@@ -1,0 +1,112 @@
+{
+  "version": "memory-golden-v1",
+  "recall": [
+    {
+      "id": "keyboard-visible-bounds",
+      "prompt": "How should keyboard menus move?",
+      "relevantIds": ["keyboard-rule"],
+      "memories": [
+        { "id": "keyboard-rule", "scope": "project", "category": "pitfall", "content": "Keyboard menus clamp selection at the first and last visible result", "tags": ["keyboard", "menus"] },
+        { "id": "keyboard-1", "scope": "project", "category": "fact", "content": "Keyboard shortcuts are listed in the settings panel", "tags": ["keyboard"] },
+        { "id": "keyboard-2", "scope": "project", "category": "fact", "content": "Keyboard focus uses the browser default outline", "tags": ["keyboard"] },
+        { "id": "keyboard-3", "scope": "project", "category": "fact", "content": "Keyboard input is handled by Vue listeners", "tags": ["keyboard"] },
+        { "id": "keyboard-4", "scope": "project", "category": "decision", "content": "Keyboard settings remain in the preferences view", "tags": ["keyboard"] },
+        { "id": "keyboard-5", "scope": "global", "category": "fact", "content": "Keyboard layouts vary by operating system", "tags": ["keyboard"] }
+      ]
+    },
+    {
+      "id": "mixed-chinese-code-error",
+      "prompt": "请修复 server/src/api/errors.ts 的 ERR_TIMEOUT 错误处理",
+      "relevantIds": ["timeout-pitfall"],
+      "memories": [
+        { "id": "timeout-pitfall", "scope": "project", "category": "pitfall", "content": "ERR_TIMEOUT 的错误处理位于 server/src/api/errors.ts", "tags": ["错误处理", "api"] },
+        { "id": "api-fact-1", "scope": "project", "category": "fact", "content": "API routes are registered by the Fastify server", "tags": ["api"] },
+        { "id": "api-fact-2", "scope": "project", "category": "fact", "content": "API responses use JSON payloads", "tags": ["api"] },
+        { "id": "api-fact-3", "scope": "global", "category": "fact", "content": "API documentation can contain examples", "tags": ["api"] }
+      ]
+    },
+    {
+      "id": "irrelevant-broad-term",
+      "prompt": "What is the server weather forecast tomorrow?",
+      "relevantIds": [],
+      "memories": [
+        { "id": "server-fact", "scope": "project", "category": "fact", "content": "The server uses Fastify", "tags": ["server"] },
+        { "id": "server-decision", "scope": "project", "category": "decision", "content": "The server listens on port 3000 by default", "tags": ["server"] }
+      ]
+    },
+    {
+      "id": "matched-pinned-rule",
+      "prompt": "Implement keyboard navigation for the file menu",
+      "relevantIds": ["matched-keyboard"],
+      "memories": [
+        { "id": "matched-keyboard", "scope": "project", "category": "rule", "content": "Use arrow keys for keyboard menus", "tags": ["keyboard"], "pinned": true, "pinnedApplicability": "matched" },
+        { "id": "matched-api", "scope": "project", "category": "rule", "content": "API errors include code and message", "tags": ["api"], "pinned": true, "pinnedApplicability": "matched" }
+      ]
+    },
+    {
+      "id": "always-pin-acknowledgement",
+      "prompt": "好的，谢谢",
+      "relevantIds": ["always-safety"],
+      "memories": [
+        { "id": "always-safety", "scope": "global", "category": "rule", "content": "Never expose credentials in logs", "tags": ["security"], "pinned": true, "pinnedApplicability": "always" },
+        { "id": "matched-style", "scope": "global", "category": "preference", "content": "Prefer Vue composition APIs", "tags": ["vue"], "pinned": true, "pinnedApplicability": "matched" }
+      ]
+    },
+    {
+      "id": "command-and-path",
+      "prompt": "After editing server/src/memory/store.ts run `pnpm test`",
+      "relevantIds": ["test-pitfall"],
+      "memories": [
+        { "id": "test-pitfall", "scope": "project", "category": "pitfall", "content": "Run pnpm test after changing server/src/memory/store.ts", "tags": ["tests", "memory"] },
+        { "id": "test-fact-1", "scope": "project", "category": "fact", "content": "The client test suite uses Vitest", "tags": ["tests"] },
+        { "id": "test-fact-2", "scope": "project", "category": "fact", "content": "Server tests run in a Node environment", "tags": ["tests"] },
+        { "id": "test-fact-3", "scope": "global", "category": "fact", "content": "Tests should be deterministic", "tags": ["tests"] }
+      ]
+    },
+    {
+      "id": "superseded-decision",
+      "prompt": "Plan around the stable project identity",
+      "relevantIds": ["stable-project"],
+      "memories": [
+        { "id": "stable-project", "scope": "project", "category": "decision", "content": "Stable project identity is based on the canonical base repository", "tags": ["project", "identity"], "updatedAt": "2026-08-10T00:00:00.000Z" },
+        { "id": "stale-project", "scope": "project", "category": "decision", "content": "Project paths alone define project IDs", "tags": ["project"], "status": "archived", "updatedAt": "2024-01-01T00:00:00.000Z" }
+      ]
+    },
+    {
+      "id": "paraphrased-worktree-identity",
+      "prompt": "Which checkout identity should worktrees share?",
+      "relevantIds": ["canonical-checkout"],
+      "memories": [
+        { "id": "canonical-checkout", "scope": "project", "category": "decision", "content": "Resolve symlinks and use the repository root as the project key", "tags": ["checkout", "identity", "worktrees"] },
+        { "id": "worktree-noise", "scope": "global", "category": "fact", "content": "Worktrees may use separate dependency folders", "tags": ["worktrees"] }
+      ]
+    },
+    {
+      "id": "near-duplicate-scope",
+      "prompt": "Where is ERR_TIMEOUT handled?",
+      "relevantIds": ["timeout-project"],
+      "memories": [
+        { "id": "timeout-project", "scope": "project", "category": "pitfall", "content": "ERR_TIMEOUT is handled in server/src/api/errors.ts", "tags": ["timeout"] },
+        { "id": "timeout-global-copy", "scope": "global", "category": "pitfall", "content": "ERR_TIMEOUT is handled in server/src/api/errors.ts", "tags": ["timeout"] }
+      ]
+    },
+    {
+      "id": "explicit-inspection",
+      "prompt": "What do you remember about this project?",
+      "relevantIds": ["inspect-a", "inspect-b", "inspect-c"],
+      "memories": [
+        { "id": "inspect-a", "scope": "project", "category": "fact", "content": "This project uses Vue 3", "tags": ["project", "vue"] },
+        { "id": "inspect-b", "scope": "project", "category": "decision", "content": "This project keeps memory in SQLite FTS5", "tags": ["project", "memory"] },
+        { "id": "inspect-c", "scope": "global", "category": "preference", "content": "Prefer concise implementation summaries across projects", "tags": ["project"], "pinned": true, "pinnedApplicability": "matched" }
+      ]
+    }
+  ],
+  "extraction": [
+    { "id": "explicit-english-rule", "expectedDecision": "extract", "evidence": [{ "role": "user", "text": "Always include code and message in API errors." }] },
+    { "id": "explicit-chinese-rule", "expectedDecision": "extract", "evidence": [{ "role": "user", "text": "以后本项目的错误必须包含 code 和 message。" }] },
+    { "id": "verified-outcome", "expectedDecision": "extract", "evidence": [{ "role": "assistant", "text": "Verified that worktrees use the base project identity." }] },
+    { "id": "acknowledgement", "expectedDecision": "skip", "evidence": [{ "role": "user", "text": "好的，谢谢" }] },
+    { "id": "one-turn-task", "expectedDecision": "skip", "evidence": [{ "role": "user", "text": "No need to write a plan, just implement this feature." }] },
+    { "id": "tool-only", "expectedDecision": "skip", "evidence": [{ "role": "tool", "text": "edit server/src/index.ts", "tool": "edit", "path": "server/src/index.ts" }] }
+  ]
+}

@@ -1,0 +1,17 @@
+node_modules
+dist
+.DS_Store
+*.log
+.pids/
+.logs/
+.superpowers/
+.worktrees/
+
+*.tar.gz
+.env
+*.zip
+.codegraph/
+.pi-subagents/
+*.tgz
+.agents
+tmp/

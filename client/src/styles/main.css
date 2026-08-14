@@ -1,0 +1,347 @@
+/* client/src/styles/main.css */
+@font-face {
+  font-family: 'Pi Terminal Nerd Font';
+  src: url('../assets/fonts/MesloLGMNerdFontMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--bg-secondary);
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg-primary: #0f0f14;
+  --bg-secondary: #16161e;
+  --bg-surface: #1e1e28;
+  --bg-elevated: #262632;
+  --bg-tertiary: #2a2a3e;
+  --bg-hover: #333344;
+
+  /* Text */
+  --text-primary: #e4e4ef;
+  --text-secondary: #8b8ba0;
+  --text-tertiary: #5c5c72;
+
+  /* Accent */
+  --accent: #6c8cff;
+  --accent-hover: #8ba4ff;
+  --accent-muted: rgba(108, 140, 255, 0.12);
+  --user-message-bg: #3656bd;
+  --user-message-text: #cabdbd;
+  --user-message-border: rgba(139, 164, 255, 0.22);
+  --user-message-shadow: 0 10px 28px rgba(8, 12, 24, 0.28);
+  --sidebar-selected-bg: #324fba;
+  --sidebar-selected-text: #f8fbff;
+  --sidebar-selected-muted: rgba(248, 251, 255, 0.78);
+  --sidebar-selected-border: rgba(139, 164, 255, 0.24);
+  --sidebar-selected-shadow: 0 8px 20px rgba(8, 12, 24, 0.24);
+
+  /* Borders */
+  --border: #2a2a38;
+  --border-subtle: #22222e;
+
+  /* Semantic */
+  --success: #4ade80;
+  --success-muted: rgba(74, 222, 128, 0.12);
+  --warning: #fbbf24;
+  --warning-muted: rgba(251, 191, 36, 0.12);
+  --error: #f87171;
+  --error-muted: rgba(248, 113, 113, 0.12);
+  --info: #3b82f6;
+  --danger: #ef4444;
+
+  /* Thinking */
+  --thinking-text: #8b8ba0;
+  --thinking-border: #2a2a38;
+
+  /* Markdown / syntax */
+  --markdown-accent: #79c0ff;
+  --markdown-accent-hover: #a5d6ff;
+  --markdown-strong: #f0f6fc;
+  --markdown-inline-code-text: #79c0ff;
+  --markdown-quote-border: #30363d;
+  --markdown-quote-bg: rgba(48, 54, 61, 0.24);
+  --markdown-table-border: rgba(139, 148, 158, 0.28);
+  --markdown-table-header-bg: rgba(48, 54, 61, 0.42);
+  --markdown-table-row-bg: rgba(48, 54, 61, 0.16);
+  --code-text: #e6edf3;
+  --syntax-keyword: #ff7b72;
+  --syntax-string: #a5d6ff;
+  --syntax-comment: #8b949e;
+  --syntax-title: #d2a8ff;
+  --syntax-attr: #79c0ff;
+  --syntax-number: #79c0ff;
+  --syntax-built-in: #ffa657;
+  --diff-added-bg: rgba(46, 160, 67, 0.20);
+  --diff-added-text: #aff5b4;
+  --diff-removed-bg: rgba(248, 81, 73, 0.18);
+  --diff-removed-text: #ffdcd7;
+  --diff-hunk-bg: rgba(56, 139, 253, 0.16);
+  --diff-hunk-text: #a5d6ff;
+  --diff-meta-text: #8b949e;
+  --git-added: #3fb950;
+  --git-modified: #d29922;
+  --git-deleted: #f85149;
+
+  /* Login */
+  --login-shell-bg: radial-gradient(circle at 50% 28%, rgba(108, 140, 255, 0.18), transparent 34rem), radial-gradient(circle at 12% 18%, rgba(74, 222, 128, 0.08), transparent 24rem), linear-gradient(180deg, var(--bg-primary), #0b0b10 72%);
+  --login-card-bg: linear-gradient(180deg, rgba(30, 30, 40, 0.92), rgba(22, 22, 30, 0.96));
+  --login-card-border: rgba(255, 255, 255, 0.08);
+  --login-card-shadow: 0 24px 80px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --login-input-bg: rgba(15, 15, 20, 0.58);
+  --login-error-text: #fecaca;
+
+  /* Radius scale */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.5);
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 280ms;
+
+  /* Safe areas (notch / pill devices) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f7;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f0f0f2;
+  --bg-tertiary: #e8e8ee;
+  --bg-hover: #e4e6ef;
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b6b80;
+  --text-tertiary: #9b9baa;
+  --accent: #4a6cf7;
+  --accent-hover: #3b5de6;
+  --accent-muted: rgba(74, 108, 247, 0.10);
+  --user-message-bg: #3f63e8;
+  --user-message-text: #ffffff;
+  --user-message-border: rgba(35, 80, 210, 0.18);
+  --user-message-shadow: 0 8px 22px rgba(35, 80, 210, 0.16);
+  --sidebar-selected-bg: #4165e6;
+  --sidebar-selected-text: #ffffff;
+  --sidebar-selected-muted: rgba(255, 255, 255, 0.82);
+  --sidebar-selected-border: rgba(35, 80, 210, 0.20);
+  --sidebar-selected-shadow: 0 7px 18px rgba(35, 80, 210, 0.14);
+  --border: #e0e0e6;
+  --border-subtle: #ebebef;
+  --success: #15803d;
+  --success-muted: rgba(21, 128, 61, 0.10);
+  --warning: #b45309;
+  --warning-muted: rgba(180, 83, 9, 0.12);
+  --error: #dc2626;
+  --error-muted: rgba(220, 38, 38, 0.10);
+  --info: #2563eb;
+  --danger: #dc2626;
+  --thinking-text: #6b6b80;
+  --thinking-border: #e0e0e6;
+  --markdown-accent: #0969da;
+  --markdown-accent-hover: #0550ae;
+  --markdown-strong: #24292f;
+  --markdown-inline-code-text: #0969da;
+  --markdown-quote-border: #d0d7de;
+  --markdown-quote-bg: rgba(208, 215, 222, 0.28);
+  --markdown-table-border: rgba(31, 35, 40, 0.18);
+  --markdown-table-header-bg: rgba(234, 238, 242, 0.72);
+  --markdown-table-row-bg: rgba(246, 248, 250, 0.72);
+  --code-text: #24292f;
+  --syntax-keyword: #cf222e;
+  --syntax-string: #0a3069;
+  --syntax-comment: #6e7781;
+  --syntax-title: #8250df;
+  --syntax-attr: #0550ae;
+  --syntax-number: #0550ae;
+  --syntax-built-in: #953800;
+  --diff-added-bg: rgba(31, 136, 61, 0.13);
+  --diff-added-text: #116329;
+  --diff-removed-bg: rgba(207, 34, 46, 0.12);
+  --diff-removed-text: #82071e;
+  --diff-hunk-bg: rgba(9, 105, 218, 0.12);
+  --diff-hunk-text: #0969da;
+  --diff-meta-text: #57606a;
+  --git-added: #1f883d;
+  --git-modified: #9a6700;
+  --git-deleted: #cf222e;
+  --login-shell-bg: radial-gradient(circle at 50% 28%, rgba(74, 108, 247, 0.14), transparent 34rem), radial-gradient(circle at 12% 18%, rgba(21, 128, 61, 0.08), transparent 24rem), linear-gradient(180deg, #ffffff, #f5f5f7 72%);
+  --login-card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 245, 247, 0.96));
+  --login-card-border: rgba(26, 26, 46, 0.10);
+  --login-card-shadow: 0 24px 80px rgba(26, 26, 46, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --login-input-bg: rgba(255, 255, 255, 0.72);
+  --login-error-text: #991b1b;
+  --shadow-sm: 0 1px 2px rgba(26, 26, 46, 0.08);
+  --shadow-md: 0 4px 12px rgba(26, 26, 46, 0.12);
+  --shadow-lg: 0 12px 40px rgba(26, 26, 46, 0.14);
+  --shadow-xl: 0 24px 80px rgba(26, 26, 46, 0.18);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (hover: none), (pointer: coarse) {
+  /* Mobile browsers can keep :hover active after tapping icon buttons. */
+  .tooltip::before,
+  .tooltip::after,
+  .session-tooltip,
+  .editor-tab-tooltip {
+    display: none !important;
+    content: none !important;
+    opacity: 0 !important;
+  }
+}
+
+#app {
+  height: 100vh;
+  display: flex;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+.dialog-action,
+.settings-action-btn {
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+/* Keep small, frequently repeated dialog actions from overpowering their controls. */
+.compact-action {
+  min-height: 32px;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+input, textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+  button:active {
+    transform: none !important;
+  }
+
+  .modal-enter-active,
+  .modal-leave-active,
+  .settings-modal-enter-active,
+  .settings-modal-leave-active,
+  .memory-center-enter-active,
+  .memory-center-leave-active,
+  .memory-toast-enter-active,
+  .memory-toast-leave-active {
+    transition: opacity 120ms var(--ease-out) !important;
+  }
+
+  .modal-enter-active > *,
+  .modal-leave-active > *,
+  .settings-modal-enter-active > *,
+  .settings-modal-leave-active > *,
+  .memory-center-enter-active .memory-center-dialog,
+  .memory-center-leave-active .memory-center-dialog,
+  .memory-toast {
+    transition: opacity 120ms var(--ease-out) !important;
+    transform: none !important;
+  }
+
+  .session-sidebar,
+  .live-indicator,
+  .memory-spinner,
+  .loading-spinner,
+  .streaming-spinner-dot {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .tooltip::after,
+  .session-tooltip {
+    transition: opacity 120ms var(--ease-out) !important;
+    transform: none !important;
+  }
+}
