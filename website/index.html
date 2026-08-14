@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#050506" />
+    <meta name="description" content="Pi WebUI is a self-hosted, mobile-friendly workspace for the Pi coding agent." />
+    <title>Pi WebUI — A workspace for the Pi coding agent</title>
+    <script>
+      // Apply the preferred theme before paint to avoid a light/dark flash.
+      let savedTheme;
+      try { savedTheme = localStorage.getItem('pi-webui-theme'); } catch {}
+      document.documentElement.dataset.theme = savedTheme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.classList.add('js');
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Pi WebUI home"><span class="brand-mark" aria-hidden="true">&gt;_</span><span>Pi WebUI</span></a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="#guide">Feature guide</a>
+        <a href="#get-started">Get started</a>
+        <a href="https://github.com/xianzhon/pi-webui/blob/main/README.md">Docs</a>
+        <a class="nav-github" href="https://github.com/xianzhon/pi-webui">GitHub ↗</a>
+        <button class="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path></svg>
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path></svg>
+        </button>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero section-shell">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="status-dot"></span> Open source · self-hosted · yours</p>
+          <h1>A complete workspace for your <span>coding agent.</span></h1>
+          <p class="hero-lede">Pi WebUI turns the Pi coding agent into a persistent, mobile-friendly workspace for conversations, code, terminals, tasks, memory, and Git workflows.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#get-started">Get started <span>→</span></a>
+            <a class="button button-secondary" href="https://github.com/xianzhon/pi-webui">View on GitHub ↗</a>
+          </div>
+          <div class="install-command" aria-label="Install command">
+            <span class="prompt">$</span><code>npm install -g @xianzhon/pi-webui</code><button class="copy-button" type="button" data-copy="npm install -g @xianzhon/pi-webui">Copy</button>
+          </div>
+          <p class="copy-status" role="status" aria-live="polite"></p>
+        </div>
+        <div class="hero-art">
+          <div class="glow"></div>
+          <figure class="hero-shot screenshot-frame">
+            <img src="assets/screenshots/workspace-overview.webp" width="3740" height="1930" alt="Pi WebUI workspace with sessions, chat, and editor" />
+            <figcaption><span class="live-dot"></span> One workspace, every part of the loop</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="trust-strip section-shell" aria-label="Product highlights">
+        <span>Stay in flow from idea to merge</span><span class="strip-item">⌘ Persistent sessions</span><span class="strip-item">⌁ Built for any screen</span><span class="strip-item">◇ Your machine, your data</span>
+      </section>
+
+      <section id="guide" class="section-shell guide-intro content-section">
+        <div class="section-heading"><p class="eyebrow">The complete feature guide</p><h2>One calm place for the messy middle of software work.</h2><p>Pi WebUI keeps the agent conversation close to the files, tools, decisions, and follow-up work that make a project move.</p></div>
+        <div class="feature-grid">
+          <a class="feature-card" href="#workspace"><span class="feature-icon">◉</span><h3>Workspace</h3><p>Chat, editor, terminal, and project navigation in one view.</p></a>
+          <a class="feature-card" href="#sessions"><span class="feature-icon">⌘</span><h3>Sessions & skills</h3><p>Resume work, create isolated worktrees, and shape agent context.</p></a>
+          <a class="feature-card" href="#tasks"><span class="feature-icon">✓</span><h3>Task queue</h3><p>Capture the next idea before it disappears, then pick it up later.</p></a>
+          <a class="feature-card" href="#memory"><span class="feature-icon">✦</span><h3>Memory</h3><p>Keep useful project and global context available across sessions.</p></a>
+          <a class="feature-card" href="#profiles"><span class="feature-icon">◎</span><h3>Profiles</h3><p>Switch providers, models, keys, and proxies without losing your setup.</p></a>
+          <a class="feature-card" href="#settings"><span class="feature-icon">⚙</span><h3>Settings & security</h3><p>Configure the experience, integrations, access, and audit trail.</p></a>
+        </div>
+      </section>
+
+      <section id="workspace" class="guide-section section-shell">
+        <div class="section-heading split-heading"><div><p class="eyebrow">01 · Workspace</p><h2>The whole development loop, visible at once.</h2></div><p>The three-panel workspace keeps project navigation, agent conversation, and the file you are working on within reach. Open a terminal alongside the chat, expand it when you need room, and keep the work grounded in the actual repository.</p></div>
+        <div class="gallery gallery-wide">
+          <article class="screenshot-card featured-card"><button class="image-button" data-lightbox="assets/screenshots/workspace-overview.webp" data-caption="The main workspace combines sessions, conversation, and the editor."><img src="assets/screenshots/workspace-overview.webp" width="3740" height="1930" loading="lazy" alt="Main Pi WebUI workspace with session list, chat, and editor" /></button><div class="card-copy"><h3>Everything in context</h3><p>Browse sessions on the left, work through the conversation in the center, and inspect Markdown, images, or code in the lightweight editor on the right.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/workspace-terminal-and-diff.webp" data-caption="The terminal can work beside the conversation and show diffs in the editor."><img src="assets/screenshots/workspace-terminal-and-diff.webp" width="3740" height="1934" loading="lazy" alt="Pi WebUI terminal and editor diff view" /></button><div class="card-copy"><h3>Terminal when you need it</h3><p>Use multiple terminal tabs, maximize the terminal for deep work, or keep it compact beside the agent.</p></div></article>
+        </div>
+      </section>
+
+      <section id="sessions" class="guide-section section-shell tinted-section">
+        <div class="section-heading split-heading"><div><p class="eyebrow">02 · Sessions & agent control</p><h2>Start with the right context.</h2></div><p>Resume an old conversation, search across your history, or open a clean session in a worktree. Decide which skills Pi should see instead of letting a crowded toolset decide for you.</p></div>
+        <div class="gallery gallery-three">
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/sessions-search.webp" data-caption="Search across the Pi sessions for a project or profile."><img src="assets/screenshots/sessions-search.webp" width="1304" height="1378" loading="lazy" alt="Session search in Pi WebUI" /></button><div class="card-copy"><h3>Find and resume</h3><p>Search session history across projects, then continue from exactly where the conversation stopped.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/sessions-create.webp" data-caption="Create a session in the current directory or choose a different workspace."><img src="assets/screenshots/sessions-create.webp" width="1524" height="1104" loading="lazy" alt="Create session dialog with directory and skill choices" /></button><div class="card-copy"><h3>Choose your starting point</h3><p>Begin in the current directory or select a managed workspace before the first prompt.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/sessions-worktree.webp" data-caption="Configure a worktree with branch and base branch settings."><img src="assets/screenshots/sessions-worktree.webp" width="1524" height="1376" loading="lazy" alt="Worktree setup in the create session dialog" /></button><div class="card-copy"><h3>Isolate experiments</h3><p>Create a worktree, choose its branch and base, and copy ignored files needed by the project.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/sessions-custom-skills.webp" data-caption="Choose a preset, all skills, or a custom allow/disable list."><img src="assets/screenshots/sessions-custom-skills.webp" width="1506" height="1236" loading="lazy" alt="Custom skills selection for a new session" /></button><div class="card-copy"><h3>Shape the agent's toolkit</h3><p>Use a focused preset or allow and disable individual skills to keep the agent's context clear.</p></div></article>
+          <article class="screenshot-card composer-card"><button class="image-button" data-lightbox="assets/screenshots/composer-features.webp" data-caption="The message composer supports references, commands, prompt polishing, and image upload."><img src="assets/screenshots/composer-features.webp" width="3040" height="830" loading="lazy" alt="Pi WebUI message composer with commands and attachments" /></button><div class="card-copy"><h3>More than a text box</h3><p>Reference files with <code>@</code>, use workflow commands, polish a prompt, or attach an image without leaving the conversation.</p></div></article>
+        </div>
+      </section>
+
+      <section id="tasks" class="guide-section section-shell">
+        <div class="section-heading split-heading"><div><p class="eyebrow">03 · Task queue</p><h2>Capture the next idea. Finish it when the time is right.</h2></div><p>The task queue is for the useful thoughts that arrive in the middle of another task. Save a title and rough prompt now, let Pi polish it, and start it later in the current session or a new browser tab.</p></div>
+        <div class="gallery gallery-three">
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/task-queue-empty.webp" data-caption="The task queue keeps future work visible without interrupting the current session."><img src="assets/screenshots/task-queue-empty.webp" width="962" height="1102" loading="lazy" alt="Empty Pi WebUI task queue" /></button><div class="card-copy"><h3>A home for unfinished thoughts</h3><p>Keep planning notes and follow-up work close without turning the current conversation into a to-do list.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/task-queue-new-task.webp" data-caption="Create a task with a short title and prompt, then choose where to run it."><img src="assets/screenshots/task-queue-new-task.webp" width="2154" height="1428" loading="lazy" alt="New task dialog in Pi WebUI" /></button><div class="card-copy"><h3>Turn a thought into a task</h3><p>Start with a rough description and choose the project, model, skills, and session destination.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/task-queue-polished-prompt.webp" data-caption="AI polishing turns a brief task description into a clearer prompt."><img src="assets/screenshots/task-queue-polished-prompt.webp" width="2154" height="1428" loading="lazy" alt="AI-polished task prompt in Pi WebUI" /></button><div class="card-copy"><h3>Make the prompt clearer</h3><p>Use AI-assisted polishing to turn a quick note into an actionable task before you start it.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/task-queue-completed-tasks.webp" data-caption="Completed tasks link back to their session and the created issue."><img src="assets/screenshots/task-queue-completed-tasks.webp" width="950" height="1756" loading="lazy" alt="Completed tasks with session and issue links" /></button><div class="card-copy"><h3>Keep the trail connected</h3><p>After a task is done, jump back to its session or open the linked GitHub or Gitea issue.</p></div></article>
+        </div>
+      </section>
+
+      <section id="memory" class="guide-section section-shell tinted-section">
+        <div class="section-heading split-heading"><div><p class="eyebrow">04 · Memory</p><h2>Keep the decisions that make future work easier.</h2></div><p>Memory gives Pi durable context beyond a single chat. Save project conventions and personal workflow preferences globally or per project, manually or through automatic extraction.</p></div>
+        <div class="gallery gallery-two">
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/memory-project.webp" data-caption="Project memories keep repository-specific context close to future sessions."><img src="assets/screenshots/memory-project.webp" width="1882" height="1514" loading="lazy" alt="Project memory center in Pi WebUI" /></button><div class="card-copy"><h3>Project memory</h3><p>Store conventions, architecture decisions, and recurring project instructions where future sessions can recall them.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/memory-global.webp" data-caption="Global memories carry personal preferences across projects."><img src="assets/screenshots/memory-global.webp" width="1886" height="1522" loading="lazy" alt="Global memory center in Pi WebUI" /></button><div class="card-copy"><h3>Global memory</h3><p>Keep durable preferences—such as how you like changes reviewed—available across your projects.</p></div></article>
+        </div>
+      </section>
+
+      <section id="profiles" class="guide-section section-shell">
+        <div class="section-heading split-heading"><div><p class="eyebrow">05 · Profiles & providers</p><h2>Switch operating modes without rebuilding your setup.</h2></div><p>Profiles let you keep separate provider credentials, models, and network settings for different workflows. Use one for Pi, another for a different provider, or create a clean profile for a new experiment.</p></div>
+        <div class="gallery gallery-three">
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/profiles-switcher.webp" data-caption="Switch between configured agent profiles from the profile menu."><img src="assets/screenshots/profiles-switcher.webp" width="702" height="466" loading="lazy" alt="Pi WebUI agent profile switcher" /></button><div class="card-copy"><h3>Switch in a moment</h3><p>Keep provider-specific environments separated and change profiles without mixing their session histories.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/profiles-provider-settings.webp" data-caption="Configure provider keys and a proxy for a profile."><img src="assets/screenshots/profiles-provider-settings.webp" width="1440" height="1844" loading="lazy" alt="Agent profile provider settings" /></button><div class="card-copy"><h3>Configure the connection</h3><p>Set provider API keys and a profile-wide proxy in one focused settings view.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/profiles-create.webp" data-caption="Create a blank profile or copy an existing profile without session history."><img src="assets/screenshots/profiles-create.webp" width="1442" height="698" loading="lazy" alt="Create agent profile dialog" /></button><div class="card-copy"><h3>Start clean or copy wisely</h3><p>Create from scratch or copy configuration while leaving old session history behind.</p></div></article>
+        </div>
+      </section>
+
+      <section id="editor" class="guide-section section-shell tinted-section">
+        <div class="section-heading split-heading"><div><p class="eyebrow">06 · Editor & files</p><h2>Give the conversation a place to land.</h2></div><p>The editor makes the agent's work tangible. Open a referenced file, preview Markdown or an image, inspect a diff, and maximize the editor when the code deserves your full attention.</p></div>
+        <div class="gallery gallery-three">
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/editor-markdown-preview.webp" data-caption="Preview Markdown and images while keeping the session nearby."><img src="assets/screenshots/editor-markdown-preview.webp" width="1868" height="1926" loading="lazy" alt="Pi WebUI editor with Markdown preview" /></button><div class="card-copy"><h3>Read files where you work</h3><p>Use Markdown and image previews to review content without opening another application.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/editor-maximized.webp" data-caption="Maximize the editor for a focused review or editing session."><img src="assets/screenshots/editor-maximized.webp" width="3740" height="1932" loading="lazy" alt="Pi WebUI maximized editor" /></button><div class="card-copy"><h3>Make room for the details</h3><p>Maximize the editor for a focused review, then return to the full workspace when you are ready.</p></div></article>
+        </div>
+      </section>
+
+      <section id="settings" class="guide-section section-shell">
+        <div class="section-heading split-heading"><div><p class="eyebrow">07 · Settings & integrations</p><h2>Configure the environment around your work.</h2></div><p>Pi WebUI keeps the important controls close but out of the way. Tune behavior, shortcuts, skills, Git integrations, gateways, and security from one settings dialog.</p></div>
+        <div class="gallery gallery-three">
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/settings-general.webp" data-caption="General settings control the overall workspace experience."><img src="assets/screenshots/settings-general.webp" width="1970" height="1458" loading="lazy" alt="General Pi WebUI settings" /></button><div class="card-copy"><h3>Make it yours</h3><p>Set the everyday defaults that make the workspace fit your habits.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/settings-security-audit-log.webp" data-caption="Security settings include two-factor authentication and an audit log."><img src="assets/screenshots/settings-security-audit-log.webp" width="1954" height="1440" loading="lazy" alt="Pi WebUI security settings and audit log" /></button><div class="card-copy"><h3>Know who accessed what</h3><p>Protect access with 2FA and review the audit log when you need an operational trail.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/settings-chat.webp" data-caption="Tune chat behavior and notifications."><img src="assets/screenshots/settings-chat.webp" width="1956" height="1444" loading="lazy" alt="Pi WebUI chat settings" /></button><div class="card-copy"><h3>Shape the conversation</h3><p>Adjust chat behavior, notifications, and streaming preferences to suit your workflow.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/settings-keyboard-shortcuts.webp" data-caption="Review and customize keyboard shortcuts."><img src="assets/screenshots/settings-keyboard-shortcuts.webp" width="1962" height="1438" loading="lazy" alt="Pi WebUI keyboard shortcut settings" /></button><div class="card-copy"><h3>Keep your hands moving</h3><p>Review the shortcuts that make session navigation and editing faster.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/settings-skill-presets.webp" data-caption="Create and manage skill presets for different kinds of work."><img src="assets/screenshots/settings-skill-presets.webp" width="1962" height="1438" loading="lazy" alt="Pi WebUI skill presets settings" /></button><div class="card-copy"><h3>Build focused presets</h3><p>Keep a small, intentional skill set for simple work and make richer presets when a project needs them.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/settings-git-integration.webp" data-caption="Configure GitHub or Gitea integration for project workflows."><img src="assets/screenshots/settings-git-integration.webp" width="1962" height="1438" loading="lazy" alt="Pi WebUI Git integration settings" /></button><div class="card-copy"><h3>Connect the repository</h3><p>Configure GitHub or Gitea so issue and pull-request workflows can stay close to the agent.</p></div></article>
+          <article class="screenshot-card"><button class="image-button" data-lightbox="assets/screenshots/settings-gateway.webp" data-caption="Configure messaging gateways from the settings dialog."><img src="assets/screenshots/settings-gateway.webp" width="1962" height="1438" loading="lazy" alt="Pi WebUI gateway settings" /></button><div class="card-copy"><h3>Meet your work where it is</h3><p>Set up supported messaging gateways for a focused remote workflow.</p></div></article>
+        </div>
+      </section>
+
+      <section id="get-started" class="section-shell start-section">
+        <div><p class="eyebrow">Start building</p><h2>Give Pi a workspace.</h2><p>Install it on your own machine, configure your credentials, and keep your agent workflow close to the projects you care about.</p></div>
+        <div class="start-actions"><a class="button button-primary" href="https://github.com/xianzhon/pi-webui#quick-start">Read the quick start →</a><a class="button button-secondary" href="https://github.com/xianzhon/pi-webui/blob/main/docs/README.md">Browse documentation ↗</a></div>
+      </section>
+    </main>
+
+    <footer class="site-footer section-shell"><span>Pi WebUI is open source under the Apache-2.0 license.</span><a href="https://github.com/xianzhon/pi-webui">xianzhon/pi-webui ↗</a></footer>
+
+    <dialog class="lightbox" aria-label="Screenshot viewer">
+      <button class="lightbox-close" type="button" aria-label="Close screenshot viewer">×</button>
+      <img alt="" />
+      <p></p>
+    </dialog>
+  </body>
+</html>
