@@ -61,7 +61,7 @@ To test the package artifact that users install:
 
 ```bash
 make package
-npm install -g ./pi-webui-1.0.0.tgz
+npm install -g ./xianzhon-pi-webui-1.0.0.tgz
 pi-webui --help
 ```
 

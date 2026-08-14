@@ -53,6 +53,7 @@ function parseArgs(args) {
 
 const SERVICE_NAME = 'pi-webui';
 const SERVICE_LABEL = 'com.pi-webui';
+const NPM_PACKAGE_NAME = '@xianzhon/pi-webui';
 const scriptPath = fileURLToPath(import.meta.url);
 
 function runCommand(command, args) {
@@ -115,7 +116,7 @@ function updateCommand(version) {
   const packagePath = join(dirname(scriptPath), '..', 'package.json');
   const installedVersion = JSON.parse(readFileSync(packagePath, 'utf8')).version;
   if (version === '--check') {
-    const result = spawnNpm(['view', 'pi-webui', 'version', '--silent'], { encoding: 'utf8' });
+    const result = spawnNpm(['view', NPM_PACKAGE_NAME, 'version', '--silent'], { encoding: 'utf8' });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(result.stderr?.trim() || 'Could not check the latest version.');
     const latestVersion = result.stdout.trim();
@@ -128,7 +129,7 @@ function updateCommand(version) {
   if (version && !/^[0-9A-Za-z][0-9A-Za-z._+-]*$/.test(version)) {
     throw new Error(`Invalid version or npm tag: ${version}`);
   }
-  const packageSpec = version ? `pi-webui@${version}` : 'pi-webui@latest';
+  const packageSpec = version ? `${NPM_PACKAGE_NAME}@${version}` : `${NPM_PACKAGE_NAME}@latest`;
   runNpm(['install', '-g', packageSpec]);
   console.log(`Updated ${packageSpec}.`);
   console.log('If Pi WebUI is running as a service, restart it to use the new version:');

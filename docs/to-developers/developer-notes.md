@@ -19,7 +19,7 @@ To test the same package artifact that users will install:
 
 ```bash
 make package               # equivalent to npm pack
-npm install -g ./pi-webui-1.0.0.tgz
+npm install -g ./xianzhon-pi-webui-1.0.0.tgz
 pi-webui --help
 ```
 

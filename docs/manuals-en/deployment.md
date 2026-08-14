@@ -23,22 +23,22 @@ The app is served at http://localhost:3000 (both frontend and backend).
 Build the npm package on your development machine and upload the generated tarball:
 
 ```bash
-make package               # runs npm pack and produces pi-webui-<version>.tgz
-scp pi-webui-*.tgz user@server:~/release/
+make package               # runs npm pack and produces xianzhon-pi-webui-<version>.tgz
+scp xianzhon-pi-webui-*.tgz user@server:~/release/
 ```
 
 On the remote server, install the tarball by path:
 
 ```bash
 cd ~/release
-npm install -g ./pi-webui-<version>.tgz
+npm install -g ./xianzhon-pi-webui-<version>.tgz
 pi-webui
 ```
 
 On native Windows, run the equivalent command from PowerShell (not WSL):
 
 ```powershell
-npm install -g .\pi-webui-<version>.tgz
+npm install -g .\xianzhon-pi-webui-<version>.tgz
 pi-webui
 ```
 
@@ -58,7 +58,7 @@ node -e "require('argon2').hash(process.argv[1]).then(console.log)" 'change-this
 If Pi WebUI was installed globally with npm, run it from the global package directory instead:
 
 ```bash
-cd "$(npm root -g)/pi-webui"
+cd "$(npm root -g)/@xianzhon/pi-webui"
 node -e "require('argon2').hash(process.argv[1]).then(console.log)" 'change-this-password'
 ```
 

@@ -44,7 +44,7 @@
 设置登录凭据，然后运行最新版本：
 
 ```bash
-PI_WEBUI_AUTH_USERNAME=pi PI_WEBUI_AUTH_PASSWORD='change-this-password' npx pi-webui@latest
+PI_WEBUI_AUTH_USERNAME=pi PI_WEBUI_AUTH_PASSWORD='change-this-password' npx @xianzhon/pi-webui@latest
 ```
 
 打开 http://127.0.0.1:3000。服务器准备就绪后，CLI 会自动打开浏览器。
@@ -52,7 +52,7 @@ PI_WEBUI_AUTH_USERNAME=pi PI_WEBUI_AUTH_PASSWORD='change-this-password' npx pi-w
 ### 全局安装
 
 ```bash
-npm install -g pi-webui
+npm install -g @xianzhon/pi-webui
 pi-webui
 ```
 
@@ -98,6 +98,10 @@ pnpm dev
 ## 部署
 
 有关源码和 npm 软件包部署以及 nginx 反向代理配置，请参阅[部署手册](docs/manuals-cn/deployment.md)。
+
+## 文档
+
+浏览[文档索引](docs/README.md)，查看全部用户手册和开发者参考资料。
 
 ## 开发
 

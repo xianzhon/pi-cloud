@@ -44,7 +44,7 @@ If npm fails while building native dependencies, install system build tools such
 Set login credentials, then run the latest release:
 
 ```bash
-PI_WEBUI_AUTH_USERNAME=pi PI_WEBUI_AUTH_PASSWORD='change-this-password' npx pi-webui@latest
+PI_WEBUI_AUTH_USERNAME=pi PI_WEBUI_AUTH_PASSWORD='change-this-password' npx @xianzhon/pi-webui@latest
 ```
 
 Open http://127.0.0.1:3000. The CLI opens the browser automatically after the server is ready.
@@ -52,7 +52,7 @@ Open http://127.0.0.1:3000. The CLI opens the browser automatically after the se
 ### Install globally
 
 ```bash
-npm install -g pi-webui
+npm install -g @xianzhon/pi-webui
 pi-webui
 ```
 
@@ -98,6 +98,10 @@ For production, use `PI_WEBUI_AUTH_PASSWORD_HASH` instead of a plaintext passwor
 ## Deployment
 
 See the [Deployment Manual](docs/manuals-en/deployment.md) for source and npm package deployments, plus nginx reverse proxy configuration.
+
+## Documentation
+
+Browse the [documentation index](docs/README.md) for all user manuals and developer references.
 
 ## Development
 

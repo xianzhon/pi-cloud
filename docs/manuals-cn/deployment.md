@@ -23,22 +23,22 @@ NODE_ENV=production PORT=3000 pnpm start:prod
 在开发机器上构建 npm 软件包，然后上传生成的压缩包：
 
 ```bash
-make package               # 运行 npm pack 并生成 pi-webui-<version>.tgz
-scp pi-webui-*.tgz user@server:~/release/
+make package               # 运行 npm pack 并生成 xianzhon-pi-webui-<version>.tgz
+scp xianzhon-pi-webui-*.tgz user@server:~/release/
 ```
 
 在远程服务器上，通过文件路径安装压缩包：
 
 ```bash
 cd ~/release
-npm install -g ./pi-webui-<version>.tgz
+npm install -g ./xianzhon-pi-webui-<version>.tgz
 pi-webui
 ```
 
 在原生 Windows 上，请从 PowerShell（而不是 WSL）运行对应命令：
 
 ```powershell
-npm install -g .\pi-webui-<version>.tgz
+npm install -g .\xianzhon-pi-webui-<version>.tgz
 pi-webui
 ```
 
@@ -58,7 +58,7 @@ node -e "require('argon2').hash(process.argv[1]).then(console.log)" 'change-this
 如果通过 npm 全局安装了 Pi WebUI，请改在全局软件包目录中运行：
 
 ```bash
-cd "$(npm root -g)/pi-webui"
+cd "$(npm root -g)/@xianzhon/pi-webui"
 node -e "require('argon2').hash(process.argv[1]).then(console.log)" 'change-this-password'
 ```
 
