@@ -1,3 +1,52 @@
+const root = document.documentElement;
+const themeToggle = document.querySelector('.theme-toggle');
+const themeColor = document.querySelector('meta[name="theme-color"]');
+
+function updateThemeControls() {
+  const isDark = root.dataset.theme === 'dark';
+  const label = `Switch to ${isDark ? 'light' : 'dark'} mode`;
+  themeToggle?.setAttribute('aria-label', label);
+  themeToggle?.setAttribute('title', label);
+  themeColor?.setAttribute('content', isDark ? '#050506' : '#f5f5f7');
+}
+
+themeToggle?.addEventListener('click', () => {
+  root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  try {
+    localStorage.setItem('pi-webui-theme', root.dataset.theme);
+  } catch {
+    // The active theme still works when storage is unavailable.
+  }
+  updateThemeControls();
+});
+
+updateThemeControls();
+
+const siteHeader = document.querySelector('.site-header');
+function updateHeader() {
+  siteHeader?.classList.toggle('is-scrolled', window.scrollY > 12);
+}
+window.addEventListener('scroll', updateHeader, { passive: true });
+updateHeader();
+
+const revealElements = document.querySelectorAll('.section-heading, .feature-card, .screenshot-card, .start-section');
+if (matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) {
+  revealElements.forEach((element) => element.classList.add('is-visible'));
+} else {
+  const revealObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('is-visible');
+      observer.unobserve(entry.target);
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+
+  revealElements.forEach((element) => {
+    element.classList.add('reveal');
+    revealObserver.observe(element);
+  });
+}
+
 const copyButton = document.querySelector('[data-copy]');
 const copyStatus = document.querySelector('.copy-status');
 
