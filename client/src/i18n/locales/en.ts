@@ -635,7 +635,6 @@ export default {
       chooseTheLightweightModelUsedForSupporting: 'Choose the lightweight model used for supporting actions like polishing, Git generation, and session auto-rename.',
       autoRename: 'Auto-rename',
       chooseTheLanguageUsedByWebUIS: 'Choose the language used by WebUI\'s bundled session auto-rename.',
-      externalPiAutoRenamePluginDetectedBundled: 'External pi-auto-rename plugin detected. Bundled WebUI auto-rename is disabled for this profile.',
       networkProxy: 'Network proxy',
       deleteProfile: 'Delete profile',
       settingsSaved: 'Settings saved.',

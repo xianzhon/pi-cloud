@@ -69,7 +69,6 @@
               />
               <h3>{{ t('components.profileManagerDialog.autoRename') }}</h3>
               <p class="profile-help">{{ t('components.profileManagerDialog.chooseTheLanguageUsedByWebUIS') }}</p>
-              <p v-if="autoRenameExternalPluginInstalled" class="profile-warning" role="status">{{ t('components.profileManagerDialog.externalPiAutoRenamePluginDetectedBundled') }}</p>
               <CustomSelect
                 v-model="autoRenameLanguage"
                 :options="autoRenameLanguageOptions"
@@ -159,7 +158,6 @@ const error = ref('');
 const defaultModel = ref('');
 const automationModel = ref('');
 const autoRenameLanguage = ref<'english' | 'chinese'>('english');
-const autoRenameExternalPluginInstalled = ref(false);
 const savingSettings = ref(false);
 const settingsSaved = ref(false);
 const checkingProxy = ref(false);
@@ -207,7 +205,6 @@ function resetSaveState(): void {
   defaultModel.value = '';
   automationModel.value = '';
   autoRenameLanguage.value = 'english';
-  autoRenameExternalPluginInstalled.value = false;
   savingSettings.value = false;
   settingsSaved.value = false;
   checkingProxy.value = false;
@@ -275,11 +272,9 @@ async function select(id: string): Promise<void> {
   }
   if (autoRenameResponse.ok) {
     const data = await autoRenameResponse.json() as {
-      config?: { language?: 'english' | 'chinese'; externalPluginInstalled?: boolean };
+      config?: { language?: 'english' | 'chinese' };
     };
-    const config = data.config;
-    autoRenameLanguage.value = config?.language === 'chinese' ? 'chinese' : 'english';
-    autoRenameExternalPluginInstalled.value = Boolean(config?.externalPluginInstalled);
+    autoRenameLanguage.value = data.config?.language === 'chinese' ? 'chinese' : 'english';
   }
   if (apiKeyProvidersResponse.ok) {
     const data = await apiKeyProvidersResponse.json() as { providers?: ApiKeyProvider[] };
@@ -395,9 +390,7 @@ async function saveSettings(): Promise<void> {
     if (!autoRenameResponse.ok) throw new Error(await readErrorMessage(autoRenameResponse, t('components.profileManagerDialog.failedToSaveAutoRenameSettings')));
     if (!proxyResponse.ok) throw new Error(await readErrorMessage(proxyResponse, t('components.profileManagerDialog.failedToSaveProxySettings')));
 
-    const autoRenameData = await autoRenameResponse.json() as { config?: { externalPluginInstalled?: boolean } };
     models.value = models.value.map((model) => ({ ...model, current: model.provider === defaultProvider && model.id === defaultModelId }));
-    autoRenameExternalPluginInstalled.value = Boolean(autoRenameData.config?.externalPluginInstalled);
     settingsSaved.value = true;
     emit('updated');
   } catch (exception) {
@@ -612,11 +605,6 @@ small {
   color: var(--success);
   font-size: 0.82rem;
   margin: 0.55rem 0 0;
-}
-.profile-warning {
-  color: var(--warning);
-  font-size: 0.82rem;
-  margin: 0.55rem 0;
 }
 @media (max-width: 600px) {
   .settings-backdrop {

@@ -437,33 +437,24 @@ export class PiSessionService {
     return { provider, modelId };
   }
 
-  async getAgentProfileAutoRenameConfig(profileId: string): Promise<{
-    language: 'english' | 'chinese';
-    externalPluginInstalled: boolean;
-  }> {
+  async getAgentProfileAutoRenameConfig(profileId: string): Promise<{ language: 'english' | 'chinese' }> {
     const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
     if (!profile) throw new Error('Unknown agent profile');
     const config = this.getProfileSettings(profileId);
-    return {
-      language: config.autoRenameLanguage,
-      externalPluginInstalled: await this.hasExternalAutoRenamePlugin(profile.path),
-    };
+    return { language: config.autoRenameLanguage };
   }
 
   async saveAgentProfileAutoRenameConfig(
     profileId: string,
     input: { language?: string },
-  ): Promise<{ language: 'english' | 'chinese'; externalPluginInstalled: boolean }> {
+  ): Promise<{ language: 'english' | 'chinese' }> {
     const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
     if (!profile) throw new Error('Unknown agent profile');
     const language = this.normalizeAutoRenameLanguage(input.language || '');
     if (!language) throw new Error('language is required');
 
     this.saveProfileAutoRenameLanguage(profileId, language);
-    return {
-      language,
-      externalPluginInstalled: await this.hasExternalAutoRenamePlugin(profile.path),
-    };
+    return { language };
   }
 
   async listSessions(clientId: string, projectPath?: string): Promise<SessionInfo[]> {
@@ -624,7 +615,6 @@ export class PiSessionService {
     const memoryEnabled = Boolean(this.memoryRuntime) && options.memoryEnabled !== false && !options.noSession;
     const autoRenameConfig = this.getProfileSettings(profile.id);
     const extensionFactories = this.createInlineExtensions({
-      agentDir,
       profileId: profile.id,
       cwd,
       memoryEnabled,
@@ -666,7 +656,6 @@ export class PiSessionService {
     const sessionId = sessionManager.getSessionId();
     const cwd = this.getSessionManagerCwd(sessionManager, sessionPath);
     const extensionFactories = this.createInlineExtensions({
-      agentDir,
       profileId: profile.id,
       cwd,
       memoryEnabled: Boolean(this.memoryRuntime),
@@ -1119,7 +1108,6 @@ export class PiSessionService {
   }
 
   private createInlineExtensions(options: {
-    agentDir: string;
     profileId: string;
     cwd: string;
     memoryEnabled: boolean;
@@ -1133,7 +1121,7 @@ export class PiSessionService {
           id: options.autoRenameConfig.automationModelId,
         },
         language: options.autoRenameConfig.autoRenameLanguage,
-      }, options.agentDir)] : []),
+      })] : []),
       ...(options.memoryEnabled && this.memoryRuntime
         ? [this.memoryRuntime.createExtension({ profileId: options.profileId, cwd: options.cwd })]
         : []),
@@ -1151,7 +1139,6 @@ export class PiSessionService {
     const sessionManager = activeSession.sessionManager;
     const model = activeSession.model ? { provider: activeSession.model.provider, id: activeSession.model.id } : undefined;
     const extensionFactories = this.createInlineExtensions({
-      agentDir,
       profileId,
       cwd,
       memoryEnabled: Boolean(this.memoryRuntime),
@@ -1325,22 +1312,6 @@ export class PiSessionService {
     if (normalized === 'english' || normalized === 'en') return 'english';
     if (normalized === 'chinese' || normalized === 'zh' || normalized === 'zh-cn' || normalized === '中文') return 'chinese';
     return null;
-  }
-
-  private async hasExternalAutoRenamePlugin(agentDir: string): Promise<boolean> {
-    const candidates = [
-      join(agentDir, 'extensions', 'pi-auto-rename.ts'),
-      join(agentDir, 'extensions', 'pi-auto-rename', 'index.ts'),
-    ];
-    for (const candidate of candidates) {
-      try {
-        await fs.access(candidate);
-        return true;
-      } catch {
-        // Try the next candidate.
-      }
-    }
-    return false;
   }
 
   private async readAgentSettings(agentDir: string): Promise<{ defaultProvider?: string; defaultModel?: string }> {

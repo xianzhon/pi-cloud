@@ -635,7 +635,6 @@ export default {
       chooseTheLightweightModelUsedForSupporting: '选择用于提示词润色、Git 内容生成和会话自动重命名等辅助操作的轻量级模型。',
       autoRename: '自动重命名',
       chooseTheLanguageUsedByWebUIS: '选择 WebUI 内置自动重命名所使用的语言。',
-      externalPiAutoRenamePluginDetectedBundled: '检测到外部 pi-auto-rename 插件。当前 Agent 配置已禁用 WebUI 内置的自动重命名功能。',
       networkProxy: '网络代理',
       deleteProfile: '删除 Agent 配置',
       settingsSaved: '设置已保存。',

@@ -37,11 +37,8 @@ describe('ProfileManagerDialog', () => {
       if (url.endsWith('/automation-model') && options?.method !== 'PUT') {
         return ok({ model: { provider: 'openai', modelId: 'gpt-5' } });
       }
-      if (url.endsWith('/auto-rename') && options?.method === 'PUT') {
-        return ok({ config: { provider: 'openai', modelId: 'gpt-5', language: 'chinese', externalPluginInstalled: false } });
-      }
       if (url.endsWith('/auto-rename')) {
-        return ok({ config: { provider: 'openai', modelId: 'gpt-5', language: 'chinese', externalPluginInstalled: true } });
+        return ok({ config: { provider: 'openai', modelId: 'gpt-5', language: 'chinese' } });
       }
       return ok({});
     }));
@@ -101,7 +98,7 @@ describe('ProfileManagerDialog', () => {
     });
     await wrapper.setProps({ visible: true });
 
-    await vi.waitFor(() => expect(wrapper.text()).toContain('External pi-auto-rename plugin detected'));
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Automation model"]').text()).toContain('GPT-5'));
 
     const saveButton = wrapper.findAll('button').find((button) => button.text() === 'Save settings')!;
     await saveButton.trigger('click');

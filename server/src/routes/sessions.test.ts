@@ -256,7 +256,6 @@ describe('session routes', () => {
   it('returns agent profile auto-rename config', async () => {
     vi.mocked((sessionService as any).getAgentProfileAutoRenameConfig).mockResolvedValue({
       language: 'english',
-      externalPluginInstalled: false,
     });
 
     const { sessionRoutes } = await import('./sessions.js');
@@ -269,17 +268,13 @@ describe('session routes', () => {
 
     expect(sessionService.getAgentProfileAutoRenameConfig).toHaveBeenCalledWith('work');
     expect(result).toEqual({
-      config: {
-        language: 'english',
-        externalPluginInstalled: false,
-      },
+      config: { language: 'english' },
     });
   });
 
   it('saves agent profile auto-rename config', async () => {
     vi.mocked((sessionService as any).saveAgentProfileAutoRenameConfig).mockResolvedValue({
       language: 'chinese',
-      externalPluginInstalled: false,
     });
 
     const { sessionRoutes } = await import('./sessions.js');
@@ -295,10 +290,7 @@ describe('session routes', () => {
       language: 'chinese',
     });
     expect(result).toEqual({
-      config: {
-        language: 'chinese',
-        externalPluginInstalled: false,
-      },
+      config: { language: 'chinese' },
     });
   });
 

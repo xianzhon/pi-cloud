@@ -1,5 +1,3 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
 import type { Api, Model, TextContent } from '@earendil-works/pi-ai';
 import { complete } from '@earendil-works/pi-ai/compat';
 import type {
@@ -152,18 +150,10 @@ async function generateName(
   return sanitizeSessionName(raw, config.language) || null;
 }
 
-function installedAutoRenamePluginExists(agentDir: string): boolean {
-  const extensionDir = join(agentDir, 'extensions');
-  return existsSync(join(extensionDir, 'pi-auto-rename.ts'))
-    || existsSync(join(extensionDir, 'pi-auto-rename', 'index.ts'));
-}
-
-export function createWebuiAutoRenameExtension(config: RenameConfig, agentDir: string): InlineExtension {
+export function createWebuiAutoRenameExtension(config: RenameConfig): InlineExtension {
   return {
     name: 'pi-webui-auto-rename',
     factory: (pi: ExtensionAPI) => {
-      if (installedAutoRenamePluginExists(agentDir)) return;
-
       let namingAttempted = false;
       let namingInProgress = false;
 

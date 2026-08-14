@@ -628,18 +628,11 @@ describe('PiSessionService', () => {
     readdir.mockResolvedValue([{ name: 'work', isDirectory: () => true }]);
     db.prepare(`INSERT INTO agent_profile_settings (profile_id, auto_rename_provider, auto_rename_model_id, auto_rename_language, updated_at) VALUES (?, ?, ?, ?, ?)`)
       .run('work', 'openai', 'gpt-5', 'chinese', new Date().toISOString());
-    access.mockImplementation(async (path: string) => {
-      if (path.endsWith('extensions/pi-auto-rename/index.ts')) return undefined;
-      throw new Error('missing');
-    });
     const service = new PiSessionService({ db });
 
     const config = await service.getAgentProfileAutoRenameConfig('work');
 
-    expect(config).toEqual({
-      language: 'chinese',
-      externalPluginInstalled: true,
-    });
+    expect(config).toEqual({ language: 'chinese' });
   });
 
   it('saves auto-rename config to SQLite', async () => {
@@ -653,10 +646,7 @@ describe('PiSessionService', () => {
     expect(db.prepare('SELECT * FROM agent_profile_settings WHERE profile_id = ?').get('work')).toMatchObject({
       auto_rename_language: 'chinese',
     });
-    expect(config).toEqual({
-      language: 'chinese',
-      externalPluginInstalled: false,
-    });
+    expect(config).toEqual({ language: 'chinese' });
   });
 
   it('preserves auto-rename settings when saving proxy settings', async () => {
