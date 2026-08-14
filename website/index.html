@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f0f14" />
+    <meta
+      name="description"
+      content="Pi WebUI is a self-hosted, mobile-friendly workspace for the Pi coding agent."
+    />
+    <title>Pi WebUI — A workspace for the Pi coding agent</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Pi WebUI home">
+        <span class="brand-mark" aria-hidden="true">&gt;_</span>
+        <span>Pi WebUI</span>
+      </a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="#features">Features</a>
+        <a href="#screenshots">Screenshots</a>
+        <a href="https://github.com/xianzhon/pi-webui/blob/main/README.md">Docs</a>
+        <a class="nav-github" href="https://github.com/xianzhon/pi-webui">GitHub ↗</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero section-shell">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="status-dot"></span> Open source · self-hosted · yours</p>
+          <h1>A better workspace for your <span>coding agent.</span></h1>
+          <p class="hero-lede">
+            Pi WebUI brings the Pi coding agent into a persistent, mobile-friendly workspace for
+            sessions, code, terminals, tasks, memory, and Git workflows.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#get-started">Get started <span>→</span></a>
+            <a class="button button-secondary" href="https://github.com/xianzhon/pi-webui">View on GitHub ↗</a>
+          </div>
+          <div class="install-command" aria-label="Install command">
+            <span class="prompt">$</span>
+            <code>npm install -g @xianzhon/pi-webui</code>
+            <button class="copy-button" type="button" data-copy="npm install -g @xianzhon/pi-webui">Copy</button>
+          </div>
+          <p class="copy-status" role="status" aria-live="polite"></p>
+        </div>
+        <div class="hero-art" aria-label="Pi WebUI interface preview">
+          <div class="glow"></div>
+          <div class="terminal-window">
+            <div class="window-bar"><span></span><span></span><span></span><b>pi-webui</b></div>
+            <div class="window-body">
+              <aside>
+                <div class="mini-logo">&gt;_</div>
+                <div class="side-line active"></div><div class="side-line"></div><div class="side-line short"></div>
+                <div class="side-spacer"></div>
+                <div class="side-line"></div><div class="side-line short"></div>
+              </aside>
+              <div class="chat-preview">
+                <div class="chat-top"><strong>Build a great idea</strong><span>•••</span></div>
+                <div class="message muted">You have a new workspace ready.</div>
+                <div class="message user">Help me shape this into a working product.</div>
+                <div class="message agent"><span class="spark">✦</span> I can help with that. Let’s break it into a few focused steps...</div>
+                <div class="code-preview"><i></i><i></i><i></i><i></i></div>
+                <div class="composer">Ask Pi anything <span>↑</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="trust-strip section-shell">
+        <span>Everything you need to stay in flow</span>
+        <span class="strip-item">⌘ Persistent sessions</span>
+        <span class="strip-item">⌁ Built for any screen</span>
+        <span class="strip-item">◇ Your machine, your data</span>
+      </section>
+
+      <section id="features" class="section-shell content-section">
+        <div class="section-heading">
+          <p class="eyebrow">A focused control room</p>
+          <h2>From first prompt to final commit.</h2>
+          <p>Keep the agent, your project, and the rest of your development workflow in one place.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card"><span class="feature-icon">◉</span><h3>Persistent sessions</h3><p>Search, resume, rename, branch, and run independent sessions without losing your context.</p></article>
+          <article class="feature-card"><span class="feature-icon">⌘</span><h3>Workspace tools</h3><p>Browse files, edit code, search your project, and use an embedded terminal beside the conversation.</p></article>
+          <article class="feature-card"><span class="feature-icon">✓</span><h3>Tasks that keep moving</h3><p>Queue work for later, receive completion notifications, and keep your attention on the right task.</p></article>
+          <article class="feature-card"><span class="feature-icon">↗</span><h3>Git workflows</h3><p>Work with branches, commits, pushes, GitHub, and Gitea pull requests from the WebUI.</p></article>
+          <article class="feature-card"><span class="feature-icon">✦</span><h3>Useful memory</h3><p>Maintain project and global memories so Pi can recall the decisions that matter.</p></article>
+          <article class="feature-card"><span class="feature-icon">◎</span><h3>Secure by default</h3><p>Protect access with password and optional TOTP authentication while keeping deployment self-hosted.</p></article>
+        </div>
+      </section>
+
+      <section id="screenshots" class="section-shell screenshot-section">
+        <div class="section-heading compact"><p class="eyebrow">See it in action</p><h2>Your projects, wherever you are.</h2></div>
+        <div class="screenshot-frame">
+          <img src="https://raw.githubusercontent.com/xianzhon/pi-webui/main/docs/images/main-window-dark-theme.png" alt="Pi WebUI dark theme showing a coding agent session" />
+        </div>
+      </section>
+
+      <section id="get-started" class="section-shell start-section">
+        <div><p class="eyebrow">Start building</p><h2>Give Pi a workspace.</h2><p>Install it on your own machine, point it at your projects, and keep your agent workflow close.</p></div>
+        <div class="start-actions"><a class="button button-primary" href="https://github.com/xianzhon/pi-webui#quick-start">Read the quick start →</a><a class="button button-secondary" href="https://github.com/xianzhon/pi-webui/blob/main/docs/README.md">Browse documentation ↗</a></div>
+      </section>
+    </main>
+
+    <footer class="site-footer section-shell"><span>Pi WebUI is open source under the Apache-2.0 license.</span><a href="https://github.com/xianzhon/pi-webui">xianzhon/pi-webui ↗</a></footer>
+    <script>
+      const copyButton = document.querySelector('[data-copy]');
+      const copyStatus = document.querySelector('.copy-status');
+      copyButton?.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(copyButton.dataset.copy);
+        copyButton.textContent = 'Copied';
+        copyStatus.textContent = 'Install command copied to clipboard.';
+        window.setTimeout(() => { copyButton.textContent = 'Copy'; copyStatus.textContent = ''; }, 2000);
+      });
+    </script>
+  </body>
+</html>
