@@ -1,6 +1,6 @@
 # Pi WebUI development and source deployment commands
 
-.PHONY: build package clean deploy start status stop restart
+.PHONY: build test package clean deploy start status stop restart
 
 NPM  ?= npm
 PNPM ?= pnpm
@@ -8,8 +8,11 @@ PNPM ?= pnpm
 build:
 	$(PNPM) build
 
+test:
+	$(PNPM) test
+
 # Build the npm tarball used for package installation and release uploads.
-package:
+package: build test
 	$(NPM) pack
 
 clean:
