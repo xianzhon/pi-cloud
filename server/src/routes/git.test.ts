@@ -367,6 +367,37 @@ describe('gitRoutes branch', () => {
     }
   });
 
+  it('uses project commit prompts when generating with AI', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'feat: customize commits' }],
+      stopReason: 'stop',
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      api: 'mock-api', provider: 'mock', model: 'model', timestamp: Date.now(),
+    });
+    const cwd = await createRepo();
+    const prompts = {
+      get: vi.fn(() => ({ global: {}, project: {}, effective: { systemPrompt: 'Use Conventional Commits.', userPrompt: 'Write a commit title only.' } })),
+      save: vi.fn(),
+    };
+    const app = await buildApp({ commitMessagePrompts: prompts });
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/git/commit-message?cwd=${encodeURIComponent(cwd)}&clientId=client-1`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(prompts.get).toHaveBeenCalledWith(cwd);
+      expect(completeSimpleMock.mock.calls[0][1].systemPrompt).toBe('Use Conventional Commits.');
+      expect(completeSimpleMock.mock.calls[0][1].messages[0].content).toContain('Write a commit title only.');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('generates a commit message with AI from staged and unstaged changes', async () => {
     completeSimpleMock.mockResolvedValueOnce({
       role: 'assistant',

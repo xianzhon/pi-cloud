@@ -150,6 +150,37 @@ describe('SettingsDialog', () => {
     expect(wrapper.find('.settings-body-header').text()).toContain('Skill presets');
   });
 
+  it('loads and saves project commit message prompt overrides', async () => {
+    const promptConfiguration = {
+      global: { systemPrompt: 'Global system', userPrompt: 'Global user' },
+      project: { userPrompt: 'Project user' },
+      effective: { systemPrompt: 'Global system', userPrompt: 'Project user' },
+    };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: true, json: async () => promptConfiguration } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => promptConfiguration } as Response);
+    const wrapper = mountSettingsDialog({ projectPath: '/workspace/project-a' });
+
+    const gitButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!;
+    await gitButton.trigger('click');
+    await vi.waitFor(() => expect(wrapper.findAll('.commit-prompt-textarea')).toHaveLength(4));
+
+    expect((wrapper.findAll('.commit-prompt-textarea')[3].element as HTMLTextAreaElement).value).toBe('Project user');
+    await wrapper.findAll('.commit-prompt-textarea')[3].setValue('Project title only');
+    await wrapper.findAll('.commit-prompt-scope')[1].find('button').trigger('click');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+
+    expect(fetch).toHaveBeenLastCalledWith('/api/git/commit-message-prompts', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        cwd: '/workspace/project-a',
+        scope: 'project',
+        systemPrompt: '',
+        userPrompt: 'Project title only',
+      }),
+    }));
+  });
+
   it('lists the task queue keyboard shortcut', async () => {
     const wrapper = mountSettingsDialog();
 

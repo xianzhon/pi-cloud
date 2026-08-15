@@ -29,6 +29,7 @@ describe('openPiuiDatabase', () => {
     expect(tables).toEqual([
       'agent_profile_settings',
       'audit_events',
+      'commit_message_prompts',
       'memories',
       'memory_extraction_runs',
       'memory_fts',

@@ -428,6 +428,7 @@
     <SettingsDialog
       :visible="showSettings"
       :client-id="clientId"
+      :project-path="activeProjectPath"
       :totp-enabled="user?.totpEnabled || false"
       :show-hint-info="showHintInfo"
       :show-code-block-language-headers="showCodeBlockLanguageHeaders"
