@@ -458,7 +458,6 @@
                   <div class="settings-card-copy">
                     <h4 id="commit-prompt-settings-title">{{ t('components.settingsDialog.commitMessagePrompts') }}</h4>
                     <p>{{ t('components.settingsDialog.commitMessagePromptsDescription') }}</p>
-                    <p class="settings-inline-note">{{ t('components.settingsDialog.commitMessagePromptProject', { project: projectPath }) }}</p>
                   </div>
                   <div v-if="commitPromptError" class="settings-error-text" role="alert">{{ commitPromptError }}</div>
                   <div class="commit-prompt-grid">
@@ -473,7 +472,10 @@
                       <button type="button" class="settings-action-btn compact-action" :disabled="commitPromptsSaving" @click="saveCommitPrompts('global')">{{ t('components.settingsDialog.saveGlobalPrompts') }}</button>
                     </fieldset>
                     <fieldset class="commit-prompt-scope">
-                      <legend>{{ t('components.settingsDialog.projectPrompts') }}</legend>
+                      <legend>
+                        {{ t('components.settingsDialog.projectPrompts') }}
+                        <span class="commit-prompt-project-path">({{ projectDisplayPath }})</span>
+                      </legend>
                       <label class="git-settings-field">{{ t('components.settingsDialog.systemPrompt') }}
                         <textarea v-model="projectSystemPrompt" class="settings-input commit-prompt-textarea" :placeholder="t('components.settingsDialog.inheritGlobalPrompt')" />
                       </label>
@@ -627,6 +629,7 @@ import type { AvailableSkill } from '../composables/useAvailableSkills';
 import type { SkillPreset, SkillPresetInput } from '../composables/useSkillPresets';
 import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh } from '@phosphor-icons/vue';
 import { playTaskNotification } from '../services/soundNotifications';
+import { formatHomePath } from '../utils/paths';
 import DialogCloseButton from './DialogCloseButton.vue';
 import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
@@ -705,6 +708,8 @@ const props = withDefaults(defineProps<{
   clientId: '',
   projectPath: '~',
 });
+
+const projectDisplayPath = computed(() => formatHomePath(props.projectPath));
 
 const themeOptions = computed<CustomSelectOption[]>(() => [
   { value: 'system', label: t('settings.theme.system') },
@@ -1189,30 +1194,57 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
+.commit-prompt-settings {
+  align-items: stretch;
+  flex-direction: column;
+}
+
 .commit-prompt-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  gap: 1rem;
+  width: 100%;
 }
 
 .commit-prompt-scope {
   display: grid;
-  gap: 12px;
+  align-content: start;
+  gap: 0.875rem;
   min-width: 0;
   margin: 0;
-  padding: 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+  padding: 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.commit-prompt-scope legend {
+  max-width: calc(100% - 1rem);
+  padding: 0 0.35rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.commit-prompt-project-path {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.commit-prompt-scope .settings-action-btn {
+  justify-self: end;
 }
 
 .commit-prompt-textarea {
-  min-height: 76px;
+  min-height: 7rem;
+  line-height: 1.45;
   resize: vertical;
 }
 
 .commit-prompt-textarea.large {
-  min-height: 160px;
+  min-height: 11rem;
 }
 
 .settings-backdrop {

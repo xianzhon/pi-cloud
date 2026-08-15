@@ -859,7 +859,6 @@ export default {
       gitIntegrationSettingsSaved: '已保存 Git 集成设置。',
       commitMessagePrompts: 'AI 提交消息提示词',
       commitMessagePromptsDescription: '自定义 AI 生成提交消息时使用的系统提示词和用户指令。Git 状态和差异内容会始终附加到用户提示词后。',
-      commitMessagePromptProject: '项目级覆盖将应用于：{project}',
       globalPrompts: '全局默认值',
       projectPrompts: '项目级覆盖',
       systemPrompt: '系统提示词',

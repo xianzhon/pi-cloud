@@ -859,7 +859,6 @@ export default {
       gitIntegrationSettingsSaved: 'Git integration settings saved.',
       commitMessagePrompts: 'AI commit message prompts',
       commitMessagePromptsDescription: 'Customize the system and user instructions used for AI commit messages. Git status and diff are always appended to the user prompt.',
-      commitMessagePromptProject: 'Project overrides apply to: {project}',
       globalPrompts: 'Global defaults',
       projectPrompts: 'Project overrides',
       systemPrompt: 'System prompt',
