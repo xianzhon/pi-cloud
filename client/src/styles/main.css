@@ -57,6 +57,9 @@
   --user-message-text: #cabdbd;
   --user-message-border: rgba(139, 164, 255, 0.22);
   --user-message-shadow: 0 10px 28px rgba(8, 12, 24, 0.28);
+  --user-message-link: #79c0ff;
+  --user-message-link-hover: #a5d6ff;
+  --user-message-link-underline: rgba(121, 192, 255, 0.35);
   --sidebar-selected-bg: #324fba;
   --sidebar-selected-text: #f8fbff;
   --sidebar-selected-muted: rgba(248, 251, 255, 0.78);
@@ -167,6 +170,9 @@
   --user-message-text: #ffffff;
   --user-message-border: rgba(35, 80, 210, 0.18);
   --user-message-shadow: 0 8px 22px rgba(35, 80, 210, 0.16);
+  --user-message-link: #ffffff;
+  --user-message-link-hover: #fef3c7;
+  --user-message-link-underline: rgba(255, 255, 255, 0.72);
   --sidebar-selected-bg: #4165e6;
   --sidebar-selected-text: #ffffff;
   --sidebar-selected-muted: rgba(255, 255, 255, 0.82);
