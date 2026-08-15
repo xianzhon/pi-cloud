@@ -386,6 +386,26 @@ describe('MessageBubble', () => {
     expect(source).toContain('--markdown-inline-code-border: none;');
   });
 
+  it('uses high-contrast link colors for user messages in the light theme', () => {
+    const componentSource = readFileSync(resolve(process.cwd(), 'src/components/MessageBubble.vue'), 'utf8');
+    const styles = readFileSync(resolve(process.cwd(), 'src/styles/main.css'), 'utf8');
+    const lightTheme = styles.match(/\[data-theme="light"\] \{([\s\S]*?)\n\}/)?.[1] || '';
+    const color = (variable: string) => lightTheme.match(new RegExp(`--${variable}: (#[0-9a-f]{6})`, 'i'))?.[1] || '';
+    const luminance = (hex: string) => {
+      const channels = hex.match(/[0-9a-f]{2}/gi)!.map((value) => parseInt(value, 16) / 255);
+      const [red, green, blue] = channels.map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    };
+    const contrast = (foreground: string, background: string) => {
+      const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+      return (values[0] + 0.05) / (values[1] + 0.05);
+    };
+
+    expect(componentSource).toContain('.message-bubble.user .markdown-body :deep(a)');
+    expect(contrast(color('user-message-link'), color('user-message-bg'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(color('user-message-link-hover'), color('user-message-bg'))).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('renders expanded skill-reference user messages as a clickable skill file path', () => {
     const wrapper = mount(MessageBubble, {
       props: {

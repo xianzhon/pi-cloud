@@ -1563,6 +1563,17 @@ async function copyContent() {
   outline: none;
 }
 
+.message-bubble.user .markdown-body :deep(a) {
+  color: var(--user-message-link);
+  border-bottom-color: var(--user-message-link-underline);
+}
+
+.message-bubble.user .markdown-body :deep(a:hover),
+.message-bubble.user .markdown-body :deep(a:focus-visible) {
+  color: var(--user-message-link-hover);
+  border-bottom-color: var(--user-message-link-hover);
+}
+
 .markdown-body :deep(strong) {
   color: var(--text-primary);
   font-weight: 700;
