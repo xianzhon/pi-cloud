@@ -85,6 +85,7 @@ A global installation can run as a startup service using systemd user services o
 pi-webui service install
 pi-webui service start
 pi-webui service stop
+pi-webui service restart
 pi-webui service status
 pi-webui service uninstall
 ```
@@ -110,7 +111,7 @@ pi-webui update 1.2.3       # specific version
 An update does not restart a running service automatically. Restart it to use the new version:
 
 ```bash
-pi-webui service stop && pi-webui service start
+pi-webui service restart
 ```
 
 ## Remote Access with SSH

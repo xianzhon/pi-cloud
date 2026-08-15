@@ -22,6 +22,7 @@ Service commands:
   service install          Install and enable automatic startup
   service start            Start the service
   service stop             Stop the service
+  service restart          Restart the service
   service status           Show service status
   service uninstall        Remove the service
   update [version]         Update the global npm installation
@@ -134,16 +135,17 @@ function updateCommand(version) {
   runNpm(['install', '-g', packageSpec]);
   console.log(`Updated ${packageSpec}.`);
   console.log('If Pi WebUI is running as a service, restart it to use the new version:');
-  console.log('  pi-webui service stop && pi-webui service start');
+  console.log('  pi-webui service restart');
 }
 
 function serviceCommand(action) {
-  if (!action) throw new Error('Usage: pi-webui service <install|start|stop|status|uninstall>');
+  if (!action) throw new Error('Usage: pi-webui service <install|start|stop|restart|status|uninstall>');
 
   if (process.platform === 'linux') {
     if (action === 'install') return installLinuxService();
     if (action === 'start') return runCommand('systemctl', ['--user', 'start', SERVICE_NAME]);
     if (action === 'stop') return runCommand('systemctl', ['--user', 'stop', SERVICE_NAME]);
+    if (action === 'restart') return runCommand('systemctl', ['--user', 'restart', SERVICE_NAME]);
     if (action === 'status') return runCommand('systemctl', ['--user', 'status', SERVICE_NAME]);
     if (action === 'uninstall') {
       runCommand('systemctl', ['--user', 'disable', '--now', SERVICE_NAME]);
@@ -156,6 +158,7 @@ function serviceCommand(action) {
     if (action === 'install') return installMacService();
     if (action === 'start') return runCommand('launchctl', ['kickstart', `${domain}/${SERVICE_LABEL}`]);
     if (action === 'stop') return runCommand('launchctl', ['kill', 'SIGTERM', `${domain}/${SERVICE_LABEL}`]);
+    if (action === 'restart') return runCommand('launchctl', ['kickstart', '-k', `${domain}/${SERVICE_LABEL}`]);
     if (action === 'status') return runCommand('launchctl', ['print', `${domain}/${SERVICE_LABEL}`]);
     if (action === 'uninstall') {
       runCommand('launchctl', ['bootout', domain, servicePath]);
@@ -165,6 +168,10 @@ function serviceCommand(action) {
     if (action === 'install') return installWindowsService();
     if (action === 'start') return runCommand('schtasks', ['/Run', '/TN', SERVICE_NAME]);
     if (action === 'stop') return runCommand('schtasks', ['/End', '/TN', SERVICE_NAME]);
+    if (action === 'restart') {
+      runCommand('schtasks', ['/End', '/TN', SERVICE_NAME]);
+      return runCommand('schtasks', ['/Run', '/TN', SERVICE_NAME]);
+    }
     if (action === 'status') return runCommand('schtasks', ['/Query', '/TN', SERVICE_NAME]);
     if (action === 'uninstall') return runCommand('schtasks', ['/Delete', '/TN', SERVICE_NAME, '/F']);
   }

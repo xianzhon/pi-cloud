@@ -85,6 +85,7 @@ chmod 600 ~/.config/pi-webui/.env
 pi-webui service install
 pi-webui service start
 pi-webui service stop
+pi-webui service restart
 pi-webui service status
 pi-webui service uninstall
 ```
@@ -110,7 +111,7 @@ pi-webui update 1.2.3       # 指定版本
 更新不会自动重启正在运行的服务。请重启服务以使用新版本：
 
 ```bash
-pi-webui service stop && pi-webui service start
+pi-webui service restart
 ```
 
 ## 通过 SSH 远程访问
