@@ -456,6 +456,8 @@ export default {
       failedToBrowseFolder: 'Failed to browse folder',
       hideHiddenFolders: 'Hide hidden folders',
       showHiddenFolders: 'Show hidden folders',
+      sortByModifiedDate: 'Sort by modified date (newest first)',
+      sortByName: 'Sort by name',
       browseFailedStatus: 'Failed to browse folder ({status})',
     },
     inputPromptModal: {

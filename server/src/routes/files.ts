@@ -17,10 +17,12 @@ interface TreeNode {
   isSymlink?: boolean;
   linkTarget?: string;
   targetType?: 'file' | 'directory' | 'missing' | 'other';
+  mtime?: number;
   children?: TreeNode[];
 }
 
 type TreeFilterType = 'all' | 'file' | 'directory';
+type TreeSort = 'name' | 'modified';
 
 const imageMimeTypes = new Map<string, string>([
   ['.apng', 'image/apng'],
@@ -43,6 +45,7 @@ interface BuildFileTreeOptions {
   includeHidden: boolean;
   excludeNames: Set<string>;
   filterType: TreeFilterType;
+  sort: TreeSort;
 }
 
 function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
@@ -53,6 +56,10 @@ function parseBoolean(value: string | undefined, defaultValue: boolean): boolean
 function parseFilterType(value: string | undefined): TreeFilterType {
   if (value === 'file' || value === 'directory') return value;
   return 'all';
+}
+
+function parseTreeSort(value: string | undefined): TreeSort {
+  return value === 'modified' ? 'modified' : 'name';
 }
 
 function getImageMimeType(filePath: string): string | undefined {
@@ -135,6 +142,7 @@ async function buildFileTree(
     includeHidden: false,
     excludeNames: new Set(['node_modules']),
     filterType: 'all',
+    sort: 'name',
   }
 ): Promise<TreeNode[]> {
   if (currentDepth >= depth) return [];
@@ -147,6 +155,9 @@ async function buildFileTree(
     if (options.excludeNames.has(entry.name)) continue;
 
     const node = await createTreeNode(dirPath, entry);
+    if (options.sort === 'modified') {
+      node.mtime = (await fs.lstat(node.path)).mtimeMs;
+    }
 
     if (options.filterType !== 'all' && options.filterType !== node.type) {
       continue;
@@ -160,6 +171,9 @@ async function buildFileTree(
   }
 
   return nodes.sort((a, b) => {
+    if (options.sort === 'modified') {
+      return (b.mtime! - a.mtime!) || a.name.localeCompare(b.name);
+    }
     if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
@@ -173,12 +187,14 @@ export async function fileRoutes(app: FastifyInstance) {
       type,
       hidden,
       exclude,
+      sort,
     } = req.query as {
       path?: string;
       depth?: string;
       type?: string;
       hidden?: string;
       exclude?: string;
+      sort?: string;
     };
 
     const resolvedPath = await resolveAllowedPath(dirPath);
@@ -193,6 +209,7 @@ export async function fileRoutes(app: FastifyInstance) {
       includeHidden: parseBoolean(hidden, false),
       excludeNames,
       filterType: parseFilterType(type),
+      sort: parseTreeSort(sort),
     });
 
     const parentPath = path.dirname(resolvedPath);

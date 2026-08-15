@@ -50,6 +50,29 @@ describe('fileRoutes', () => {
     ]);
   });
 
+  it('sorts by modified time from newest to oldest like ls -t', async () => {
+    const olderPath = path.join(tempDir, 'z-older.txt');
+    const newerPath = path.join(tempDir, 'a-newer.txt');
+    await fs.writeFile(olderPath, 'older');
+    await fs.writeFile(newerPath, 'newer');
+    await fs.utimes(olderPath, new Date('2025-01-01'), new Date('2025-01-01'));
+    await fs.utimes(newerPath, new Date('2025-01-02'), new Date('2025-01-02'));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/tree?path=${encodeURIComponent(tempDir)}&type=file&sort=modified`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const tree = response.json().tree as Array<{ name: string; mtime: number }>;
+    expect(tree.map((node) => node.name)).toEqual([
+      'README.md',
+      'a-newer.txt',
+      'z-older.txt',
+    ]);
+    expect(tree.every((node) => typeof node.mtime === 'number')).toBe(true);
+  });
+
   it('can include hidden files and override excluded names', async () => {
     const response = await app.inject({
       method: 'GET',

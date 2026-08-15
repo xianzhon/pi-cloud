@@ -456,6 +456,8 @@ export default {
       failedToBrowseFolder: '无法浏览文件夹',
       hideHiddenFolders: '不显示隐藏文件夹',
       showHiddenFolders: '显示隐藏文件夹',
+      sortByModifiedDate: '按修改日期排序（最新优先）',
+      sortByName: '按名称排序',
       browseFailedStatus: '浏览文件夹失败（{status}）',
     },
     inputPromptModal: {

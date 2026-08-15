@@ -51,6 +51,18 @@
           </label>
           <button
             class="toolbar-btn tooltip"
+            :class="{ active: directorySort === 'modified' }"
+            type="button"
+            @click="toggleDirectorySort"
+            :data-tooltip="directorySort === 'modified' ? t('components.folderPickerModal.sortByName') : t('components.folderPickerModal.sortByModifiedDate')"
+            :aria-label="directorySort === 'modified' ? t('components.folderPickerModal.sortByName') : t('components.folderPickerModal.sortByModifiedDate')"
+            :aria-pressed="directorySort === 'modified'"
+          >
+            <PhTextAa v-if="directorySort === 'name'" :size="15" />
+            <PhClockCounterClockwise v-else :size="15" />
+          </button>
+          <button
+            class="toolbar-btn tooltip"
             :class="{ active: showHiddenFolders }"
             type="button"
             @click="toggleHiddenFolders"
@@ -145,7 +157,7 @@
 <script setup lang="ts">
 import { i18n } from '../i18n';
 import { computed, ref, watch } from 'vue';
-import { PhArrowLeft, PhEye, PhEyeSlash, PhFolder, PhMagnifyingGlass } from '@phosphor-icons/vue';
+import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhMagnifyingGlass, PhTextAa } from '@phosphor-icons/vue';
 import CloneRepositoryModal from './CloneRepositoryModal.vue';
 import DialogCloseButton from './DialogCloseButton.vue';
 
@@ -186,6 +198,7 @@ const error = ref('');
 const moveMode = ref<MoveMode | undefined>('rename');
 const projectName = ref('');
 const showHiddenFolders = ref(false);
+const directorySort = ref<'name' | 'modified'>('name');
 const searchQuery = ref('');
 const activeTab = ref<'browse' | 'clone'>('browse');
 
@@ -262,18 +275,25 @@ function browseEnteredPath() {
   void browse(targetPath);
 }
 
+async function toggleDirectorySort() {
+  directorySort.value = directorySort.value === 'name' ? 'modified' : 'name';
+  await browse(currentPath.value);
+}
+
 async function toggleHiddenFolders() {
   showHiddenFolders.value = !showHiddenFolders.value;
   await browse(currentPath.value);
 }
 
 function createTreeParams(path: string, depth: string) {
-  return new URLSearchParams({
+  const params = new URLSearchParams({
     path,
     depth,
     type: 'directory',
     hidden: showHiddenFolders.value ? 'true' : 'false',
   });
+  if (directorySort.value === 'modified') params.set('sort', 'modified');
+  return params;
 }
 
 function selectClonedProject(payload: { projectPath: string }) {

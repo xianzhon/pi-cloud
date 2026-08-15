@@ -51,6 +51,31 @@ describe('FolderPickerModal', () => {
     }]);
   });
 
+  it('toggles folder sorting by modified time from the button before hidden folders', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ path: '/workspace', tree: [] }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = mount(FolderPickerModal, {
+      props: { visible: true, initialPath: '/workspace' },
+      global: { stubs: { Teleport: true } },
+    });
+
+    await vi.waitFor(() => expect(wrapper.find('.path-input').element).toHaveProperty('value', '/workspace'));
+    const sortButton = wrapper.find('[aria-label="Sort by modified date (newest first)"]');
+    const hiddenButton = wrapper.find('[aria-label="Show hidden folders"]');
+    expect(sortButton.find('svg').exists()).toBe(true);
+    expect(sortButton.element.nextElementSibling).toBe(hiddenButton.element);
+
+    fetchMock.mockClear();
+    await sortButton.trigger('click');
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/files/tree?path=%2Fworkspace&depth=1&type=directory&hidden=false&sort=modified');
+    });
+  });
+
   it('browses an entered path and treats a bare Windows drive as its root', async () => {
     const fetchMock = vi.fn(async (input: string) => {
       const requestedPath = new URL(input, 'http://localhost').searchParams.get('path');
