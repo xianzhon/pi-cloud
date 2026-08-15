@@ -14,6 +14,7 @@ Options:
   -p, --port <port>       Listen on this port (default: 3000)
   -H, --hostname <host>   Bind to this hostname (default: 127.0.0.1)
       --no-open           Do not open the browser
+  -v, --version           Show the current version
   -h, --help              Show this help
 
 Environment variables PORT and HOST are also supported.
@@ -35,6 +36,10 @@ function parseArgs(args) {
     const arg = args[index];
     if (arg === '-h' || arg === '--help') {
       printHelp();
+      process.exit(0);
+    }
+    if (arg === '-v' || arg === '--version') {
+      console.log(installedVersion());
       process.exit(0);
     }
     if (arg === '--no-open') {
@@ -114,17 +119,21 @@ function installWindowsService() {
   console.log('Installed Windows startup task Pi WebUI.');
 }
 
-function updateCommand(version) {
+function installedVersion() {
   const packagePath = join(dirname(scriptPath), '..', 'package.json');
-  const installedVersion = JSON.parse(readFileSync(packagePath, 'utf8')).version;
+  return JSON.parse(readFileSync(packagePath, 'utf8')).version;
+}
+
+function updateCommand(version) {
+  const currentVersion = installedVersion();
   if (version === '--check') {
     const result = spawnNpm(['view', NPM_PACKAGE_NAME, 'version', '--silent'], { encoding: 'utf8' });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(result.stderr?.trim() || 'Could not check the latest version.');
     const latestVersion = result.stdout.trim();
-    console.log(`Installed version: ${installedVersion}`);
+    console.log(`Installed version: ${currentVersion}`);
     console.log(`Latest version: ${latestVersion}`);
-    console.log(installedVersion === latestVersion ? 'Pi WebUI is up to date.' : 'An update is available. Run: pi-webui update');
+    console.log(currentVersion === latestVersion ? 'Pi WebUI is up to date.' : 'An update is available. Run: pi-webui update');
     return;
   }
 
