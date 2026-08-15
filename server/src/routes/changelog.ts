@@ -1,9 +1,14 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 
 const MAX_CHANGELOG_BYTES = 256 * 1024;
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const CHANGELOG_PATHS = [
+  // The bundled route lives in server/dist; the source route lives in server/src/routes.
+  path.resolve(moduleDir, '../../CHANGELOG.md'),
+  path.resolve(moduleDir, '../../../CHANGELOG.md'),
   path.resolve(process.cwd(), 'CHANGELOG.md'),
   path.resolve(process.cwd(), '..', 'CHANGELOG.md'),
 ];

@@ -27,6 +27,7 @@
     "client/dist",
     "server/dist",
     "client/src/assets/fonts/MesloLGMNerdFontMono-Regular.LICENSE",
+    "CHANGELOG.md",
     "LICENSE",
     "README.md"
   ],
