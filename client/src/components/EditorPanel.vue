@@ -164,9 +164,11 @@
       
       <div
         v-if="activeIsMarkdown && activeMarkdownMode === 'preview'"
+        ref="markdownPreviewEl"
         class="markdown-preview"
         :class="{ 'markdown-preview-light': resolvedTheme === 'light' }"
         v-html="activeMarkdownHtml"
+        @click="handleMarkdownPreviewClick"
       ></div>
       <div v-else-if="activeImageSrc" class="image-preview">
         <div class="image-preview-toolbar" role="group" :aria-label="t('components.editorPanel.imageZoomControls')">
@@ -433,6 +435,9 @@ const markdownRenderer = new Marked({
     image(href, title, text) {
       return defaultMarkdownRenderer.image(resolveMarkdownImageHref(href), title, text);
     },
+    heading(text, level, raw) {
+      return `<h${level} id="${escapeHtml(markdownHeadingId(raw))}">${text}</h${level}>`;
+    },
   },
 });
 
@@ -481,6 +486,7 @@ const statusMessage = ref('');
 const statusType = ref<'success' | 'error' | 'saving'>('success');
 const isSaving = ref(false);
 const editorContainer = ref<HTMLElement>();
+const markdownPreviewEl = ref<HTMLElement>();
 const fileTreeEl = ref<HTMLElement>();
 const imagePreviewEl = ref<HTMLElement>();
 const imageEl = ref<HTMLImageElement>();
@@ -629,7 +635,22 @@ function resolveMarkdownImageHref(href: string): string {
   return `/api/files/raw?path=${encodeURIComponent(resolvedPath)}${suffix}`;
 }
 
+const markdownHeadingCounts = new Map<string, number>();
+
+function markdownHeadingId(raw: string): string {
+  const base = raw
+    .trim()
+    .toLowerCase()
+    .replace(/<[^>]*>/g, '')
+    .replace(/[^\p{Letter}\p{Number}\s_-]/gu, '')
+    .replace(/\s+/g, '-');
+  const count = markdownHeadingCounts.get(base) || 0;
+  markdownHeadingCounts.set(base, count + 1);
+  return count ? `${base}-${count}` : base;
+}
+
 function renderMarkdownPreview(markdown: string): string {
+  markdownHeadingCounts.clear();
   const frontmatter = parseFrontmatter(markdown);
   if (!frontmatter) return markdownRenderer.parse(markdown) as string;
 
@@ -641,6 +662,42 @@ function renderMarkdownPreview(markdown: string): string {
     : '';
 
   return `${metadataTable}${markdownRenderer.parse(frontmatter.body) as string}`;
+}
+
+function isLocalMarkdownHref(href: string): boolean {
+  if (href.startsWith('#')) return true;
+  return !href.startsWith('/') && !href.startsWith('//') && !/^[a-z][a-z\d+.-]*:/i.test(href);
+}
+
+async function handleMarkdownPreviewClick(event: MouseEvent): Promise<void> {
+  const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+  const href = link?.getAttribute('href');
+  if (!href || !isLocalMarkdownHref(href)) return;
+
+  event.preventDefault();
+  const hashIndex = href.indexOf('#');
+  const encodedPath = (hashIndex === -1 ? href : href.slice(0, hashIndex)).split('?')[0];
+  const encodedHeading = hashIndex === -1 ? '' : href.slice(hashIndex + 1);
+  let linkedPath = encodedPath;
+  let headingId = encodedHeading;
+  try {
+    linkedPath = decodeURIComponent(encodedPath);
+    headingId = decodeURIComponent(encodedHeading);
+  } catch {
+    // Keep malformed escapes unchanged so the file API can report a normal error.
+  }
+
+  if (linkedPath && activeTab.value) {
+    const targetPath = resolveNewFilePath(linkedPath, dirname(activeTab.value));
+    await openFile(targetPath);
+    if (activeTab.value !== targetPath) return;
+  }
+
+  if (!headingId) return;
+  await nextTick();
+  const heading = Array.from(markdownPreviewEl.value?.querySelectorAll<HTMLElement>('[id]') || [])
+    .find(element => element.id === headingId);
+  heading?.scrollIntoView({ block: 'start' });
 }
 
 function parseFrontmatter(markdown: string): { metadata: Array<{ key: string; value: string }>; body: string } | null {

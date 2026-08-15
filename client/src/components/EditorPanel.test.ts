@@ -287,6 +287,47 @@ describe('EditorPanel', () => {
     ]);
   });
 
+  it('opens relative markdown links in the editor and scrolls to the linked heading', async () => {
+    const readContents: Record<string, string> = {
+      '/project/README.md': '[Developer notes](docs/to-developers/developer-notes.md#testing)',
+      '/project/docs/to-developers/developer-notes.md': '# Developer Notes\n\n## Testing\n',
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) {
+        return { ok: true, json: async () => ({ tree: [] }) };
+      }
+      if (String(url).startsWith('/api/files/read')) {
+        const filePath = new URL(String(url), 'http://localhost').searchParams.get('path') || '';
+        return { ok: true, json: async () => ({ content: readContents[filePath], mtime: 1 }) };
+      }
+      if (String(url).startsWith('/api/git/changes')) {
+        return { ok: true, json: async () => ({ changes: {} }) };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    vi.spyOn(monaco.editor, 'createModel').mockImplementation((content: string) => ({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => content),
+      dispose: vi.fn(),
+    } as any));
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/README.md');
+    await wrapper.vm.$nextTick();
+    await wrapper.find('.markdown-preview a').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.markdown-preview h1').text()).toBe('Developer Notes');
+    expect(wrapper.find('.markdown-preview h2').attributes('id')).toBe('testing');
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+  });
+
   it('renders markdown frontmatter containing angle-bracket placeholders without hiding the body', async () => {
     const markdown = [
       '---',
