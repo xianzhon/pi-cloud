@@ -435,6 +435,12 @@ const markdownRenderer = new Marked({
     image(href, title, text) {
       return defaultMarkdownRenderer.image(resolveMarkdownImageHref(href), title, text);
     },
+    code(code, language, escaped) {
+      if (language?.trim().toLowerCase() === 'mermaid') {
+        return `<div class="mermaid-diagram">${escapeHtml(code)}</div>`;
+      }
+      return defaultMarkdownRenderer.code(code, language, escaped);
+    },
     heading(text, level, raw) {
       return `<h${level} id="${escapeHtml(markdownHeadingId(raw))}">${text}</h${level}>`;
     },
@@ -662,6 +668,45 @@ function renderMarkdownPreview(markdown: string): string {
     : '';
 
   return `${metadataTable}${markdownRenderer.parse(frontmatter.body) as string}`;
+}
+
+let mermaidRenderVersion = 0;
+
+async function renderMermaidDiagrams(): Promise<void> {
+  const preview = markdownPreviewEl.value;
+  if (!preview) return;
+  const diagrams = Array.from(preview.querySelectorAll<HTMLElement>('.mermaid-diagram'));
+  if (!diagrams.length) return;
+
+  const renderVersion = ++mermaidRenderVersion;
+  // Mermaid is large, so load it only when a preview actually contains a diagram.
+  const { default: mermaid } = await import('mermaid');
+  if (renderVersion !== mermaidRenderVersion || preview !== markdownPreviewEl.value) return;
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: resolvedTheme.value === 'light' ? 'default' : 'dark',
+    // Mermaid 11 reads this globally when creating node labels.
+    // Native SVG text survives sanitization; HTML foreignObject labels do not.
+    htmlLabels: false,
+  });
+
+  for (const [index, diagram] of diagrams.entries()) {
+    const source = diagram.dataset.mermaidSource || diagram.textContent || '';
+    diagram.dataset.mermaidSource = source;
+    try {
+      const { svg, bindFunctions } = await mermaid.render(`editor-mermaid-${renderVersion}-${index}`, source);
+      if (renderVersion !== mermaidRenderVersion || preview !== markdownPreviewEl.value || !preview.contains(diagram)) return;
+      diagram.innerHTML = sanitizeHtmlFragment(svg);
+      bindFunctions?.(diagram);
+    } catch {
+      // Keep invalid Mermaid source visible so users can correct it in edit mode.
+      diagram.replaceChildren(Object.assign(document.createElement('pre'), {
+        className: 'mermaid-error',
+        textContent: source,
+      }));
+    }
+  }
 }
 
 function isLocalMarkdownHref(href: string): boolean {
@@ -2338,6 +2383,14 @@ watch(resolvedTheme, (theme) => {
   applyGitChangeDecorations();
 });
 
+watch([
+  () => activeIsMarkdown.value ? activeMarkdownHtml.value : '',
+  activeMarkdownMode,
+  resolvedTheme,
+], () => {
+  void nextTick(renderMermaidDiagrams);
+});
+
 watch(() => props.autoRefresh, (enabled) => {
   stopAutoRefresh();
   if (enabled) startAutoRefresh();
@@ -3004,6 +3057,22 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 .markdown-preview :deep(img) {
   max-width: 100%;
+}
+
+.markdown-preview :deep(.mermaid-diagram) {
+  margin: 0 0 1rem;
+  overflow: auto;
+  text-align: center;
+}
+
+.markdown-preview :deep(.mermaid-diagram svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-preview :deep(.mermaid-error) {
+  text-align: left;
+  white-space: pre-wrap;
 }
 
 .markdown-preview :deep(table) {

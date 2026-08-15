@@ -4,6 +4,13 @@ import * as monaco from 'monaco-editor';
 import EditorPanel from './EditorPanel.vue';
 import editorPanelSource from './EditorPanel.vue?raw';
 
+const mermaidMock = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  render: vi.fn(),
+}));
+
+vi.mock('mermaid', () => ({ default: mermaidMock }));
+
 enableAutoUnmount(afterEach);
 
 vi.mock('monaco-editor', () => ({
@@ -64,6 +71,8 @@ describe('EditorPanel', () => {
   afterEach(async () => {
     // Let mounted reloads finish while their per-test fetch stub is still installed.
     await flushPromises();
+    mermaidMock.initialize.mockReset();
+    mermaidMock.render.mockReset();
     vi.unstubAllGlobals();
   });
 
@@ -104,6 +113,75 @@ describe('EditorPanel', () => {
     expect(editorPanelSource).toContain(":class=\"{ 'markdown-preview-light': resolvedTheme === 'light' }\"");
     expect(editorPanelSource).toContain('.markdown-preview-light :deep(tbody tr:nth-child(2n))');
     expect(editorPanelSource).toContain('background: #f6f8fa;');
+  });
+
+  it('renders Mermaid flowcharts and sequence diagrams in markdown preview', async () => {
+    const markdown = [
+      '```mermaid',
+      'graph LR',
+      '  A --> B',
+      '```',
+      '',
+      '```mermaid',
+      'sequenceDiagram',
+      '  A->>B: Hello',
+      '```',
+      '',
+      '```ts',
+      'const untouched = true;',
+      '```',
+    ].join('\n');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: markdown, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => markdown),
+      dispose: vi.fn(),
+    } as any);
+    mermaidMock.render.mockImplementation(async (_id: string, source: string) => ({
+      svg: `<svg><text>${source.startsWith('graph') ? 'flowchart' : 'sequence'}</text></svg>`,
+    }));
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/architecture.md');
+    await vi.waitFor(() => expect(mermaidMock.render).toHaveBeenCalledTimes(2));
+
+    expect(mermaidMock.initialize).toHaveBeenCalledWith(expect.objectContaining({
+      securityLevel: 'strict',
+      htmlLabels: false,
+    }));
+    expect(mermaidMock.render.mock.calls.map(call => call[1])).toEqual([
+      'graph LR\n  A --> B',
+      'sequenceDiagram\n  A->>B: Hello',
+    ]);
+    expect(wrapper.findAll('.mermaid-diagram svg')).toHaveLength(2);
+    expect(wrapper.find('pre code.language-ts').text()).toBe('const untouched = true;');
+  });
+
+  it('keeps invalid Mermaid source visible in markdown preview', async () => {
+    const markdown = '```mermaid\nnot a valid diagram\n```';
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: markdown, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => markdown),
+      dispose: vi.fn(),
+    } as any);
+    mermaidMock.render.mockRejectedValue(new Error('Parse error'));
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/broken.md');
+    await vi.waitFor(() => expect(wrapper.find('.mermaid-error').exists()).toBe(true));
+
+    expect(wrapper.find('.mermaid-error').text()).toBe('not a valid diagram');
   });
 
   it('zooms and drag-pans an image preview, then resets it', async () => {
