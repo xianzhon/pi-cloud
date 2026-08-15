@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { loadRuntimeConfig } from './runtime-config.mjs';
 
 function printHelp() {
   console.log(`Usage: pi-webui [options]
@@ -210,11 +211,9 @@ try {
   }
 
   const options = parseArgs(args);
-  process.env.PORT = options.port ?? process.env.PORT ?? '3000';
-  process.env.HOST = options.hostname ?? process.env.HOST ?? '127.0.0.1';
   process.env.PI_WEBUI_CLI_IMPORT = '1';
 
-  const { startServer } = await import('../server/dist/index.js');
+  const { startServer } = await loadRuntimeConfig(options, () => import('../server/dist/index.js'));
   const app = await startServer();
   const address = app.server.address();
   const port = typeof address === 'object' && address ? address.port : process.env.PORT;
