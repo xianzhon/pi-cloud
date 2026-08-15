@@ -836,6 +836,29 @@ describe('App routing', () => {
     expect(fetchMock).not.toHaveBeenCalledWith('/api/files/search?pattern=**%2FAGENTS.md&path=%2Fworkspace');
   });
 
+  it('opens home-relative file paths without resolving them against the workspace', async () => {
+    const fetchMock = vi.mocked(fetch);
+    mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    window.dispatchEvent(new CustomEvent('open-file-in-editor', {
+      detail: { path: '~/ai/260815-sshd-usepam-systemd-user-service.md', kind: 'path' },
+    }));
+    await flushPromises();
+
+    expect(editorOpenFile).toHaveBeenCalledWith('~/ai/260815-sshd-usepam-systemd-user-service.md', undefined, undefined);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/files/search?'))).toBe(false);
+  });
+
   it('falls back to suffix search for relative file paths that are not rooted at the workspace', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url === '/api/sessions/project-path') {

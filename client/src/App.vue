@@ -1773,7 +1773,7 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 function resolveFilePath(filePath: string, cwd: string): string {
-  if (filePath.startsWith('/')) return filePath;
+  if (filePath.startsWith('/') || filePath.startsWith('~/')) return filePath;
   // Expand bare ~ to ~/ so path joining works correctly
   const expandedCwd = cwd === '~' ? '~/' : cwd;
   const base = expandedCwd.endsWith('/') ? expandedCwd : expandedCwd + '/';
@@ -1854,7 +1854,7 @@ async function handleOpenFileInEditor(event: Event) {
     } catch {
       return;
     }
-  } else if (!detail.path.startsWith('/') && detail.path.includes('/')) {
+  } else if (!detail.path.startsWith('/') && !detail.path.startsWith('~/') && detail.path.includes('/')) {
     try {
       filePath = await resolveSearchableFilePath(detail.path, cwd) || resolveFilePath(detail.path, cwd);
     } catch {
