@@ -2,6 +2,27 @@
 
 All notable changes to Pi WebUI are documented here.
 
+## [1.0.1] - 2026-08-15
+
+### Added
+
+- Added a responsive GitHub Pages website with an illustrated feature guide, updated product screenshots, and automated deployment.
+- Added `pi-webui service restart` support on Linux, macOS, and Windows.
+
+### Changed
+
+- Always use Pi WebUI's bundled session auto-rename extension instead of disabling it when an external auto-rename plugin is detected.
+- Upgraded `better-sqlite3` from version 12 to 13 and removed the deprecated `prebuild-install` dependency.
+- Added a GitHub social preview image and refreshed the main interface screenshots.
+
+### Fixed
+
+- Respect `PORT` and `HOST` values from `~/.config/pi-webui/.env` when the CLI starts Pi WebUI, while preserving explicit CLI option precedence.
+- Open home-relative (`~/`) file links from chat in the editor instead of resolving them against the workspace.
+- Open relative links and heading anchors within the Markdown preview instead of navigating to browser routes.
+- Improved user-message link contrast and hover/focus visibility in the light theme.
+- Allow the GitHub Pages workflow to enable Pages during deployment.
+
 ## [1.0.0] - 2026-07-23
 
 ### Added
