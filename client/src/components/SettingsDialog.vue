@@ -474,7 +474,7 @@
                     <fieldset class="commit-prompt-scope">
                       <legend>
                         {{ t('components.settingsDialog.projectPrompts') }}
-                        <span class="commit-prompt-project-path">({{ projectDisplayPath }})</span>
+                        <span class="commit-prompt-project-name">({{ projectName }})</span>
                       </legend>
                       <label class="git-settings-field">{{ t('components.settingsDialog.systemPrompt') }}
                         <textarea v-model="projectSystemPrompt" class="settings-input commit-prompt-textarea" :placeholder="t('components.settingsDialog.inheritGlobalPrompt')" />
@@ -629,7 +629,6 @@ import type { AvailableSkill } from '../composables/useAvailableSkills';
 import type { SkillPreset, SkillPresetInput } from '../composables/useSkillPresets';
 import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh } from '@phosphor-icons/vue';
 import { playTaskNotification } from '../services/soundNotifications';
-import { formatHomePath } from '../utils/paths';
 import DialogCloseButton from './DialogCloseButton.vue';
 import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
@@ -709,7 +708,7 @@ const props = withDefaults(defineProps<{
   projectPath: '~',
 });
 
-const projectDisplayPath = computed(() => formatHomePath(props.projectPath));
+const projectName = computed(() => props.projectPath.replace(/\/+$/, '').split('/').pop() || props.projectPath);
 
 const themeOptions = computed<CustomSelectOption[]>(() => [
   { value: 'system', label: t('settings.theme.system') },
@@ -1226,11 +1225,10 @@ const emit = defineEmits<{
   line-height: 1.4;
 }
 
-.commit-prompt-project-path {
+.commit-prompt-project-name {
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 400;
-  overflow-wrap: anywhere;
 }
 
 .commit-prompt-scope .settings-action-btn {
