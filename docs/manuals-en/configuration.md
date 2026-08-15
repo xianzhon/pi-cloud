@@ -2,6 +2,8 @@
 
 Pi WebUI reads configuration from shell environment variables and `.env` files. Shell variables take precedence. Source deployments can use `.env` in the project root; global installations use `~/.config/pi-webui/.env` by default. Set `XDG_CONFIG_HOME` to change the user configuration directory.
 
+On the first run of a global installation, Pi WebUI copies the complete sample configuration to the user configuration file and replaces the sample credentials with the `admin` username and a random password. It prints those credentials to the terminal. An existing user configuration file is never overwritten.
+
 ## Authentication
 
 | Variable | Required | Description |

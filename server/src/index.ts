@@ -1,6 +1,6 @@
 // server/src/index.ts
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import * as os from 'node:os';
 import Fastify from 'fastify';
@@ -26,6 +26,7 @@ import { authRoutes } from './routes/auth.js';
 import { chatWebSocket } from './ws/chat.js';
 import { terminalWebSocket } from './ws/terminal.js';
 import { loadAuthConfig, type AuthConfig } from './config/auth.js';
+import { renderDefaultConfig } from './config/default-config.js';
 import { openPiuiDatabase, type PiuiDatabase } from './db/database.js';
 import { AuditLog } from './auth/audit.js';
 import { IpRateLimiter } from './auth/rate-limit.js';
@@ -85,14 +86,16 @@ function createDefaultConfig(): void {
   if (process.env.NODE_ENV === 'test') return;
   if (process.env.PI_WEBUI_AUTH_USERNAME || process.env.PI_WEBUI_AUTH_PASSWORD || process.env.PI_WEBUI_AUTH_PASSWORD_HASH) return;
 
+  const username = 'admin';
   const password = randomBytes(6).toString('base64url');
-  const content = `PI_WEBUI_AUTH_USERNAME=admin\nPI_WEBUI_AUTH_PASSWORD=${password}\n`;
+  const samplePath = path.resolve(__dirname, '../../.env.example');
+  const content = renderDefaultConfig(readFileSync(samplePath, 'utf8'), username, password);
 
   mkdirSync(userConfigDir, { recursive: true, mode: 0o700 });
   try {
     writeFileSync(userConfigPath, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     console.log(`Created default configuration at ${userConfigPath}`);
-    console.log(`Pi WebUI login: admin / ${password}`);
+    console.log(`Pi WebUI login: ${username} / ${password}`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
   }

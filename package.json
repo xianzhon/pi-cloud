@@ -23,6 +23,7 @@
     "pi-webui": "bin/pi-webui.mjs"
   },
   "files": [
+    ".env.example",
     "bin",
     "client/dist",
     "server/dist",
