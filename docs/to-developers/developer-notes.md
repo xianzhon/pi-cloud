@@ -4,7 +4,7 @@
 
 **pnpm monorepo** with two packages:
 
-- **server/** — Fastify + WebSocket backend wrapping the `@earendil-works/pi-coding-agent` SDK. SQLite (better-sqlite3) for auth/session storage, argon2 for password hashing, and a prebuilt node-pty distribution for embedded terminals.
+- **server/** — Fastify + WebSocket backend wrapping the `@earendil-works/pi-coding-agent` SDK. SQLite (better-sqlite3) for auth/session storage, Node.js scrypt for password hashing, and a prebuilt node-pty distribution for embedded terminals.
 - **client/** — Vue 3 + Vite frontend with Monaco editor and xterm.js terminal.
 
 Each browser tab gets its own `clientId` and independent session state — no synchronization between tabs.

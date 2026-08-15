@@ -8,7 +8,6 @@ overrides:
   undici: '>=8.9.0'
 allowBuilds:
   '@google/genai': true
-  argon2: true
   better-sqlite3: true
   core-js: false
   esbuild: true

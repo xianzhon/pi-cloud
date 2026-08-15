@@ -10,7 +10,7 @@ On the first run of a global installation, Pi WebUI copies the complete sample c
 |---|---|---|
 | `PI_WEBUI_AUTH_USERNAME` | Yes | Login username |
 | `PI_WEBUI_AUTH_PASSWORD` | Yes* | Plaintext login password for development or simple setups |
-| `PI_WEBUI_AUTH_PASSWORD_HASH` | Yes* | Argon2id password hash, recommended for production |
+| `PI_WEBUI_AUTH_PASSWORD_HASH` | Yes* | scrypt password hash, recommended for production |
 
 \* Provide exactly one of `PI_WEBUI_AUTH_PASSWORD` or `PI_WEBUI_AUTH_PASSWORD_HASH`. See the [deployment manual](deployment.md#store-the-password-securely) for generating and configuring a production password hash.
 

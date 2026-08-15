@@ -48,25 +48,17 @@ pi-webui
 
 ## 安全地存储密码
 
-生产环境中，请存储 Argon2id 哈希，而不是明文密码。安装依赖后，在 Pi WebUI 项目目录中运行：
+生产环境中，请存储 scrypt 哈希，而不是明文密码。使用 Node.js 生成哈希；此命令仅使用内置的 `node:crypto` 模块：
 
 ```bash
-cd /path/to/pi-webui
-node -e "require('argon2').hash(process.argv[1]).then(console.log)" 'change-this-password'
-```
-
-如果通过 npm 全局安装了 Pi WebUI，请改在全局软件包目录中运行：
-
-```bash
-cd "$(npm root -g)/@xianzhon/pi-webui"
-node -e "require('argon2').hash(process.argv[1]).then(console.log)" 'change-this-password'
+node -e 'const { randomBytes, scryptSync } = require("node:crypto"); const s = randomBytes(16); const k = scryptSync(process.argv[1], s, 32, { N: 2**15, r: 8, p: 3, maxmem: 64*1024**2 }); console.log(`$scrypt$ln=15,r=8,p=3$${s.toString("base64")}$${k.toString("base64")}`)' 'change-this-password'
 ```
 
 使用生成的哈希替换密码设置，并删除 `PI_WEBUI_AUTH_PASSWORD`：
 
 ```dotenv
 PI_WEBUI_AUTH_USERNAME=admin
-PI_WEBUI_AUTH_PASSWORD_HASH=$argon2id$v=19$m=65536,t=3,p=4$...
+PI_WEBUI_AUTH_PASSWORD_HASH=$scrypt$ln=15,r=8,p=3$...
 ```
 
 确保配置文件仅文件所有者可读：

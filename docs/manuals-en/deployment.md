@@ -48,25 +48,17 @@ Configure credentials as described in the [configuration manual](configuration.m
 
 ## Store the Password Securely
 
-For production, store an Argon2id hash instead of the plaintext password. Run the following from the Pi WebUI project directory after installing dependencies:
+For production, store a scrypt hash instead of the plaintext password. Generate one with Node.js; this uses only the built-in `node:crypto` module:
 
 ```bash
-cd /path/to/pi-webui
-node -e "require('argon2').hash(process.argv[1]).then(console.log)" 'change-this-password'
-```
-
-If Pi WebUI was installed globally with npm, run it from the global package directory instead:
-
-```bash
-cd "$(npm root -g)/@xianzhon/pi-webui"
-node -e "require('argon2').hash(process.argv[1]).then(console.log)" 'change-this-password'
+node -e 'const { randomBytes, scryptSync } = require("node:crypto"); const s = randomBytes(16); const k = scryptSync(process.argv[1], s, 32, { N: 2**15, r: 8, p: 3, maxmem: 64*1024**2 }); console.log(`$scrypt$ln=15,r=8,p=3$${s.toString("base64")}$${k.toString("base64")}`)' 'change-this-password'
 ```
 
 Replace the password setting with the generated hash and remove `PI_WEBUI_AUTH_PASSWORD`:
 
 ```dotenv
 PI_WEBUI_AUTH_USERNAME=admin
-PI_WEBUI_AUTH_PASSWORD_HASH=$argon2id$v=19$m=65536,t=3,p=4$...
+PI_WEBUI_AUTH_PASSWORD_HASH=$scrypt$ln=15,r=8,p=3$...
 ```
 
 Keep the configuration file owner-readable only:

@@ -10,7 +10,7 @@ Pi WebUI 从 shell 环境变量和 `.env` 文件中读取配置，shell 变量�
 |---|---|---|
 | `PI_WEBUI_AUTH_USERNAME` | 是 | 登录用户名 |
 | `PI_WEBUI_AUTH_PASSWORD` | 是* | 用于开发或简单部署的明文登录密码 |
-| `PI_WEBUI_AUTH_PASSWORD_HASH` | 是* | Argon2id 密码哈希，推荐用于生产环境 |
+| `PI_WEBUI_AUTH_PASSWORD_HASH` | 是* | scrypt 密码哈希，推荐用于生产环境 |
 
 \* `PI_WEBUI_AUTH_PASSWORD` 和 `PI_WEBUI_AUTH_PASSWORD_HASH` 必须且只能提供其中一个。有关生成和配置生产环境密码哈希的方法，请参阅[部署手册](deployment.md#安全地存储密码)。
 

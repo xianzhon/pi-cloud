@@ -24,10 +24,10 @@ describe('loadAuthConfig', () => {
     const config = loadAuthConfig({
       PI_WEBUI_AUTH_USERNAME: 'me',
       PI_WEBUI_AUTH_PASSWORD: 'plain',
-      PI_WEBUI_AUTH_PASSWORD_HASH: '$argon2id$v=19$m=65536,t=3,p=4$abc$def',
+      PI_WEBUI_AUTH_PASSWORD_HASH: '$scrypt$ln=15,r=8,p=3$abc$def',
     } as NodeJS.ProcessEnv);
 
-    expect(config.passwordHash).toBe('$argon2id$v=19$m=65536,t=3,p=4$abc$def');
+    expect(config.passwordHash).toBe('$scrypt$ln=15,r=8,p=3$abc$def');
     expect(config.password).toBe('plain');
   });
 

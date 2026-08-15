@@ -59,7 +59,7 @@ check_native_modules() {
     echo -e "${YELLOW}Checking native Node modules...${NC}"
 
     cd "$SERVER_DIR"
-    if node -e "require('better-sqlite3'); require('argon2'); require('@lydell/node-pty')" >/dev/null 2>"$LOG_DIR/native-check.log"; then
+    if node -e "require('better-sqlite3'); require('@lydell/node-pty')" >/dev/null 2>"$LOG_DIR/native-check.log"; then
         return 0
     fi
 
@@ -67,13 +67,13 @@ check_native_modules() {
     echo "See $LOG_DIR/native-check.log for the original load error."
 
     cd "$PROJECT_DIR"
-    pnpm rebuild better-sqlite3 argon2
+    pnpm rebuild better-sqlite3
     
     # Fix node-pty spawn-helper execute permissions (pnpm install strips them)
     find "$PROJECT_DIR/node_modules" -path "*/node-pty/prebuilds/*/spawn-helper" -exec chmod +x {} + 2>/dev/null || true
 
     cd "$SERVER_DIR"
-    if ! node -e "require('better-sqlite3'); require('argon2'); require('@lydell/node-pty')" >/dev/null 2>>"$LOG_DIR/native-check.log"; then
+    if ! node -e "require('better-sqlite3'); require('@lydell/node-pty')" >/dev/null 2>>"$LOG_DIR/native-check.log"; then
         echo -e "${RED}Failed to load native modules after rebuild. Check $LOG_DIR/native-check.log${NC}"
         return 1
     fi
