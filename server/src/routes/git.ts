@@ -200,10 +200,14 @@ function commitMessagePrompt(instructions: string, status: string, diff: string)
   return `${instructions.trim()}
 
 Git status:
+--- BEGIN GIT STATUS ---
 ${status.trim() || '(empty)'}
+--- END GIT STATUS ---
 
 Git diff:
-${diff.trim() || '(empty)'}`;
+--- BEGIN GIT DIFF ---
+${diff.trim() || '(empty)'}
+--- END GIT DIFF ---`;
 }
 
 async function completeWithClientModel(clientId: string, unavailableMessage: string, request: Parameters<typeof completeSimple>[1], options: { maxTokens: number; sessionId: string; operation: string }) {

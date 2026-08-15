@@ -424,10 +424,14 @@ describe('gitRoutes branch', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json().message).toBe('Update README content');
       expect(modelRegistryFindMock).toHaveBeenCalledWith('mock', 'automation-model');
-      const prompt = completeSimpleMock.mock.calls[0][1].messages[0].content;
-      expect(prompt).toContain('For large or multi-area changes, add a blank line after the subject followed by 2-5 concise detail bullets.');
+      const request = completeSimpleMock.mock.calls[0][1];
+      expect(request.systemPrompt).toContain('accurate Conventional Commit messages');
+      const prompt = request.messages[0].content;
+      expect(prompt).toContain('Generate one Conventional Commit message');
+      expect(prompt).toContain('--- BEGIN GIT STATUS ---');
       expect(prompt).toContain('+staged change');
       expect(prompt).toContain('+unstaged change');
+      expect(prompt).toContain('--- END GIT DIFF ---');
       expect(completeSimpleMock.mock.calls[0][2]).not.toHaveProperty('temperature');
       expect(completeSimpleMock.mock.calls[0][2].maxTokens).toBe(220);
       expect(completeSimpleMock.mock.calls[0][2].sessionId).toMatch(/^commit-message:[a-f0-9]{32}$/);
