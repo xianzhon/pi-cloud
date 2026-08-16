@@ -257,13 +257,25 @@ describe('EditorPanel', () => {
 
     expect(wrapper.find('.editor-panel').attributes('style')).toContain('--editor-panel-width: 50vw');
 
-    await wrapper.find('.editor-resize-handle').trigger('mousedown', { clientX: 600 });
+    const editorHandle = wrapper.find('.editor-resize-handle');
+    await editorHandle.trigger('mousedown', { clientX: 600 });
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 500 }));
     await wrapper.vm.$nextTick();
-    window.dispatchEvent(new MouseEvent('mouseup'));
+    expect(editorHandle.classes()).toContain('is-resizing');
 
+    window.dispatchEvent(new Event('blur'));
+    await wrapper.vm.$nextTick();
+    expect(editorHandle.classes()).not.toContain('is-resizing');
     expect(wrapper.find('.editor-panel').attributes('style')).toContain('--editor-panel-width: 600px');
     expect(layout).toHaveBeenCalled();
+
+    const treeHandle = wrapper.find('.file-tree-resize-handle');
+    await treeHandle.trigger('mousedown', { clientX: 260 });
+    expect(treeHandle.classes()).toContain('is-resizing');
+
+    window.dispatchEvent(new Event('blur'));
+    await wrapper.vm.$nextTick();
+    expect(treeHandle.classes()).not.toContain('is-resizing');
   });
 
   it('supports minimize and maximize window controls', async () => {

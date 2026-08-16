@@ -204,6 +204,7 @@ export function useTerminalPanel() {
 
     document.addEventListener('mousemove', onPointerMove)
     document.addEventListener('mouseup', stopInteraction)
+    window.addEventListener('blur', stopInteraction)
   }
 
   function startResize(event: MouseEvent, direction: string) {
@@ -223,6 +224,7 @@ export function useTerminalPanel() {
 
     document.addEventListener('mousemove', onPointerMove)
     document.addEventListener('mouseup', stopInteraction)
+    window.addEventListener('blur', stopInteraction)
     event.preventDefault()
     event.stopPropagation()
   }
@@ -300,6 +302,7 @@ export function useTerminalPanel() {
     }
     document.removeEventListener('mousemove', onPointerMove)
     document.removeEventListener('mouseup', stopInteraction)
+    window.removeEventListener('blur', stopInteraction)
     saveFloatRect()
   }
 
@@ -354,6 +357,7 @@ export function useTerminalPanel() {
   }
 
   function disposeAll() {
+    stopInteraction()
     for (const session of sessions.value) {
       if (session.terminal) try { session.terminal.dispose() } catch {}
       if (session.resizeObserver) session.resizeObserver.disconnect()

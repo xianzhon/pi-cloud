@@ -177,6 +177,7 @@ function onDockedResizeStart(event: MouseEvent) {
   document.body.style.userSelect = 'none'
   window.addEventListener('mousemove', onDockedResizeMove)
   window.addEventListener('mouseup', onDockedResizeEnd)
+  window.addEventListener('blur', onDockedResizeEnd)
 }
 
 function onDockedResizeMove(event: MouseEvent) {
@@ -189,12 +190,10 @@ function onDockedResizeEnd() {
   document.body.style.userSelect = ''
   window.removeEventListener('mousemove', onDockedResizeMove)
   window.removeEventListener('mouseup', onDockedResizeEnd)
+  window.removeEventListener('blur', onDockedResizeEnd)
 }
 
-onUnmounted(() => {
-  window.removeEventListener('mousemove', onDockedResizeMove)
-  window.removeEventListener('mouseup', onDockedResizeEnd)
-})
+onUnmounted(onDockedResizeEnd)
 </script>
 
 <style scoped>

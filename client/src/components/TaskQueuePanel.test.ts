@@ -240,11 +240,15 @@ describe('TaskQueuePanel', () => {
     const wrapper = mountPanel();
     expect(wrapper.attributes('style')).toContain('--task-queue-panel-width: 480px');
 
-    await wrapper.get('.task-queue-resize-handle').trigger('mousedown', { clientX: 800 });
+    const handle = wrapper.get('.task-queue-resize-handle');
+    await handle.trigger('mousedown', { clientX: 800 });
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 700 }));
     await wrapper.vm.$nextTick();
+    expect(handle.classes()).toContain('is-resizing');
 
+    window.dispatchEvent(new Event('blur'));
+    await wrapper.vm.$nextTick();
+    expect(handle.classes()).not.toContain('is-resizing');
     expect(wrapper.attributes('style')).toContain('--task-queue-panel-width: 580px');
-    window.dispatchEvent(new MouseEvent('mouseup'));
   });
 });

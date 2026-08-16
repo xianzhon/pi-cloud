@@ -117,6 +117,7 @@
         @pointermove="handleInputResizeMove"
         @pointerup="handleInputResizeEnd"
         @pointercancel="handleInputResizeEnd"
+        @lostpointercapture="handleInputResizeEnd"
       ></div>
       <SlashCommandMenu
         v-if="slashCommands.isOpen.value"
@@ -952,6 +953,7 @@ function handleInputResizeStart(event: PointerEvent) {
   inputResizeStartY.value = event.clientY;
   inputResizeStartHeight = input.offsetHeight;
   (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  window.addEventListener('blur', stopInputResize);
 }
 
 function handleInputResizeMove(event: PointerEvent) {
@@ -964,10 +966,11 @@ function handleInputResizeMove(event: PointerEvent) {
   input.style.overflowY = input.scrollHeight > height ? 'auto' : 'hidden';
 }
 
-function handleInputResizeEnd(event: PointerEvent) {
+function stopInputResize() {
   if (inputResizeStartY.value === null) return;
 
   inputResizeStartY.value = null;
+  window.removeEventListener('blur', stopInputResize);
   if (userInputHeight !== null) {
     try {
       sessionStorage.setItem(inputHeightStorageKey, String(userInputHeight));
@@ -975,6 +978,10 @@ function handleInputResizeEnd(event: PointerEvent) {
       // Keep the height for this component instance when storage is unavailable.
     }
   }
+}
+
+function handleInputResizeEnd(event: PointerEvent) {
+  stopInputResize();
   const handle = event.currentTarget as HTMLElement;
   if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
 }
@@ -1246,6 +1253,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   isUnmounted = true;
   window.removeEventListener('summary-generated', handleSummaryGenerated as EventListener);
+  stopInputResize();
   stopStreamingElapsedTimer();
 });
 

@@ -438,6 +438,7 @@ function stopPanelResize() {
   document.body.style.userSelect = '';
   window.removeEventListener('mousemove', handlePanelResize);
   window.removeEventListener('mouseup', stopPanelResize);
+  window.removeEventListener('blur', stopPanelResize);
 }
 
 function startPanelResize(event: MouseEvent) {
@@ -449,6 +450,7 @@ function startPanelResize(event: MouseEvent) {
   document.body.style.userSelect = 'none';
   window.addEventListener('mousemove', handlePanelResize);
   window.addEventListener('mouseup', stopPanelResize);
+  window.addEventListener('blur', stopPanelResize);
 }
 
 onUnmounted(() => {

@@ -134,14 +134,14 @@ describe('TerminalPanel', () => {
     expect(wrapper.find('.resize-docked').exists()).toBe(true);
   });
 
-  it('keeps the docked divider active until resizing ends', async () => {
+  it('clears the docked divider highlight when the window blurs', async () => {
     const wrapper = mount(TerminalPanel, { props: defaultProps });
     const handle = wrapper.find('.resize-docked');
 
     await handle.trigger('mousedown', { clientY: 300 });
     expect(handle.classes()).toContain('is-resizing');
 
-    window.dispatchEvent(new MouseEvent('mouseup'));
+    window.dispatchEvent(new Event('blur'));
     await wrapper.vm.$nextTick();
     expect(handle.classes()).not.toContain('is-resizing');
   });

@@ -921,6 +921,7 @@ function stopSidebarResize() {
   document.body.style.userSelect = '';
   window.removeEventListener('mousemove', handleSidebarResize);
   window.removeEventListener('mouseup', stopSidebarResize);
+  window.removeEventListener('blur', stopSidebarResize);
 }
 
 function startSidebarResize(event: MouseEvent) {
@@ -930,6 +931,7 @@ function startSidebarResize(event: MouseEvent) {
   document.body.style.userSelect = 'none';
   window.addEventListener('mousemove', handleSidebarResize);
   window.addEventListener('mouseup', stopSidebarResize);
+  window.addEventListener('blur', stopSidebarResize);
 }
 
 function normalizeProjectPath(path?: string): string {

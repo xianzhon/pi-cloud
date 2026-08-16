@@ -762,11 +762,15 @@ describe('SessionSidebar', () => {
 
     expect(wrapper.find('.session-sidebar').attributes('style')).toContain('--session-sidebar-width: 280px');
 
-    await wrapper.find('.sidebar-resize-handle').trigger('mousedown', { clientX: 280 });
+    const handle = wrapper.find('.sidebar-resize-handle');
+    await handle.trigger('mousedown', { clientX: 280 });
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 340 }));
     await wrapper.vm.$nextTick();
-    window.dispatchEvent(new MouseEvent('mouseup'));
+    expect(handle.classes()).toContain('is-resizing');
 
+    window.dispatchEvent(new Event('blur'));
+    await wrapper.vm.$nextTick();
+    expect(handle.classes()).not.toContain('is-resizing');
     expect(wrapper.find('.session-sidebar').attributes('style')).toContain('--session-sidebar-width: 340px');
   });
 

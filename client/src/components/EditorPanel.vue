@@ -1053,6 +1053,7 @@ function stopEditorResize() {
   document.body.style.userSelect = '';
   window.removeEventListener('mousemove', handleEditorResize);
   window.removeEventListener('mouseup', stopEditorResize);
+  window.removeEventListener('blur', stopEditorResize);
 }
 
 function stopFileTreeResize() {
@@ -1061,6 +1062,7 @@ function stopFileTreeResize() {
   document.body.style.userSelect = '';
   window.removeEventListener('mousemove', handleFileTreeResize);
   window.removeEventListener('mouseup', stopFileTreeResize);
+  window.removeEventListener('blur', stopFileTreeResize);
 }
 
 let resizeStartX = 0;
@@ -1083,6 +1085,7 @@ function startEditorResize(event: MouseEvent) {
   document.body.style.userSelect = 'none';
   window.addEventListener('mousemove', handleEditorResize);
   window.addEventListener('mouseup', stopEditorResize);
+  window.addEventListener('blur', stopEditorResize);
 }
 
 function clampFileTreeWidth(width: number): number {
@@ -1103,6 +1106,7 @@ function startFileTreeResize(event: MouseEvent) {
   document.body.style.userSelect = 'none';
   window.addEventListener('mousemove', handleFileTreeResize);
   window.addEventListener('mouseup', stopFileTreeResize);
+  window.addEventListener('blur', stopFileTreeResize);
 }
 
 function toggleMaximize() {

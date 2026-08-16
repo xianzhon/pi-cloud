@@ -82,6 +82,26 @@ describe('ChatPanel', () => {
     expect(wrapper.find('.composer-model-selector').text()).toBe('openai / gpt-5.4');
   });
 
+  it('clears the input divider highlight when pointer capture is lost or the window blurs', async () => {
+    const wrapper = mount(ChatPanel);
+    const handle = wrapper.find('.input-resize-handle');
+    Object.defineProperties(handle.element, {
+      setPointerCapture: { configurable: true, value: vi.fn() },
+      hasPointerCapture: { configurable: true, value: vi.fn(() => false) },
+    });
+
+    await handle.trigger('pointerdown', { clientY: 200, pointerId: 1 });
+    expect(handle.classes()).toContain('is-resizing');
+
+    await handle.trigger('lostpointercapture', { pointerId: 1 });
+    expect(handle.classes()).not.toContain('is-resizing');
+
+    await handle.trigger('pointerdown', { clientY: 200, pointerId: 2 });
+    window.dispatchEvent(new Event('blur'));
+    await wrapper.vm.$nextTick();
+    expect(handle.classes()).not.toContain('is-resizing');
+  });
+
   it('does not start deferred requests after unmount', () => {
     let idleCallback: IdleRequestCallback | undefined;
     vi.stubGlobal('requestIdleCallback', vi.fn((callback: IdleRequestCallback) => {
