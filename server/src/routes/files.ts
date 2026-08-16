@@ -35,6 +35,16 @@ const imageMimeTypes = new Map<string, string>([
   ['.webp', 'image/webp'],
 ]);
 
+const previewAssetMimeTypes = new Map<string, string>([
+  ...imageMimeTypes,
+  ['.css', 'text/css; charset=utf-8'],
+  ['.ico', 'image/x-icon'],
+  ['.otf', 'font/otf'],
+  ['.ttf', 'font/ttf'],
+  ['.woff', 'font/woff'],
+  ['.woff2', 'font/woff2'],
+]);
+
 const binaryExtensions = new Set([
   '.aiff', '.avi', '.bin', '.bmp', '.class', '.dmg', '.doc', '.docx', '.exe', '.flac',
   '.ico', '.jar', '.m4a', '.m4v', '.mov', '.mp3', '.mp4', '.o', '.ogg', '.pdf', '.ppt',
@@ -69,6 +79,25 @@ function getImageMimeType(filePath: string): string | undefined {
 function isBinaryFile(filePath: string, content: Buffer): boolean {
   if (binaryExtensions.has(path.extname(filePath).toLowerCase())) return true;
   return content.includes(0) || !isUtf8(content);
+}
+
+function rewritePreviewCss(css: string, root: string, cssPath: string): string {
+  // CSS loaded through a query endpoint cannot resolve its nested URLs against
+  // the source file's directory, so preserve that directory explicitly.
+  function rewriteReference(reference: string): string {
+    if (!reference || reference.startsWith('#') || /^[a-z][a-z\d+.-]*:/i.test(reference) || reference.startsWith('//')) {
+      return reference;
+    }
+    const [assetPath] = reference.split(/[?#]/, 1);
+    const resolvedAssetPath = assetPath.startsWith('/')
+      ? assetPath.slice(1)
+      : path.posix.normalize(path.posix.join(path.posix.dirname(cssPath.replace(/\\/g, '/')), assetPath));
+    return `/api/files/preview-asset?${new URLSearchParams({ root, path: resolvedAssetPath })}`;
+  }
+
+  return css
+    .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (_match, quote: string, reference: string) => `url(${quote}${rewriteReference(reference.trim())}${quote})`)
+    .replace(/(@import\s+)(['"])([^'"]+)\2/gi, (_match, prefix: string, quote: string, reference: string) => `${prefix}${quote}${rewriteReference(reference)}${quote}`);
 }
 
 function getSystemOpenCommand(filePath: string): { command: string; args: string[] } {
@@ -302,6 +331,40 @@ export async function fileRoutes(app: FastifyInstance) {
     }
 
     return { path: resolvedPath, content: content.toString('utf-8'), mtime: stats.mtimeMs };
+  });
+
+  app.get('/preview-asset', async (req, reply) => {
+    const { root, path: relativePath } = req.query as { root?: string; path?: string };
+    if (!root || !relativePath) {
+      return reply.code(400).send({ error: 'Preview asset path is required' });
+    }
+    const previewRoot = Buffer.from(root, 'base64url').toString('utf8');
+    if (!previewRoot) {
+      return reply.code(400).send({ error: 'Preview asset path is required' });
+    }
+
+    const resolvedPath = await resolveAllowedPath(path.resolve(previewRoot, relativePath));
+    const mimeType = previewAssetMimeTypes.get(path.extname(resolvedPath).toLowerCase());
+    if (!mimeType) {
+      return reply.code(415).send({ error: 'Unsupported preview asset type' });
+    }
+
+    try {
+      const content = await fs.readFile(resolvedPath);
+      reply.header('X-Content-Type-Options', 'nosniff');
+      if (mimeType === 'image/svg+xml') {
+        reply.header('Content-Security-Policy', "sandbox; default-src 'none'");
+      }
+      if (mimeType.startsWith('text/css')) {
+        return reply.type(mimeType).send(rewritePreviewCss(content.toString('utf8'), root, relativePath));
+      }
+      return reply.type(mimeType).send(content);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return reply.code(404).send({ error: 'Preview asset not found' });
+      }
+      throw error;
+    }
   });
 
   app.get('/raw', async (req, reply) => {
