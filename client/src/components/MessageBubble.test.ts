@@ -413,7 +413,7 @@ describe('MessageBubble', () => {
           id: 'user-skill-reference',
           role: 'user',
           content: [
-            'References are relative to /Users/ross/.pi/codex/skills/code-simplifier.',
+            'References are relative to /workspace/skills/code-simplifier.',
             '',
             'You are an expert code simplification specialist focused on enhancing code clarity.',
           ].join('\n'),
@@ -426,7 +426,7 @@ describe('MessageBubble', () => {
     const link = wrapper.find('.message-content a.file-link');
     expect(link.exists()).toBe(true);
     expect(link.text()).toBe('code-simplifier');
-    expect(link.attributes('data-path')).toBe('/Users/ross/.pi/codex/skills/code-simplifier/SKILL.md');
+    expect(link.attributes('data-path')).toBe('/workspace/skills/code-simplifier/SKILL.md');
   });
 
   it('renders XML-wrapped expanded skill user messages as a clickable skill file path', () => {
@@ -436,8 +436,8 @@ describe('MessageBubble', () => {
           id: 'user-skill-reference-tagged',
           role: 'user',
           content: [
-            '<skill name="code-simplifier" location="/Users/ross/.pi/codex/skills/code-simplifier/SKILL.md">',
-            'References are relative to /Users/ross/.pi/codex/skills/code-simplifier.',
+            '<skill name="code-simplifier" location="/workspace/skills/code-simplifier/SKILL.md">',
+            'References are relative to /workspace/skills/code-simplifier.',
             '',
             'You are an expert code simplification specialist focused on enhancing code clarity.',
             '</skill>',
@@ -450,7 +450,7 @@ describe('MessageBubble', () => {
     expect(wrapper.find('.message-content').text()).not.toContain('You are an expert code simplification specialist');
     const link = wrapper.find('.message-content a.file-link');
     expect(link.text()).toBe('code-simplifier');
-    expect(link.attributes('data-path')).toBe('/Users/ross/.pi/codex/skills/code-simplifier/SKILL.md');
+    expect(link.attributes('data-path')).toBe('/workspace/skills/code-simplifier/SKILL.md');
   });
 
   it('opens Markdown links to local files in the editor', async () => {
@@ -546,7 +546,7 @@ describe('MessageBubble', () => {
   });
 
   it('truncates long bash tool call commands in the header only', () => {
-    const command = 'cd /Users/ross/git/github/pi-webui && tea pr create --help 2>&1 && pnpm test:run MessageBubble.test.ts -- --reporter verbose --coverage.enabled false';
+    const command = 'cd /workspace/pi-webui && tea pr create --help 2>&1 && pnpm test:run MessageBubble.test.ts -- --reporter verbose --coverage.enabled false';
     const toolInput = JSON.stringify({ command }, null, 2);
 
     const wrapper = mount(MessageBubble, {
@@ -601,7 +601,7 @@ describe('MessageBubble', () => {
   });
 
   it('shows read tool call path in the header instead of an input block', () => {
-    const toolInput = JSON.stringify({ path: '/Users/ross/.claude/plugins/cache/skills/SKILL.md' }, null, 2);
+    const toolInput = JSON.stringify({ path: '/workspace/skills/example/SKILL.md' }, null, 2);
 
     const wrapper = mount(MessageBubble, {
       props: {
@@ -619,7 +619,7 @@ describe('MessageBubble', () => {
     });
 
     expect(wrapper.find('.event-title').text()).toBe('Executing tool read');
-    expect(wrapper.find('.event-path').text()).toBe('/Users/ross/.claude/plugins/cache/skills/SKILL.md');
+    expect(wrapper.find('.event-path').text()).toBe('/workspace/skills/example/SKILL.md');
     expect(wrapper.find('.event-block').exists()).toBe(false);
   });
 

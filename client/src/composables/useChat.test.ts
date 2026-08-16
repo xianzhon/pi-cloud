@@ -602,7 +602,7 @@ describe('useChat', () => {
 
   it('attaches read tool input paths to matching history results', async () => {
     const { chat } = mountChat();
-    const readPath = '/Users/ross/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/verification-before-completion/SKILL.md';
+    const readPath = '/workspace/project/docs/example.md';
     vi.stubGlobal('fetch', vi.fn(async () => ({
       json: async () => ({
         messages: [
@@ -648,7 +648,7 @@ describe('useChat', () => {
 
   it('attaches read tool input paths to matching live results', () => {
     const { chat } = mountChat();
-    const readPath = '/Users/ross/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/verification-before-completion/SKILL.md';
+    const readPath = '/workspace/project/docs/example.md';
 
     handlers.get('event')?.({
       event: {

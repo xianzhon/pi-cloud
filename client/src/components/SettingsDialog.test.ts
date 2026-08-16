@@ -79,7 +79,7 @@ describe('SettingsDialog', () => {
   });
 
   it('shows only user prompt customization for commit messages', async () => {
-    const wrapper = mountSettingsDialog({ projectPath: '/Users/ross/git/pi-webui' });
+    const wrapper = mountSettingsDialog({ projectPath: '/workspace/pi-webui' });
     const gitButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!;
 
     await gitButton.trigger('click');
