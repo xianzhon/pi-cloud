@@ -980,8 +980,9 @@ describe('session routes', () => {
     const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
     await sessionRoutes(app as any, cloneRouteOptions() as any);
 
-    await handlers['POST /clone-repository']({ body: { clientId: 'client-1', remoteUrl: 'https://github.com/acme/tool.git', destinationPath: '/Users/test/git/github/acme/tool' } }, reply);
+    await handlers['POST /clone-repository']({ body: { clientId: 'client-1', remoteUrl: 'https://github.com/acme/tool.git', destinationPath: '/Users/test/git/github/acme/tool', shallow: true } }, reply);
 
+    expect(cloneStart).toHaveBeenCalledWith({ clientId: 'client-1', remoteUrl: 'https://github.com/acme/tool.git', destinationPath: '/Users/test/git/github/acme/tool', shallow: true });
     expect(reply.status).toHaveBeenCalledWith(409);
     expect(reply.send).toHaveBeenCalledWith({ status: 'destination_exists', existingPath: '/Users/test/git/github/acme/tool' });
   });

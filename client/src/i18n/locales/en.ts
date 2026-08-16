@@ -280,6 +280,7 @@ export default {
       cancel: 'Cancel',
       gitURL: 'Git URL',
       destination: 'Destination',
+      shallowClone: 'Shallow clone (latest history only)',
       parentFolder: 'Parent folder',
       noVisibleSubfolders: 'No visible subfolders',
       loading: 'Loading…',

@@ -9,7 +9,7 @@ export type CloneJobStatus = 'running' | 'completed' | 'failed' | 'canceled';
 
 export interface ClonePreviewInput { remoteUrl: string; }
 export interface ClonePreviewResult { remoteUrl: string; isGithub: boolean; owner?: string; repo?: string; suggestedPath?: string; }
-export interface StartCloneInput { remoteUrl: string; destinationPath: string; clientId?: string; }
+export interface StartCloneInput { remoteUrl: string; destinationPath: string; clientId?: string; shallow?: boolean; }
 export interface CloneProgressEvent { type: 'progress' | 'completed' | 'failed' | 'canceled'; status: string; percent?: number; projectPath?: string; error?: string; }
 export interface CloneJobSnapshot { id: string; status: CloneJobStatus; destinationPath: string; latest: CloneProgressEvent; }
 export interface CloneStartResult { jobId?: string; existingPath?: string; status: 'started' | 'destination_exists'; }
@@ -46,7 +46,7 @@ export class RepositoryCloner {
     const pathExists = this.options.pathExists || defaultPathExists;
     if (await pathExists(destinationPath)) return { status: 'destination_exists', existingPath: destinationPath };
 
-    const job = new CloneJob(`clone_${randomUUID()}`, remoteUrl, destinationPath);
+    const job = new CloneJob(`clone_${randomUUID()}`, remoteUrl, destinationPath, input.shallow === true);
     this.jobs.set(job.id, job);
     await this.spawnClone(job, remoteUrl, false, input.clientId);
     return { status: 'started', jobId: job.id };
@@ -98,7 +98,8 @@ export class RepositoryCloner {
 
   private spawnCloneWithEnv(job: CloneJob, remoteUrl: string, usingToken: boolean, env: NodeJS.ProcessEnv): void {
     const secrets = [this.options.githubSettings().token, this.options.giteaSettings().token].filter(Boolean);
-    const child = this.options.spawnGit(['clone', '--progress', '--', remoteUrl, job.destinationPath], { env });
+    const args = ['clone', '--progress', ...(job.shallow ? ['--depth', '1'] : []), '--', remoteUrl, job.destinationPath];
+    const child = this.options.spawnGit(args, { env });
     job.process = child;
     let stderr = '';
 
@@ -157,7 +158,7 @@ class CloneJob extends EventEmitter {
   process: ChildProcessWithoutNullStreams | null = null;
   latest: CloneProgressEvent = { type: 'progress', status: 'Starting clone…' };
 
-  constructor(readonly id: string, readonly remoteUrl: string, readonly destinationPath: string) {
+  constructor(readonly id: string, readonly remoteUrl: string, readonly destinationPath: string, readonly shallow: boolean) {
     super();
   }
 

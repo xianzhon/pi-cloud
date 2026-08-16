@@ -74,6 +74,11 @@
             </div>
           </div>
 
+          <label class="shallow-clone-option">
+            <input data-testid="clone-shallow-checkbox" v-model="shallow" type="checkbox" :disabled="isRunning" />
+            {{ t('components.cloneRepositoryModal.shallowClone') }}
+          </label>
+
           <footer class="modal-actions">
             <button v-if="isRunning" class="dialog-action cancel-btn" type="button" :disabled="canceling" @click="cancelClone">{{ canceling ? t('components.cloneRepositoryModal.canceling') : t('components.cloneRepositoryModal.cancel') }}</button>
             <button v-else class="dialog-action cancel-btn" type="button" @click="emit('close')">{{ t('components.cloneRepositoryModal.cancel') }}</button>
@@ -103,6 +108,7 @@ const emit = defineEmits<{ close: []; cloned: [payload: { projectPath: string }]
 
 const remoteUrl = ref('');
 const destinationPath = ref('');
+const shallow = ref(false);
 const existingPath = ref('');
 const error = ref('');
 const jobId = ref('');
@@ -211,7 +217,7 @@ async function startClone() {
     const response = await fetch('/api/sessions/clone-repository', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId: props.clientId, remoteUrl: remoteUrl.value.trim(), destinationPath: destinationPath.value.trim() }),
+      body: JSON.stringify({ clientId: props.clientId, remoteUrl: remoteUrl.value.trim(), destinationPath: destinationPath.value.trim(), shallow: shallow.value }),
     });
     const data = await response.json().catch(() => ({}));
     if (response.status === 409 && data.status === 'destination_exists') {
@@ -286,6 +292,7 @@ function requestClose() {
 function reset() {
   remoteUrl.value = '';
   destinationPath.value = '';
+  shallow.value = false;
   existingPath.value = '';
   error.value = '';
   jobId.value = '';
@@ -404,6 +411,12 @@ onBeforeUnmount(() => events?.close());
   gap: 0.35rem;
   color: var(--text-secondary);
   font-size: 0.9rem;
+}
+
+.clone-form .shallow-clone-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .modal-input {

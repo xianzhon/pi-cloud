@@ -547,12 +547,12 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
   app.post('/clone-repository', async (req, reply) => {
     const cloner = requireRepositoryCloner(reply);
     if (!cloner) return;
-    const { clientId, remoteUrl, destinationPath } = req.body as { clientId?: string; remoteUrl?: string; destinationPath?: string };
+    const { clientId, remoteUrl, destinationPath, shallow } = req.body as { clientId?: string; remoteUrl?: string; destinationPath?: string; shallow?: boolean };
     if (!clientId || !remoteUrl || !destinationPath) {
       return reply.status(400).send({ error: 'clientId, remoteUrl and destinationPath are required' });
     }
     try {
-      const result = await cloner.start({ clientId, remoteUrl, destinationPath });
+      const result = await cloner.start({ clientId, remoteUrl, destinationPath, shallow: shallow === true });
       if (result.status === 'destination_exists') return reply.status(409).send(result);
       return result;
     } catch (error) {

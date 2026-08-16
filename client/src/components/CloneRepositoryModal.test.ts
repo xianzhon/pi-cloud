@@ -103,6 +103,28 @@ describe('CloneRepositoryModal', () => {
     expect((wrapper.find('[data-testid="clone-destination-input"]').element as HTMLInputElement).value).toBe('/Users/test/git/github/acme/api');
   });
 
+  it('starts a shallow clone when the unchecked-by-default option is selected', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/files/tree?')) return ok({ path: '~', tree: [] });
+      if (url.endsWith('/preview')) return ok({ preview: { remoteUrl: 'https://github.com/acme/tool.git', isGithub: true } });
+      return ok({ status: 'started', jobId: 'clone_1' });
+    }));
+    vi.stubGlobal('EventSource', FakeEventSource as any);
+    const wrapper = mountModal();
+    const shallowCheckbox = wrapper.find('[data-testid="clone-shallow-checkbox"]');
+
+    expect((shallowCheckbox.element as HTMLInputElement).checked).toBe(false);
+    await wrapper.find('[data-testid="clone-url-input"]').setValue('https://github.com/acme/tool.git');
+    await wrapper.find('[data-testid="clone-destination-input"]').setValue('/Users/test/git/github/acme/tool');
+    await shallowCheckbox.setValue(true);
+    await wrapper.find('[data-testid="clone-start-button"]').trigger('click');
+
+    await vi.waitFor(() => {
+      const request = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/sessions/clone-repository');
+      expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ shallow: true });
+    });
+  });
+
   it('shows inline destination choices when the destination exists', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url.startsWith('/api/files/tree?')) return ok({ path: '~', tree: [] });

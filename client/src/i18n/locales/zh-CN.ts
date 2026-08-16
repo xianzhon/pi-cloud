@@ -280,6 +280,7 @@ export default {
       cancel: '取消',
       gitURL: 'Git 地址',
       destination: '目标位置',
+      shallowClone: '浅克隆（仅最新历史）',
       parentFolder: '父文件夹',
       noVisibleSubfolders: '没有可见的子文件夹',
       loading: '加载中…',

@@ -129,6 +129,21 @@ describe('RepositoryCloner jobs', () => {
     expect(processes).toHaveLength(0);
   });
 
+  it('uses depth 1 for shallow clones', async () => {
+    const { service, processes } = jobCloner();
+
+    await service.start({
+      remoteUrl: 'https://github.com/acme/tool.git',
+      destinationPath: '/Users/test/git/github/acme/tool',
+      shallow: true,
+    });
+
+    expect(processes[0].args).toEqual([
+      'clone', '--progress', '--depth', '1', '--',
+      'https://github.com/acme/tool.git', '/Users/test/git/github/acme/tool',
+    ]);
+  });
+
   it('publishes progress and completion for a successful clone', async () => {
     const { service, processes } = jobCloner();
     const result = await service.start({ remoteUrl: 'https://github.com/acme/tool.git', destinationPath: '/Users/test/git/github/acme/tool' });
