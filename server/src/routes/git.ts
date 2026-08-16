@@ -7,6 +7,7 @@ import { completeSimple, type AssistantMessage, type TextContent } from '@earend
 import { AuthStorage, ModelRegistry } from '@earendil-works/pi-coding-agent';
 import type { FastifyInstance } from 'fastify';
 import type { SessionActivityStore } from '../services/session-activity-store.js';
+import { CommitMessagePromptStore, DEFAULT_COMMIT_MESSAGE_PROMPTS, type CommitMessagePrompts } from '../services/commit-message-prompt-store.js';
 import { sessionService } from '../services/session-manager.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
 
@@ -195,21 +196,18 @@ function aiGenerationSessionId(prefix: string, cwd: string) {
   return `${prefix}:${createHash('sha256').update(cwd).digest('hex').slice(0, 32)}`;
 }
 
-function commitMessagePrompt(status: string, diff: string) {
-  return `Generate one clear git commit message for these staged and unstaged changes.
-
-Rules:
-- Output only the commit message, with no markdown, quotes, explanation, or code block.
-- Start with one concise imperative subject line under 72 characters when possible.
-- For small focused changes, output only the subject line.
-- For large or multi-area changes, add a blank line after the subject followed by 2-5 concise detail bullets.
-- Detail bullets should start with "- " and summarize the main changed areas or user-visible behavior.
+function commitMessagePrompt(instructions: string, status: string, diff: string) {
+  return `${instructions.trim()}
 
 Git status:
+--- BEGIN GIT STATUS ---
 ${status.trim() || '(empty)'}
+--- END GIT STATUS ---
 
 Git diff:
-${diff.trim() || '(empty)'}`;
+--- BEGIN GIT DIFF ---
+${diff.trim() || '(empty)'}
+--- END GIT DIFF ---`;
 }
 
 async function completeWithClientModel(clientId: string, unavailableMessage: string, request: Parameters<typeof completeSimple>[1], options: { maxTokens: number; sessionId: string; operation: string }) {
@@ -269,10 +267,10 @@ async function generateBranchNameWithAi(clientId: string, cwd: string, status: s
   return name;
 }
 
-async function generateCommitMessageWithAi(clientId: string, cwd: string, status: string, diff: string) {
+async function generateCommitMessageWithAi(clientId: string, cwd: string, status: string, diff: string, prompts: CommitMessagePrompts) {
   const response = await completeWithClientModel(clientId, 'No available AI model configured for commit message generation', {
-    systemPrompt: 'You write accurate, concise git commit messages from git changes.',
-    messages: [{ role: 'user', content: commitMessagePrompt(status, diff), timestamp: Date.now() }],
+    systemPrompt: prompts.systemPrompt,
+    messages: [{ role: 'user', content: commitMessagePrompt(prompts.userPrompt, status, diff), timestamp: Date.now() }],
     tools: [],
   }, {
     maxTokens: 220,
@@ -331,6 +329,7 @@ function parseChangedRanges(diff: string): Record<string, GitChangeRange[]> {
 
 export interface GitRouteOptions {
   activityStore?: Pick<SessionActivityStore, 'recordCommit' | 'recordBranchDeleted'>;
+  commitMessagePrompts?: Pick<CommitMessagePromptStore, 'get' | 'save'>;
 }
 
 function recordCommitActivity(options: GitRouteOptions, input: Parameters<SessionActivityStore['recordCommit']>[0]) {
@@ -350,6 +349,34 @@ function recordBranchDeletedActivity(options: GitRouteOptions, input: Parameters
 }
 
 export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions = {}) {
+  app.get('/commit-message-prompts', async (req) => {
+    const { cwd } = req.query as { cwd?: string };
+    const resolvedCwd = await resolveGitCwd(cwd);
+    return options.commitMessagePrompts?.get(resolvedCwd) || {
+      global: {},
+      project: {},
+      effective: DEFAULT_COMMIT_MESSAGE_PROMPTS,
+    };
+  });
+
+  app.put('/commit-message-prompts', async (req, reply) => {
+    const body = (req.body || {}) as { cwd?: string; scope?: unknown; userPrompt?: unknown };
+    if (body.scope !== 'global' && body.scope !== 'project') {
+      return reply.status(400).send({ error: 'scope must be global or project' });
+    }
+    if (body.userPrompt === undefined) {
+      return reply.status(400).send({ error: 'userPrompt must be provided' });
+    }
+    if (typeof body.userPrompt !== 'string') {
+      return reply.status(400).send({ error: 'userPrompt must be a string' });
+    }
+
+    const resolvedCwd = await resolveGitCwd(body.cwd);
+    return options.commitMessagePrompts?.save(body.scope, resolvedCwd, {
+      userPrompt: body.userPrompt,
+    }) || { global: {}, project: {}, effective: DEFAULT_COMMIT_MESSAGE_PROMPTS };
+  });
+
   app.get('/status', async (req, reply) => {
     const { cwd, message } = req.query as { cwd?: string; message?: string };
     const resolvedCwd = await resolveGitCwd(cwd);
@@ -436,7 +463,8 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
         return reply.status(400).send({ error: 'No git changes to generate a commit message from' });
       }
 
-      const message = await generateCommitMessageWithAi(clientId, resolvedCwd, status, diff);
+      const prompts = options.commitMessagePrompts?.get(resolvedCwd).effective || DEFAULT_COMMIT_MESSAGE_PROMPTS;
+      const message = await generateCommitMessageWithAi(clientId, resolvedCwd, status, diff, prompts);
       return { cwd: resolvedCwd, message, files };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate commit message';

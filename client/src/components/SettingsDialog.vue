@@ -453,6 +453,34 @@
                     <span class="settings-inline-note">{{ t('components.settingsDialog.usedAsALLPROXYHttpProxyHttps') }}</span>
                   </label>
                 </section>
+
+                <section class="settings-card commit-prompt-settings" aria-labelledby="commit-prompt-settings-title">
+                  <div class="settings-card-copy">
+                    <h4 id="commit-prompt-settings-title">{{ t('components.settingsDialog.commitMessagePrompts') }}</h4>
+                    <p>{{ t('components.settingsDialog.commitMessagePromptsDescription') }}</p>
+                  </div>
+                  <div v-if="commitPromptError" class="settings-error-text" role="alert">{{ commitPromptError }}</div>
+                  <div class="commit-prompt-grid">
+                    <fieldset class="commit-prompt-scope">
+                      <legend>{{ t('components.settingsDialog.globalPrompts') }}</legend>
+                      <label class="git-settings-field">{{ t('components.settingsDialog.userPrompt') }}
+                        <textarea v-model="globalUserPrompt" class="settings-input commit-prompt-textarea" :placeholder="effectiveUserPrompt" />
+                      </label>
+                      <button type="button" class="settings-action-btn compact-action" :disabled="commitPromptsSaving" @click="saveCommitPrompts('global')">{{ t('components.settingsDialog.saveGlobalPrompts') }}</button>
+                    </fieldset>
+                    <fieldset class="commit-prompt-scope">
+                      <legend>
+                        {{ t('components.settingsDialog.projectPrompts') }}
+                        <span class="commit-prompt-project-name">({{ projectName }})</span>
+                      </legend>
+                      <label class="git-settings-field">{{ t('components.settingsDialog.userPrompt') }}
+                        <textarea v-model="projectUserPrompt" class="settings-input commit-prompt-textarea" :placeholder="t('components.settingsDialog.inheritGlobalPrompt')" />
+                      </label>
+                      <button type="button" class="settings-action-btn compact-action" :disabled="commitPromptsSaving" @click="saveCommitPrompts('project')">{{ t('components.settingsDialog.saveProjectPrompts') }}</button>
+                    </fieldset>
+                  </div>
+                  <p v-if="commitPromptsSaved" class="git-save-success" role="status">{{ t('components.settingsDialog.commitMessagePromptsSaved') }}</p>
+                </section>
               </template>
 
               <template v-if="activeSection === 'gateway'">
@@ -607,6 +635,7 @@ const t = i18n.global.t;
 const props = withDefaults(defineProps<{
   visible: boolean;
   clientId?: string;
+  projectPath?: string;
   totpEnabled: boolean;
   showHintInfo: boolean;
   showCodeBlockLanguageHeaders: boolean;
@@ -670,7 +699,10 @@ const props = withDefaults(defineProps<{
   githubProxyChecking: false,
   githubProxyCheckResult: null,
   clientId: '',
+  projectPath: '~',
 });
+
+const projectName = computed(() => props.projectPath.replace(/\/+$/, '').split('/').pop() || props.projectPath);
 
 const themeOptions = computed<CustomSelectOption[]>(() => [
   { value: 'system', label: t('settings.theme.system') },
@@ -718,6 +750,12 @@ const gatewayModelsLoading = ref(false);
 const showGatewayFolderPicker = ref(false);
 const gitSavedVisible = ref(false);
 const gatewaySavedVisible = ref(false);
+const globalUserPrompt = ref('');
+const projectUserPrompt = ref('');
+const effectiveUserPrompt = ref('');
+const commitPromptsSaving = ref(false);
+const commitPromptsSaved = ref(false);
+const commitPromptError = ref('');
 
 interface GitSettingsSavePayload {
   gitea?: { serverUrl: string; token: string };
@@ -852,6 +890,50 @@ function saveGitSettings() {
   emit('saveGitSettings', payload);
 }
 
+interface CommitPromptResponse {
+  global: { userPrompt?: string };
+  project: { userPrompt?: string };
+  effective: { userPrompt: string };
+}
+
+function applyCommitPrompts(data: CommitPromptResponse) {
+  globalUserPrompt.value = data.global.userPrompt || '';
+  projectUserPrompt.value = data.project.userPrompt || '';
+  effectiveUserPrompt.value = data.effective.userPrompt;
+}
+
+async function loadCommitPrompts() {
+  commitPromptError.value = '';
+  const response = await fetch(`/api/git/commit-message-prompts?cwd=${encodeURIComponent(props.projectPath)}`);
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Failed to load commit message prompts');
+  applyCommitPrompts(await response.json());
+}
+
+async function saveCommitPrompts(scope: 'global' | 'project') {
+  commitPromptsSaving.value = true;
+  commitPromptError.value = '';
+  commitPromptsSaved.value = false;
+  try {
+    const response = await fetch('/api/git/commit-message-prompts', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cwd: props.projectPath,
+        scope,
+        userPrompt: scope === 'global' ? globalUserPrompt.value : projectUserPrompt.value,
+      }),
+    });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Failed to save commit message prompts');
+    applyCommitPrompts(await response.json());
+    commitPromptsSaved.value = true;
+    window.setTimeout(() => { commitPromptsSaved.value = false; }, 1800);
+  } catch (error) {
+    commitPromptError.value = error instanceof Error ? error.message : 'Failed to save commit message prompts';
+  } finally {
+    commitPromptsSaving.value = false;
+  }
+}
+
 function saveGatewaySettings() {
   if (!gatewayDirty.value || props.gatewaySaving) return;
   const model = parseGatewayModelValue(draftGatewayDefaultModel.value);
@@ -981,6 +1063,9 @@ watch(() => props.visible, (visible) => {
   if (visible) {
     resetGitDrafts();
     resetGatewayDrafts();
+    if (activeSection.value === 'git') {
+      void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
+    }
     if (activeSection.value === 'gateway') {
       void loadGatewayProfiles().catch(() => undefined);
       void loadGatewayModels().catch(() => undefined);
@@ -991,10 +1076,19 @@ watch(() => props.visible, (visible) => {
 });
 
 watch(activeSection, (section) => {
+  if (section === 'git') {
+    void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
+  }
   if (section !== 'gateway') return;
   void loadGatewayProfiles().catch(() => undefined);
   void loadGatewayModels().catch(() => undefined);
   void loadWeixinState().catch(() => undefined);
+});
+
+watch(() => props.projectPath, () => {
+  if (props.visible && activeSection.value === 'git') {
+    void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
+  }
 });
 
 watch(() => props.giteaServerUrl, (value, oldValue) => {
@@ -1086,6 +1180,54 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
+.commit-prompt-settings {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.commit-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+.commit-prompt-scope {
+  display: grid;
+  align-content: start;
+  gap: 0.875rem;
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.commit-prompt-scope legend {
+  max-width: calc(100% - 1rem);
+  padding: 0 0.35rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.commit-prompt-project-name {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.commit-prompt-scope .settings-action-btn {
+  justify-self: end;
+}
+
+.commit-prompt-textarea {
+  min-height: 11rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 .settings-backdrop {
   position: fixed;
   inset: 0;
@@ -1830,6 +1972,10 @@ const emit = defineEmits<{
 }
 
 @media (max-width: 760px) {
+  .commit-prompt-grid {
+    grid-template-columns: 1fr;
+  }
+
   .settings-backdrop {
     padding: 0.5rem;
   }

@@ -36,6 +36,7 @@ vi.mock('../services/session-manager.js', () => ({
   },
 }));
 
+import { DEFAULT_COMMIT_MESSAGE_PROMPTS } from '../services/commit-message-prompt-store';
 import { gitRoutes, type GitRouteOptions } from './git';
 
 const execFileAsync = promisify(execFile);
@@ -367,6 +368,53 @@ describe('gitRoutes branch', () => {
     }
   });
 
+  it('rejects system-only commit prompt customization', async () => {
+    const app = await buildApp();
+    try {
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/api/git/commit-message-prompts',
+        payload: { scope: 'global', systemPrompt: 'Custom system prompt' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: 'userPrompt must be provided' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('uses the project user prompt when generating with AI', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'feat: customize commits' }],
+      stopReason: 'stop',
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      api: 'mock-api', provider: 'mock', model: 'model', timestamp: Date.now(),
+    });
+    const cwd = await createRepo();
+    const prompts = {
+      get: vi.fn(() => ({ global: {}, project: {}, effective: { systemPrompt: DEFAULT_COMMIT_MESSAGE_PROMPTS.systemPrompt, userPrompt: 'Write a commit title only.' } })),
+      save: vi.fn(),
+    };
+    const app = await buildApp({ commitMessagePrompts: prompts });
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/git/commit-message?cwd=${encodeURIComponent(cwd)}&clientId=client-1`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(prompts.get).toHaveBeenCalledWith(cwd);
+      expect(completeSimpleMock.mock.calls[0][1].systemPrompt).toBe(DEFAULT_COMMIT_MESSAGE_PROMPTS.systemPrompt);
+      expect(completeSimpleMock.mock.calls[0][1].messages[0].content).toContain('Write a commit title only.');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('generates a commit message with AI from staged and unstaged changes', async () => {
     completeSimpleMock.mockResolvedValueOnce({
       role: 'assistant',
@@ -393,10 +441,14 @@ describe('gitRoutes branch', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json().message).toBe('Update README content');
       expect(modelRegistryFindMock).toHaveBeenCalledWith('mock', 'automation-model');
-      const prompt = completeSimpleMock.mock.calls[0][1].messages[0].content;
-      expect(prompt).toContain('For large or multi-area changes, add a blank line after the subject followed by 2-5 concise detail bullets.');
+      const request = completeSimpleMock.mock.calls[0][1];
+      expect(request.systemPrompt).toContain('accurate Conventional Commit messages');
+      const prompt = request.messages[0].content;
+      expect(prompt).toContain('Generate one Conventional Commit message');
+      expect(prompt).toContain('--- BEGIN GIT STATUS ---');
       expect(prompt).toContain('+staged change');
       expect(prompt).toContain('+unstaged change');
+      expect(prompt).toContain('--- END GIT DIFF ---');
       expect(completeSimpleMock.mock.calls[0][2]).not.toHaveProperty('temperature');
       expect(completeSimpleMock.mock.calls[0][2].maxTokens).toBe(220);
       expect(completeSimpleMock.mock.calls[0][2].sessionId).toMatch(/^commit-message:[a-f0-9]{32}$/);

@@ -78,6 +78,17 @@ describe('SettingsDialog', () => {
     expect(wrapper.find('.settings-dialog').exists()).toBe(false);
   });
 
+  it('shows only user prompt customization for commit messages', async () => {
+    const wrapper = mountSettingsDialog({ projectPath: '/Users/ross/git/pi-webui' });
+    const gitButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!;
+
+    await gitButton.trigger('click');
+
+    const promptSettings = wrapper.find('.commit-prompt-settings');
+    expect(promptSettings.text()).not.toContain('System prompt');
+    expect(promptSettings.findAll('textarea')).toHaveLength(2);
+  });
+
   it('renders the security menu and embedded security body when visible', async () => {
     const wrapper = mountSettingsDialog({ totpEnabled: true });
 
@@ -148,6 +159,36 @@ describe('SettingsDialog', () => {
 
     expect(wrapper.find('.skill-presets-panel-stub').exists()).toBe(true);
     expect(wrapper.find('.settings-body-header').text()).toContain('Skill presets');
+  });
+
+  it('loads and saves project commit message prompt overrides', async () => {
+    const promptConfiguration = {
+      global: { userPrompt: 'Global user' },
+      project: { userPrompt: 'Project user' },
+      effective: { userPrompt: 'Project user' },
+    };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: true, json: async () => promptConfiguration } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => promptConfiguration } as Response);
+    const wrapper = mountSettingsDialog({ projectPath: '/workspace/project-a' });
+
+    const gitButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!;
+    await gitButton.trigger('click');
+    await vi.waitFor(() => expect(wrapper.findAll('.commit-prompt-textarea')).toHaveLength(2));
+
+    expect((wrapper.findAll('.commit-prompt-textarea')[1].element as HTMLTextAreaElement).value).toBe('Project user');
+    await wrapper.findAll('.commit-prompt-textarea')[1].setValue('Project title only');
+    await wrapper.findAll('.commit-prompt-scope')[1].find('button').trigger('click');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+
+    expect(fetch).toHaveBeenLastCalledWith('/api/git/commit-message-prompts', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        cwd: '/workspace/project-a',
+        scope: 'project',
+        userPrompt: 'Project title only',
+      }),
+    }));
   });
 
   it('lists the task queue keyboard shortcut', async () => {

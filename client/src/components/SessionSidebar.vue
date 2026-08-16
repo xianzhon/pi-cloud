@@ -306,6 +306,7 @@
 
 <script setup lang="ts">
 import { i18n } from '../i18n';
+import { formatHomePath } from '../utils/paths';
 import { computed, ref, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { PhBrain, PhFolder, PhX, PhPencilSimple, PhTrash, PhSignOut, PhPlus, PhArrowSquareOut, PhGitMerge, PhGitPullRequest, PhGitBranch } from '@phosphor-icons/vue';
 import FolderPickerModal from './FolderPickerModal.vue';
@@ -649,13 +650,6 @@ function handleSessionListScroll() {
 
 function logout() {
   emit('logout');
-}
-
-function formatHomePath(path?: string): string {
-  if (!path) return '';
-  return path
-    .replace(/^\/home\/[^/]+(?=\/|$)/, '~')
-    .replace(/^\/Users\/[^/]+(?=\/|$)/, '~');
 }
 
 function formatProjectPath(path?: string): string {

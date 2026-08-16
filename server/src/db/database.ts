@@ -46,6 +46,13 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS commit_message_prompts (
+      scope_path TEXT PRIMARY KEY,
+      system_prompt TEXT,
+      user_prompt TEXT,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS agent_profile_settings (
       profile_id TEXT PRIMARY KEY,
       proxy_json TEXT NOT NULL DEFAULT '{}',

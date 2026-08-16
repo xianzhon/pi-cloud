@@ -47,6 +47,7 @@ import { GithubClient } from './services/github-client.js';
 import { GatewaySettingsStore } from './services/gateway-settings-store.js';
 import { GithubSettingsStore } from './services/github-settings-store.js';
 import { ProjectTaskStore } from './services/project-task-store.js';
+import { CommitMessagePromptStore } from './services/commit-message-prompt-store.js';
 import { ProjectTaskStarter } from './services/project-task-starter.js';
 import { RepositoryCloner } from './services/repository-cloner.js';
 import { FeishuGatewayService } from './services/feishu-gateway.js';
@@ -343,7 +344,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Backward-compatible alias for clients that still call the original Gitea-only prefix.
   await app.register(gitHostingRoutes, { prefix: '/api/gitea', ...gitHostingRouteOptions });
   await app.register(fileRoutes, { prefix: '/api/files' });
-  await app.register(gitRoutes, { prefix: '/api/git', activityStore: sessionActivityStore });
+  await app.register(gitRoutes, {
+    prefix: '/api/git',
+    activityStore: sessionActivityStore,
+    commitMessagePrompts: new CommitMessagePromptStore(db),
+  });
   await app.register(slashCommandRoutes, { prefix: '/api/slash-commands' });
   await app.register(changelogRoutes, { prefix: '/api/changelog' });
   await app.register(chatWebSocket);
