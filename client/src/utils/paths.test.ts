@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatHomePath } from './paths';
+import { formatHomePath, normalizePathSeparators } from './paths';
+
+describe('normalizePathSeparators', () => {
+  it('canonicalizes Windows paths without changing POSIX paths', () => {
+    expect(normalizePathSeparators('D:\\develop\\project\\src\\main.py')).toBe('D:/develop/project/src/main.py');
+    expect(normalizePathSeparators('/workspace/src/main.ts')).toBe('/workspace/src/main.ts');
+  });
+});
 
 describe('formatHomePath', () => {
   it('replaces Linux and macOS home directories with a tilde', () => {

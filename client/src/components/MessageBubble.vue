@@ -758,7 +758,7 @@ function isFilePath(text: string): boolean {
   const pathPart = text.replace(/:\d+(?::\d+)?$/, '');
 
   // Path with directory segments — must have a file extension
-  if (/\//.test(pathPart)) return /\.\w{1,15}$/.test(pathPart);
+  if (/[\\/]/.test(pathPart)) return /\.\w{1,15}$/.test(pathPart);
 
   // Bare filename — has a dot and looks like a filename
   return /^[\w][\w.-]*\.\w{1,15}$/.test(pathPart);
@@ -801,7 +801,7 @@ function decodeHtmlEntities(value: string): string {
 
 function fileLinkAttributes(path: string): string {
   const escaped = path.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-  const kind = path.includes('/') ? 'path' : 'filename';
+  const kind = /[\\/]/.test(path) ? 'path' : 'filename';
   return `class="file-link" data-path="${escaped}" data-kind="${kind}"`;
 }
 

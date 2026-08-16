@@ -482,6 +482,26 @@ describe('MessageBubble', () => {
     window.removeEventListener('open-file-in-editor', openFile);
   });
 
+  it('recognizes Windows file paths as path links', async () => {
+    const openFile = vi.fn();
+    window.addEventListener('open-file-in-editor', openFile);
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'assistant-windows-file-link',
+          role: 'assistant',
+          content: '`D:\\develop\\project\\MyTT.py`',
+        },
+      },
+    });
+
+    const link = wrapper.find('.message-content code.file-link');
+    expect(link.attributes('data-kind')).toBe('path');
+    await link.trigger('click');
+    expect((openFile.mock.calls[0][0] as CustomEvent).detail.path).toBe('D:\\develop\\project\\MyTT.py');
+    window.removeEventListener('open-file-in-editor', openFile);
+  });
+
   it('renders links, blockquotes, and tables as markdown elements', () => {
     const wrapper = mount(MessageBubble, {
       props: {

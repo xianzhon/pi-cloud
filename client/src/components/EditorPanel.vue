@@ -314,6 +314,7 @@ import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, Ph
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
+import { normalizePathSeparators } from '../utils/paths';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
@@ -1018,17 +1019,26 @@ function handleConfirmPromptCancel() {
   confirmPromptResolve = undefined;
 }
 
+function normalizeTreePaths(nodes: TreeNodeData[]): TreeNodeData[] {
+  return nodes.map(node => ({
+    ...node,
+    path: normalizePathSeparators(node.path),
+    linkTarget: node.linkTarget ? normalizePathSeparators(node.linkTarget) : undefined,
+    children: node.children ? normalizeTreePaths(node.children) : undefined,
+  }));
+}
+
 async function loadFileTree(path = props.cwd): Promise<TreeNodeData[]> {
   try {
     const params = new URLSearchParams({
-      path: path || '~',
+      path: normalizePathSeparators(path || '~'),
       depth: '1',
       hidden: showHiddenFiles.value ? 'true' : 'false',
     });
     const response = await fetch(`/api/files/tree?${params}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    return data.tree || [];
+    return normalizeTreePaths(data.tree || []);
   } catch (error) {
     console.error(t('components.editorPanel.failedToLoadFileTree'), error);
     return [];
@@ -1115,13 +1125,15 @@ function toggleMaximize() {
 }
 
 function normalizePathForCompare(path: string): string {
-  if (path === '~') return '~/';
-  return path.endsWith('/') ? path : `${path}/`;
+  const normalized = normalizePathSeparators(path);
+  if (normalized === '~') return '~/';
+  return normalized.endsWith('/') ? normalized : `${normalized}/`;
 }
 
 function normalizePath(path: string): string {
-  if (path === '/') return path;
-  return path.endsWith('/') ? path.slice(0, -1) : path;
+  const normalized = normalizePathSeparators(path);
+  if (normalized === '/') return normalized;
+  return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
 }
 
 function dirname(path: string): string {
@@ -1160,14 +1172,15 @@ function findTreeNodeByPath(nodes: TreeNodeData[], path: string): TreeNodeData |
 
 function relativePathFromCwd(filePath: string): string {
   const cwd = props.cwd || '';
-  if (!cwd || cwd === '~') return filePath;
+  const normalizedFilePath = normalizePathSeparators(filePath);
+  if (!cwd || cwd === '~') return normalizedFilePath;
 
   const normalizedCwd = normalizePathForCompare(cwd);
-  if (filePath.startsWith(normalizedCwd)) {
-    return filePath.slice(normalizedCwd.length);
+  if (normalizedFilePath.startsWith(normalizedCwd)) {
+    return normalizedFilePath.slice(normalizedCwd.length);
   }
 
-  return filePath;
+  return normalizedFilePath;
 }
 
 function relativePathForGit(filePath: string): string {
@@ -1175,7 +1188,7 @@ function relativePathForGit(filePath: string): string {
 }
 
 function tabTooltipPath(filePath: string): string {
-  return relativePathForGit(filePath);
+  return normalizePathSeparators(filePath);
 }
 
 function rootDirectory(): string {
@@ -1419,6 +1432,7 @@ function openVirtualDiff({ cwd, scope, content }: { cwd: string; scope: string; 
 }
 
 async function openFile(filePath: string, line?: number, column?: number) {
+  filePath = normalizePathSeparators(filePath);
   selectedDirectoryPath.value = dirname(filePath) || rootDirectory();
 
   const existing = tabs.value.find(t => t.path === filePath);
@@ -1440,7 +1454,7 @@ async function openFile(filePath: string, line?: number, column?: number) {
     if (response.status === 415) {
       if (data.kind === 'image') {
         tabs.value.push({
-          name: filePath.split('/').pop() || filePath,
+          name: basename(filePath),
           path: filePath,
           kind: 'image',
         });
@@ -1469,7 +1483,7 @@ async function openFile(filePath: string, line?: number, column?: number) {
     modelListeners.set(filePath, listener);
     if (data.mtime) fileTimestamps.set(filePath, data.mtime);
     tabs.value.push({
-      name: filePath.split('/').pop() || filePath,
+      name: basename(filePath),
       path: filePath,
       kind: 'text',
     });

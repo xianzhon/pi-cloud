@@ -836,6 +836,41 @@ describe('App routing', () => {
     expect(fetchMock).not.toHaveBeenCalledWith('/api/files/search?pattern=**%2FAGENTS.md&path=%2Fworkspace');
   });
 
+  it('canonicalizes a bare filename resolved in a Windows workspace', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/sessions/project-path') {
+        return { json: async () => ({ projectPath: 'D:\\develop\\project' }) };
+      }
+      if (String(url).startsWith('/api/sessions')) {
+        return { json: async () => ({ sessions: [{ id: 'session-1', cwd: 'D:\\develop\\project' }] }) };
+      }
+      if (String(url) === '/api/files/search?pattern=MyTT.py&path=D%3A%5Cdevelop%5Cproject') {
+        return { json: async () => ({ files: ['MyTT.py'] }) };
+      }
+      return { json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    window.dispatchEvent(new CustomEvent('open-file-in-editor', {
+      detail: { path: 'MyTT.py', kind: 'filename' },
+    }));
+    await flushPromises();
+
+    expect(editorOpenFile).toHaveBeenCalledWith('D:/develop/project/MyTT.py', undefined, undefined);
+  });
+
   it('opens home-relative file paths without resolving them against the workspace', async () => {
     const fetchMock = vi.mocked(fetch);
     mount(App, {

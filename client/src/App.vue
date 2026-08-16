@@ -551,6 +551,7 @@ import { useMemories } from './composables/useMemories';
 import { useGitHosting } from './composables/useGitHosting';
 import { useGatewaySettings } from './composables/useGatewaySettings';
 import { cachedLaunchResource, invalidateLaunchResourceCache, launchCacheKey } from './composables/useLaunchResourceCache';
+import { normalizePathSeparators } from './utils/paths';
 
 const router = useRouter();
 const route = useRoute();
@@ -1774,11 +1775,16 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 function resolveFilePath(filePath: string, cwd: string): string {
-  if (filePath.startsWith('/') || filePath.startsWith('~/')) return filePath;
-  // Expand bare ~ to ~/ so path joining works correctly
-  const expandedCwd = cwd === '~' ? '~/' : cwd;
+  const normalizedFilePath = normalizePathSeparators(filePath);
+  if (normalizedFilePath.startsWith('/') || normalizedFilePath.startsWith('~/') || /^[A-Za-z]:\//.test(normalizedFilePath)) {
+    return normalizedFilePath;
+  }
+
+  // Expand bare ~ to ~/ so path joining works correctly.
+  const normalizedCwd = normalizePathSeparators(cwd);
+  const expandedCwd = normalizedCwd === '~' ? '~/' : normalizedCwd;
   const base = expandedCwd.endsWith('/') ? expandedCwd : expandedCwd + '/';
-  const fullPath = base + filePath;
+  const fullPath = base + normalizedFilePath;
   const isAbsolute = fullPath.startsWith('/');
   const parts = fullPath.split('/');
   const resolved: string[] = [];
@@ -1802,15 +1808,16 @@ async function searchProjectFiles(pattern: string, cwd: string): Promise<string[
 }
 
 function pickBestPathMatch(files: string[], requestedPath: string): string | undefined {
-  const exact = files.find((file: string) => file === requestedPath);
+  const normalizedRequestedPath = normalizePathSeparators(requestedPath);
+  const exact = files.find((file: string) => normalizePathSeparators(file) === normalizedRequestedPath);
   if (exact) return exact;
 
-  const suffix = `/${requestedPath}`;
-  const suffixMatches = files.filter((file: string) => file.endsWith(suffix));
+  const suffix = `/${normalizedRequestedPath}`;
+  const suffixMatches = files.filter((file: string) => normalizePathSeparators(file).endsWith(suffix));
   if (!suffixMatches.length) return files[0];
 
   return suffixMatches.sort((a: string, b: string) => {
-    const depthDiff = a.split('/').length - b.split('/').length;
+    const depthDiff = normalizePathSeparators(a).split('/').length - normalizePathSeparators(b).split('/').length;
     return depthDiff || a.localeCompare(b);
   })[0];
 }

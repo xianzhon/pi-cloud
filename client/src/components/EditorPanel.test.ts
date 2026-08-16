@@ -571,7 +571,7 @@ describe('EditorPanel', () => {
 
     const tooltip = wrapper.find('.editor-tab-tooltip');
     expect(tooltip.exists()).toBe(true);
-    expect(tooltip.text()).toBe('server/src/index.ts');
+    expect(tooltip.text()).toBe('/project/server/src/index.ts');
 
     await tab.trigger('mouseleave');
     expect(wrapper.find('.editor-tab-tooltip').exists()).toBe(false);
@@ -752,6 +752,44 @@ describe('EditorPanel', () => {
 
     await vi.waitFor(() => expect(wrapper.text()).toContain('index.ts'));
     expect(wrapper.find('.tree-node.directory + div').exists()).toBe(true);
+  });
+
+  it('uses one canonical path for Windows tree entries and opened tabs', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) {
+        return {
+          ok: true,
+          json: async () => ({
+            tree: [{ name: 'MyTT.py', path: 'D:\\develop\\project\\MyTT.py', type: 'file' }],
+          }),
+        };
+      }
+      if (String(url).startsWith('/api/files/read')) {
+        return { ok: true, json: async () => ({ content: 'import time\n', mtime: 1 }) };
+      }
+      return { ok: true, json: async () => ({ changes: {} }) };
+    }));
+
+    const wrapper = mount(EditorPanel, {
+      props: { visible: true, cwd: 'D:\\develop\\project' },
+    });
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('MyTT.py'));
+    await wrapper.vm.openFile('D:\\develop\\project/MyTT.py');
+    await wrapper.vm.$nextTick();
+
+    const tab = wrapper.find('.editor-tabs .tab');
+    expect(tab.text()).toContain('MyTT.py');
+    expect(tab.text()).not.toContain('develop');
+
+    await tab.trigger('mouseenter');
+    expect(wrapper.find('.editor-tab-tooltip').text()).toBe('D:/develop/project/MyTT.py');
+
+    await wrapper.find('[aria-label="Locate active file in file tree"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('[data-tree-current="true"]').exists()).toBe(true));
+    expect(scrollIntoView).toHaveBeenCalled();
   });
 
   it('locates the active tab in the file tree by expanding ancestors and scrolling to it', async () => {
