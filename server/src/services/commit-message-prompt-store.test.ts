@@ -20,17 +20,20 @@ function createStore() {
 }
 
 describe('CommitMessagePromptStore', () => {
-  it('uses defaults, then global prompts, then project overrides', () => {
+  it('uses a fixed system prompt with global and project user prompt overrides', () => {
     const store = createStore();
 
     expect(store.get('/repo').effective).toEqual(DEFAULT_COMMIT_MESSAGE_PROMPTS);
-    store.save('global', '/repo', { systemPrompt: 'Global system', userPrompt: 'Global instructions' });
+    store.save('global', '/repo', { userPrompt: 'Global instructions' });
     store.save('project', '/repo', { userPrompt: 'Project instructions' });
+    db!.prepare('UPDATE commit_message_prompts SET system_prompt = ?').run('Legacy custom system prompt');
 
-    expect(store.get('/repo')).toMatchObject({
-      global: { systemPrompt: 'Global system', userPrompt: 'Global instructions' },
-      project: { userPrompt: 'Project instructions' },
-      effective: { systemPrompt: 'Global system', userPrompt: 'Project instructions' },
+    const result = store.get('/repo');
+    expect(result.global).toEqual({ userPrompt: 'Global instructions' });
+    expect(result.project).toEqual({ userPrompt: 'Project instructions' });
+    expect(result.effective).toEqual({
+      systemPrompt: DEFAULT_COMMIT_MESSAGE_PROMPTS.systemPrompt,
+      userPrompt: 'Project instructions',
     });
     expect(store.get('/other').effective.userPrompt).toBe('Global instructions');
   });

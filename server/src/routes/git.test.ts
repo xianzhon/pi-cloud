@@ -36,6 +36,7 @@ vi.mock('../services/session-manager.js', () => ({
   },
 }));
 
+import { DEFAULT_COMMIT_MESSAGE_PROMPTS } from '../services/commit-message-prompt-store';
 import { gitRoutes, type GitRouteOptions } from './git';
 
 const execFileAsync = promisify(execFile);
@@ -367,7 +368,23 @@ describe('gitRoutes branch', () => {
     }
   });
 
-  it('uses project commit prompts when generating with AI', async () => {
+  it('rejects system-only commit prompt customization', async () => {
+    const app = await buildApp();
+    try {
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/api/git/commit-message-prompts',
+        payload: { scope: 'global', systemPrompt: 'Custom system prompt' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: 'userPrompt must be provided' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('uses the project user prompt when generating with AI', async () => {
     completeSimpleMock.mockResolvedValueOnce({
       role: 'assistant',
       content: [{ type: 'text', text: 'feat: customize commits' }],
@@ -377,7 +394,7 @@ describe('gitRoutes branch', () => {
     });
     const cwd = await createRepo();
     const prompts = {
-      get: vi.fn(() => ({ global: {}, project: {}, effective: { systemPrompt: 'Use Conventional Commits.', userPrompt: 'Write a commit title only.' } })),
+      get: vi.fn(() => ({ global: {}, project: {}, effective: { systemPrompt: DEFAULT_COMMIT_MESSAGE_PROMPTS.systemPrompt, userPrompt: 'Write a commit title only.' } })),
       save: vi.fn(),
     };
     const app = await buildApp({ commitMessagePrompts: prompts });
@@ -390,7 +407,7 @@ describe('gitRoutes branch', () => {
 
       expect(response.statusCode).toBe(200);
       expect(prompts.get).toHaveBeenCalledWith(cwd);
-      expect(completeSimpleMock.mock.calls[0][1].systemPrompt).toBe('Use Conventional Commits.');
+      expect(completeSimpleMock.mock.calls[0][1].systemPrompt).toBe(DEFAULT_COMMIT_MESSAGE_PROMPTS.systemPrompt);
       expect(completeSimpleMock.mock.calls[0][1].messages[0].content).toContain('Write a commit title only.');
     } finally {
       await app.close();

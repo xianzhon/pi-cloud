@@ -360,24 +360,20 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
   });
 
   app.put('/commit-message-prompts', async (req, reply) => {
-    const body = (req.body || {}) as { cwd?: string; scope?: unknown; systemPrompt?: unknown; userPrompt?: unknown };
+    const body = (req.body || {}) as { cwd?: string; scope?: unknown; userPrompt?: unknown };
     if (body.scope !== 'global' && body.scope !== 'project') {
       return reply.status(400).send({ error: 'scope must be global or project' });
     }
-    if (body.systemPrompt !== undefined && typeof body.systemPrompt !== 'string') {
-      return reply.status(400).send({ error: 'systemPrompt must be a string' });
+    if (body.userPrompt === undefined) {
+      return reply.status(400).send({ error: 'userPrompt must be provided' });
     }
-    if (body.userPrompt !== undefined && typeof body.userPrompt !== 'string') {
+    if (typeof body.userPrompt !== 'string') {
       return reply.status(400).send({ error: 'userPrompt must be a string' });
-    }
-    if (body.systemPrompt === undefined && body.userPrompt === undefined) {
-      return reply.status(400).send({ error: 'At least one prompt must be provided' });
     }
 
     const resolvedCwd = await resolveGitCwd(body.cwd);
     return options.commitMessagePrompts?.save(body.scope, resolvedCwd, {
-      ...(body.systemPrompt !== undefined ? { systemPrompt: body.systemPrompt } : {}),
-      ...(body.userPrompt !== undefined ? { userPrompt: body.userPrompt } : {}),
+      userPrompt: body.userPrompt,
     }) || { global: {}, project: {}, effective: DEFAULT_COMMIT_MESSAGE_PROMPTS };
   });
 

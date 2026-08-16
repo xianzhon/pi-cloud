@@ -463,11 +463,8 @@
                   <div class="commit-prompt-grid">
                     <fieldset class="commit-prompt-scope">
                       <legend>{{ t('components.settingsDialog.globalPrompts') }}</legend>
-                      <label class="git-settings-field">{{ t('components.settingsDialog.systemPrompt') }}
-                        <textarea v-model="globalSystemPrompt" class="settings-input commit-prompt-textarea" :placeholder="effectiveSystemPrompt" />
-                      </label>
                       <label class="git-settings-field">{{ t('components.settingsDialog.userPrompt') }}
-                        <textarea v-model="globalUserPrompt" class="settings-input commit-prompt-textarea large" :placeholder="effectiveUserPrompt" />
+                        <textarea v-model="globalUserPrompt" class="settings-input commit-prompt-textarea" :placeholder="effectiveUserPrompt" />
                       </label>
                       <button type="button" class="settings-action-btn compact-action" :disabled="commitPromptsSaving" @click="saveCommitPrompts('global')">{{ t('components.settingsDialog.saveGlobalPrompts') }}</button>
                     </fieldset>
@@ -476,11 +473,8 @@
                         {{ t('components.settingsDialog.projectPrompts') }}
                         <span class="commit-prompt-project-name">({{ projectName }})</span>
                       </legend>
-                      <label class="git-settings-field">{{ t('components.settingsDialog.systemPrompt') }}
-                        <textarea v-model="projectSystemPrompt" class="settings-input commit-prompt-textarea" :placeholder="t('components.settingsDialog.inheritGlobalPrompt')" />
-                      </label>
                       <label class="git-settings-field">{{ t('components.settingsDialog.userPrompt') }}
-                        <textarea v-model="projectUserPrompt" class="settings-input commit-prompt-textarea large" :placeholder="t('components.settingsDialog.inheritGlobalPrompt')" />
+                        <textarea v-model="projectUserPrompt" class="settings-input commit-prompt-textarea" :placeholder="t('components.settingsDialog.inheritGlobalPrompt')" />
                       </label>
                       <button type="button" class="settings-action-btn compact-action" :disabled="commitPromptsSaving" @click="saveCommitPrompts('project')">{{ t('components.settingsDialog.saveProjectPrompts') }}</button>
                     </fieldset>
@@ -756,11 +750,8 @@ const gatewayModelsLoading = ref(false);
 const showGatewayFolderPicker = ref(false);
 const gitSavedVisible = ref(false);
 const gatewaySavedVisible = ref(false);
-const globalSystemPrompt = ref('');
 const globalUserPrompt = ref('');
-const projectSystemPrompt = ref('');
 const projectUserPrompt = ref('');
-const effectiveSystemPrompt = ref('');
 const effectiveUserPrompt = ref('');
 const commitPromptsSaving = ref(false);
 const commitPromptsSaved = ref(false);
@@ -900,17 +891,14 @@ function saveGitSettings() {
 }
 
 interface CommitPromptResponse {
-  global: { systemPrompt?: string; userPrompt?: string };
-  project: { systemPrompt?: string; userPrompt?: string };
-  effective: { systemPrompt: string; userPrompt: string };
+  global: { userPrompt?: string };
+  project: { userPrompt?: string };
+  effective: { userPrompt: string };
 }
 
 function applyCommitPrompts(data: CommitPromptResponse) {
-  globalSystemPrompt.value = data.global.systemPrompt || '';
   globalUserPrompt.value = data.global.userPrompt || '';
-  projectSystemPrompt.value = data.project.systemPrompt || '';
   projectUserPrompt.value = data.project.userPrompt || '';
-  effectiveSystemPrompt.value = data.effective.systemPrompt;
   effectiveUserPrompt.value = data.effective.userPrompt;
 }
 
@@ -932,7 +920,6 @@ async function saveCommitPrompts(scope: 'global' | 'project') {
       body: JSON.stringify({
         cwd: props.projectPath,
         scope,
-        systemPrompt: scope === 'global' ? globalSystemPrompt.value : projectSystemPrompt.value,
         userPrompt: scope === 'global' ? globalUserPrompt.value : projectUserPrompt.value,
       }),
     });
@@ -1236,13 +1223,9 @@ const emit = defineEmits<{
 }
 
 .commit-prompt-textarea {
-  min-height: 7rem;
+  min-height: 11rem;
   line-height: 1.45;
   resize: vertical;
-}
-
-.commit-prompt-textarea.large {
-  min-height: 11rem;
 }
 
 .settings-backdrop {
