@@ -44,18 +44,18 @@
         >
           <PhSidebarSimple :size="16" weight="bold" />
         </button>
-        <div v-if="activeIsMarkdown" class="markdown-mode-toggle" role="group" :aria-label="t('components.editorPanel.markdownViewMode')">
+        <div v-if="activeIsPreviewable" class="markdown-mode-toggle" role="group" :aria-label="activeViewModeLabel">
           <button
-            :class="{ active: activeMarkdownMode === 'preview' }"
-            @click="setActiveMarkdownMode('preview')"
-            :title="t('components.editorPanel.previewMarkdown')"
+            :class="{ active: activePreviewMode === 'preview' }"
+            @click="setActivePreviewMode('preview')"
+            :title="activePreviewTitle"
           >
             {{ t('components.editorPanel.preview') }}
           </button>
           <button
-            :class="{ active: activeMarkdownMode === 'edit' }"
-            @click="setActiveMarkdownMode('edit')"
-            :title="t('components.editorPanel.editMarkdownSource')"
+            :class="{ active: activePreviewMode === 'edit' }"
+            @click="setActivePreviewMode('edit')"
+            :title="activeEditTitle"
           >
             {{ t('components.editorPanel.raw') }}
           </button>
@@ -163,13 +163,20 @@
       <div v-if="showTree" class="file-tree-backdrop" @click="toggleFileTree" />
       
       <div
-        v-if="activeIsMarkdown && activeMarkdownMode === 'preview'"
+        v-if="activeIsMarkdown && activePreviewMode === 'preview'"
         ref="markdownPreviewEl"
         class="markdown-preview"
         :class="{ 'markdown-preview-light': resolvedTheme === 'light' }"
         v-html="activeMarkdownHtml"
         @click="handleMarkdownPreviewClick"
       ></div>
+      <iframe
+        v-else-if="activeIsHtml && activePreviewMode === 'preview'"
+        class="html-preview"
+        sandbox="allow-same-origin"
+        :srcdoc="activeHtmlDocument"
+        :title="t('components.editorPanel.htmlPreview')"
+      ></iframe>
       <div v-else-if="activeImageSrc" class="image-preview">
         <div class="image-preview-toolbar" role="group" :aria-label="t('components.editorPanel.imageZoomControls')">
           <button
@@ -224,7 +231,7 @@
       </div>
       <div
         class="editor-container"
-        :class="{ hidden: (activeIsMarkdown && activeMarkdownMode === 'preview') || !!activeImageSrc }"
+        :class="{ hidden: (activeIsPreviewable && activePreviewMode === 'preview') || !!activeImageSrc }"
         ref="editorContainer"
       ></div>
     </div>
@@ -486,9 +493,9 @@ const expandedPaths = ref(new Set<string>());
 const selectedDirectoryPath = ref<string>();
 const dirtyPaths = ref(new Set<string>());
 const cutFilePath = ref<string>();
-type MarkdownMode = 'preview' | 'edit';
-const markdownModes = ref(new Map<string, MarkdownMode>());
-const markdownPreviewVersion = ref(0);
+type PreviewMode = 'preview' | 'edit';
+const previewModes = ref(new Map<string, PreviewMode>());
+const previewVersion = ref(0);
 const statusMessage = ref('');
 const statusType = ref<'success' | 'error' | 'saving'>('success');
 const isSaving = ref(false);
@@ -612,14 +619,31 @@ const activeImageSrc = computed(() => activeTabInfo.value?.kind === 'image' && a
   ? `/api/files/raw?path=${encodeURIComponent(activeTab.value)}`
   : '');
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
-const activeMarkdownMode = computed(() => activeTab.value ? (markdownModes.value.get(activeTab.value) || 'preview') : 'preview');
+const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isHtmlFile(activeTab.value));
+const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value);
+const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
+const activeViewModeLabel = computed(() => t(activeIsHtml.value
+  ? 'components.editorPanel.htmlViewMode'
+  : 'components.editorPanel.markdownViewMode'));
+const activePreviewTitle = computed(() => t(activeIsHtml.value
+  ? 'components.editorPanel.previewHtml'
+  : 'components.editorPanel.previewMarkdown'));
+const activeEditTitle = computed(() => t(activeIsHtml.value
+  ? 'components.editorPanel.editHtmlSource'
+  : 'components.editorPanel.editMarkdownSource'));
 const activeMarkdownHtml = computed(() => {
-  markdownPreviewVersion.value;
+  previewVersion.value;
   const filePath = activeTab.value;
   if (!filePath) return '';
   const model = models.get(filePath);
   if (!model) return '';
   return sanitizeHtmlFragment(renderMarkdownPreview(model.getValue()));
+});
+const activeHtmlDocument = computed(() => {
+  previewVersion.value;
+  const filePath = activeTab.value;
+  const model = filePath ? models.get(filePath) : undefined;
+  return filePath && model ? renderHtmlPreview(model.getValue(), filePath) : '';
 });
 const canOpenWithSystemTool = isLocalHostname(window.location.hostname);
 
@@ -792,6 +816,51 @@ function isMarkdownFile(filePath: string): boolean {
   return /\.(md|markdown|mdown|mkdn|mdx)$/i.test(filePath);
 }
 
+function isHtmlFile(filePath: string): boolean {
+  return /\.html?$/i.test(filePath);
+}
+
+function isPreviewableFile(filePath: string): boolean {
+  return isMarkdownFile(filePath) || isHtmlFile(filePath);
+}
+
+function encodeBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function renderHtmlPreview(html: string, filePath: string): string {
+  const root = encodeBase64Url(dirname(filePath));
+  const document = new DOMParser().parseFromString(html, 'text/html');
+
+  // srcdoc has no filesystem-relative URL base, so local resources must go
+  // through the authenticated preview endpoint.
+  function rewriteAttribute(element: Element, attribute: string): void {
+    const value = element.getAttribute(attribute);
+    if (!value || value.startsWith('#') || /^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith('//')) return;
+
+    const assetPath = value.split(/[?#]/, 1)[0].replace(/^[/\\]+/, '');
+    if (!assetPath) return;
+    const params = new URLSearchParams({ root, path: assetPath });
+    element.setAttribute(attribute, `/api/files/preview-asset?${params}`);
+  }
+
+  document.querySelectorAll('[src]').forEach(element => rewriteAttribute(element, 'src'));
+  document.querySelectorAll('[poster]').forEach(element => rewriteAttribute(element, 'poster'));
+  document.querySelectorAll('link[href]').forEach(element => rewriteAttribute(element, 'href'));
+
+  const policy = document.createElement('meta');
+  policy.httpEquiv = 'Content-Security-Policy';
+  const previewOrigin = window.location.origin;
+  policy.content = `default-src 'none'; style-src ${previewOrigin} 'unsafe-inline' data: blob:; img-src ${previewOrigin} data: blob:; font-src ${previewOrigin} data:; media-src ${previewOrigin} data: blob:; script-src 'none'; object-src 'none'; frame-src 'none'; connect-src 'none'; base-uri 'none'`;
+  document.head.prepend(policy);
+
+  const doctype = /^\s*<!doctype\s+html[^>]*>/i.test(html) ? '<!DOCTYPE html>' : '';
+  return `${doctype}${document.documentElement.outerHTML}`;
+}
+
 function clampImagePan(pan = imagePan.value): { x: number; y: number } {
   const viewport = imagePreviewEl.value;
   const image = imageEl.value;
@@ -932,11 +1001,11 @@ function handleImagePointerEnd(event: PointerEvent): void {
   if (!imagePanStart) isImageDragging.value = false;
 }
 
-function setActiveMarkdownMode(mode: MarkdownMode) {
+function setActivePreviewMode(mode: PreviewMode) {
   if (!activeTab.value) return;
-  const nextModes = new Map(markdownModes.value);
+  const nextModes = new Map(previewModes.value);
   nextModes.set(activeTab.value, mode);
-  markdownModes.value = nextModes;
+  previewModes.value = nextModes;
   if (mode === 'edit') nextTick(() => editor?.layout());
 }
 
@@ -1367,8 +1436,8 @@ async function reloadRootTree() {
   tabs.value = [];
   activeTab.value = undefined;
   dirtyPaths.value = new Set();
-  markdownModes.value = new Map();
-  markdownPreviewVersion.value++;
+  previewModes.value = new Map();
+  previewVersion.value++;
   gitChanges.value = new Map();
   gitChangeDecorations?.clear();
   diffDecorations?.clear();
@@ -1531,7 +1600,7 @@ function markDirty(filePath: string) {
   const nextDirtyPaths = new Set(dirtyPaths.value);
   nextDirtyPaths.add(filePath);
   dirtyPaths.value = nextDirtyPaths;
-  if (isMarkdownFile(filePath)) markdownPreviewVersion.value++;
+  if (isPreviewableFile(filePath)) previewVersion.value++;
   clearStatus();
 }
 
@@ -1639,7 +1708,7 @@ async function refreshFile(filePath: string): Promise<boolean> {
     listener?.dispose();
 
     model.setValue(data.content);
-    if (isMarkdownFile(filePath)) markdownPreviewVersion.value++;
+    if (isPreviewableFile(filePath)) previewVersion.value++;
     if (newMtime) fileTimestamps.set(filePath, newMtime);
 
     // Re-attach the listener
@@ -2045,12 +2114,12 @@ function moveOpenTabPath(oldPath: string, newPath: string) {
     fileTimestamps.set(newPath, timestamp);
   }
 
-  const markdownMode = markdownModes.value.get(oldPath);
-  if (markdownMode) {
-    const nextMarkdownModes = new Map(markdownModes.value);
-    nextMarkdownModes.delete(oldPath);
-    if (isMarkdownFile(newPath)) nextMarkdownModes.set(newPath, markdownMode);
-    markdownModes.value = nextMarkdownModes;
+  const previewMode = previewModes.value.get(oldPath);
+  if (previewMode) {
+    const nextPreviewModes = new Map(previewModes.value);
+    nextPreviewModes.delete(oldPath);
+    if (isPreviewableFile(newPath)) nextPreviewModes.set(newPath, previewMode);
+    previewModes.value = nextPreviewModes;
   }
 
   if (dirtyPaths.value.has(oldPath)) {
@@ -2089,9 +2158,9 @@ function removeOpenTab(filePath: string) {
   modelListeners.delete(filePath);
   models.get(filePath)?.dispose();
   models.delete(filePath);
-  const nextMarkdownModes = new Map(markdownModes.value);
-  nextMarkdownModes.delete(filePath);
-  markdownModes.value = nextMarkdownModes;
+  const nextPreviewModes = new Map(previewModes.value);
+  nextPreviewModes.delete(filePath);
+  previewModes.value = nextPreviewModes;
   fileTimestamps.delete(filePath);
   clearDirty(filePath);
 
@@ -2386,7 +2455,7 @@ watch(activeTab, (path) => {
   if (typeof editor?.updateOptions === 'function') {
     editor.updateOptions({ readOnly: !!tabs.value.find(tab => tab.path === path)?.virtual });
   }
-  markdownPreviewVersion.value++;
+  previewVersion.value++;
   nextTick(() => editor?.layout());
   applyGitChangeDecorations(path);
   applyDiffDecorations(path);
@@ -2403,7 +2472,7 @@ watch(resolvedTheme, (theme) => {
 
 watch([
   () => activeIsMarkdown.value ? activeMarkdownHtml.value : '',
-  activeMarkdownMode,
+  activePreviewMode,
   resolvedTheme,
 ], () => {
   void nextTick(renderMermaidDiagrams);
@@ -3009,6 +3078,13 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   will-change: transform;
 }
 
+.html-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: #fff;
+}
+
 .markdown-preview {
   flex: 1 1 auto;
   min-width: 0;
@@ -3190,6 +3266,7 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
   .editor-container,
   .markdown-preview,
+  .html-preview,
   .image-preview {
     min-height: 0;
   }

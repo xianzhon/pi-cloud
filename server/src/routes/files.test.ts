@@ -254,6 +254,44 @@ describe('fileRoutes', () => {
     expect(response.headers['content-security-policy']).toBe("sandbox; default-src 'none'");
   });
 
+  it('serves safe local assets for sandboxed HTML previews', async () => {
+    const siteDir = path.join(tempDir, 'site');
+    await fs.mkdir(path.join(siteDir, 'styles'), { recursive: true });
+    await fs.writeFile(path.join(siteDir, 'styles', 'site.css'), 'body { background: url(../image.png); }');
+    await fs.writeFile(path.join(siteDir, 'app.js'), 'alert(1)');
+    const encodedRoot = Buffer.from(siteDir).toString('base64url');
+
+    const cssResponse = await app.inject({
+      method: 'GET',
+      url: `/api/files/preview-asset?root=${encodedRoot}&path=${encodeURIComponent('styles/site.css')}`,
+    });
+    expect(cssResponse.statusCode).toBe(200);
+    expect(cssResponse.headers['content-type']).toContain('text/css');
+    expect(cssResponse.headers['x-content-type-options']).toBe('nosniff');
+    expect(cssResponse.body).toBe(`body { background: url(/api/files/preview-asset?root=${encodedRoot}&path=image.png); }`);
+
+    const scriptResponse = await app.inject({
+      method: 'GET',
+      url: `/api/files/preview-asset?root=${encodedRoot}&path=app.js`,
+    });
+    expect(scriptResponse.statusCode).toBe(415);
+  });
+
+  it('rejects HTML preview assets outside the configured allowed roots', async () => {
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-preview-outside-'));
+    await fs.writeFile(path.join(outsideDir, 'secret.css'), 'secret');
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/files/preview-asset?root=${Buffer.from(outsideDir).toString('base64url')}&path=secret.css`,
+      });
+      expect(response.statusCode).toBe(403);
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   it('writes file contents', async () => {
     const filePath = path.join(tempDir, 'README.md');
     const response = await app.inject({

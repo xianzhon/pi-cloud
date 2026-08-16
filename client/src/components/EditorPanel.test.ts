@@ -162,6 +162,36 @@ describe('EditorPanel', () => {
     expect(wrapper.find('pre code.language-ts').text()).toBe('const untouched = true;');
   });
 
+  it('previews HTML in a sandboxed iframe with local asset support', async () => {
+    const html = '<!doctype html><html><head><link href="styles/site.css"></head><body><h1>Hello</h1><script>alert(1)</script></body></html>';
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: html, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => html),
+      dispose: vi.fn(),
+    } as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/site/index.html');
+    await wrapper.vm.$nextTick();
+
+    const preview = wrapper.find('iframe.html-preview');
+    expect(preview.exists()).toBe(true);
+    expect(preview.attributes('sandbox')).toBe('allow-same-origin');
+    expect(preview.attributes('srcdoc')).toContain('href="/api/files/preview-asset?root=L3Byb2plY3Qvc2l0ZQ&amp;path=styles%2Fsite.css"');
+    expect(preview.attributes('srcdoc')).toContain("script-src 'none'");
+    expect(preview.attributes('srcdoc')).toContain('<h1>Hello</h1>');
+
+    await wrapper.find('.markdown-mode-toggle button:last-child').trigger('click');
+    expect(wrapper.find('iframe.html-preview').exists()).toBe(false);
+    expect(wrapper.find('.editor-container').classes()).not.toContain('hidden');
+  });
+
   it('keeps invalid Mermaid source visible in markdown preview', async () => {
     const markdown = '```mermaid\nnot a valid diagram\n```';
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
