@@ -2,6 +2,27 @@
 
 All notable changes to Pi WebUI are documented here.
 
+## [1.0.2] - 2026-08-16
+
+### Added
+
+- Added global and per-project prompt customization for AI-generated Git commit messages.
+- Added a shallow-clone option when cloning repositories.
+- Added Mermaid diagram rendering to the Markdown preview.
+- Added modified-time sorting to the folder picker and file tree.
+- Added `pi-webui --version` and `pi-webui -v` commands.
+
+### Changed
+
+- Generate the complete sample configuration with random login credentials on the first run of a global installation.
+- Replaced Argon2 password hashing with Node.js's built-in scrypt implementation, removing the native Argon2 dependency.
+- Added a favicon to the project website.
+
+### Fixed
+
+- Stop panel resize interactions when the browser window loses focus.
+- Include `CHANGELOG.md` in the npm package so the changelog remains available in global installations.
+
 ## [1.0.1] - 2026-08-15
 
 ### Added
