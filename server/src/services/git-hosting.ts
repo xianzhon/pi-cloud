@@ -149,13 +149,13 @@ export class GitHostingService {
 
   private async resolveRemote(root: string, serverUrl: string, githubServerUrl = 'https://github.com'): Promise<{ name: string; url: string }> {
     const remotes = (await this.git(root, ['remote'])).split('\n').filter(Boolean);
-    let giteaRemote: { name: string; url: string } | null = null;
-    for (const name of remotes) {
+    const orderedRemotes = remotes.includes('origin')
+      ? ['origin', ...remotes.filter((name) => name !== 'origin')]
+      : remotes;
+    for (const name of orderedRemotes) {
       const url = await this.git(root, ['remote', 'get-url', name]);
-      if (parseGithubRemoteUrl(url, githubServerUrl)) return { name, url };
-      if (!giteaRemote && parseGiteaRemoteUrl(url, serverUrl)) giteaRemote = { name, url };
+      if (parseGithubRemoteUrl(url, githubServerUrl) || parseGiteaRemoteUrl(url, serverUrl)) return { name, url };
     }
-    if (giteaRemote) return giteaRemote;
     throw new Error('No git remote matches configured GitHub or Gitea servers');
   }
 
