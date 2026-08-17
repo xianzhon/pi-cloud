@@ -139,6 +139,13 @@ function stateToStyle(state: AnsiState): string {
   return styles.join('; ');
 }
 
+export function normalizeTerminalOutput(text: string): string {
+  return text.replace(/\r\n/g, '\n').split('\n').map((line) => {
+    const settledLine = line.replace(/\r+$/, '');
+    return settledLine.slice(settledLine.lastIndexOf('\r') + 1);
+  }).join('\n');
+}
+
 export function ansiToHtml(text: string): string {
   // Keep HTML escaping with the markdown renderer so code blocks preserve literal < and > characters.
   const result = text;

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ansiToHtml } from './ansi';
+import { ansiToHtml, normalizeTerminalOutput } from './ansi';
+
+describe('normalizeTerminalOutput', () => {
+  it('keeps only the latest carriage-return progress update', () => {
+    expect(normalizeTerminalOutput('Starting\n## 20%\r#### 40%\r###### 60%\r\nDone'))
+      .toBe('Starting\n###### 60%\nDone');
+  });
+});
 
 describe('ansiToHtml', () => {
   it('returns plain text unchanged when no ANSI codes are present', () => {

@@ -194,7 +194,7 @@ import { marked, Renderer } from 'marked';
 import hljs from 'highlight.js';
 import DOMPurify from 'dompurify';
 import type { ChatImage, MessageMemoryRecall } from '../composables/useChat';
-import { ansiToHtml } from '../utils/ansi';
+import { ansiToHtml, normalizeTerminalOutput } from '../utils/ansi';
 import {
   PhCopy,
   PhCheck,
@@ -876,7 +876,7 @@ const renderedToolInput = computed(() => {
 
 const renderedToolOutput = computed(() => {
   if (!props.message.toolOutput) return '';
-  return renderHighlightedCode(props.message.toolOutput, inferToolBlockLanguage('output'));
+  return renderHighlightedCode(normalizeTerminalOutput(props.message.toolOutput), inferToolBlockLanguage('output'));
 });
 
 function toggleThinkingExpanded() {
