@@ -8,6 +8,8 @@ A web-based, mobile-friendly interface for the [Pi coding agent](http://pi.dev).
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | ![Pi WebUI main window in dark theme](docs/images/main-window-dark-theme.png) | ![Pi WebUI main window in light theme](docs/images/main-window-white-theme.png) |
 
+**[▶ Watch Pi WebUI handle a Git bugfix workflow](https://xianzhon.github.io/pi-webui-website/assets/videos/demo-git-bugfix-workflow.mp4)**
+
 ## Features
 
 - **Mobile-friendly access** — use Pi from a desktop, phone, or tablet without needing a local terminal.

@@ -8,6 +8,8 @@
 | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
 | ![Pi WebUI 深色主题主窗口](docs/images/main-window-dark-theme.png) | ![Pi WebUI 浅色主题主窗口](docs/images/main-window-white-theme.png) |
 
+**[▶ 观看 Pi WebUI 完成 Git 缺陷修复工作流](https://xianzhon.github.io/pi-webui-website/assets/videos/demo-git-bugfix-workflow.mp4)**
+
 ## 功能特性
 
 - **移动端友好** — 无需本地终端，即可在电脑、手机或平板上使用 Pi。
