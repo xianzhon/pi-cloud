@@ -128,6 +128,46 @@ describe('FolderPickerModal', () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining('path=D%3A%5C')));
   });
 
+  it('creates a folder in the current directory and browses into it', async () => {
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      if (input === '/api/files/mkdir') {
+        expect(init).toMatchObject({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: '/workspace/new-project' }),
+        });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, path: '/workspace/new-project' }),
+        };
+      }
+
+      const requestedPath = new URL(input, 'http://localhost').searchParams.get('path');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ path: requestedPath, tree: [] }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = mount(FolderPickerModal, {
+      props: { visible: true, initialPath: '/workspace' },
+      global: { stubs: { Teleport: true } },
+    });
+
+    await vi.waitFor(() => expect(wrapper.find('.path-input').element).toHaveProperty('value', '/workspace'));
+    await wrapper.find('[aria-label="Create new folder"]').trigger('click');
+    await wrapper.find('.prompt-input').setValue('new-project');
+    await wrapper.find('.prompt-form').trigger('submit');
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/files/mkdir', expect.any(Object));
+      expect(wrapper.find('.path-input').element).toHaveProperty('value', '/workspace/new-project');
+    });
+  });
+
   it('shows clone repository as a tab and emits the cloned path as a project selection', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,

@@ -51,6 +51,16 @@
           </label>
           <button
             class="toolbar-btn tooltip"
+            type="button"
+            :disabled="loading"
+            @click="newFolderDialogVisible = true"
+            :data-tooltip="t('components.folderPickerModal.newFolder')"
+            :aria-label="t('components.folderPickerModal.createNewFolder')"
+          >
+            <PhFolderPlus :size="15" />
+          </button>
+          <button
+            class="toolbar-btn tooltip"
             :class="{ active: directorySort === 'modified' }"
             type="button"
             @click="toggleDirectorySort"
@@ -152,14 +162,27 @@
       </div>
     </div>
   </Teleport>
+
+  <InputPromptModal
+    :visible="newFolderDialogVisible"
+    :title="t('components.folderPickerModal.createNewFolder')"
+    :label="t('components.folderPickerModal.folderName')"
+    :description="t('components.folderPickerModal.createFolderInside', { path: currentPath })"
+    :confirm-text="t('components.folderPickerModal.createFolder')"
+    @confirm="createFolder"
+    @cancel="newFolderDialogVisible = false"
+  >
+    <template #icon><PhFolderPlus :size="20" weight="duotone" /></template>
+  </InputPromptModal>
 </template>
 
 <script setup lang="ts">
 import { i18n } from '../i18n';
 import { computed, ref, watch } from 'vue';
-import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhMagnifyingGlass, PhTextAa } from '@phosphor-icons/vue';
+import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhFolderPlus, PhMagnifyingGlass, PhTextAa } from '@phosphor-icons/vue';
 import CloneRepositoryModal from './CloneRepositoryModal.vue';
 import DialogCloseButton from './DialogCloseButton.vue';
+import InputPromptModal from './InputPromptModal.vue';
 
 const t = i18n.global.t;
 
@@ -201,6 +224,7 @@ const showHiddenFolders = ref(false);
 const directorySort = ref<'name' | 'modified'>('name');
 const searchQuery = ref('');
 const activeTab = ref<'browse' | 'clone'>('browse');
+const newFolderDialogVisible = ref(false);
 
 const currentProjectName = computed(() => basenamePath(props.currentProjectPath || ''));
 const isCurrentProjectPath = computed(() => Boolean(props.currentProjectPath) && currentPath.value === props.currentProjectPath);
@@ -234,6 +258,7 @@ watch(
       projectName.value = currentProjectName.value;
       searchQuery.value = '';
       activeTab.value = 'browse';
+      newFolderDialogVisible.value = false;
       browse(props.initialPath || '~');
     }
   },
@@ -298,6 +323,45 @@ function createTreeParams(path: string, depth: string) {
 
 function selectClonedProject(payload: { projectPath: string }) {
   emit('select', { path: payload.projectPath, refreshProjectPaths: true });
+}
+
+async function createFolder(value: string) {
+  const folderName = value.trim();
+  newFolderDialogVisible.value = false;
+
+  if (!folderName || folderName === '.' || folderName === '..' || /[\\/]/.test(folderName)) {
+    error.value = t('components.folderPickerModal.invalidFolderName');
+    return;
+  }
+
+  const separator = currentPath.value.includes('\\') && !currentPath.value.includes('/') ? '\\' : '/';
+  const folderPath = currentPath.value.endsWith('/') || currentPath.value.endsWith('\\')
+    ? `${currentPath.value}${folderName}`
+    : `${currentPath.value}${separator}${folderName}`;
+
+  loading.value = true;
+  error.value = '';
+  try {
+    const response = await fetch('/api/files/mkdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: folderPath }),
+    });
+    if (response.status === 409) {
+      error.value = t('components.folderPickerModal.folderAlreadyExists');
+      return;
+    }
+    if (!response.ok) {
+      throw new Error(t('components.folderPickerModal.createFolderFailedStatus', { status: response.status }));
+    }
+
+    const data = await response.json();
+    await browse(data.path || folderPath);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : t('components.folderPickerModal.failedToCreateFolder');
+  } finally {
+    loading.value = false;
+  }
 }
 
 function selectCurrent() {
