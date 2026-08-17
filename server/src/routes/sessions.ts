@@ -1,6 +1,7 @@
 // server/src/routes/sessions.ts
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import * as os from 'os';
+import { dirname } from 'path';
 import { projectMover } from '../services/project-mover.js';
 import { sessionFileRelocator } from '../services/session-file-relocator.js';
 import { sessionService } from '../services/session-manager.js';
@@ -734,6 +735,50 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       return { success: true, moved: result.moved, skipped: result.skipped };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to relocate project sessions';
+      return reply.status(message.includes('already exists') ? 409 : 400).send({ error: message });
+    }
+  });
+
+  app.post('/:id/relocate', async (req, reply) => {
+    const { clientId, newProjectPath } = req.body as { clientId?: string; newProjectPath?: string };
+    const { id } = req.params as { id: string };
+
+    if (!clientId || !newProjectPath) {
+      return reply.status(400).send({ error: 'clientId and newProjectPath are required' });
+    }
+    if (sessionService.isSessionStreaming(id)) {
+      return reply.status(409).send({ error: 'Cannot move a streaming session' });
+    }
+
+    const session = await sessionService.findPersistedSession(clientId, id);
+    if (!session) return reply.status(404).send({ error: 'Session not found' });
+    if (!session.cwd) return reply.status(400).send({ error: 'Session does not have a project path' });
+
+    const oldCwd = expandHomePath(session.cwd);
+    const newCwd = expandHomePath(newProjectPath);
+    if (oldCwd === newCwd) return { success: true, path: session.path, cwd: newCwd };
+
+    const worktree = getWorktreeMetadataStore().get(id);
+    if (worktree?.worktreeManaged === true && worktree.worktreeStatus === 'active') {
+      return reply.status(409).send({ error: 'Cannot move an active worktree session' });
+    }
+
+    try {
+      sessionService.forceDisposeBySessionId(id);
+      const agentDir = await sessionService.getClientAgentDirForRoutes(clientId);
+      const result = await sessionFileRelocator.relocate({
+        sessionId: id,
+        sourceSessionDir: dirname(session.path),
+        destinationSessionDir: sessionService.getProjectSessionDirForPath(newCwd, agentDir),
+        expectedOldCwd: oldCwd,
+        newCwd,
+      });
+      if (!result.relocated) return reply.status(404).send({ error: 'Session file not found' });
+
+      sessionService.invalidateSessionListCache();
+      return { success: true, path: result.destinationPath, cwd: newCwd };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to move session';
       return reply.status(message.includes('already exists') ? 409 : 400).send({ error: message });
     }
   });

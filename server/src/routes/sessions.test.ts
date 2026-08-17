@@ -393,6 +393,44 @@ describe('session routes', () => {
     expect(result).toEqual({ success: true, moved: 1, skipped: 0 });
   });
 
+  it('moves one persisted session to another project folder', async () => {
+    vi.mocked(sessionService.findPersistedSession).mockResolvedValue({
+      id: 'session-1',
+      path: '/profiles/default/sessions/old/session-1.jsonl',
+      cwd: '/repo/old',
+    } as any);
+    vi.mocked(sessionService.getClientAgentDirForRoutes).mockResolvedValue('/profiles/default');
+    vi.mocked(sessionService.getProjectSessionDirForPath).mockReturnValue('/profiles/default/sessions/new');
+    relocateSessionFile.mockResolvedValue({
+      sourcePath: '/profiles/default/sessions/old/session-1.jsonl',
+      destinationPath: '/profiles/default/sessions/new/session-1.jsonl',
+      relocated: true,
+    });
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+
+    const result = await handlers['POST /:id/relocate']({
+      params: { id: 'session-1' },
+      body: { clientId: 'client-1', newProjectPath: '/repo/new' },
+    }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
+
+    expect(sessionService.forceDisposeBySessionId).toHaveBeenCalledWith('session-1');
+    expect(relocateSessionFile).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      sourceSessionDir: '/profiles/default/sessions/old',
+      destinationSessionDir: '/profiles/default/sessions/new',
+      expectedOldCwd: '/repo/old',
+      newCwd: '/repo/new',
+    });
+    expect(sessionService.invalidateSessionListCache).toHaveBeenCalled();
+    expect(result).toEqual({
+      success: true,
+      path: '/profiles/default/sessions/new/session-1.jsonl',
+      cwd: '/repo/new',
+    });
+  });
+
   it('loads project paths from the active client profile store', async () => {
     vi.mocked(sessionService.listProjectPaths).mockResolvedValue(['/workspace/app', '/workspace/api', '/session/storage/4']);
 

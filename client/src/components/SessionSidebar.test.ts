@@ -6,7 +6,7 @@ import SessionSidebar from './SessionSidebar.vue';
 vi.mock('./FolderPickerModal.vue', () => ({
   default: {
     name: 'FolderPickerModal',
-    props: ['visible', 'initialPath', 'currentProjectPath', 'clientId'],
+    props: ['visible', 'initialPath', 'currentProjectPath', 'clientId', 'title', 'showClone'],
     emits: ['close', 'select'],
     template: '<div data-testid="folder-picker" />',
   },
@@ -946,6 +946,39 @@ describe('SessionSidebar', () => {
 
     await vi.waitFor(() => expect(wrapper.find('.sidebar-header h3').text()).toContain('Pi WebUI'));
     expect(wrapper.find('.sidebar-mode-toggle').exists()).toBe(false);
+  });
+
+  it('moves a session to a folder selected from its context menu', async () => {
+    mockFetchWithNoSessions(['/project']);
+    const wrapper = mountSidebar();
+    await vi.waitFor(() => expect(wrapper.text()).toContain('No sessions found'));
+
+    window.dispatchEvent(new CustomEvent('session-created', {
+      detail: {
+        id: 'saved-session-1',
+        path: '/sessions/project/saved-session-1.jsonl',
+        cwd: '/project',
+        firstMessage: 'saved conversation',
+        created: '2026-07-14T00:00:00.000Z',
+      },
+    }));
+    await wrapper.vm.$nextTick();
+    await wrapper.get('.session-item').trigger('contextmenu', { clientX: 20, clientY: 30 });
+    await vi.waitFor(() => expect(document.body.querySelector('.move-session-btn')).not.toBeNull());
+    (document.body.querySelector('.move-session-btn') as HTMLButtonElement).click();
+    await wrapper.vm.$nextTick();
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, path: '/sessions/archive/saved-session-1.jsonl', cwd: '/archive' }),
+    } as Response);
+    wrapper.findAllComponents({ name: 'FolderPickerModal' })[1].vm.$emit('select', { path: '/archive' });
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/sessions/saved-session-1/relocate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: 'client-1', newProjectPath: '/archive' }),
+    }));
   });
 
   it('extracts memories from a saved-session context menu and closes it', async () => {

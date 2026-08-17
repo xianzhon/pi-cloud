@@ -215,6 +215,9 @@
         >
           <PhPlus :size="14" /> {{ t('components.sessionSidebar.newSessionWithSameSettings') }}
         </button>
+        <button class="move-session-btn" @click="openMoveSessionDialog">
+          <PhFolder :size="14" /> {{ t('components.sessionSidebar.moveToFolder') }}
+        </button>
         <button class="extract-memories-btn" @click="extractMemoriesFromSession">
           <PhBrain :size="14" /> {{ t('components.sessionSidebar.extractMemories') }}
         </button>
@@ -293,6 +296,15 @@
       :client-id="clientId"
       @close="showFolderPicker = false"
       @select="setProjectPath"
+    />
+
+    <FolderPickerModal
+      :visible="moveSessionDialog.visible"
+      :initial-path="moveSessionDialog.session?.cwd || projectPath"
+      :title="t('components.sessionSidebar.moveSession')"
+      :show-clone="false"
+      @close="moveSessionDialog.visible = false"
+      @select="moveSessionToFolder"
     />
 
     <div
@@ -397,6 +409,8 @@ const scope = ref<'project' | 'all'>('project');
 
 // Context menu
 const contextMenu = ref({ visible: false, left: 0, top: 0, session: null as Session | null });
+
+const moveSessionDialog = ref({ visible: false, session: null as Session | null });
 
 // Rename dialog
 const renameDialog = ref({ visible: false, value: '' });
@@ -1113,6 +1127,39 @@ function createSessionWithSameSettings() {
   const session = contextMenu.value.session;
   closeContextMenu();
   if (session) emit('createSessionWithSameSettings', session.id);
+}
+
+function openMoveSessionDialog() {
+  const session = contextMenu.value.session;
+  closeContextMenu();
+  if (!session) return;
+  projectPathError.value = '';
+  moveSessionDialog.value = { visible: true, session };
+}
+
+async function moveSessionToFolder(selection: string | { path: string }) {
+  const session = moveSessionDialog.value.session;
+  const newProjectPath = typeof selection === 'string' ? selection : selection.path;
+  if (!session || !newProjectPath) return;
+
+  try {
+    const response = await fetch(`/api/sessions/${session.id}/relocate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: props.clientId, newProjectPath }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || t('components.sessionSidebar.failedToMoveSessionStatus', { status: response.status }));
+    }
+
+    moveSessionDialog.value = { visible: false, session: null };
+    await loadProjectPathOptions();
+    await loadSessions();
+  } catch (error) {
+    moveSessionDialog.value.visible = false;
+    projectPathError.value = error instanceof Error ? error.message : t('components.sessionSidebar.failedToMoveSession');
+  }
 }
 
 function extractMemoriesFromSession() {
