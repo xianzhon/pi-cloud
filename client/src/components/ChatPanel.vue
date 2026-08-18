@@ -106,7 +106,40 @@
       </div>
     </div>
 
-    <div v-if="!isReviewMode" class="input-area">
+    <div v-if="isReviewMode" class="input-area">
+      <FileSearchMenu
+        v-if="fileSearch.isOpen.value"
+        :files="fileSearch.suggestions.value"
+        :activeIndex="fileSearch.state.value.activeIndex"
+        :isLoading="fileSearch.state.value.isLoading"
+        :query="fileSearch.state.value.query"
+        :isOpen="fileSearch.isOpen.value"
+        @select="insertFileReference"
+      />
+      <div class="composer-shell">
+        <textarea
+          ref="inputRef"
+          v-model="inputText"
+          @input="handleInput"
+          @click="handleCaretChange"
+          @keyup="handleCaretChange"
+          @keydown="handleInputKeydown"
+          @focus="handleInputFocus"
+          :placeholder="t('components.chatPanel.reviewFileSearchPlaceholder')"
+          rows="1"
+          id="chat-input"
+          name="chat-input"
+        ></textarea>
+      </div>
+      <div class="mobile-trigger-btns">
+        <button class="trigger-btn" @click="insertTrigger('@')" type="button">@</button>
+        <button class="trigger-btn trigger-btn-clear" :disabled="!inputText" @click="inputText = ''; resizeInput()" type="button">✕</button>
+      </div>
+      <div class="composer-actions">
+        <button class="send-btn" disabled>{{ t('components.chatPanel.send') }}</button>
+      </div>
+    </div>
+    <div v-else class="input-area">
       <div
         class="input-resize-handle"
         :class="{ 'is-resizing': inputResizeStartY !== null }"
@@ -1682,7 +1715,7 @@ function clearAcceptedDraft(imageDraft: PendingAttachment[]): void {
 
 async function handleSendToNewSession() {
   const text = inputText.value;
-  if (!hasDraftContent.value || imagesBlocked.value || !props.sessionId || !props.createInheritedSession || isPreparingSession.value) return;
+  if (isReviewMode.value || !hasDraftContent.value || imagesBlocked.value || !props.sessionId || !props.createInheritedSession || isPreparingSession.value) return;
 
   isPreparingSession.value = true;
   try {
@@ -1708,7 +1741,7 @@ async function handleSendToNewSession() {
 
 async function handleSend(): Promise<boolean> {
   const text = inputText.value;
-  if (!hasDraftContent.value || isPreparingSession.value || imagesBlocked.value) return false;
+  if (isReviewMode.value || !hasDraftContent.value || isPreparingSession.value || imagesBlocked.value) return false;
 
   if (text.trim() && isSessionCommand(text)) {
     await handleSessionCommand(text);
@@ -3132,6 +3165,11 @@ function updateFileSearchQuery() {
 }
 
 function updateSlashQuery() {
+  if (isReviewMode.value) {
+    slashCommands.close();
+    return;
+  }
+
   const input = inputRef.value;
   if (!input) return;
   slashCommands.updateQuery(inputText.value, input.selectionStart ?? inputText.value.length);
@@ -3287,6 +3325,9 @@ function handleInputKeydown(event: KeyboardEvent) {
       return;
     }
   }
+
+  // Review composers remain editable, so Enter inserts a newline instead of invoking any send path.
+  if (isReviewMode.value && key === 'enter') return;
 
   if (key === 'enter' && event.ctrlKey && !event.shiftKey) {
     event.preventDefault();

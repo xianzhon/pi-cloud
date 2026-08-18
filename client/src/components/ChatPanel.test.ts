@@ -1111,6 +1111,54 @@ describe('ChatPanel', () => {
     expect((textarea.element as HTMLTextAreaElement).value).toBe('/help ');
   });
 
+  it('keeps a minimal read-only composer with file mentions in review mode', async () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/transcript')) {
+        return new Response(JSON.stringify({ transcript: { messages: [] } }), { status: 200 });
+      }
+      if (url.includes('/api/files/search')) {
+        return new Response(JSON.stringify({ files: ['src/components/ChatPanel.vue'] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ commands: [] }), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, {
+      props: { reviewSourceId: 'devin', reviewSessionId: 'review-1', projectPath: '.' },
+    });
+    await flushPromises();
+
+    const textarea = wrapper.find('#chat-input');
+    expect(textarea.exists()).toBe(true);
+    expect(textarea.attributes('disabled')).toBeUndefined();
+    expect(textarea.attributes('placeholder')).toBe('Type @ to search and open a file...');
+    expect(wrapper.find('.send-btn').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.attach-image-btn').exists()).toBe(false);
+    expect(wrapper.find('.composer-skill-selector').exists()).toBe(false);
+    expect(wrapper.find('.composer-model-selector').exists()).toBe(false);
+
+    await textarea.setValue('/help');
+    await nextTick();
+    expect(wrapper.find('.slash-menu').exists()).toBe(false);
+
+    await textarea.setValue('@chat');
+    (textarea.element as HTMLTextAreaElement).setSelectionRange(5, 5);
+    await textarea.trigger('input');
+    await flushPromises();
+    await wrapper.find('.file-search-item').trigger('click');
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'open-file-in-editor',
+      detail: { path: 'src/components/ChatPanel.vue', kind: 'path', onlyIfEditorVisible: true },
+    }));
+
+    await textarea.setValue('read-only draft');
+    await textarea.trigger('keydown', { key: 'Enter' });
+    await textarea.trigger('keydown', { key: 'Enter', ctrlKey: true });
+    expect(await wrapper.vm.submitExternalPrompt('external prompt')).toBe(false);
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
   it('hides Devin context blocks in clean review mode and shows them in details mode', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).includes('/api/review-sources/devin/sessions/review-1/transcript')) {

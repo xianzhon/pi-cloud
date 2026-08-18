@@ -112,6 +112,7 @@ export default {
       attachedImages: 'Attached images',
       doubleClickToEnlarge: 'Double-click to enlarge',
       typeAMessage: 'Type a message...',
+      reviewFileSearchPlaceholder: "Type {'@'} to search and open a file...",
       polishPrompt: 'Polish prompt',
       attachImages: 'Attach images',
       takePhoto: 'Take photo',

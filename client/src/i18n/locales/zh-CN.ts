@@ -112,6 +112,7 @@ export default {
       attachedImages: '已添加的图片',
       doubleClickToEnlarge: '双击放大',
       typeAMessage: '输入消息...',
+      reviewFileSearchPlaceholder: "输入 {'@'} 以搜索并打开文件...",
       polishPrompt: '润色提示词',
       attachImages: '添加图片',
       takePhoto: '拍照',
