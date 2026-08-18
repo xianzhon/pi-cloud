@@ -751,6 +751,40 @@ describe('App routing', () => {
     });
   });
 
+  it('switches review sessions from the collapsed utility rail', async () => {
+    localStorage.setItem('pi-webui-sidebar-collapsed', 'true');
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    const sidebar = wrapper.findComponent({ name: 'SessionSidebar' });
+    sidebar.vm.$emit('projectPathChanged', '/devin/project', { initial: true });
+    sidebar.vm.$emit('reviewSessionSelected', { sourceId: 'devin', sessionId: 'review-1' });
+    sidebar.vm.$emit('sessionsChanged', [
+      { id: 'review-1', path: '/review-1.jsonl', cwd: '/devin/project', title: 'First review' },
+      { id: 'review-2', path: '/review-2.jsonl', cwd: '/devin/project', title: 'Second review' },
+    ]);
+    await wrapper.vm.$nextTick();
+    push.mockClear();
+
+    await wrapper.findAll('.utility-rail-session')[1].trigger('click');
+
+    expect(push).toHaveBeenCalledWith({
+      path: '/sessions/review-2',
+      query: { profile: 'devin', project: '/devin/project' },
+    });
+    expect(sidebar.props('activeReviewSessionId')).toBe('review-2');
+  });
+
   it('shows worktree and Pi history cleanup targets before finishing a worktree session', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url === '/api/sessions/project-path') {

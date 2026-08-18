@@ -48,7 +48,7 @@
           :class="{ active: session.id === activeSessionId || session.id === activeReviewSession?.sessionId }"
           :title="session.title"
           :aria-label="session.title"
-          @click="selectSession(session)"
+          @click="selectCompactSession(session)"
           @contextmenu.prevent="showCompactSessionContextMenu($event, session.id)"
         >
           <span>{{ sessionInitial(session.title) }}</span>
@@ -1502,6 +1502,17 @@ async function selectSession(session: { id: string; path: string; name?: string;
   showMobileSidebar.value = false;
   showMobileActions.value = false;
   router.push(sessionRouteLocation(session.id, session.cwd));
+}
+
+function selectCompactSession(session: CompactSession): void {
+  if (activeReviewSession.value) {
+    handleReviewSessionSelected({
+      sourceId: activeReviewSession.value.sourceId,
+      sessionId: session.id,
+    });
+    return;
+  }
+  void selectSession(session);
 }
 
 function handleReviewSourceSelected(sourceId: string, sourceLabel: string): void {
