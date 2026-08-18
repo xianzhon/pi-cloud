@@ -1,18 +1,24 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { reactive, ref, computed } from 'vue';
+import { computed, defineComponent, h, reactive, ref } from 'vue';
 import App from './App.vue';
 
 const push = vi.fn();
-const route = reactive({ params: { id: 'session-1' as string | undefined } });
+const replace = vi.fn();
+const route = reactive<{
+  params: { id?: string };
+  path: string;
+  query: Record<string, string>;
+}>({ params: { id: 'session-1' }, path: '/sessions/session-1', query: {} });
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace }),
   useRoute: () => route,
 }));
 
+const isConnected = ref(true);
 vi.mock('./composables/useWebSocket', () => ({
-  useWebSocket: () => ({ isConnected: true, clientId: 'client-1' }),
+  useWebSocket: () => ({ isConnected, clientId: 'client-1' }),
 }));
 
 const memoryCounts = ref({ globalPending: 0 });
@@ -57,7 +63,10 @@ const loadPresets = vi.fn(async () => {});
 const createPreset = vi.fn(async () => {});
 const updatePreset = vi.fn(async () => {});
 const deletePreset = vi.fn(async () => {});
-const { editorOpenFile } = vi.hoisted(() => ({ editorOpenFile: vi.fn() }));
+const { editorOpenFile, submitExternalPrompt } = vi.hoisted(() => ({
+  editorOpenFile: vi.fn(),
+  submitExternalPrompt: vi.fn(async () => true),
+}));
 const setShowHintInfo = vi.fn((value: boolean) => {
   showHintInfo.value = value;
 });
@@ -151,7 +160,7 @@ vi.mock('./composables/useSkillPresets', () => ({
 vi.mock('./components/ChatPanel.vue', () => ({
   default: {
     props: ['sessionId', 'ensureSession', 'showHintInfo', 'clientId', 'showGoToTopButton', 'showChatViewOptionsButton'],
-    methods: { focusInput: vi.fn() },
+    methods: { focusInput: vi.fn(), submitExternalPrompt },
     template: '<button class="stub-ensure" :data-session-id="sessionId || \'\'" :data-show-hint-info="String(showHintInfo)" :data-client-id="clientId" :data-show-go-to-top="String(showGoToTopButton)" :data-show-view-options="String(showChatViewOptionsButton)" @click="ensureSession?.(undefined, \'first prompt\')">ensure</button>',
   },
 }));
@@ -207,7 +216,14 @@ vi.mock('./components/SettingsDialog.vue', () => ({
 
 describe('App routing', () => {
   beforeEach(() => {
-    push.mockClear();
+    push.mockReset();
+    replace.mockReset();
+    replace.mockImplementation(async (location: { path: string; query: Record<string, string> }) => {
+      route.path = location.path;
+      route.query = location.query;
+    });
+    submitExternalPrompt.mockClear();
+    isConnected.value = true;
     refresh.mockClear();
     loadPreferences.mockClear();
     setShowHintInfo.mockClear();
@@ -247,6 +263,8 @@ describe('App routing', () => {
     document.title = 'Pi WebUI';
     sessionStorage.clear();
     route.params.id = 'session-1';
+    route.path = '/sessions/session-1';
+    route.query = {};
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url === '/api/sessions/project-path') {
         return { json: async () => ({ projectPath: '/workspace' }) };
@@ -256,6 +274,63 @@ describe('App routing', () => {
       }
       return { json: async () => ({}) };
     }));
+  });
+
+  it('waits for the socket and sidebar before submitting a new-tab queued task', async () => {
+    const SessionSidebarStub = defineComponent({
+      emits: ['initialized'],
+      setup(_props, { emit, expose }) {
+        expose({ switchToProjectPath: vi.fn(async () => {}) });
+        return () => h('button', { class: 'sidebar-initialize', onClick: () => emit('initialized') });
+      },
+    });
+    isConnected.value = false;
+    route.query = { startTask: 'task-1', project: '/workspace' };
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (url: string | URL | Request) => {
+      if (url === '/api/tasks/task-1/start') {
+        return {
+          ok: true,
+          json: async () => ({
+            task: { id: 'task-1', projectPath: '/workspace' },
+            sessionId: 'task-session',
+            prompt: 'Implement the queued task',
+          }),
+        } as Response;
+      }
+      if (url === '/api/sessions/project-path') return { json: async () => ({ projectPath: '/workspace' }) } as Response;
+      if (String(url).startsWith('/api/sessions')) return { json: async () => ({ sessions: [] }) } as Response;
+      return { json: async () => ({}) } as Response;
+    });
+
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          SessionSidebar: SessionSidebarStub,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/tasks/task-1/start', expect.anything());
+
+    isConnected.value = true;
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/task-1/start', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ clientId: 'client-1' }),
+    }));
+    expect(submitExternalPrompt).not.toHaveBeenCalled();
+
+    await wrapper.get('.sidebar-initialize').trigger('click');
+    await flushPromises();
+
+    expect(submitExternalPrompt).toHaveBeenCalledWith('Implement the queued task');
   });
 
   it('deletes a session immediately when delete confirmation is disabled', async () => {

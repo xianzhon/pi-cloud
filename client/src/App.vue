@@ -1443,6 +1443,18 @@ async function startTaskFromQueryIfPresent(): Promise<void> {
   }
 }
 
+async function waitForSessionContextReady(): Promise<void> {
+  if (isSessionContextReady.value) return;
+
+  await new Promise<void>((resolve) => {
+    const stop = watch(isSessionContextReady, (ready) => {
+      if (!ready) return;
+      stop();
+      resolve();
+    });
+  });
+}
+
 async function handleTaskStarted(result: ProjectTaskStartResult): Promise<void> {
   setTaskQueueVisible(false);
   const targetCwd = result.worktree?.worktreePath || result.task.projectPath;
@@ -1457,6 +1469,7 @@ async function handleTaskStarted(result: ProjectTaskStartResult): Promise<void> 
   await router.push(sessionRouteLocation(result.sessionId, targetCwd));
   if (targetCwd) await sessionSidebarRef.value?.switchToProjectPath(targetCwd);
   else await sessionSidebarRef.value?.loadSessions();
+  await waitForSessionContextReady();
   await nextTick();
   const sent = await chatPanelRef.value?.submitExternalPrompt?.(result.prompt);
   if (sent === false) {
@@ -1997,6 +2010,8 @@ function handleFirstMessage(event: Event) {
   }
 }
 
+let authenticatedAppReady = false;
+
 async function initializeAuthenticatedApp(): Promise<void> {
   await Promise.all([
     loadPreferences(),
@@ -2004,12 +2019,19 @@ async function initializeAuthenticatedApp(): Promise<void> {
     gatewaySettings.loadSettings().catch(() => {}),
     refreshSelectedAgentProfileDetails(),
   ]);
-  await startTaskFromQueryIfPresent();
+  authenticatedAppReady = true;
+  if (isConnected.value) await startTaskFromQueryIfPresent();
 }
 
 watch(isAuthenticated, (authenticated) => {
   if (authenticated) void initializeAuthenticatedApp();
+  else authenticatedAppReady = false;
 }, { immediate: true });
+
+// A newly opened tab cannot submit the task prompt until its chat socket is ready.
+watch(isConnected, (connected) => {
+  if (connected && authenticatedAppReady) void startTaskFromQueryIfPresent();
+});
 
 onMounted(() => {
   authRefreshMounted = true;
