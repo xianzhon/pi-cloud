@@ -701,6 +701,19 @@ interface ChatLocalMessage {
   memory?: MessageMemoryRecall;
 }
 
+interface ReviewVisibleMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  kind: 'text' | 'tool_call' | 'tool_result';
+  status?: 'pending' | 'success';
+  title?: string;
+  toolName?: string;
+  toolInput?: string;
+  toolOutput?: string;
+  timestamp?: number;
+}
+
 interface SummaryGeneratedDetail {
   sessionId?: string | null;
   content?: string;
@@ -1112,12 +1125,87 @@ function thinkingOnlyBody(content: string): string | undefined {
   return bodies.join('\n\n');
 }
 
+function reviewObservationOutput(body: string): string {
+  const trimmed = body.trim();
+  try {
+    const parsed = JSON.parse(trimmed);
+    const results = Array.isArray(parsed.results) ? parsed.results : [parsed];
+    return results.map((result: unknown) => {
+      if (result && typeof result === 'object' && 'content' in result && typeof result.content === 'string') {
+        return result.content;
+      }
+      return JSON.stringify(result, null, 2);
+    }).join('\n\n');
+  } catch {
+    return trimmed;
+  }
+}
+
+function structuredReviewMessages(): ReviewVisibleMessage[] {
+  const normalized: ReviewVisibleMessage[] = [];
+  // Review adapters emit calls and observations separately, in execution order.
+  const pendingTools: Array<{ name: string; input: string }> = [];
+  const detailPattern = /<tool_call\b([^>]*)>([\s\S]*?)<\/tool_call>|<observation>([\s\S]*?)<\/observation>/g;
+
+  for (const [messageIndex, message] of (reviewTranscript.value?.messages || []).entries()) {
+    const content = reviewMessageContentToString(message.content);
+    const role = message.role === 'user' || message.role === 'assistant' ? message.role : 'assistant';
+    let segmentIndex = 0;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    function pushText(text: string): void {
+      if (text.trim()) normalized.push({ id: `review-${messageIndex}-${segmentIndex++}`, role, content: text, kind: 'text', timestamp: message.timestamp });
+    }
+
+    while (role === 'assistant' && (match = detailPattern.exec(content)) !== null) {
+      pushText(content.slice(lastIndex, match.index));
+      if (typeof match[2] === 'string') {
+        const name = match[1].match(/\bname=["']([^"']+)["']/)?.[1]?.replace(/&quot;/g, '"') || 'tool';
+        const input = match[2].trim();
+        pendingTools.push({ name, input });
+        normalized.push({
+          id: `review-${messageIndex}-${segmentIndex++}`,
+          role: 'assistant',
+          content: input,
+          kind: 'tool_call',
+          status: 'pending',
+          title: `Executing tool ${name}`,
+          toolName: name,
+          toolInput: input,
+          timestamp: message.timestamp,
+        });
+      } else {
+        const tool = pendingTools.shift();
+        const output = reviewObservationOutput(match[3]);
+        normalized.push({
+          id: `review-${messageIndex}-${segmentIndex++}`,
+          role: 'assistant',
+          content: output,
+          kind: 'tool_result',
+          status: 'success',
+          title: `Tool ${tool?.name || 'tool'} completed`,
+          toolName: tool?.name || 'tool',
+          toolInput: tool?.input,
+          toolOutput: output,
+          timestamp: message.timestamp,
+        });
+      }
+      lastIndex = detailPattern.lastIndex;
+    }
+    pushText(content.slice(lastIndex));
+  }
+
+  return normalized;
+}
+
 const visibleMessages = computed(() => {
   if (isReviewMode.value) {
+    if (showDetails.value) return structuredReviewMessages();
+
     const reviewMessages = (reviewTranscript.value?.messages || []).flatMap((message, index) => {
-      if (!showDetails.value && message.detailOnly) return [];
-      const originalContent = reviewMessageContentToString(message.content);
-      const content = showDetails.value ? originalContent : stripReviewDetailBlocks(originalContent);
+      if (message.detailOnly) return [];
+      const content = stripReviewDetailBlocks(reviewMessageContentToString(message.content));
       if (!content.trim()) return [];
       return [{
         id: `review-${index}`,
@@ -1132,7 +1220,7 @@ const visibleMessages = computed(() => {
       const body = message.role === 'assistant' ? thinkingOnlyBody(message.content) : undefined;
       const previous = visible.at(-1);
       const previousBody = previous?.role === 'assistant' ? thinkingOnlyBody(previous.content) : undefined;
-      if (previous && body !== undefined && previousBody !== undefined && !showDetails.value) {
+      if (previous && body !== undefined && previousBody !== undefined) {
         previous.content = `<thinking>\n${previousBody}\n\n${body}\n</thinking>`;
       } else {
         visible.push(message);

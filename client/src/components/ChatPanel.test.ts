@@ -47,7 +47,7 @@ vi.mock('../composables/useChat', () => ({
 
 vi.mock('./MessageBubble.vue', () => ({
   default: {
-    template: '<div class="message-bubble-stub">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button></div>',
+    template: '<div class="message-bubble-stub" :data-kind="message.kind" :data-tool-name="message.toolName">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button></div>',
     props: ['message', 'hideThinkingBlock'],
     emits: ['annotate'],
   },
@@ -1163,6 +1163,35 @@ describe('ChatPanel', () => {
     expect(wrapper.text()).toContain('Hidden observation');
     expect(wrapper.text()).toContain('file-view path=');
     expect(wrapper.text()).toContain('Visible review conclusion');
+  });
+
+  it('renders review tool calls and observations like Pi tool activity in details mode', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/review-sources/claude-code/sessions/review-1/transcript')) {
+        return new Response(JSON.stringify({ transcript: {
+          messages: [
+            { role: 'assistant', content: '<tool_call name="Bash">\n{"command":"tea pr 88"}\n</tool_call>' },
+            { role: 'assistant', content: '<observation>\ncommand output\n</observation>' },
+          ],
+        } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, { props: { reviewSourceId: 'claude-code', reviewSessionId: 'review-1' } });
+    await flushPromises();
+    await wrapper.find('.view-options-toggle-btn').trigger('mouseenter');
+    await wrapper.find('.details-toggle-btn').trigger('click');
+    await nextTick();
+
+    const toolCall = wrapper.find('[data-kind="tool_call"]');
+    const toolResult = wrapper.find('[data-kind="tool_result"]');
+    expect(toolCall.attributes('data-tool-name')).toBe('Bash');
+    expect(toolCall.text()).toContain('tea pr 88');
+    expect(toolResult.attributes('data-tool-name')).toBe('Bash');
+    expect(toolResult.text()).toContain('command output');
+    expect(wrapper.text()).not.toContain('name="Bash"');
+    expect(wrapper.text()).not.toContain('Observation');
   });
 
   it('merges adjacent thinking-only messages in clean review mode', async () => {
