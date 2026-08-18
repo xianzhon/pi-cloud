@@ -64,6 +64,15 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS review_sources (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      label TEXT NOT NULL,
+      data_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS audit_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_at TEXT NOT NULL,

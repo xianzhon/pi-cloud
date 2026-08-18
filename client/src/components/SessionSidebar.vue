@@ -35,17 +35,26 @@
             readonly
           />
           <div
-            v-if="isAgentProfileListOpen && agentProfiles.length > 0"
+            v-if="isAgentProfileListOpen && (agentProfiles.length > 0 || reviewSources.length > 0)"
             class="agent-profile-list bounded"
           >
             <button
               v-for="profile in agentProfiles"
-              :key="profile.id"
+              :key="`pi-${profile.id}`"
               type="button"
               class="agent-profile-option"
               @mousedown.prevent="chooseAgentProfile(profile.id)"
             >
               {{ profile.label }}
+            </button>
+            <button
+              v-for="source in reviewSources"
+              :key="`review-${source.id}`"
+              type="button"
+              class="agent-profile-option"
+              @mousedown.prevent="chooseReviewSource(source.id)"
+            >
+              {{ source.label }} 🔍
             </button>
             <button type="button" class="agent-profile-option" @mousedown.prevent="showProfileManager = true">{{ t('components.sessionSidebar.manageProfiles') }}</button>
           </div>
@@ -122,12 +131,21 @@
       <div v-if="projectPathError" class="project-path-error">{{ projectPathError }}</div>
     </div>
     
+    <div v-if="isReviewMode" class="review-search">
+      <input
+        v-model="reviewSearchQuery"
+        class="review-search-input"
+        type="text"
+        :placeholder="t('components.sessionSidebar.searchReviewSessions')"
+        @input="debouncedReviewSearch"
+      />
+    </div>
     <div ref="sessionList" class="session-list" @scroll="handleSessionListScroll">
       <div 
         v-for="session in sessions"
         :key="session.id"
         class="session-item"
-        :class="{ active: session.id === activeSessionId }"
+        :class="{ active: session.id === activeSessionId || session.id === activeReviewSessionId }"
         @click="selectSession(session)"
         @contextmenu.prevent="showContextMenu($event, session)"
         @mouseenter="showTooltip($event, formatSessionTitle(session))"
@@ -197,31 +215,35 @@
         @click.stop
       >
         <button
-          v-if="canGoToSessionProject"
+          v-if="canGoToSessionProject && !isReviewMode"
           class="switch-to-project-btn"
           @click="goToSessionProject"
         >
           <PhFolder :size="14" /> {{ t('components.sessionSidebar.switchToThisProject') }}
         </button>
         <button
-          v-if="canOpenSessionProjectInNewTab"
+          v-if="canOpenSessionProjectInNewTab && !isReviewMode"
           @click="openSessionProjectInNewTab"
         >
           <PhArrowSquareOut :size="14" /> {{ t('components.sessionSidebar.openProjectInNewTab') }}
         </button>
         <button
-          v-if="canCreateSessionWithSameSettings"
+          v-if="canCreateSessionWithSameSettings && !isReviewMode"
           @click="createSessionWithSameSettings"
         >
           <PhPlus :size="14" /> {{ t('components.sessionSidebar.newSessionWithSameSettings') }}
         </button>
-        <button class="move-session-btn" @click="openMoveSessionDialog">
+        <button v-if="!isReviewMode" class="move-session-btn" @click="openMoveSessionDialog">
           <PhFolder :size="14" /> {{ t('components.sessionSidebar.moveToFolder') }}
         </button>
-        <button class="extract-memories-btn" @click="extractMemoriesFromSession">
+        <button
+          v-if="!isReviewMode"
+          class="extract-memories-btn"
+          @click="extractMemoriesFromSession"
+        >
           <PhBrain :size="14" /> {{ t('components.sessionSidebar.extractMemories') }}
         </button>
-        <button @click="openRenameDialog"><PhPencilSimple :size="14" /> {{ t('components.sessionSidebar.rename') }}</button>
+        <button v-if="!isReviewMode" @click="openRenameDialog"><PhPencilSimple :size="14" /> {{ t('components.sessionSidebar.rename') }}</button>
         <button class="danger" @click="openDeleteConfirm"><PhTrash :size="14" /> {{ t('components.sessionSidebar.delete') }}</button>
       </div>
     </Teleport>
@@ -320,11 +342,19 @@
 import { i18n } from '../i18n';
 import { formatHomePath } from '../utils/paths';
 import { computed, ref, nextTick, onMounted, onUnmounted, watch } from 'vue';
-import { PhBrain, PhFolder, PhX, PhPencilSimple, PhTrash, PhSignOut, PhPlus, PhArrowSquareOut, PhGitMerge, PhGitPullRequest, PhGitBranch } from '@phosphor-icons/vue';
+import { PhBrain, PhFolder, PhX, PhPencilSimple, PhTrash, PhSignOut, PhPlus, PhArrowSquareOut, PhGitMerge, PhGitPullRequest, PhGitBranch, PhMagnifyingGlass } from '@phosphor-icons/vue';
 import FolderPickerModal from './FolderPickerModal.vue';
 import InputPromptModal from './InputPromptModal.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import ProfileManagerDialog from './ProfileManagerDialog.vue';
+import { useReviewSources } from '../composables/useReviewSources';
+import type { ReviewSessionListItem } from '../types/reviewSource';
+import {
+  deleteReviewSession,
+  listReviewSessions,
+  listReviewSourceProjectPaths,
+  searchReviewSessions,
+} from '../services/reviewSourceService';
 
 const t = i18n.global.t;
 
@@ -373,6 +403,7 @@ const DEFAULT_SESSION_TITLE = t('components.sessionSidebar.newSession');
 
 const props = withDefaults(defineProps<{
   activeSessionId?: string;
+  activeReviewSessionId?: string;
   clientId: string;
   username?: string;
   readySessionIds?: string[];
@@ -388,6 +419,8 @@ const emit = defineEmits<{
   createSessionWithSameSettings: [sessionId: string];
   projectPathChanged: [cwd: string, options?: { initial?: boolean; keepSession?: boolean }];
   agentProfileChanged: [profileId: string];
+  reviewSourceSelected: [sourceId: string, sourceLabel: string];
+  reviewSessionSelected: [{ sourceId: string; sessionId: string }];
   sessionDeleted: [sessionId: string];
   initialized: [];
   close: [];
@@ -419,7 +452,9 @@ const renameDialog = ref({ visible: false, value: '' });
 const deleteConfirm = ref({ visible: false });
 const tooltip = ref({ visible: false, x: 0, y: 0, text: '', placement: 'right' as 'right' | 'top' });
 const agentProfiles = ref<AgentProfile[]>([]);
+const { sources: reviewSources, load: loadReviewSources } = useReviewSources();
 const selectedAgentProfile = ref('default');
+const selectedReviewSourceId = ref('');
 const isAgentProfileListOpen = ref(false);
 const showProfileManager = ref(false);
 const projectPath = ref<string>('');
@@ -431,6 +466,8 @@ const activeRecentProjectIndex = ref(0);
 const projectPathInput = ref<HTMLInputElement | null>(null);
 const recentProjectList = ref<HTMLElement | null>(null);
 const showFolderPicker = ref(false);
+const reviewSearchQuery = ref('');
+let reviewSearchTimeout: ReturnType<typeof setTimeout> | undefined;
 const sidebarWidth = ref(280);
 const minSidebarWidth = 220;
 const maxSidebarWidth = 420;
@@ -448,14 +485,20 @@ const filteredProjectPathOptions = computed(() => {
     path.toLowerCase().includes(query) || formatHomePath(path).toLowerCase().includes(query)
   ));
 });
-const selectedAgentProfileLabel = computed(() => (
-  agentProfiles.value.find((profile) => profile.id === selectedAgentProfile.value)?.label || selectedAgentProfile.value
-));
+const selectedAgentProfileLabel = computed(() => {
+  if (selectedReviewSourceId.value) {
+    const source = reviewSources.value.find((item) => item.id === selectedReviewSourceId.value);
+    return source ? `${source.label} 🔍` : selectedReviewSourceId.value;
+  }
+  return agentProfiles.value.find((profile) => profile.id === selectedAgentProfile.value)?.label || selectedAgentProfile.value;
+});
 const selectedAgentModelSummary = computed(() => {
+  if (selectedReviewSourceId.value) return '';
   const profile = agentProfiles.value.find((item) => item.id === selectedAgentProfile.value);
   if (!profile?.defaultProvider || !profile?.defaultModel) return '';
   return `${profile.defaultProvider} / ${profile.defaultModel}`;
 });
+const isReviewMode = computed(() => Boolean(selectedReviewSourceId.value));
 const canGoToSessionProject = computed(() => (
   scope.value === 'all'
   && Boolean(contextMenu.value.session && getSessionProjectPath(contextMenu.value.session))
@@ -493,17 +536,26 @@ async function syncAgentProfile(profileId: string) {
   emit('agentProfileChanged', selectedAgentProfile.value);
 }
 
-async function loadInitialAgentProfile() {
+async function loadInitialAgentProfile(): Promise<string | null> {
   const urlProfileId = new URLSearchParams(window.location.search).get('profile');
+  const reviewSource = urlProfileId && reviewSources.value.find((source) => source.id === urlProfileId);
+  if (reviewSource) {
+    selectedReviewSourceId.value = reviewSource.id;
+    selectedAgentProfile.value = 'default';
+    sessionStorage.setItem(agentProfileStorageKey, selectedAgentProfile.value);
+    emit('reviewSourceSelected', reviewSource.id, reviewSource.label);
+    return reviewSource.id;
+  }
+
   if (urlProfileId && agentProfiles.value.some((profile) => profile.id === urlProfileId)) {
     await syncAgentProfile(urlProfileId);
-    return;
+    return null;
   }
 
   const savedProfileId = sessionStorage.getItem(agentProfileStorageKey);
   if (savedProfileId && agentProfiles.value.some((profile) => profile.id === savedProfileId)) {
     await syncAgentProfile(savedProfileId);
-    return;
+    return null;
   }
 
   const response = await fetch(`/api/sessions/agent-profile?clientId=${encodeURIComponent(props.clientId)}`);
@@ -511,6 +563,7 @@ async function loadInitialAgentProfile() {
   selectedAgentProfile.value = data.profile?.id || 'default';
   sessionStorage.setItem(agentProfileStorageKey, selectedAgentProfile.value);
   emit('agentProfileChanged', selectedAgentProfile.value);
+  return null;
 }
 
 async function loadDefaultProjectPath(): Promise<string> {
@@ -589,17 +642,31 @@ async function refreshProjectPath(options: { preferSaved: boolean; initial?: boo
   emit('projectPathChanged', projectPath.value, options.initial ? { initial: true } : undefined);
 }
 
-async function loadProjectPathOptions() {
+async function loadProjectPathOptions(sourceId?: string) {
   try {
-    const response = await fetch(`/api/sessions/project-paths?clientId=${encodeURIComponent(props.clientId)}`);
-    const data = await response.json();
+    let paths: string[];
+    if (sourceId) {
+      paths = await listReviewSourceProjectPaths(sourceId);
+    } else {
+      const response = await fetch(`/api/sessions/project-paths?clientId=${encodeURIComponent(props.clientId)}`);
+      const data = await response.json() as { projectPaths?: unknown[] };
+      paths = (data.projectPaths || []) as string[];
+    }
     projectPathOptions.value = sortProjectPathsByMru(Array.from(new Set(
-      (data.projectPaths || []).filter((path: unknown): path is string => typeof path === 'string' && path.trim().length > 0)
+      paths.filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
     )));
   } catch (error) {
     console.error(t('components.sessionSidebar.failedToLoadProjectPathOptions'), error);
     projectPathOptions.value = [];
   }
+}
+
+function debouncedReviewSearch() {
+  clearTimeout(reviewSearchTimeout);
+  reviewSearchTimeout = setTimeout(() => {
+    if (!isReviewMode.value || !selectedReviewSourceId.value) return;
+    void loadSessions();
+  }, 250);
 }
 
 async function loadSessions(options: { append?: boolean } = {}) {
@@ -611,6 +678,25 @@ async function loadSessions(options: { append?: boolean } = {}) {
   isLoadingMore.value = true;
 
   try {
+    if (isReviewMode.value) {
+      const sourceId = selectedReviewSourceId.value;
+      const query = reviewSearchQuery.value.trim();
+      const listOptions = {
+        projectPath: scope.value === 'project' && projectPath.value && projectPath.value !== '~' ? projectPath.value : undefined,
+        offset,
+        limit: SESSION_PAGE_SIZE,
+      };
+      const results = query
+        ? await searchReviewSessions(sourceId, query, listOptions)
+        : await listReviewSessions(sourceId, listOptions);
+      if (requestId !== sessionRequestId || sourceId !== selectedReviewSourceId.value) return;
+      const loadedSessions = results.map((session) => reviewSessionToSession(session));
+      sessions.value = append ? [...sessions.value, ...loadedSessions] : loadedSessions;
+      nextSessionOffset.value = offset + loadedSessions.length;
+      hasMoreSessions.value = loadedSessions.length === SESSION_PAGE_SIZE;
+      return;
+    }
+
     const params = new URLSearchParams({
       scope: scope.value,
       clientId: props.clientId,
@@ -654,6 +740,19 @@ async function loadSessions(options: { append?: boolean } = {}) {
   } finally {
     if (requestId === sessionRequestId) isLoadingMore.value = false;
   }
+}
+
+function reviewSessionToSession(session: ReviewSessionListItem): Session {
+  return {
+    id: session.id,
+    name: session.name,
+    path: session.path,
+    created: session.created,
+    modified: session.modified,
+    messageCount: session.messageCount,
+    firstMessage: session.firstMessage,
+    cwd: session.cwd,
+  };
 }
 
 function handleSessionListScroll() {
@@ -764,9 +863,29 @@ function closeAgentProfileList() {
 
 async function chooseAgentProfile(profileId: string) {
   isAgentProfileListOpen.value = false;
+  selectedReviewSourceId.value = '';
   await syncAgentProfile(profileId);
   await loadProjectPathOptions();
   await refreshProjectPath({ preferSaved: false });
+  await loadSessions();
+}
+
+async function chooseReviewSource(sourceId: string) {
+  isAgentProfileListOpen.value = false;
+  selectedReviewSourceId.value = sourceId;
+  selectedAgentProfile.value = 'default';
+  sessionStorage.setItem(agentProfileStorageKey, selectedAgentProfile.value);
+  const source = reviewSources.value.find((item) => item.id === sourceId);
+  emit('reviewSourceSelected', sourceId, source?.label ?? sourceId);
+  await loadProjectPathOptions(sourceId);
+  scope.value = 'project';
+  await refreshProjectPath({ preferSaved: true });
+  if (projectPath.value === '~' && projectPathOptions.value.length > 0) {
+    projectPath.value = projectPathOptions.value[0];
+    sessionStorage.setItem(storageKey, projectPath.value);
+    rememberProjectPath(projectPath.value);
+    emit('projectPathChanged', projectPath.value);
+  }
   await loadSessions();
 }
 
@@ -893,6 +1012,10 @@ function formatRelativeUnit(value: number, unit: Intl.RelativeTimeFormatUnit): s
 
 function selectSession(session: Session) {
   hideTooltip();
+  if (isReviewMode.value) {
+    emit('reviewSessionSelected', { sourceId: selectedReviewSourceId.value, sessionId: session.id });
+    return;
+  }
   emit('selectSession', session);
 }
 
@@ -1212,13 +1335,19 @@ async function confirmDeleteSession() {
   if (!session) return;
 
   try {
+    if (isReviewMode.value) {
+      await deleteReviewSession(selectedReviewSourceId.value, session.id);
+      sessions.value = sessions.value.filter((s) => s.id !== session.id);
+      emit('sessionDeleted', session.id);
+      return;
+    }
     const response = await fetch(`/api/sessions/${session.id}?clientId=${encodeURIComponent(props.clientId)}`, {
       method: 'DELETE',
     });
     const data = await response.json();
     if (data.success) {
       optimisticSessions.value.delete(session.id);
-      sessions.value = sessions.value.filter(s => s.id !== session.id);
+      sessions.value = sessions.value.filter((s) => s.id !== session.id);
       emit('sessionDeleted', session.id);
       window.dispatchEvent(new Event('refresh-sessions'));
     }
@@ -1229,10 +1358,19 @@ async function confirmDeleteSession() {
 
 onMounted(async () => {
   await loadAgentProfiles();
-  await loadInitialAgentProfile();
-  await loadProjectPathOptions();
+  const urlProfileId = new URLSearchParams(window.location.search).get('profile');
+  const reviewSourcesPromise = loadReviewSources();
+  if (urlProfileId) await reviewSourcesPromise;
+  const initialReviewSourceId = await loadInitialAgentProfile();
+  await loadProjectPathOptions(initialReviewSourceId || undefined);
   await refreshProjectPath({ preferSaved: true, initial: true });
   await loadSessions();
+
+  if (initialReviewSourceId) {
+    const sessionId = window.location.pathname.match(/^\/sessions\/([^/]+)$/)?.[1];
+    if (sessionId) emit('reviewSessionSelected', { sourceId: initialReviewSourceId, sessionId: decodeURIComponent(sessionId) });
+  }
+
   emit('initialized');
 });
 
@@ -1252,6 +1390,7 @@ onMounted(() => {
 
 // Cleanup
 onUnmounted(() => {
+  clearTimeout(reviewSearchTimeout);
   window.removeEventListener('refresh-sessions', refreshHandler);
   window.removeEventListener('session-created', addCreatedSession);
   window.removeEventListener('session-first-message', updateFirstMessage);
@@ -1768,6 +1907,20 @@ defineExpose({ focusProjectPath, loadSessions, showContextMenuForSession, switch
 
 .session-context-menu button.danger:hover {
   background: var(--error-muted);
+}
+
+.review-search {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-search-input {
+  width: 100%;
+  padding: 0.55rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
 }
 
 /* ── Mobile ────────────────────────────────────────────────────────────── */

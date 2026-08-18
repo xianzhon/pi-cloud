@@ -33,25 +33,42 @@ const defaultProfiles = [
   },
 ];
 
-function mockFetchWithNoSessions(projectPaths: string[] = [], profiles = defaultProfiles, sessions: object[] = []) {
+function mockFetchWithNoSessions(
+  projectPaths: string[] = [],
+  profiles = defaultProfiles,
+  sessions: object[] = [],
+  reviewSources: object[] = [],
+  reviewProjectPaths: string[] = [],
+  reviewSessions: object[] = [],
+) {
   vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+    const ok = (payload: object) => ({ ok: true, json: async () => payload });
     if (url === '/api/sessions/agent-profiles') {
-      return { json: async () => ({ profiles }) };
+      return ok({ profiles });
     }
     if (String(url).startsWith('/api/sessions/agent-profile?')) {
-      return { json: async () => ({ profile: profiles[0] }) };
+      return ok({ profile: profiles[0] });
     }
     if (url === '/api/sessions/agent-profile') {
       const profileId = JSON.parse(String(options?.body || '{}')).profileId;
-      return { json: async () => ({ profile: profiles.find((profile) => profile.id === profileId) || profiles[0] }) };
+      return ok({ profile: profiles.find((profile) => profile.id === profileId) || profiles[0] });
     }
     if (String(url).startsWith('/api/sessions/project-paths')) {
-      return { json: async () => ({ projectPaths }) };
+      return ok({ projectPaths });
     }
     if (String(url).startsWith('/api/sessions/project-path')) {
-      return { json: async () => ({ projectPath: '/project' }) };
+      return ok({ projectPath: '/project' });
     }
-    return { json: async () => ({ sessions }) };
+    if (url === '/api/review-sources') {
+      return ok({ sources: reviewSources });
+    }
+    if (String(url).match(/^\/api\/review-sources\/[^/]+\/project-paths$/)) {
+      return ok({ projectPaths: reviewProjectPaths });
+    }
+    if (String(url).match(/^\/api\/review-sources\/[^/]+\/sessions/)) {
+      return ok({ sessions: reviewSessions });
+    }
+    return ok({ sessions });
   }));
 }
 
@@ -156,6 +173,78 @@ describe('SessionSidebar', () => {
       expect(wrapper.text()).toContain('openai / gpt-4.1');
     });
     expect(sessionStorage.getItem('pi-webui-agent-profile')).toBe('work');
+  });
+
+  it('loads review-source project paths when selecting a review source', async () => {
+    mockFetchWithNoSessions(
+      ['/pi/project'],
+      defaultProfiles,
+      [],
+      [{ id: 'devin', label: 'Devin', type: 'devin', dataPath: '/tmp/devin' }],
+      ['/devin/project'],
+      [],
+    );
+    const wrapper = mountSidebar();
+
+    await vi.waitFor(() => {
+      expect(wrapper.find('.agent-profile-input').exists()).toBe(true);
+    });
+
+    await wrapper.find('.agent-profile-input').trigger('focus');
+    await vi.waitFor(() => {
+      expect(wrapper.findAll('.agent-profile-option')).toHaveLength(4);
+    });
+    await wrapper.findAll('.agent-profile-option')[2].trigger('mousedown');
+
+    await vi.waitFor(() => {
+      expect((wrapper.find('.project-path-input').element as HTMLInputElement).value).toBe('/devin/project');
+    });
+    expect(wrapper.emitted('reviewSourceSelected')?.at(-1)).toEqual(['devin', 'Devin']);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url) === '/api/review-sources/devin/project-paths')).toBe(true);
+  });
+
+  it('highlights the active review session row', async () => {
+    window.history.replaceState(null, '', '/sessions/review-1?profile=devin&project=%2Fdevin%2Fproject');
+    mockFetchWithNoSessions(
+      [],
+      defaultProfiles,
+      [],
+      [{ id: 'devin', label: 'Devin', type: 'devin', dataPath: '/tmp/devin' }],
+      ['/devin/project'],
+      [{
+        id: 'review-1', sourceId: 'devin', path: '/devin/project', cwd: '/devin/project',
+        created: '2026-08-01T00:00:00.000Z', modified: '2026-08-01T00:00:00.000Z',
+        messageCount: 1, firstMessage: 'review this',
+      }],
+    );
+    const wrapper = mount(SessionSidebar, {
+      props: { clientId: 'client-1', activeReviewSessionId: 'review-1' },
+    });
+
+    await vi.waitFor(() => expect(wrapper.find('.session-item').classes()).toContain('active'));
+    expect(wrapper.emitted('reviewSessionSelected')?.at(-1)).toEqual([{ sourceId: 'devin', sessionId: 'review-1' }]);
+  });
+
+  it('restores a review source and session from the URL', async () => {
+    window.history.replaceState(null, '', '/sessions/review-1?profile=devin&project=%2Fdevin%2Fproject');
+    mockFetchWithNoSessions(
+      [],
+      defaultProfiles,
+      [],
+      [{ id: 'devin', label: 'Devin', type: 'devin', dataPath: '/tmp/devin' }],
+      ['/devin/project'],
+      [{
+        id: 'review-1', sourceId: 'devin', path: '/devin/project', cwd: '/devin/project',
+        created: '2026-08-01T00:00:00.000Z', modified: '2026-08-01T00:00:00.000Z',
+        messageCount: 1, firstMessage: 'review this',
+      }],
+    );
+    const wrapper = mountSidebar();
+
+    await vi.waitFor(() => expect(wrapper.emitted('reviewSourceSelected')?.at(-1)).toEqual(['devin', 'Devin']));
+    expect(wrapper.emitted('reviewSessionSelected')?.at(-1)).toEqual([{ sourceId: 'devin', sessionId: 'review-1' }]);
+    expect((wrapper.find('.project-path-input').element as HTMLInputElement).value).toBe('/devin/project');
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/api/review-sources/devin/sessions'))).toBe(true);
   });
 
   it('opens profile management from the agent selector', async () => {

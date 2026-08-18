@@ -1111,6 +1111,58 @@ describe('ChatPanel', () => {
     expect((textarea.element as HTMLTextAreaElement).value).toBe('/help ');
   });
 
+  it('hides Devin context blocks in clean review mode and shows them in details mode', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/review-sources/devin/sessions/review-1/transcript')) {
+        return new Response(JSON.stringify({ transcript: {
+          messages: [
+            { role: 'assistant', content: 'You are Devin, an interactive command line agent from Cognition.' },
+            { role: 'assistant', content: 'Available subagent profiles for the `run_subagent` tool.' },
+            { role: 'assistant', content: 'You are powered by Kimi K2.7.' },
+            { role: 'assistant', content: '<system_info>\nPlatform: linux\n</system_info>' },
+            { role: 'assistant', content: '<available_skills>\nThe following skills can be invoked using the `skill` tool.\n</available_skills>' },
+            { role: 'assistant', content: '<rules type="always-on">\nKeep changes focused.\n</rules>\n\nVisible rule-following text' },
+            { role: 'assistant', content: '<thinking>inspect</thinking>\\n<file-view path="/workspace/src/App.vue">\\n1| const app = true;\\n</file-view>' },
+            { role: 'assistant', content: '<observation>{"results":[{"content":"Hidden observation"}]}</observation>' },
+            { role: 'assistant', content: 'Visible review conclusion' },
+          ],
+        } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, { props: { reviewSourceId: 'devin', reviewSessionId: 'review-1' } });
+    await flushPromises();
+    await nextTick();
+
+    expect(wrapper.text()).toContain('Visible review conclusion');
+    expect(wrapper.text()).toContain('Visible rule-following text');
+    expect(wrapper.text()).not.toContain('You are Devin');
+    expect(wrapper.text()).not.toContain('Available subagent profiles');
+    expect(wrapper.text()).not.toContain('You are powered by');
+    expect(wrapper.text()).not.toContain('Platform: linux');
+    expect(wrapper.text()).not.toContain('The following skills can be invoked');
+    expect(wrapper.text()).not.toContain('Keep changes focused');
+    expect(wrapper.text()).not.toContain('Hidden observation');
+    expect(wrapper.text()).not.toContain('file-view path=');
+    expect(wrapper.text()).toContain('inspect');
+
+    await wrapper.find('.view-options-toggle-btn').trigger('mouseenter');
+    await nextTick();
+    await wrapper.find('.details-toggle-btn').trigger('click');
+    await nextTick();
+
+    expect(wrapper.text()).toContain('You are Devin');
+    expect(wrapper.text()).toContain('Available subagent profiles');
+    expect(wrapper.text()).toContain('You are powered by');
+    expect(wrapper.text()).toContain('Platform: linux');
+    expect(wrapper.text()).toContain('The following skills can be invoked');
+    expect(wrapper.text()).toContain('Keep changes focused');
+    expect(wrapper.text()).toContain('Hidden observation');
+    expect(wrapper.text()).toContain('file-view path=');
+    expect(wrapper.text()).toContain('Visible review conclusion');
+  });
+
   it('hides tool activity in clean mode', async () => {
     chatMessages.value = [
       { id: 'user-1', role: 'user', content: 'please inspect files' },

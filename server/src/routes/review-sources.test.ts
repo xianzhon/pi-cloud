@@ -1,0 +1,102 @@
+import Fastify from 'fastify';
+import Database from 'better-sqlite3';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { openPiuiDatabase } from '../db/database.js';
+import { reviewSourceRoutes } from './review-sources.js';
+import { ReviewSourceService } from '../services/review-source-service.js';
+import { ReviewSourceStore } from '../services/review-source-store.js';
+
+describe('review source routes', () => {
+  let tempDir: string;
+  let dbPath: string;
+  let db: Database.Database;
+  let store: ReviewSourceStore;
+  let service: ReviewSourceService;
+  let app: ReturnType<typeof Fastify>;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), 'pi-webui-review-routes-'));
+    dbPath = path.join(tempDir, 'piui.db');
+    db = openPiuiDatabase(dbPath);
+    store = new ReviewSourceStore(db, '/nonexistent/devin');
+    service = new ReviewSourceService(store);
+    app = Fastify();
+    await app.register(reviewSourceRoutes, { prefix: '/api/review-sources', reviewSourceService: service });
+  });
+
+  afterEach(async () => {
+    await app.close();
+    db.close();
+    await rm(tempDir, { recursive: true, force: true });
+    try { await rm(`${dbPath}-wal`, { force: true }); } catch {}
+    try { await rm(`${dbPath}-shm`, { force: true }); } catch {}
+  });
+
+  it('lists review sources', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/review-sources' });
+    expect(response.statusCode).toBe(200);
+    const data = response.json();
+    expect(Array.isArray(data.sources)).toBe(true);
+  });
+
+  it('creates and deletes a custom source', async () => {
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/review-sources',
+      payload: { type: 'devin', label: 'Custom Devin', dataPath: '/tmp/custom-devin' },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const { source } = createResponse.json();
+    expect(source.type).toBe('devin');
+
+    const deleteResponse = await app.inject({ method: 'DELETE', url: `/api/review-sources/${source.id}` });
+    expect(deleteResponse.statusCode).toBe(200);
+  });
+
+  it('rejects missing fields on create', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/review-sources',
+      payload: { type: 'devin' },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns project paths for a Devin review source', async () => {
+    const dataPath = path.join(tempDir, 'devin-data');
+    await mkdir(dataPath, { recursive: true });
+    const db = new Database(path.join(dataPath, 'sessions.db'));
+    db.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        working_directory TEXT NOT NULL,
+        backend_type TEXT NOT NULL,
+        model TEXT NOT NULL,
+        agent_mode TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_activity_at INTEGER NOT NULL,
+        title TEXT
+      );
+      INSERT INTO sessions (id, working_directory, backend_type, model, agent_mode, created_at, last_activity_at, title)
+      VALUES ('s1', '/tmp/project-a', 'devin', 'kimi', 'normal', 1700000000, 1700000100, 'A');
+      INSERT INTO sessions (id, working_directory, backend_type, model, agent_mode, created_at, last_activity_at, title)
+      VALUES ('s2', '/tmp/project-b', 'devin', 'kimi', 'normal', 1700000000, 1700000200, 'B');
+    `);
+    db.close();
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/review-sources',
+      payload: { type: 'devin', label: 'Devin', dataPath },
+    });
+    const { source } = createResponse.json();
+
+    const response = await app.inject({ method: 'GET', url: `/api/review-sources/${source.id}/project-paths` });
+    expect(response.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.projectPaths).toEqual(['/tmp/project-b', '/tmp/project-a']);
+  });
+});

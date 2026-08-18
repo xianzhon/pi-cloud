@@ -792,4 +792,138 @@ describe('MessageBubble', () => {
     expect(outputCode.html()).not.toContain('hljs-keyword');
     expect(outputCode.text()).toContain('const value2499: number = 2499;');
   });
+
+  it('uses compact bubble spacing for a thinking-only tagged message', () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'thinking-only-tag',
+          role: 'assistant',
+          content: '<thinking>\\n**Correcting testing logic**\\n\\nBuild is running.\\n</thinking>',
+        },
+      },
+    });
+
+    expect(wrapper.find('.message-bubble').classes()).toContain('thinking-only-bubble');
+  });
+
+  it('renders assistant thinking and observation tags as collapsed header/body blocks', async () => {
+    const observation = JSON.stringify({
+      results: [{
+        source_call_id: 'functions.grep:84',
+        content: 'Found 14 match(es)\n-- 5 matches in useChat.test.ts',
+      }],
+    });
+    const content = [
+      '<thinking>',
+      '**Correcting testing logic**',
+      'No obvious newline handling in ChatPanel.vue.',
+      '',
+      'Let me check the WebSocket message handling.',
+      '</thinking>',
+      '',
+      '<tool_call name="tool">undefined</tool_call>',
+      '',
+      `<observation>${observation}</observation>`,
+    ].join('\n');
+
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'internal-tags',
+          role: 'assistant',
+          content,
+        },
+      },
+    });
+
+    const thinkingBlock = wrapper.find('[data-internal="thinking"]');
+    expect(thinkingBlock.element.tagName).toBe('DETAILS');
+    expect(thinkingBlock.find('summary').text()).toBe('Correcting testing logic');
+    expect(thinkingBlock.find('.review-thinking-icon').exists()).toBe(true);
+    expect(thinkingBlock.attributes('open')).toBeUndefined();
+    expect(thinkingBlock.find('.review-internal-body').text()).toContain('No obvious newline handling');
+    expect(thinkingBlock.find('.review-internal-body').text()).not.toContain('Correcting testing logic');
+    expect(thinkingBlock.text()).toContain('Let me check the WebSocket message handling.');
+
+    expect(wrapper.find('[data-internal="tool-call"]').exists()).toBe(true);
+
+    const observationBlock = wrapper.find('[data-internal="observation"]');
+    expect(observationBlock.element.tagName).toBe('DETAILS');
+    expect(observationBlock.find('summary').text()).toBe('Observation');
+    expect(observationBlock.attributes('open')).toBeUndefined();
+    expect(observationBlock.text()).toContain('Found 14 match(es)');
+
+    await thinkingBlock.find('summary').trigger('click');
+    expect(thinkingBlock.attributes('open')).toBeDefined();
+    await thinkingBlock.find('summary').trigger('click');
+    expect(thinkingBlock.attributes('open')).toBeUndefined();
+    expect(observationBlock.text()).toContain('-- 5 matches in useChat.test.ts');
+  });
+
+  it('renders internal blocks even when the message has no other visible text', () => {
+    const content = [
+      '<thinking>\nDeciding what to investigate.\n</thinking>',
+      '',
+      '<tool_call name="tool">undefined</tool_call>',
+      '',
+      '<observation>{"results":[{"source_call_id":"functions.grep:0","content":"Found 1 match"}]}</observation>',
+    ].join('\n\n');
+
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'internal-only',
+          role: 'assistant',
+          content,
+        },
+      },
+    });
+
+    expect(wrapper.find('[data-internal="thinking"]').exists()).toBe(true);
+    expect(wrapper.find('[data-internal="tool-call"]').exists()).toBe(true);
+    expect(wrapper.find('[data-internal="observation"]').exists()).toBe(true);
+    expect(wrapper.find('.message-content').text().trim().length).toBeGreaterThan(0);
+  });
+
+  it('does not render an empty bubble when observations are hidden', () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        showDetails: false,
+        message: {
+          id: 'observation-only-hidden',
+          role: 'assistant',
+          content: '<observation>{"results":[{"content":"Found a match"}]}</observation>',
+        },
+      },
+    });
+
+    expect(wrapper.find('.message-bubble').exists()).toBe(false);
+    expect(wrapper.find('[data-internal="observation"]').exists()).toBe(false);
+  });
+
+  it('hides internal tool-call blocks when showDetails is false', () => {
+    const content = [
+      '<thinking>\nDeciding what to investigate.\n</thinking>',
+      '',
+      '<tool_call name="tool">undefined</tool_call>',
+      '',
+      '<observation>{"results":[{"source_call_id":"functions.grep:0","content":"Found 1 match"}]}</observation>',
+    ].join('\n\n');
+
+    const wrapper = mount(MessageBubble, {
+      props: {
+        showDetails: false,
+        message: {
+          id: 'internal-only-hidden-details',
+          role: 'assistant',
+          content,
+        },
+      },
+    });
+
+    expect(wrapper.find('[data-internal="thinking"]').exists()).toBe(true);
+    expect(wrapper.find('[data-internal="tool-call"]').exists()).toBe(false);
+    expect(wrapper.find('[data-internal="observation"]').exists()).toBe(false);
+  });
 });

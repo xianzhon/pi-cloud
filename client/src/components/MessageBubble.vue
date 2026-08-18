@@ -44,7 +44,7 @@
   <div
     v-else-if="showMessageBubble"
     class="message-bubble"
-    :class="[message.role, { 'git-diff-card': isGitDiffMessage, 'thinking-only-bubble': message.thinking?.trim() && !message.content.trim() }]"
+    :class="[message.role, { 'git-diff-card': isGitDiffMessage, 'thinking-only-bubble': (message.thinking?.trim() && !message.content.trim()) || isThinkingTagOnly }]"
     :aria-label="imageMessageLabel || undefined"
   >
     <div class="message-actions">
@@ -111,7 +111,7 @@
 
     <!-- Text content -->
     <div 
-      v-if="message.content && message.content.trim()"
+      v-if="message.content && message.content.trim() && renderedContent.trim()"
       class="message-content markdown-body" 
       v-html="renderedContent"
       @click="handleContentClick"
@@ -243,10 +243,12 @@ const props = withDefaults(defineProps<{
   showHintInfo?: boolean;
   showCodeBlockLanguageHeaders?: boolean;
   expandThinkingByDefault?: boolean;
+  showDetails?: boolean;
 }>(), {
   showHintInfo: true,
   showCodeBlockLanguageHeaders: true,
   expandThinkingByDefault: false,
+  showDetails: true,
 });
 
 const copied = ref(false);
@@ -384,7 +386,11 @@ watch(imagePreview, (preview, _previous, onCleanup) => {
 const showThinkingBlock = computed(() => !props.hideThinkingBlock || props.expandThinkingByDefault);
 const isHiddenThinking = computed(() => props.message.kind === 'thinking' && !showThinkingBlock.value);
 const showEventRow = computed(() => isEventRow.value && !isHiddenThinking.value);
-const showMessageBubble = computed(() => !isEventRow.value && !isHiddenThinking.value);
+const showMessageBubble = computed(() => (
+  !isEventRow.value
+  && !isHiddenThinking.value
+  && (Boolean(renderedContent.value) || renderedImages.value.length > 0 || Boolean(props.message.memory) || Boolean(props.message.usage))
+));
 const eventIcon = computed(() => {
   if (props.message.status === 'failure') return PhXCircle;
   if (props.message.kind === 'thinking') return PhLightbulb;
@@ -482,6 +488,7 @@ const usageTitle = computed(() => {
 });
 
 const isGitDiffMessage = computed(() => props.message.role === 'assistant' && props.message.content.trim().startsWith('### Git diff'));
+const isThinkingTagOnly = computed(() => props.message.role === 'assistant' && /^\s*<thinking>[\s\S]*<\/thinking>\s*$/.test(props.message.content));
 
 function escapeHtml(value: string) {
   return value
@@ -820,12 +827,105 @@ function makeFilePathsClickable(html: string): string {
   });
 }
 
-function renderMarkdown(content: string) {
+function renderObservation(body: string): string {
+  try {
+    const parsed = JSON.parse(body);
+    const results = Array.isArray(parsed.results) ? parsed.results : [parsed];
+    const contents = results.map((item: unknown) => {
+      if (item && typeof item === 'object' && 'content' in item && typeof (item as { content?: unknown }).content === 'string') {
+        return (item as { content: string }).content;
+      }
+      return JSON.stringify(item, null, 2);
+    }).join('\n\n');
+    return `<pre><code>${escapeHtml(contents)}</code></pre>`;
+  } catch {
+    return `<pre><code>${escapeHtml(body)}</code></pre>`;
+  }
+}
+
+function renderMarkdownFragment(content: string): string {
   const contentWithAnsi = ansiToHtml(content);
   const html = marked.parse(contentWithAnsi, {
     renderer: createMarkdownRenderer(props.showCodeBlockLanguageHeaders),
   }) as string;
-  return sanitizeHtmlFragment(makeFilePathsClickable(html));
+  return makeFilePathsClickable(html);
+}
+
+function renderMarkdown(content: string) {
+  return sanitizeHtmlFragment(renderMarkdownFragment(content));
+}
+
+function splitThinkingBlock(body: string): { title: string; content: string } {
+  const lines = body.trim().split(/\r?\n/);
+  const firstLine = lines[0] || t('components.messageBubble.thinking');
+  const headingMatch = firstLine.match(/^\*\*(.+?)\*\*\s*$/);
+  if (!headingMatch) return { title: t('components.messageBubble.thinking'), content: body.trim() };
+  return { title: headingMatch[1].trim(), content: lines.slice(1).join('\n').trim() };
+}
+
+function renderAssistantContent(content: string) {
+  const segments: Array<{ type: 'text'; content: string } | { type: 'internal'; kind: 'thinking' | 'tool-call' | 'observation'; html: string }> = [];
+  const pattern = /^\s*<thinking>([\s\S]*?)<\/thinking>\s*$|^\s*<tool_call([^>]*)>([\s\S]*?)<\/tool_call>\s*$|^\s*<observation>([\s\S]*?)<\/observation>\s*$/gm;
+
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      const text = content.slice(lastIndex, match.index);
+      if (text.trim()) {
+        segments.push({ type: 'text', content: text });
+      }
+    }
+
+    if (typeof match[1] === 'string') {
+      const body = match[1].replace(/^\n|\n$/g, '');
+      const thinking = splitThinkingBlock(body);
+      const renderedBody = thinking.content ? renderMarkdown(thinking.content) : '';
+      segments.push({
+        type: 'internal',
+        kind: 'thinking',
+        html: `<details data-internal="thinking" class="review-internal-block"><summary class="review-internal-header"><span class="review-thinking-icon" aria-hidden="true"></span><span>${escapeHtml(thinking.title)}</span></summary><div class="review-internal-body">${renderedBody}</div></details>`,
+      });
+    } else if (typeof match[3] === 'string') {
+      const attrs = match[2] || '';
+      const body = match[3].replace(/^\n|\n$/g, '');
+      segments.push({
+        type: 'internal',
+        kind: 'tool-call',
+        html: `<div data-internal="tool-call"><pre><code>${escapeHtml(attrs.trim())}\n${escapeHtml(body)}</code></pre></div>`,
+      });
+    } else if (typeof match[4] === 'string') {
+      const body = match[4].replace(/^\n|\n$/g, '');
+      segments.push({
+        type: 'internal',
+        kind: 'observation',
+        html: `<details data-internal="observation" class="review-internal-block"><summary class="review-internal-header">${escapeHtml(t('components.messageBubble.observation'))}</summary><div class="review-internal-body">${renderObservation(body)}</div></details>`,
+      });
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < content.length) {
+    const tail = content.slice(lastIndex);
+    if (tail.trim()) {
+      segments.push({ type: 'text', content: tail });
+    }
+  }
+
+  const fragment = segments
+    .filter((segment) => (
+      segment.type !== 'internal'
+      || (segment.kind !== 'tool-call' && segment.kind !== 'observation')
+      || props.showDetails
+    ))
+    .map((segment) => (
+      segment.type === 'internal' ? segment.html : renderMarkdownFragment(collapseExpandedSkillReference(segment.content))
+    ))
+    .join('');
+
+  if (!fragment.trim()) return '';
+  return sanitizeHtmlFragment(fragment);
 }
 
 function handleContentClick(event: MouseEvent) {
@@ -847,6 +947,9 @@ function handleContentClick(event: MouseEvent) {
 
 const renderedContent = computed(() => {
   if (!props.message.content) return '';
+  if (props.message.role === 'assistant') {
+    return renderAssistantContent(props.message.content);
+  }
   return renderMarkdown(collapseExpandedSkillReference(props.message.content));
 });
 
@@ -1480,6 +1583,100 @@ async function copyContent() {
   line-height: 1.6;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.message-content :deep([data-internal]),
+.event-content :deep([data-internal]) {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+.message-content :deep([data-internal="thinking"]),
+.event-content :deep([data-internal="thinking"]) {
+  margin: 0.25rem 0;
+  padding-left: 0;
+}
+
+.message-content :deep([data-internal="tool-call"]),
+.event-content :deep([data-internal="tool-call"]) {
+  opacity: 0.8;
+}
+
+.message-content :deep([data-internal="observation"]),
+.event-content :deep([data-internal="observation"]) {
+  border-left: 3px solid var(--text-tertiary);
+  padding-left: 0.75rem;
+}
+
+.message-content :deep(.review-internal-header),
+.event-content :deep(.review-internal-header) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  list-style: none;
+  color: var(--thinking-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.message-content :deep(.review-internal-header:hover),
+.event-content :deep(.review-internal-header:hover) {
+  color: var(--text-primary);
+}
+
+.message-content :deep(.review-internal-header::after),
+.event-content :deep(.review-internal-header::after) {
+  content: '›';
+  display: inline-block;
+  width: 0.75rem;
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.message-content :deep(.review-internal-block[open] > .review-internal-header::after),
+.event-content :deep(.review-internal-block[open] > .review-internal-header::after) {
+  transform: rotate(90deg);
+}
+
+.message-content :deep(.review-thinking-icon),
+.event-content :deep(.review-thinking-icon) {
+  flex: 0 0 auto;
+  width: 1rem;
+  color: var(--warning);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.message-content :deep(.review-thinking-icon::before),
+.event-content :deep(.review-thinking-icon::before) {
+  content: '💡';
+}
+
+.message-content :deep(.review-internal-header::-webkit-details-marker),
+.event-content :deep(.review-internal-header::-webkit-details-marker) {
+  display: none;
+}
+
+.message-content :deep(.review-internal-body),
+.event-content :deep(.review-internal-body) {
+  margin-top: 0.5rem;
+  color: var(--thinking-text);
+  opacity: 0.85;
+}
+
+.message-content :deep([data-internal="thinking"] > .review-internal-body),
+.event-content :deep([data-internal="thinking"] > .review-internal-body) {
+  margin-top: 0.25rem;
+}
+
+.message-content :deep([data-internal] pre),
+.event-content :deep([data-internal] pre) {
+  white-space: pre;
 }
 
 .git-diff-card .message-content :deep(h3:first-child) {

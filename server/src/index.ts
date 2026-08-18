@@ -22,6 +22,7 @@ import { taskRoutes } from './routes/tasks.js';
 import { feishuGatewayRoutes } from './routes/feishu-gateway.js';
 import { gatewayRoutes } from './routes/gateways.js';
 import { gitHostingRoutes, type GitHostingRouteOptions } from './routes/git-hosting.js';
+import { reviewSourceRoutes } from './routes/review-sources.js';
 import { authRoutes } from './routes/auth.js';
 import { chatWebSocket } from './ws/chat.js';
 import { terminalWebSocket } from './ws/terminal.js';
@@ -52,6 +53,8 @@ import { ProjectTaskStarter } from './services/project-task-starter.js';
 import { RepositoryCloner } from './services/repository-cloner.js';
 import { FeishuGatewayService } from './services/feishu-gateway.js';
 import { WeixinGatewayService } from './services/weixin-gateway.js';
+import { ReviewSourceStore } from './services/review-source-store.js';
+import { ReviewSourceService } from './services/review-source-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -227,6 +230,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   memoryRuntime.start();
   const projectTaskStore = new ProjectTaskStore(db);
+  const reviewSourceStore = new ReviewSourceStore(db);
+  const reviewSourceService = new ReviewSourceService(reviewSourceStore);
   const sessionActivityStore = new SessionActivityStore(db);
   projectTaskStore.restoreAllStarting();
   const giteaSettings = new GiteaSettingsStore(db);
@@ -351,6 +356,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   await app.register(slashCommandRoutes, { prefix: '/api/slash-commands' });
   await app.register(changelogRoutes, { prefix: '/api/changelog' });
+  await app.register(reviewSourceRoutes, { prefix: '/api/review-sources', reviewSourceService });
   await app.register(chatWebSocket);
   await app.register(terminalWebSocket);
 

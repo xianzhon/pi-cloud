@@ -210,3 +210,53 @@ export interface SessionCommandInfo {
     cost: number;
   };
 }
+
+export interface ReviewSource {
+  id: string;
+  type: string;
+  label: string;
+  dataPath: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReviewSessionListItem {
+  id: string;
+  sourceId: string;
+  name?: string;
+  path: string;
+  cwd?: string;
+  created: string;
+  modified: string;
+  messageCount: number;
+  firstMessage?: string;
+}
+
+export interface ReviewSessionTranscript {
+  messages: Array<{
+    role: string;
+    content: unknown;
+    timestamp?: number;
+  }>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReviewSourceListOptions {
+  projectPath?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export interface ReviewSourceAdapter {
+  list(options?: ReviewSourceListOptions): Promise<ReviewSessionListItem[]>;
+  search(query: string, options?: ReviewSourceListOptions): Promise<ReviewSessionListItem[]>;
+  getTranscript(sessionId: string): Promise<ReviewSessionTranscript>;
+  delete(sessionId: string): Promise<void>;
+  listProjectPaths(): Promise<string[]>;
+}
+
+export interface CreateReviewSourceRequest {
+  type: string;
+  label: string;
+  dataPath: string;
+}

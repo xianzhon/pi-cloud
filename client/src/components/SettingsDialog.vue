@@ -69,6 +69,15 @@
                 <PhPaperPlaneTilt :size="18" weight="bold" class="settings-menu-icon" />
                 <span>{{ t('settings.sections.gateway') }}</span>
               </button>
+              <button
+                class="settings-menu-item"
+                :class="{ active: activeSection === 'reviewSources' }"
+                type="button"
+                @click="activeSection = 'reviewSources'"
+              >
+                <PhMagnifyingGlass :size="18" weight="bold" class="settings-menu-icon" />
+                <span>{{ t('settings.sections.reviewSources') }}</span>
+              </button>
             </nav>
           </aside>
 
@@ -599,6 +608,54 @@
                 />
               </template>
 
+              <template v-if="activeSection === 'reviewSources'">
+                <section class="settings-card review-sources-settings" aria-labelledby="review-sources-title">
+                  <div class="settings-card-copy">
+                    <h4 id="review-sources-title">{{ t('components.settingsDialog.reviewSources') }}</h4>
+                    <p>{{ t('components.settingsDialog.reviewSourcesHelp') }}</p>
+                  </div>
+                  <div v-if="reviewSourcesLoading" class="settings-loading">{{ t('app.loading') }}</div>
+                  <p v-else-if="reviewSourcesError" class="settings-error-text" role="alert">{{ reviewSourcesError }}</p>
+                  <div v-else>
+                    <div v-for="source in reviewSources" :key="source.id" class="review-source-row">
+                      <div class="review-source-info">
+                        <strong>{{ source.label }}</strong>
+                        <small>{{ source.dataPath }}</small>
+                      </div>
+                      <button
+                        type="button"
+                        class="settings-action-btn compact-action"
+                        :disabled="source.type === 'devin' && source.label === 'Devin'"
+                        @click="removeReviewSource(source.id)"
+                      >
+                        {{ t('app.delete') }}
+                      </button>
+                    </div>
+                    <div class="review-source-form">
+                      <input
+                        v-model="newReviewSourceLabel"
+                        class="settings-input"
+                        :placeholder="t('components.settingsDialog.reviewSourceLabel')"
+                      />
+                      <input
+                        v-model="newReviewSourcePath"
+                        class="settings-input"
+                        :placeholder="t('components.settingsDialog.reviewSourcePath')"
+                      />
+                      <button
+                        type="button"
+                        class="settings-action-btn"
+                        :disabled="!newReviewSourceLabel.trim() || !newReviewSourcePath.trim() || addingReviewSource"
+                        @click="addCustomReviewSource"
+                      >
+                        {{ addingReviewSource ? t('app.loading') : t('components.settingsDialog.addReviewSource') }}
+                      </button>
+                    </div>
+                    <p v-if="reviewSourceActionError" class="settings-error-text" role="alert">{{ reviewSourceActionError }}</p>
+                  </div>
+                </section>
+              </template>
+
               <SecurityPanel v-if="activeSection === 'security'" :totp-enabled="totpEnabled" embedded @updated="emit('updated')" />
               <SkillPresetsPanel
                 v-if="activeSection === 'skills'"
@@ -621,8 +678,9 @@ import { computed, ref, watch } from 'vue';
 import type { FullscreenShortcut, LanguagePreference, NewSessionShortcut, SoundNotificationPreference, StreamingMessageBehavior, ThemePreference } from '../composables/usePreferences';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import type { SkillPreset, SkillPresetInput } from '../composables/useSkillPresets';
-import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh } from '@phosphor-icons/vue';
+import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh } from '@phosphor-icons/vue';
 import { playTaskNotification } from '../services/soundNotifications';
+import { useReviewSources } from '../composables/useReviewSources';
 import DialogCloseButton from './DialogCloseButton.vue';
 import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
@@ -733,7 +791,12 @@ const fullscreenShortcutOptions: CustomSelectOption[] = [
   { value: 'ctrlShiftF', label: 'Ctrl+Shift+F' },
 ];
 
-const activeSection = ref<'general' | 'security' | 'chat' | 'keyboard' | 'skills' | 'git' | 'gateway'>('general');
+const activeSection = ref<'general' | 'security' | 'chat' | 'keyboard' | 'skills' | 'git' | 'gateway' | 'reviewSources'>('general');
+const { sources: reviewSources, loading: reviewSourcesLoading, error: reviewSourcesError, load: loadReviewSources, add: addReviewSource, remove: removeReviewSourceFn } = useReviewSources();
+const newReviewSourceLabel = ref('');
+const newReviewSourcePath = ref('');
+const addingReviewSource = ref(false);
+const reviewSourceActionError = ref('');
 const draftGiteaServerUrl = ref(props.giteaServerUrl);
 const draftGiteaToken = ref('');
 const draftGithubServerUrl = ref(props.githubServerUrl);
@@ -1059,10 +1122,39 @@ function parseGatewayModelValue(value: string): { provider: string; id: string }
   return { provider, id };
 }
 
+async function addCustomReviewSource() {
+  if (!newReviewSourceLabel.value.trim() || !newReviewSourcePath.value.trim()) return;
+  reviewSourceActionError.value = '';
+  addingReviewSource.value = true;
+  try {
+    await addReviewSource({
+      type: 'devin',
+      label: newReviewSourceLabel.value.trim(),
+      dataPath: newReviewSourcePath.value.trim(),
+    });
+    newReviewSourceLabel.value = '';
+    newReviewSourcePath.value = '';
+  } catch (error) {
+    reviewSourceActionError.value = error instanceof Error ? error.message : t('components.settingsDialog.failedToAddReviewSource');
+  } finally {
+    addingReviewSource.value = false;
+  }
+}
+
+async function removeReviewSource(id: string) {
+  reviewSourceActionError.value = '';
+  try {
+    await removeReviewSourceFn(id);
+  } catch (error) {
+    reviewSourceActionError.value = error instanceof Error ? error.message : t('components.settingsDialog.failedToRemoveReviewSource');
+  }
+}
+
 watch(() => props.visible, (visible) => {
   if (visible) {
     resetGitDrafts();
     resetGatewayDrafts();
+    void loadReviewSources().catch(() => undefined);
     if (activeSection.value === 'git') {
       void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
     }
@@ -1145,6 +1237,7 @@ const sectionHeading = computed(() => {
   if (activeSection.value === 'skills') return t('settings.sections.skillsHeading');
   if (activeSection.value === 'git') return t('settings.sections.gitHeading');
   if (activeSection.value === 'gateway') return t('settings.sections.gateway');
+  if (activeSection.value === 'reviewSources') return t('settings.sections.reviewSources');
   return t('settings.sections.chatHeading');
 });
 
@@ -2063,5 +2156,45 @@ const emit = defineEmits<{
   .weixin-status-details {
     grid-template-columns: 1fr;
   }
+}
+
+.review-sources-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.review-source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-source-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.review-source-info small {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-source-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.review-source-form input {
+  flex: 1 1 200px;
 }
 </style>

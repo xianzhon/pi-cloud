@@ -3,6 +3,9 @@
   <div class="chat-workspace">
     <section class="chat-panel discussion-pane">
     <div class="messages-shell">
+      <div v-if="isReviewMode" class="review-banner">
+        {{ t('components.chatPanel.reviewingSession', { session: reviewSessionTitle }) }}
+      </div>
       <div
         class="messages"
         ref="messagesRef"
@@ -24,6 +27,7 @@
             :showHintInfo="showHintInfo"
             :showCodeBlockLanguageHeaders="showCodeBlockLanguageHeaders"
             :expandThinkingByDefault="isStreaming"
+            :showDetails="showDetails"
             @annotate="handleAnnotateImage"
           />
         </div>
@@ -105,7 +109,7 @@
       </div>
     </div>
 
-    <div class="input-area">
+    <div v-if="!isReviewMode" class="input-area">
       <div
         class="input-resize-handle"
         :class="{ 'is-resizing': inputResizeStartY !== null }"
@@ -605,6 +609,8 @@ import SkillPicker from './SkillPicker.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import { exportSessionPdf, hasExportableMessages } from '../utils/sessionPdfExport';
+import { getReviewTranscript } from '../services/reviewSourceService';
+import type { ReviewSessionTranscript } from '../types/reviewSource';
 
 const t = i18n.global.t;
 
@@ -636,6 +642,8 @@ const props = withDefaults(defineProps<{
   showGoToTopButton?: boolean;
   showChatViewOptionsButton?: boolean;
   fullscreen?: boolean;
+  reviewSourceId?: string;
+  reviewSessionId?: string;
 }>(), {
   projectPath: '~',
   showHintInfo: true,
@@ -765,6 +773,10 @@ const isPolishingPrompt = ref(false);
 const promptPolishError = ref('');
 const sessionStatus = ref<SessionRuntimeStatus | null>(null);
 const selectedMessageIndex = ref(0);
+const reviewTranscript = ref<ReviewSessionTranscript | null>(null);
+let reviewTranscriptRequestId = 0;
+const isReviewMode = computed(() => Boolean(props.reviewSourceId && props.reviewSessionId));
+const reviewSessionTitle = computed(() => props.reviewSessionId || '');
 const showDetails = ref(false);
 const showViewOptions = ref(false);
 const isExportingPdf = ref(false);
@@ -1063,7 +1075,54 @@ function isBoldOnlyText(message: { kind?: string; content: string; thinking?: st
   return message.kind === 'text' && hasOnlyBoldSummary(message);
 }
 
+function reviewMessageContentToString(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map((item) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && 'type' in item && 'text' in item
+        && item.type === 'text' && typeof item.text === 'string') {
+        return item.text;
+      }
+      return JSON.stringify(item);
+    }).join('\n');
+  }
+  return content == null ? '' : JSON.stringify(content);
+}
+
+function stripReviewDetailBlocks(content: string): string {
+  const trimmed = content.trimStart();
+  if (trimmed.startsWith('You are Devin, an interactive command line')
+    || trimmed.startsWith('You are powered by ')
+    || /^Available subagent profiles for the\s+`?run_subagent`?\s+tool\./.test(trimmed)
+    || trimmed.startsWith('The following skills can be invoked using the `skill` tool.')) {
+    return '';
+  }
+
+  return content
+    .replace(/<system_info>[\s\S]*?<\/system_info>/g, '')
+    .replace(/<rules\b[^>]*>[\s\S]*?<\/rules>/g, '')
+    .replace(/<available_skills>[\s\S]*?<\/available_skills>/g, '')
+    .replace(/<observation>[\s\S]*?<\/observation>/g, '')
+    .replace(/<tool_call\b[^>]*>[\s\S]*?<\/tool_call>/g, '')
+    .replace(/<file-view\b[^>]*>[\s\S]*?<\/file-view>/g, '');
+}
+
 const visibleMessages = computed(() => {
+  if (isReviewMode.value) {
+    return (reviewTranscript.value?.messages || []).flatMap((message, index) => {
+      const originalContent = reviewMessageContentToString(message.content);
+      const content = showDetails.value ? originalContent : stripReviewDetailBlocks(originalContent);
+      if (!content.trim()) return [];
+      return [{
+        id: `review-${index}`,
+        role: (message.role === 'user' || message.role === 'assistant' ? message.role : 'assistant') as 'user' | 'assistant',
+        content,
+        kind: 'text' as const,
+        timestamp: message.timestamp,
+      }];
+    });
+  }
   if (showDetails.value) return messages.value;
 
   const messagesWithoutTools = messages.value.filter((message) => (
@@ -1296,6 +1355,21 @@ watch(() => props.sessionId, async (newSessionId) => {
   }
 
   clearMessages();
+}, { immediate: true });
+
+watch(() => [props.reviewSourceId, props.reviewSessionId], async ([sourceId, sessionId]) => {
+  const requestId = ++reviewTranscriptRequestId;
+  reviewTranscript.value = null;
+  if (!sourceId || !sessionId) return;
+
+  try {
+    const transcript = await getReviewTranscript(sourceId, sessionId);
+    if (requestId === reviewTranscriptRequestId) reviewTranscript.value = transcript;
+  } catch (error) {
+    if (requestId === reviewTranscriptRequestId) {
+      console.error('Failed to load review transcript', error);
+    }
+  }
 }, { immediate: true });
 
 watch(visibleMessages, async () => {
@@ -4040,6 +4114,14 @@ function handleInputKeydown(event: KeyboardEvent) {
 
 .mobile-trigger-btns {
   display: none;
+}
+
+.review-banner {
+  padding: 0.5rem 1rem;
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-size: 0.875rem;
+  border-bottom: 1px solid var(--border);
 }
 
 /* ── Mobile ────────────────────────────────────────────────────────────── */

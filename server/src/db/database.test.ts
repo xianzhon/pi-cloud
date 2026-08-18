@@ -36,6 +36,7 @@ describe('openPiuiDatabase', () => {
       'memory_projects',
       'memory_recall_events',
       'project_tasks',
+      'review_sources',
       'security_settings',
       'session_builtin_events',
       'session_skill_policies',
