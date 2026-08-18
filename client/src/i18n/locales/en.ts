@@ -956,7 +956,7 @@ export default {
       savedAccount: 'saved account',
       gatewayRequestFailed: 'Gateway request failed ({status})',
       reviewSources: 'Review sources',
-      reviewSourcesHelp: 'Browse sessions from other coding agents. Installed Devin CLI and Claude Code sources are detected automatically.',
+      reviewSourcesHelp: 'Browse sessions from other coding agents. Installed Devin CLI, Claude Code, and Codex sources are detected automatically.',
       reviewSourceType: 'Review source type',
       reviewSourceLabel: 'Label',
       reviewSourcePath: 'Data path',

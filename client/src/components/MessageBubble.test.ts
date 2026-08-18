@@ -591,6 +591,51 @@ describe('MessageBubble', () => {
     expect(wrapper.find('.event-block code').text()).toBe(command);
   });
 
+  it('shows Codex exec commands only in the event header', () => {
+    const toolInput = JSON.stringify({ cmd: 'git status --short', workdir: '/workspace/pi-webui' }, null, 2);
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'codex-exec-1',
+          role: 'assistant',
+          content: toolInput,
+          kind: 'tool_call',
+          status: 'pending',
+          title: 'Executing tool exec_command',
+          toolName: 'exec_command',
+          toolInput,
+        },
+      },
+    });
+
+    expect(wrapper.find('.event-path').text()).toBe('git status --short');
+    expect(wrapper.find('.event-path').attributes('title')).toBe('git status --short');
+    expect(wrapper.find('.event-block').exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'PhCaretDown' }).exists()).toBe(false);
+  });
+
+  it('shows the originating Codex command on its result', () => {
+    const toolInput = JSON.stringify({ cmd: 'pnpm test' }, null, 2);
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'codex-result-1',
+          role: 'assistant',
+          content: '12 tests passed',
+          kind: 'tool_result',
+          status: 'success',
+          title: 'Tool exec_command completed',
+          toolName: 'exec_command',
+          toolInput,
+          toolOutput: '12 tests passed',
+        },
+      },
+    });
+
+    expect(wrapper.find('.event-path').text()).toBe('pnpm test');
+    expect(wrapper.find('.event-block code.hljs.language-bash').text()).toBe('12 tests passed');
+  });
+
   it('toggles tool call code blocks from the event header', async () => {
     const toolInput = JSON.stringify({ command: 'pnpm test', timeout: 120 }, null, 2);
 

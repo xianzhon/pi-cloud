@@ -413,16 +413,10 @@ const hasExpandableThinking = computed(() => {
 const eventTitle = computed(() => props.message.kind === 'thinking' ? thinkingTitle.value : props.message.title || props.message.toolName || t('components.messageBubble.event'));
 const eventPathLabel = computed(() => {
   if (props.message.kind !== 'tool_call' && props.message.kind !== 'tool_result') return '';
-  const toolName = (props.message.toolName || '').toLowerCase();
-  if (toolName === 'bash' || toolName === 'shell') return truncateMiddle(getToolInputCommand(), 120);
-  if (!['edit', 'read', 'write'].includes(toolName)) return '';
+  if (isCommandTool()) return truncateMiddle(getToolInputCommand(), 120);
   return getToolInputPath();
 });
-const eventPathTitle = computed(() => {
-  const toolName = (props.message.toolName || '').toLowerCase();
-  if (toolName === 'bash' || toolName === 'shell') return getToolInputCommand();
-  return eventPathLabel.value;
-});
+const eventPathTitle = computed(() => isCommandTool() ? getToolInputCommand() : eventPathLabel.value);
 const isCollapsibleEvent = computed(() => props.message.kind !== 'thinking' && (
   Boolean(renderedToolInput.value) ||
   Boolean(renderedToolOutput.value) ||
@@ -613,23 +607,30 @@ function getToolInputPath(): string {
   return typeof candidate === 'string' ? candidate : '';
 }
 
+function isCommandTool(): boolean {
+  return ['bash', 'shell', 'exec_command', 'shell_command'].includes((props.message.toolName || '').toLowerCase());
+}
+
 function getToolInputCommand(): string {
   const input = props.message.toolInput || '';
   const parsed = parseJsonObject(input);
-  return typeof parsed?.command === 'string' ? parsed.command : '';
+  const command = parsed?.command ?? parsed?.cmd;
+  if (typeof command === 'string') return command;
+  return Array.isArray(command) && command.every((part) => typeof part === 'string') ? command.join(' ') : '';
 }
 
 function inferToolBlockLanguage(kind: 'input' | 'output'): string {
   const toolName = (props.message.toolName || '').toLowerCase();
 
   if (kind === 'input') {
+    if (toolName === 'apply_patch') return 'diff';
     if (parseJsonObject(props.message.toolInput || '')) return 'json';
-    if (toolName === 'bash' || toolName === 'shell') return 'bash';
+    if (isCommandTool()) return 'bash';
     return '';
   }
 
-  if (toolName === 'read') return languageFromPath(getToolInputPath());
-  if (toolName === 'bash' || toolName === 'shell') return 'bash';
+  if (toolName === 'read' || toolName === 'codegraph_node') return languageFromPath(getToolInputPath());
+  if (isCommandTool()) return 'bash';
   return '';
 }
 
@@ -983,8 +984,9 @@ const renderedToolInput = computed(() => {
     const content = getWriteContent();
     if (content != null) return renderHighlightedCode(content, languageFromPath(getToolInputPath()));
   }
-  if (toolName === 'read' && getToolInputPath()) return '';
-  if (toolName === 'bash' || toolName === 'shell') {
+  if ((toolName === 'read' || toolName === 'view_image' || toolName === 'codegraph_node') && getToolInputPath()) return '';
+  if (toolName === 'exec_command' || toolName === 'shell_command') return '';
+  if (isCommandTool()) {
     const command = getToolInputCommand();
     if (command) return renderHighlightedCode(command, 'bash');
   }

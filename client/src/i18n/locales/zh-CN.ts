@@ -956,7 +956,7 @@ export default {
       savedAccount: '已保存的账户',
       gatewayRequestFailed: '网关请求失败（{status}）',
       reviewSources: '审查来源',
-      reviewSourcesHelp: '浏览其他编码代理的会话。已安装的 Devin CLI 和 Claude Code 来源会被自动检测。',
+      reviewSourcesHelp: '浏览其他编码代理的会话。已安装的 Devin CLI、Claude Code 和 Codex 来源会被自动检测。',
       reviewSourceType: '审查来源类型',
       reviewSourceLabel: '名称',
       reviewSourcePath: '数据路径',

@@ -47,7 +47,7 @@ vi.mock('../composables/useChat', () => ({
 
 vi.mock('./MessageBubble.vue', () => ({
   default: {
-    template: '<div class="message-bubble-stub" :data-kind="message.kind" :data-tool-name="message.toolName">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button></div>',
+    template: '<div class="message-bubble-stub" :data-kind="message.kind" :data-tool-name="message.toolName" :data-title="message.title" :data-tool-input="message.toolInput" :data-status="message.status">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button></div>',
     props: ['message', 'hideThinkingBlock'],
     emits: ['annotate'],
   },
@@ -1223,8 +1223,10 @@ describe('ChatPanel', () => {
       if (String(url).includes('/api/review-sources/claude-code/sessions/review-1/transcript')) {
         return new Response(JSON.stringify({ transcript: {
           messages: [
-            { role: 'assistant', content: '<tool_call name="Bash">\n{"command":"tea pr 88"}\n</tool_call>' },
-            { role: 'assistant', content: '<observation>\ncommand output\n</observation>' },
+            { role: 'assistant', content: '<tool_call name="exec_command" id="call-1">\n{"cmd":"tea pr 88"}\n</tool_call>' },
+            { role: 'assistant', content: '<tool_call name="exec_command" id="call-2">\n{"cmd":"git status"}\n</tool_call>' },
+            { role: 'assistant', content: '<observation tool_call_id="call-2">\nstatus output\n</observation>' },
+            { role: 'assistant', content: '<observation tool_call_id="call-1" status="failure">\ncommand output\n</observation>' },
           ],
         } }), { status: 200 });
       }
@@ -1237,13 +1239,17 @@ describe('ChatPanel', () => {
     await wrapper.find('.details-toggle-btn').trigger('click');
     await nextTick();
 
-    const toolCall = wrapper.find('[data-kind="tool_call"]');
-    const toolResult = wrapper.find('[data-kind="tool_result"]');
-    expect(toolCall.attributes('data-tool-name')).toBe('Bash');
-    expect(toolCall.text()).toContain('tea pr 88');
-    expect(toolResult.attributes('data-tool-name')).toBe('Bash');
-    expect(toolResult.text()).toContain('command output');
-    expect(wrapper.text()).not.toContain('name="Bash"');
+    const toolCalls = wrapper.findAll('[data-kind="tool_call"]');
+    const toolResults = wrapper.findAll('[data-kind="tool_result"]');
+    expect(toolCalls[0].attributes('data-tool-name')).toBe('exec_command');
+    expect(toolCalls[0].text()).toContain('tea pr 88');
+    expect(toolResults[0].attributes('data-tool-input')).toContain('git status');
+    expect(toolResults[0].text()).toContain('status output');
+    expect(toolResults[1].attributes('data-tool-input')).toContain('tea pr 88');
+    expect(toolResults[1].attributes('data-status')).toBe('failure');
+    expect(toolResults[1].attributes('data-title')).toBe('Tool exec_command failed');
+    expect(toolResults[1].text()).toContain('command output');
+    expect(wrapper.text()).not.toContain('name="exec_command"');
     expect(wrapper.text()).not.toContain('Observation');
   });
 
