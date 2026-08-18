@@ -151,7 +151,8 @@
               <span>PR #{{ activePullRequest.number }}</span>
             </a>
             <span v-if="selectedAgentName" class="agent-pill" :title="t('app.agentName', { name: selectedAgentName })">
-              <PhRobot :size="13" weight="bold" />
+              <PhMagnifyingGlass v-if="isReviewProfileSelected" :size="13" weight="bold" />
+              <PhRobot v-else :size="13" weight="bold" />
               <span>{{ selectedAgentName }}</span>
             </span>
           </span>
@@ -754,6 +755,7 @@ function sessionRouteLocation(sessionId: string, cwd?: string) {
 const newSessionModels = ref<ModelOption[]>([]);
 const newSessionInitialModel = ref('');
 const selectedAgentName = computed(() => selectedReviewSourceLabel.value || formatAgentName(selectedAgentProfileLabel.value));
+const isReviewProfileSelected = computed(() => Boolean(selectedReviewSourceLabel.value));
 const selectedAgentModelSummary = ref('');
 const showEditor = ref(false);
 const isFullscreen = ref(false);

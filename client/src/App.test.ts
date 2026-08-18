@@ -619,7 +619,7 @@ describe('App routing', () => {
     expect(wrapper.find('.session-cwd').attributes('title')).toBe('/workspace');
   });
 
-  it('shows the review source label in the agent pill when a review source is selected', async () => {
+  it('shows the review source label and search icon when a review profile is selected', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url === '/api/sessions/project-path') {
         return { json: async () => ({ projectPath: '/workspace' }) };
@@ -646,7 +646,10 @@ describe('App routing', () => {
     await wrapper.findComponent({ name: 'SessionSidebar' }).vm.$emit('reviewSourceSelected', 'devin', 'Devin');
     await flushPromises();
 
-    expect(wrapper.find('.agent-pill').text()).toContain('Devin');
+    const agentPill = wrapper.find('.agent-pill');
+    expect(agentPill.text()).toContain('Devin');
+    expect(agentPill.findComponent({ name: 'PhMagnifyingGlass' }).exists()).toBe(true);
+    expect(agentPill.findComponent({ name: 'PhRobot' }).exists()).toBe(false);
   });
 
   it('routes a selected review session with its source profile and project path', async () => {
