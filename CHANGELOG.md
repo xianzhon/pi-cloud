@@ -2,6 +2,27 @@
 
 All notable changes to Pi WebUI are documented here.
 
+## [1.0.3] - 2026-08-19
+
+### Added
+
+- Added review-session integrations for Devin, Claude Code, and Codex, with source configuration, session search, and transcript viewing.
+- Added secure HTML file previews with sandboxing and support for local page assets.
+- Added new-folder creation to the folder picker.
+- Added an action to move saved sessions to another folder.
+
+### Changed
+
+- Improved review transcript rendering, including tool-call details, patch display, output indentation, and PDF export.
+
+### Fixed
+
+- Wait for the chat connection before starting tasks in newly opened tabs.
+- Select the correct review session from the compact session rail.
+- Normalize terminal progress output before rendering tool results.
+- Normalize Windows file paths across file links, the editor, and file-tree navigation.
+- Prefer the `origin` remote when resolving GitHub or Gitea integrations, while falling back to other matching remotes.
+
 ## [1.0.2] - 2026-08-16
 
 ### Added
