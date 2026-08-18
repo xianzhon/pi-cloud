@@ -1163,6 +1163,34 @@ describe('ChatPanel', () => {
     expect(wrapper.text()).toContain('Visible review conclusion');
   });
 
+  it('merges adjacent thinking-only messages in clean review mode', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/review-sources/claude-code/sessions/review-1/transcript')) {
+        return new Response(JSON.stringify({ transcript: {
+          messages: [
+            { role: 'assistant', content: '<thinking>Check the login.</thinking>\n\n<tool_call name="bash">first command</tool_call>' },
+            { role: 'assistant', content: '<thinking>Try the correct flag.</thinking>\n\n<tool_call name="bash">second command</tool_call>' },
+            { role: 'assistant', content: 'The login works.' },
+            { role: 'assistant', content: '<thinking>Review the diff.</thinking>\n\n<tool_call name="bash">third command</tool_call>' },
+          ],
+        } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, { props: { reviewSourceId: 'claude-code', reviewSessionId: 'review-1' } });
+    await flushPromises();
+    await nextTick();
+
+    const thinkingMessages = wrapper.findAll('.message-bubble-stub')
+      .filter((message) => message.text().includes('<thinking>'));
+    expect(thinkingMessages).toHaveLength(2);
+    expect(thinkingMessages[0].text()).toContain('Check the login.');
+    expect(thinkingMessages[0].text()).toContain('Try the correct flag.');
+    expect(thinkingMessages[1].text()).toContain('Review the diff.');
+    expect(wrapper.text()).toContain('The login works.');
+  });
+
   it('hides tool activity in clean mode', async () => {
     chatMessages.value = [
       { id: 'user-1', role: 'user', content: 'please inspect files' },

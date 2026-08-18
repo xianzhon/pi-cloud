@@ -44,7 +44,7 @@
   <div
     v-else-if="showMessageBubble"
     class="message-bubble"
-    :class="[message.role, { 'git-diff-card': isGitDiffMessage, 'thinking-only-bubble': (message.thinking?.trim() && !message.content.trim()) || isThinkingTagOnly }]"
+    :class="[message.role, { 'git-diff-card': isGitDiffMessage, 'thinking-only-bubble': (message.thinking?.trim() && !message.content.trim()) || isThinkingTagOnly, 'thinking-header-only-bubble': isHeaderOnlyThinkingTag }]"
     :aria-label="imageMessageLabel || undefined"
   >
     <div class="message-actions">
@@ -489,6 +489,11 @@ const usageTitle = computed(() => {
 
 const isGitDiffMessage = computed(() => props.message.role === 'assistant' && props.message.content.trim().startsWith('### Git diff'));
 const isThinkingTagOnly = computed(() => props.message.role === 'assistant' && /^\s*<thinking>[\s\S]*<\/thinking>\s*$/.test(props.message.content));
+const isHeaderOnlyThinkingTag = computed(() => {
+  if (!isThinkingTagOnly.value) return false;
+  const match = props.message.content.match(/^\s*<thinking>([\s\S]*?)<\/thinking>\s*$/);
+  return Boolean(match && !splitThinkingBlock(match[1]).content);
+});
 
 function escapeHtml(value: string) {
   return value
@@ -856,11 +861,16 @@ function renderMarkdown(content: string) {
 }
 
 function splitThinkingBlock(body: string): { title: string; content: string } {
-  const lines = body.trim().split(/\r?\n/);
-  const firstLine = lines[0] || t('components.messageBubble.thinking');
-  const headingMatch = firstLine.match(/^\*\*(.+?)\*\*\s*$/);
-  if (!headingMatch) return { title: t('components.messageBubble.thinking'), content: body.trim() };
-  return { title: headingMatch[1].trim(), content: lines.slice(1).join('\n').trim() };
+  const trimmed = body.trim();
+  const lines = trimmed.split(/\r?\n/);
+  const headingMatch = lines[0]?.match(/^\*\*(.+?)\*\*\s*$/);
+  if (headingMatch) return { title: headingMatch[1].trim(), content: lines.slice(1).join('\n').trim() };
+
+  const sentenceMatch = trimmed.match(/^([\s\S]*?[.!?])(?:\s+([\s\S]*))?$/);
+  if (sentenceMatch) return { title: sentenceMatch[1].trim(), content: (sentenceMatch[2] || '').trim() };
+
+  const [title = t('components.messageBubble.thinking'), ...remainingLines] = lines;
+  return { title: title.trim(), content: remainingLines.join('\n').trim() };
 }
 
 function renderAssistantContent(content: string) {
@@ -880,11 +890,13 @@ function renderAssistantContent(content: string) {
     if (typeof match[1] === 'string') {
       const body = match[1].replace(/^\n|\n$/g, '');
       const thinking = splitThinkingBlock(body);
-      const renderedBody = thinking.content ? renderMarkdown(thinking.content) : '';
+      const header = `<span class="review-thinking-icon" aria-hidden="true"></span><span>${escapeHtml(thinking.title)}</span>`;
       segments.push({
         type: 'internal',
         kind: 'thinking',
-        html: `<details data-internal="thinking" class="review-internal-block"><summary class="review-internal-header"><span class="review-thinking-icon" aria-hidden="true"></span><span>${escapeHtml(thinking.title)}</span></summary><div class="review-internal-body">${renderedBody}</div></details>`,
+        html: thinking.content
+          ? `<details data-internal="thinking" class="review-internal-block"><summary class="review-internal-header">${header}</summary><div class="review-internal-body">${renderMarkdown(thinking.content)}</div></details>`
+          : `<div data-internal="thinking" class="review-internal-header review-thinking-only">${header}</div>`,
       });
     } else if (typeof match[3] === 'string') {
       const attrs = match[2] || '';
@@ -1282,6 +1294,12 @@ async function copyContent() {
   padding: 0.55rem 0.75rem;
 }
 
+.message-bubble.thinking-header-only-bubble {
+  padding: 0.25rem 0;
+  border-color: transparent;
+  background: transparent;
+}
+
 .message-actions {
   position: absolute;
   top: 0.5rem;
@@ -1624,6 +1642,16 @@ async function copyContent() {
 .message-content :deep(.review-internal-header:hover),
 .event-content :deep(.review-internal-header:hover) {
   color: var(--text-primary);
+}
+
+.message-content :deep(.review-thinking-only),
+.event-content :deep(.review-thinking-only) {
+  cursor: default;
+}
+
+.message-content :deep(.review-thinking-only::after),
+.event-content :deep(.review-thinking-only::after) {
+  display: none;
 }
 
 .message-content :deep(.review-internal-header::after),

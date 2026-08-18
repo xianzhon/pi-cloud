@@ -1100,9 +1100,25 @@ function stripReviewDetailBlocks(content: string): string {
     .replace(/<file-view\b[^>]*>[\s\S]*?<\/file-view>/g, '');
 }
 
+function thinkingOnlyBody(content: string): string | undefined {
+  const bodies: string[] = [];
+  const pattern = /<thinking>([\s\S]*?)<\/thinking>/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    if (content.slice(lastIndex, match.index).trim()) return undefined;
+    if (match[1].trim()) bodies.push(match[1].trim());
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (!bodies.length || content.slice(lastIndex).trim()) return undefined;
+  return bodies.join('\n\n');
+}
+
 const visibleMessages = computed(() => {
   if (isReviewMode.value) {
-    return (reviewTranscript.value?.messages || []).flatMap((message, index) => {
+    const reviewMessages = (reviewTranscript.value?.messages || []).flatMap((message, index) => {
       if (!showDetails.value && message.detailOnly) return [];
       const originalContent = reviewMessageContentToString(message.content);
       const content = showDetails.value ? originalContent : stripReviewDetailBlocks(originalContent);
@@ -1115,6 +1131,18 @@ const visibleMessages = computed(() => {
         timestamp: message.timestamp,
       }];
     });
+
+    return reviewMessages.reduce<typeof reviewMessages>((visible, message) => {
+      const body = message.role === 'assistant' ? thinkingOnlyBody(message.content) : undefined;
+      const previous = visible.at(-1);
+      const previousBody = previous?.role === 'assistant' ? thinkingOnlyBody(previous.content) : undefined;
+      if (previous && body !== undefined && previousBody !== undefined && !showDetails.value) {
+        previous.content = `<thinking>\n${previousBody}\n\n${body}\n</thinking>`;
+      } else {
+        visible.push(message);
+      }
+      return visible;
+    }, []);
   }
   if (showDetails.value) return messages.value;
 

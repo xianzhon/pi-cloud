@@ -861,6 +861,40 @@ describe('MessageBubble', () => {
     expect(observationBlock.text()).toContain('-- 5 matches in useChat.test.ts');
   });
 
+  it('uses the first thinking sentence as the collapsed header', () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'sentence-thinking',
+          role: 'assistant',
+          content: '<thinking>Check the login first. Then inspect the pull request changes.</thinking>',
+        },
+      },
+    });
+
+    const thinkingBlock = wrapper.find('[data-internal="thinking"]');
+    expect(thinkingBlock.element.tagName).toBe('DETAILS');
+    expect(thinkingBlock.find('summary').text()).toBe('Check the login first.');
+    expect(thinkingBlock.find('.review-internal-body').text()).toBe('Then inspect the pull request changes.');
+    expect(wrapper.text()).not.toContain('Thinking');
+  });
+
+  it('renders a one-sentence thought without an expandable card', () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'single-sentence-thinking',
+          role: 'assistant',
+          content: '<thinking>Check the login first.</thinking>',
+        },
+      },
+    });
+
+    expect(wrapper.find('[data-internal="thinking"]').element.tagName).toBe('DIV');
+    expect(wrapper.find('.review-internal-body').exists()).toBe(false);
+    expect(wrapper.find('.message-bubble').classes()).toContain('thinking-header-only-bubble');
+  });
+
   it('renders internal blocks even when the message has no other visible text', () => {
     const content = [
       '<thinking>\nDeciding what to investigate.\n</thinking>',
@@ -880,7 +914,10 @@ describe('MessageBubble', () => {
       },
     });
 
-    expect(wrapper.find('[data-internal="thinking"]').exists()).toBe(true);
+    const thinkingBlock = wrapper.find('[data-internal="thinking"]');
+    expect(thinkingBlock.element.tagName).toBe('DIV');
+    expect(thinkingBlock.text()).toBe('Deciding what to investigate.');
+    expect(thinkingBlock.find('.review-internal-body').exists()).toBe(false);
     expect(wrapper.find('[data-internal="tool-call"]').exists()).toBe(true);
     expect(wrapper.find('[data-internal="observation"]').exists()).toBe(true);
     expect(wrapper.find('.message-content').text().trim().length).toBeGreaterThan(0);
