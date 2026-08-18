@@ -1135,6 +1135,8 @@ describe('ChatPanel', () => {
     await flushPromises();
     await nextTick();
 
+    expect(wrapper.find('.review-banner').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Reviewing session:');
     expect(wrapper.text()).toContain('Visible review conclusion');
     expect(wrapper.text()).toContain('Visible rule-following text');
     expect(wrapper.text()).not.toContain('You are Devin');

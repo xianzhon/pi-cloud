@@ -225,7 +225,6 @@ export default {
       modelChangedTo: '模型已更改为 `{model}` [{provider}]。',
       modelChanged: '模型已更改',
       failedToChangeModel: '更改模型失败',
-      reviewingSession: '审查会话：{session}',
       shown: '显示',
       hidden: '隐藏',
       exporting: '正在导出…',

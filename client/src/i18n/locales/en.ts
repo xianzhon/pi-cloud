@@ -225,7 +225,6 @@ export default {
       modelChangedTo: 'Model changed to `{model}` [{provider}].',
       modelChanged: 'Model changed',
       failedToChangeModel: 'Failed to change model',
-      reviewingSession: 'Reviewing session: {session}',
       shown: 'Shown',
       hidden: 'Hidden',
       exporting: 'Exporting…',

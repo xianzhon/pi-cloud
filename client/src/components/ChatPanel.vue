@@ -3,9 +3,6 @@
   <div class="chat-workspace">
     <section class="chat-panel discussion-pane">
     <div class="messages-shell">
-      <div v-if="isReviewMode" class="review-banner">
-        {{ t('components.chatPanel.reviewingSession', { session: reviewSessionTitle }) }}
-      </div>
       <div
         class="messages"
         ref="messagesRef"
@@ -776,7 +773,6 @@ const selectedMessageIndex = ref(0);
 const reviewTranscript = ref<ReviewSessionTranscript | null>(null);
 let reviewTranscriptRequestId = 0;
 const isReviewMode = computed(() => Boolean(props.reviewSourceId && props.reviewSessionId));
-const reviewSessionTitle = computed(() => props.reviewSessionId || '');
 const showDetails = ref(false);
 const showViewOptions = ref(false);
 const isExportingPdf = ref(false);
@@ -4135,14 +4131,6 @@ function handleInputKeydown(event: KeyboardEvent) {
 
 .mobile-trigger-btns {
   display: none;
-}
-
-.review-banner {
-  padding: 0.5rem 1rem;
-  background: var(--accent-muted);
-  color: var(--accent);
-  font-size: 0.875rem;
-  border-bottom: 1px solid var(--border);
 }
 
 /* ── Mobile ────────────────────────────────────────────────────────────── */

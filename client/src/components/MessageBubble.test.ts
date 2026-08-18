@@ -840,7 +840,9 @@ describe('MessageBubble', () => {
     const thinkingBlock = wrapper.find('[data-internal="thinking"]');
     expect(thinkingBlock.element.tagName).toBe('DETAILS');
     expect(thinkingBlock.find('summary').text()).toBe('Correcting testing logic');
-    expect(thinkingBlock.find('.review-thinking-icon').exists()).toBe(true);
+    const thinkingIcon = thinkingBlock.find('.review-thinking-icon');
+    expect(thinkingIcon.element.tagName).toBe('svg');
+    expect(thinkingIcon.findAll('path')).toHaveLength(2);
     expect(thinkingBlock.attributes('open')).toBeUndefined();
     expect(thinkingBlock.find('.review-internal-body').text()).toContain('No obvious newline handling');
     expect(thinkingBlock.find('.review-internal-body').text()).not.toContain('Correcting testing logic');
