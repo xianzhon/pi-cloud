@@ -133,10 +133,11 @@
       </div>
       <div class="mobile-trigger-btns">
         <button class="trigger-btn" @click="insertTrigger('@')" type="button">@</button>
-        <button class="trigger-btn trigger-btn-clear" :disabled="!inputText" @click="inputText = ''; resizeInput()" type="button">✕</button>
       </div>
       <div class="composer-actions">
-        <button class="send-btn" disabled>{{ t('components.chatPanel.send') }}</button>
+        <button class="send-btn review-clear-btn" :disabled="!inputText" @click="clearReviewInput">
+          {{ t('components.chatPanel.clear') }}
+        </button>
       </div>
     </div>
     <div v-else class="input-area">
@@ -3189,6 +3190,12 @@ async function insertSlashCommand(command: SlashCommandItem) {
   resizeInput();
 }
 
+function clearReviewInput(): void {
+  inputText.value = '';
+  fileSearch.close();
+  resizeInputAfterDomUpdate();
+}
+
 async function insertFileReference(file: FileSearchResult) {
   const token = fileSearch.activeToken.value;
   if (!token) return;
@@ -3203,7 +3210,7 @@ async function insertFileReference(file: FileSearchResult) {
   resizeInput();
   
   window.dispatchEvent(new CustomEvent('open-file-in-editor', {
-    detail: { path: file.path, kind: 'path', onlyIfEditorVisible: true }
+    detail: { path: file.path, kind: 'path', onlyIfEditorVisible: !isReviewMode.value }
   }));
 }
 

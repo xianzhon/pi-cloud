@@ -236,6 +236,7 @@ export default {
       exitFullscreen: 'Exit fullscreen',
       enterFullscreen: 'Enter fullscreen',
       send: 'Send',
+      clear: 'Clear',
       generateCommitMessageWithAi: 'Generate commit message with AI',
       openASessionToGenerateACommitMessage: 'Open a session to generate a commit message with AI',
       generating: 'Generating...',

@@ -236,6 +236,7 @@ export default {
       exitFullscreen: '退出全屏',
       enterFullscreen: '进入全屏',
       send: '发送',
+      clear: '清除',
       generateCommitMessageWithAi: '使用 AI 生成提交消息',
       openASessionToGenerateACommitMessage: '请先打开会话，再使用 AI 生成提交消息',
       generating: '生成...',

@@ -1133,7 +1133,9 @@ describe('ChatPanel', () => {
     expect(textarea.exists()).toBe(true);
     expect(textarea.attributes('disabled')).toBeUndefined();
     expect(textarea.attributes('placeholder')).toBe('Type @ to search and open a file...');
-    expect(wrapper.find('.send-btn').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.review-clear-btn').text()).toBe('Clear');
+    expect(wrapper.find('.review-clear-btn').attributes('disabled')).toBeDefined();
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Send')).toBe(false);
     expect(wrapper.find('.attach-image-btn').exists()).toBe(false);
     expect(wrapper.find('.composer-skill-selector').exists()).toBe(false);
     expect(wrapper.find('.composer-model-selector').exists()).toBe(false);
@@ -1149,7 +1151,7 @@ describe('ChatPanel', () => {
     await wrapper.find('.file-search-item').trigger('click');
     expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
       type: 'open-file-in-editor',
-      detail: { path: 'src/components/ChatPanel.vue', kind: 'path', onlyIfEditorVisible: true },
+      detail: { path: 'src/components/ChatPanel.vue', kind: 'path', onlyIfEditorVisible: false },
     }));
 
     await textarea.setValue('read-only draft');
@@ -1157,6 +1159,9 @@ describe('ChatPanel', () => {
     await textarea.trigger('keydown', { key: 'Enter', ctrlKey: true });
     expect(await wrapper.vm.submitExternalPrompt('external prompt')).toBe(false);
     expect(sendMessage).not.toHaveBeenCalled();
+
+    await wrapper.find('.review-clear-btn').trigger('click');
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('');
   });
 
   it('hides Devin context blocks in clean review mode and shows them in details mode', async () => {
