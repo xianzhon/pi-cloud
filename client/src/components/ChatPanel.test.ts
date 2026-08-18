@@ -47,7 +47,7 @@ vi.mock('../composables/useChat', () => ({
 
 vi.mock('./MessageBubble.vue', () => ({
   default: {
-    template: '<div class="message-bubble-stub">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button></div>',
+    template: '<div class="message-bubble-stub" :data-kind="message.kind" :data-tool-name="message.toolName">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button></div>',
     props: ['message', 'hideThinkingBlock'],
     emits: ['annotate'],
   },
@@ -1109,6 +1109,170 @@ describe('ChatPanel', () => {
 
     expect(sendMessage).not.toHaveBeenCalled();
     expect((textarea.element as HTMLTextAreaElement).value).toBe('/help ');
+  });
+
+  it('keeps a minimal read-only composer with file mentions in review mode', async () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/transcript')) {
+        return new Response(JSON.stringify({ transcript: { messages: [] } }), { status: 200 });
+      }
+      if (url.includes('/api/files/search')) {
+        return new Response(JSON.stringify({ files: ['src/components/ChatPanel.vue'] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ commands: [] }), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, {
+      props: { reviewSourceId: 'devin', reviewSessionId: 'review-1', projectPath: '.' },
+    });
+    await flushPromises();
+
+    const textarea = wrapper.find('#chat-input');
+    expect(textarea.exists()).toBe(true);
+    expect(textarea.attributes('disabled')).toBeUndefined();
+    expect(textarea.attributes('placeholder')).toBe('Type @ to search and open a file...');
+    expect(wrapper.find('.review-clear-btn').text()).toBe('Clear');
+    expect(wrapper.find('.review-clear-btn').attributes('disabled')).toBeDefined();
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Send')).toBe(false);
+    expect(wrapper.find('.attach-image-btn').exists()).toBe(false);
+    expect(wrapper.find('.composer-skill-selector').exists()).toBe(false);
+    expect(wrapper.find('.composer-model-selector').exists()).toBe(false);
+
+    await textarea.setValue('/help');
+    await nextTick();
+    expect(wrapper.find('.slash-menu').exists()).toBe(false);
+
+    await textarea.setValue('@chat');
+    (textarea.element as HTMLTextAreaElement).setSelectionRange(5, 5);
+    await textarea.trigger('input');
+    await flushPromises();
+    await wrapper.find('.file-search-item').trigger('click');
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'open-file-in-editor',
+      detail: { path: 'src/components/ChatPanel.vue', kind: 'path', onlyIfEditorVisible: false },
+    }));
+
+    await textarea.setValue('read-only draft');
+    await textarea.trigger('keydown', { key: 'Enter' });
+    await textarea.trigger('keydown', { key: 'Enter', ctrlKey: true });
+    expect(await wrapper.vm.submitExternalPrompt('external prompt')).toBe(false);
+    expect(sendMessage).not.toHaveBeenCalled();
+
+    await wrapper.find('.review-clear-btn').trigger('click');
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('hides Devin context blocks in clean review mode and shows them in details mode', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/review-sources/devin/sessions/review-1/transcript')) {
+        return new Response(JSON.stringify({ transcript: {
+          messages: [
+            { role: 'assistant', content: 'You are Devin, an interactive command line agent from Cognition.', detailOnly: true },
+            { role: 'assistant', content: 'Available subagent profiles for the `run_subagent` tool.', detailOnly: true },
+            { role: 'assistant', content: 'You are powered by Kimi K2.7.', detailOnly: true },
+            { role: 'assistant', content: '<system_info>\nPlatform: linux\n</system_info>' },
+            { role: 'assistant', content: '<available_skills>\nThe following skills can be invoked using the `skill` tool.\n</available_skills>' },
+            { role: 'assistant', content: '<rules type="always-on">\nKeep changes focused.\n</rules>\n\nVisible rule-following text' },
+            { role: 'assistant', content: '<thinking>inspect</thinking>\\n<file-view path="/workspace/src/App.vue">\\n1| const app = true;\\n</file-view>' },
+            { role: 'assistant', content: '<observation>{"results":[{"content":"Hidden observation"}]}</observation>' },
+            { role: 'assistant', content: 'Visible review conclusion' },
+          ],
+        } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, { props: { reviewSourceId: 'devin', reviewSessionId: 'review-1' } });
+    await flushPromises();
+    await nextTick();
+
+    expect(wrapper.find('.review-banner').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Reviewing session:');
+    expect(wrapper.text()).toContain('Visible review conclusion');
+    expect(wrapper.text()).toContain('Visible rule-following text');
+    expect(wrapper.text()).not.toContain('You are Devin');
+    expect(wrapper.text()).not.toContain('Available subagent profiles');
+    expect(wrapper.text()).not.toContain('You are powered by');
+    expect(wrapper.text()).not.toContain('Platform: linux');
+    expect(wrapper.text()).not.toContain('The following skills can be invoked');
+    expect(wrapper.text()).not.toContain('Keep changes focused');
+    expect(wrapper.text()).not.toContain('Hidden observation');
+    expect(wrapper.text()).not.toContain('file-view path=');
+    expect(wrapper.text()).toContain('inspect');
+
+    await wrapper.find('.view-options-toggle-btn').trigger('mouseenter');
+    await nextTick();
+    await wrapper.find('.details-toggle-btn').trigger('click');
+    await nextTick();
+
+    expect(wrapper.text()).toContain('You are Devin');
+    expect(wrapper.text()).toContain('Available subagent profiles');
+    expect(wrapper.text()).toContain('You are powered by');
+    expect(wrapper.text()).toContain('Platform: linux');
+    expect(wrapper.text()).toContain('The following skills can be invoked');
+    expect(wrapper.text()).toContain('Keep changes focused');
+    expect(wrapper.text()).toContain('Hidden observation');
+    expect(wrapper.text()).toContain('file-view path=');
+    expect(wrapper.text()).toContain('Visible review conclusion');
+  });
+
+  it('renders review tool calls and observations like Pi tool activity in details mode', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/review-sources/claude-code/sessions/review-1/transcript')) {
+        return new Response(JSON.stringify({ transcript: {
+          messages: [
+            { role: 'assistant', content: '<tool_call name="Bash">\n{"command":"tea pr 88"}\n</tool_call>' },
+            { role: 'assistant', content: '<observation>\ncommand output\n</observation>' },
+          ],
+        } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, { props: { reviewSourceId: 'claude-code', reviewSessionId: 'review-1' } });
+    await flushPromises();
+    await wrapper.find('.view-options-toggle-btn').trigger('mouseenter');
+    await wrapper.find('.details-toggle-btn').trigger('click');
+    await nextTick();
+
+    const toolCall = wrapper.find('[data-kind="tool_call"]');
+    const toolResult = wrapper.find('[data-kind="tool_result"]');
+    expect(toolCall.attributes('data-tool-name')).toBe('Bash');
+    expect(toolCall.text()).toContain('tea pr 88');
+    expect(toolResult.attributes('data-tool-name')).toBe('Bash');
+    expect(toolResult.text()).toContain('command output');
+    expect(wrapper.text()).not.toContain('name="Bash"');
+    expect(wrapper.text()).not.toContain('Observation');
+  });
+
+  it('merges adjacent thinking-only messages in clean review mode', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/review-sources/claude-code/sessions/review-1/transcript')) {
+        return new Response(JSON.stringify({ transcript: {
+          messages: [
+            { role: 'assistant', content: '<thinking>Check the login.</thinking>\n\n<tool_call name="bash">first command</tool_call>' },
+            { role: 'assistant', content: '<thinking>Try the correct flag.</thinking>\n\n<tool_call name="bash">second command</tool_call>' },
+            { role: 'assistant', content: 'The login works.' },
+            { role: 'assistant', content: '<thinking>Review the diff.</thinking>\n\n<tool_call name="bash">third command</tool_call>' },
+          ],
+        } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, { props: { reviewSourceId: 'claude-code', reviewSessionId: 'review-1' } });
+    await flushPromises();
+    await nextTick();
+
+    const thinkingMessages = wrapper.findAll('.message-bubble-stub')
+      .filter((message) => message.text().includes('<thinking>'));
+    expect(thinkingMessages).toHaveLength(2);
+    expect(thinkingMessages[0].text()).toContain('Check the login.');
+    expect(thinkingMessages[0].text()).toContain('Try the correct flag.');
+    expect(thinkingMessages[1].text()).toContain('Review the diff.');
+    expect(wrapper.text()).toContain('The login works.');
   });
 
   it('hides tool activity in clean mode', async () => {

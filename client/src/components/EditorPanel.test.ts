@@ -550,7 +550,7 @@ describe('EditorPanel', () => {
     expect(toast.text()).toBe('File does not exist: /project/missing.ts');
   });
 
-  it('shows the workspace-relative open file path in the styled tab tooltip', async () => {
+  it('shows the open file path and dismisses the tab tooltip across lifecycle changes', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).startsWith('/api/files/tree')) {
         return {
@@ -604,6 +604,20 @@ describe('EditorPanel', () => {
     expect(tooltip.text()).toBe('/project/server/src/index.ts');
 
     await tab.trigger('mouseleave');
+    expect(wrapper.find('.editor-tab-tooltip').exists()).toBe(false);
+
+    await tab.trigger('mouseenter');
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.editor-tab-tooltip').exists()).toBe(false);
+
+    await tab.trigger('mouseenter');
+    await wrapper.setProps({ visible: false });
+    expect(wrapper.find('.editor-tab-tooltip').exists()).toBe(false);
+
+    await wrapper.setProps({ visible: true });
+    await wrapper.find('.editor-tabs .tab').trigger('mouseenter');
+    await wrapper.find('.editor-tabs .tab button').trigger('click');
     expect(wrapper.find('.editor-tab-tooltip').exists()).toBe(false);
   });
 

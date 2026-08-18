@@ -24,6 +24,7 @@
             :showHintInfo="showHintInfo"
             :showCodeBlockLanguageHeaders="showCodeBlockLanguageHeaders"
             :expandThinkingByDefault="isStreaming"
+            :showDetails="showDetails"
             @annotate="handleAnnotateImage"
           />
         </div>
@@ -105,7 +106,41 @@
       </div>
     </div>
 
-    <div class="input-area">
+    <div v-if="isReviewMode" class="input-area">
+      <FileSearchMenu
+        v-if="fileSearch.isOpen.value"
+        :files="fileSearch.suggestions.value"
+        :activeIndex="fileSearch.state.value.activeIndex"
+        :isLoading="fileSearch.state.value.isLoading"
+        :query="fileSearch.state.value.query"
+        :isOpen="fileSearch.isOpen.value"
+        @select="insertFileReference"
+      />
+      <div class="composer-shell">
+        <textarea
+          ref="inputRef"
+          v-model="inputText"
+          @input="handleInput"
+          @click="handleCaretChange"
+          @keyup="handleCaretChange"
+          @keydown="handleInputKeydown"
+          @focus="handleInputFocus"
+          :placeholder="t('components.chatPanel.reviewFileSearchPlaceholder')"
+          rows="1"
+          id="chat-input"
+          name="chat-input"
+        ></textarea>
+      </div>
+      <div class="mobile-trigger-btns">
+        <button class="trigger-btn" @click="insertTrigger('@')" type="button">@</button>
+      </div>
+      <div class="composer-actions">
+        <button class="send-btn review-clear-btn" :disabled="!inputText" @click="clearReviewInput">
+          {{ t('components.chatPanel.clear') }}
+        </button>
+      </div>
+    </div>
+    <div v-else class="input-area">
       <div
         class="input-resize-handle"
         :class="{ 'is-resizing': inputResizeStartY !== null }"
@@ -605,6 +640,8 @@ import SkillPicker from './SkillPicker.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import { exportSessionPdf, hasExportableMessages } from '../utils/sessionPdfExport';
+import { getReviewTranscript } from '../services/reviewSourceService';
+import type { ReviewSessionTranscript } from '../types/reviewSource';
 
 const t = i18n.global.t;
 
@@ -636,6 +673,8 @@ const props = withDefaults(defineProps<{
   showGoToTopButton?: boolean;
   showChatViewOptionsButton?: boolean;
   fullscreen?: boolean;
+  reviewSourceId?: string;
+  reviewSessionId?: string;
 }>(), {
   projectPath: '~',
   showHintInfo: true,
@@ -694,6 +733,19 @@ interface ChatLocalMessage {
   status?: 'pending' | 'success' | 'failure' | 'info';
   title?: string;
   memory?: MessageMemoryRecall;
+}
+
+interface ReviewVisibleMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  kind: 'text' | 'tool_call' | 'tool_result';
+  status?: 'pending' | 'success';
+  title?: string;
+  toolName?: string;
+  toolInput?: string;
+  toolOutput?: string;
+  timestamp?: number;
 }
 
 interface SummaryGeneratedDetail {
@@ -765,6 +817,9 @@ const isPolishingPrompt = ref(false);
 const promptPolishError = ref('');
 const sessionStatus = ref<SessionRuntimeStatus | null>(null);
 const selectedMessageIndex = ref(0);
+const reviewTranscript = ref<ReviewSessionTranscript | null>(null);
+let reviewTranscriptRequestId = 0;
+const isReviewMode = computed(() => Boolean(props.reviewSourceId && props.reviewSessionId));
 const showDetails = ref(false);
 const showViewOptions = ref(false);
 const isExportingPdf = ref(false);
@@ -1063,7 +1118,150 @@ function isBoldOnlyText(message: { kind?: string; content: string; thinking?: st
   return message.kind === 'text' && hasOnlyBoldSummary(message);
 }
 
+function reviewMessageContentToString(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map((item) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && 'type' in item && 'text' in item
+        && item.type === 'text' && typeof item.text === 'string') {
+        return item.text;
+      }
+      return JSON.stringify(item);
+    }).join('\n');
+  }
+  return content == null ? '' : JSON.stringify(content);
+}
+
+function stripReviewDetailBlocks(content: string): string {
+  return content
+    .replace(/<system_info>[\s\S]*?<\/system_info>/g, '')
+    .replace(/<rules\b[^>]*>[\s\S]*?<\/rules>/g, '')
+    .replace(/<available_skills>[\s\S]*?<\/available_skills>/g, '')
+    .replace(/<observation>[\s\S]*?<\/observation>/g, '')
+    .replace(/<tool_call\b[^>]*>[\s\S]*?<\/tool_call>/g, '')
+    .replace(/<file-view\b[^>]*>[\s\S]*?<\/file-view>/g, '');
+}
+
+function thinkingOnlyBody(content: string): string | undefined {
+  const bodies: string[] = [];
+  const pattern = /<thinking>([\s\S]*?)<\/thinking>/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    if (content.slice(lastIndex, match.index).trim()) return undefined;
+    if (match[1].trim()) bodies.push(match[1].trim());
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (!bodies.length || content.slice(lastIndex).trim()) return undefined;
+  return bodies.join('\n\n');
+}
+
+function reviewObservationOutput(body: string): string {
+  const trimmed = body.trim();
+  try {
+    const parsed = JSON.parse(trimmed);
+    const results = Array.isArray(parsed.results) ? parsed.results : [parsed];
+    return results.map((result: unknown) => {
+      if (result && typeof result === 'object' && 'content' in result && typeof result.content === 'string') {
+        return result.content;
+      }
+      return JSON.stringify(result, null, 2);
+    }).join('\n\n');
+  } catch {
+    return trimmed;
+  }
+}
+
+function structuredReviewMessages(): ReviewVisibleMessage[] {
+  const normalized: ReviewVisibleMessage[] = [];
+  // Review adapters emit calls and observations separately, in execution order.
+  const pendingTools: Array<{ name: string; input: string }> = [];
+  const detailPattern = /<tool_call\b([^>]*)>([\s\S]*?)<\/tool_call>|<observation>([\s\S]*?)<\/observation>/g;
+
+  for (const [messageIndex, message] of (reviewTranscript.value?.messages || []).entries()) {
+    const content = reviewMessageContentToString(message.content);
+    const role = message.role === 'user' || message.role === 'assistant' ? message.role : 'assistant';
+    let segmentIndex = 0;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    function pushText(text: string): void {
+      if (text.trim()) normalized.push({ id: `review-${messageIndex}-${segmentIndex++}`, role, content: text, kind: 'text', timestamp: message.timestamp });
+    }
+
+    while (role === 'assistant' && (match = detailPattern.exec(content)) !== null) {
+      pushText(content.slice(lastIndex, match.index));
+      if (typeof match[2] === 'string') {
+        const name = match[1].match(/\bname=["']([^"']+)["']/)?.[1]?.replace(/&quot;/g, '"') || 'tool';
+        const input = match[2].trim();
+        pendingTools.push({ name, input });
+        normalized.push({
+          id: `review-${messageIndex}-${segmentIndex++}`,
+          role: 'assistant',
+          content: input,
+          kind: 'tool_call',
+          status: 'pending',
+          title: `Executing tool ${name}`,
+          toolName: name,
+          toolInput: input,
+          timestamp: message.timestamp,
+        });
+      } else {
+        const tool = pendingTools.shift();
+        const output = reviewObservationOutput(match[3]);
+        normalized.push({
+          id: `review-${messageIndex}-${segmentIndex++}`,
+          role: 'assistant',
+          content: output,
+          kind: 'tool_result',
+          status: 'success',
+          title: `Tool ${tool?.name || 'tool'} completed`,
+          toolName: tool?.name || 'tool',
+          toolInput: tool?.input,
+          toolOutput: output,
+          timestamp: message.timestamp,
+        });
+      }
+      lastIndex = detailPattern.lastIndex;
+    }
+    pushText(content.slice(lastIndex));
+  }
+
+  return normalized;
+}
+
 const visibleMessages = computed(() => {
+  if (isReviewMode.value) {
+    if (showDetails.value) return structuredReviewMessages();
+
+    const reviewMessages = (reviewTranscript.value?.messages || []).flatMap((message, index) => {
+      if (message.detailOnly) return [];
+      const content = stripReviewDetailBlocks(reviewMessageContentToString(message.content));
+      if (!content.trim()) return [];
+      return [{
+        id: `review-${index}`,
+        role: (message.role === 'user' || message.role === 'assistant' ? message.role : 'assistant') as 'user' | 'assistant',
+        content,
+        kind: 'text' as const,
+        timestamp: message.timestamp,
+      }];
+    });
+
+    return reviewMessages.reduce<typeof reviewMessages>((visible, message) => {
+      const body = message.role === 'assistant' ? thinkingOnlyBody(message.content) : undefined;
+      const previous = visible.at(-1);
+      const previousBody = previous?.role === 'assistant' ? thinkingOnlyBody(previous.content) : undefined;
+      if (previous && body !== undefined && previousBody !== undefined) {
+        previous.content = `<thinking>\n${previousBody}\n\n${body}\n</thinking>`;
+      } else {
+        visible.push(message);
+      }
+      return visible;
+    }, []);
+  }
   if (showDetails.value) return messages.value;
 
   const messagesWithoutTools = messages.value.filter((message) => (
@@ -1298,6 +1496,21 @@ watch(() => props.sessionId, async (newSessionId) => {
   clearMessages();
 }, { immediate: true });
 
+watch(() => [props.reviewSourceId, props.reviewSessionId], async ([sourceId, sessionId]) => {
+  const requestId = ++reviewTranscriptRequestId;
+  reviewTranscript.value = null;
+  if (!sourceId || !sessionId) return;
+
+  try {
+    const transcript = await getReviewTranscript(sourceId, sessionId);
+    if (requestId === reviewTranscriptRequestId) reviewTranscript.value = transcript;
+  } catch (error) {
+    if (requestId === reviewTranscriptRequestId) {
+      console.error('Failed to load review transcript', error);
+    }
+  }
+}, { immediate: true });
+
 watch(visibleMessages, async () => {
   const shouldAutoScroll = isMessagesScrolledNearBottom();
 
@@ -1503,7 +1716,7 @@ function clearAcceptedDraft(imageDraft: PendingAttachment[]): void {
 
 async function handleSendToNewSession() {
   const text = inputText.value;
-  if (!hasDraftContent.value || imagesBlocked.value || !props.sessionId || !props.createInheritedSession || isPreparingSession.value) return;
+  if (isReviewMode.value || !hasDraftContent.value || imagesBlocked.value || !props.sessionId || !props.createInheritedSession || isPreparingSession.value) return;
 
   isPreparingSession.value = true;
   try {
@@ -1529,7 +1742,7 @@ async function handleSendToNewSession() {
 
 async function handleSend(): Promise<boolean> {
   const text = inputText.value;
-  if (!hasDraftContent.value || isPreparingSession.value || imagesBlocked.value) return false;
+  if (isReviewMode.value || !hasDraftContent.value || isPreparingSession.value || imagesBlocked.value) return false;
 
   if (text.trim() && isSessionCommand(text)) {
     await handleSessionCommand(text);
@@ -2953,6 +3166,11 @@ function updateFileSearchQuery() {
 }
 
 function updateSlashQuery() {
+  if (isReviewMode.value) {
+    slashCommands.close();
+    return;
+  }
+
   const input = inputRef.value;
   if (!input) return;
   slashCommands.updateQuery(inputText.value, input.selectionStart ?? inputText.value.length);
@@ -2972,6 +3190,12 @@ async function insertSlashCommand(command: SlashCommandItem) {
   resizeInput();
 }
 
+function clearReviewInput(): void {
+  inputText.value = '';
+  fileSearch.close();
+  resizeInputAfterDomUpdate();
+}
+
 async function insertFileReference(file: FileSearchResult) {
   const token = fileSearch.activeToken.value;
   if (!token) return;
@@ -2986,7 +3210,7 @@ async function insertFileReference(file: FileSearchResult) {
   resizeInput();
   
   window.dispatchEvent(new CustomEvent('open-file-in-editor', {
-    detail: { path: file.path, kind: 'path', onlyIfEditorVisible: true }
+    detail: { path: file.path, kind: 'path', onlyIfEditorVisible: !isReviewMode.value }
   }));
 }
 
@@ -3108,6 +3332,9 @@ function handleInputKeydown(event: KeyboardEvent) {
       return;
     }
   }
+
+  // Review composers remain editable, so Enter inserts a newline instead of invoking any send path.
+  if (isReviewMode.value && key === 'enter') return;
 
   if (key === 'enter' && event.ctrlKey && !event.shiftKey) {
     event.preventDefault();

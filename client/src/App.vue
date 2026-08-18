@@ -28,7 +28,7 @@
       </span>
 
       <div class="utility-rail-group utility-rail-primary">
-        <button class="utility-rail-btn tooltip" type="button" data-rail-action="new-session" :data-tooltip="newSessionTooltip" :aria-label="t('app.newSession')" @click="openTitleBarNew">
+        <button v-if="!isReviewMode" class="utility-rail-btn tooltip" type="button" data-rail-action="new-session" :data-tooltip="newSessionTooltip" :aria-label="t('app.newSession')" @click="openTitleBarNew">
           <PhPlus :size="19" weight="bold" />
         </button>
         <button class="utility-rail-btn search-btn tooltip" type="button" data-rail-action="search" :data-tooltip="t('app.searchShortcut')" :aria-label="t('app.search')" @click="openSearch">
@@ -45,7 +45,7 @@
           :key="session.id"
           type="button"
           class="utility-rail-session"
-          :class="{ active: session.id === activeSessionId }"
+          :class="{ active: session.id === activeSessionId || session.id === activeReviewSession?.sessionId }"
           :title="session.title"
           :aria-label="session.title"
           @click="selectSession(session)"
@@ -58,7 +58,7 @@
       </div>
 
       <div class="utility-rail-group utility-rail-bottom">
-        <button class="utility-rail-btn tooltip" :class="{ active: showTerminal }" type="button" data-rail-action="terminal" :data-tooltip="terminalTooltip" :aria-label="t('app.terminal')" @click="toggleTerminalPanel">
+        <button v-if="!isReviewMode" class="utility-rail-btn tooltip" :class="{ active: showTerminal }" type="button" data-rail-action="terminal" :data-tooltip="terminalTooltip" :aria-label="t('app.terminal')" @click="toggleTerminalPanel">
           <PhTerminal :size="19" weight="bold" />
         </button>
         <button
@@ -85,9 +85,12 @@
       :clientId="clientId"
       :username="user?.username"
       :activeSessionId="activeSessionId"
+      :activeReviewSessionId="activeReviewSession?.sessionId"
       :readySessionIds="readySessionIdList"
       :class="{ 'mobile-open': showMobileSidebar }"
       @selectSession="selectSession"
+      @reviewSourceSelected="handleReviewSourceSelected"
+      @reviewSessionSelected="handleReviewSessionSelected"
       @createSessionWithSameSettings="createSessionWithSameSettings"
       @projectPathChanged="handleProjectPathChanged"
       @agentProfileChanged="handleAgentProfileChanged"
@@ -148,13 +151,15 @@
               <span>PR #{{ activePullRequest.number }}</span>
             </a>
             <span v-if="selectedAgentName" class="agent-pill" :title="t('app.agentName', { name: selectedAgentName })">
-              <PhRobot :size="13" weight="bold" />
+              <PhMagnifyingGlass v-if="isReviewProfileSelected" :size="13" weight="bold" />
+              <PhRobot v-else :size="13" weight="bold" />
               <span>{{ selectedAgentName }}</span>
             </span>
           </span>
         </div>
         <div class="header-actions">
           <button
+            v-if="!isReviewMode"
             class="icon-btn tooltip title-new-btn mobile-title-new-btn"
             @click="openTitleBarNew"
             :data-tooltip="newSessionTooltip"
@@ -265,7 +270,7 @@
                 <PhTrash :size="18" weight="bold" />
                 <span>{{ t('app.deleteSession') }}</span>
               </button>
-              <button class="mobile-action-item" :class="{ active: showTerminal }" @click="showTerminal = !showTerminal; showMobileActions = false">
+              <button v-if="!isReviewMode" class="mobile-action-item" :class="{ active: showTerminal }" @click="showTerminal = !showTerminal; showMobileActions = false">
                 <PhTerminal :size="18" weight="bold" />
                 <span>{{ t('app.terminal') }}</span>
               </button>
@@ -299,6 +304,8 @@
         :showGoToTopButton="showGoToTopButton"
         :showChatViewOptionsButton="showChatViewOptionsButton"
         :fullscreen="isFullscreen"
+        :reviewSourceId="activeReviewSession?.sourceId"
+        :reviewSessionId="activeReviewSession?.sessionId"
         @branch-changed="handleBranchChanged"
         @toggle-fullscreen="toggleFullscreen"
       />
@@ -699,12 +706,14 @@ type WorktreePayload =
 const optimisticSessions = ref(new Map<string, { id: string; name?: string; firstMessage?: string; cwd?: string; worktree?: SessionWorktreeInfo }>());
 const boundSessionId = ref<string>();
 const sidebarInitialized = ref(false);
+const activeReviewSession = ref<{ sourceId: string; sessionId: string } | null>(null);
+const isReviewMode = computed(() => activeReviewSession.value !== null);
 const isSessionContextReady = computed(() => !activeSessionId.value || sidebarInitialized.value);
 const activeProjectPath = computed(() => sessionCwd.value || selectedProjectPath.value);
 const sessionCwdDisplay = computed(() => formatHomePath(sessionCwd.value));
 const showTaskQueue = ref(false);
 const headerTitle = computed(() => sessionTitle.value || 'Pi WebUI');
-const headerSubtitle = computed(() => sessionCwdDisplay.value);
+const headerSubtitle = computed(() => sessionCwdDisplay.value || formatHomePath(selectedProjectPath.value));
 const headerProjectName = computed(() => formatProjectName(headerSubtitle.value));
 const canSwitchToSessionProject = computed(() => (
   Boolean(sessionCwd.value)
@@ -730,6 +739,7 @@ const gitStatus = ref<GitStatus>({ isGitRepo: false });
 let gitStatusRequestId = 0;
 const selectedAgentProfileLabel = ref('default (~/.pi/agent)');
 const selectedAgentProfileId = ref('default');
+const selectedReviewSourceLabel = ref('');
 function sessionRouteLocation(sessionId: string, cwd?: string) {
   const query: Record<string, string> = {};
   if (selectedAgentProfileId.value && selectedAgentProfileId.value !== 'default') {
@@ -744,7 +754,8 @@ function sessionRouteLocation(sessionId: string, cwd?: string) {
 }
 const newSessionModels = ref<ModelOption[]>([]);
 const newSessionInitialModel = ref('');
-const selectedAgentName = computed(() => formatAgentName(selectedAgentProfileLabel.value));
+const selectedAgentName = computed(() => selectedReviewSourceLabel.value || formatAgentName(selectedAgentProfileLabel.value));
+const isReviewProfileSelected = computed(() => Boolean(selectedReviewSourceLabel.value));
 const selectedAgentModelSummary = ref('');
 const showEditor = ref(false);
 const isFullscreen = ref(false);
@@ -874,8 +885,14 @@ watch([isAuthenticated, activeSessionId, sidebarInitialized], async ([authentica
   // Wait for the sidebar session list before resolving route metadata; otherwise
   // startup races the persisted-session scan and performs a request that cannot succeed yet.
   if (!authenticated || (id && !sidebarReady)) return;
-  clearReadySession(id);
-  await refreshActiveSessionMetadata(id);
+  if (id && !activeReviewSession.value) {
+    clearReadySession(id);
+    await refreshActiveSessionMetadata(id);
+  } else if (!id) {
+    activeReviewSession.value = null;
+    clearReadySession(id);
+    await refreshActiveSessionMetadata(id);
+  }
 }, { immediate: true });
 
 watch([isAuthenticated, activeProjectPath], async ([authenticated, projectPath]) => {
@@ -1366,6 +1383,8 @@ async function refreshSelectedAgentProfileDetails() {
 
 async function handleAgentProfileChanged(profileId: string) {
   void profileId;
+  activeReviewSession.value = null;
+  selectedReviewSourceLabel.value = '';
   // Stash current UI state into optimisticSessions so it survives the
   // clear-and-refresh cycle below; refreshActiveSessionMetadata will restore
   // it from this map when the summary fetch fails or the session is absent.
@@ -1465,10 +1484,29 @@ function showCompactSessionContextMenu(event: MouseEvent, sessionId: string): vo
 }
 
 async function selectSession(session: { id: string; path: string; name?: string; cwd?: string }): Promise<void> {
+  activeReviewSession.value = null;
   setTaskQueueVisible(false);
   showMobileSidebar.value = false;
   showMobileActions.value = false;
   router.push(sessionRouteLocation(session.id, session.cwd));
+}
+
+function handleReviewSourceSelected(sourceId: string, sourceLabel: string): void {
+  activeReviewSession.value = null;
+  selectedReviewSourceLabel.value = sourceLabel;
+  selectedAgentModelSummary.value = '';
+}
+
+function handleReviewSessionSelected(event: { sourceId: string; sessionId: string }): void {
+  activeReviewSession.value = { sourceId: event.sourceId, sessionId: event.sessionId };
+  setTaskQueueVisible(false);
+  showMobileSidebar.value = false;
+  showMobileActions.value = false;
+  const query: Record<string, string> = { profile: event.sourceId };
+  if (selectedProjectPath.value && selectedProjectPath.value !== '~') {
+    query.project = selectedProjectPath.value;
+  }
+  void router.push({ path: `/sessions/${event.sessionId}`, query });
 }
 
 function showMemoryCenterForRun(runId?: string): void {

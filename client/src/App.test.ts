@@ -589,6 +589,93 @@ describe('App routing', () => {
     expect(wrapper.find('.header-title').text()).not.toContain('new-sess');
   });
 
+  it('shows the selected project path in the header when no session is active', async () => {
+    route.params.id = undefined;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/sessions/project-path') {
+        return { json: async () => ({ projectPath: '/workspace' }) };
+      }
+      if (String(url).startsWith('/api/sessions')) {
+        return { json: async () => ({ sessions: [] }) };
+      }
+      return { json: async () => ({}) };
+    }));
+
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    expect(wrapper.find('.session-cwd').text()).toContain('workspace');
+    expect(wrapper.find('.session-cwd').attributes('title')).toBe('/workspace');
+  });
+
+  it('shows the review source label and search icon when a review profile is selected', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/sessions/project-path') {
+        return { json: async () => ({ projectPath: '/workspace' }) };
+      }
+      if (String(url).startsWith('/api/sessions')) {
+        return { json: async () => ({ sessions: [] }) };
+      }
+      return { json: async () => ({}) };
+    }));
+
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    await wrapper.findComponent({ name: 'SessionSidebar' }).vm.$emit('reviewSourceSelected', 'devin', 'Devin');
+    await flushPromises();
+
+    const agentPill = wrapper.find('.agent-pill');
+    expect(agentPill.text()).toContain('Devin');
+    expect(agentPill.findComponent({ name: 'PhMagnifyingGlass' }).exists()).toBe(true);
+    expect(agentPill.findComponent({ name: 'PhRobot' }).exists()).toBe(false);
+  });
+
+  it('routes a selected review session with its source profile and project path', async () => {
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    wrapper.findComponent({ name: 'SessionSidebar' }).vm.$emit('reviewSourceSelected', 'devin', 'Devin');
+    wrapper.findComponent({ name: 'SessionSidebar' }).vm.$emit('projectPathChanged', '/devin/project', { initial: true });
+    wrapper.findComponent({ name: 'SessionSidebar' }).vm.$emit('reviewSessionSelected', { sourceId: 'devin', sessionId: 'review-1' });
+
+    expect(push).toHaveBeenLastCalledWith({
+      path: '/sessions/review-1',
+      query: { profile: 'devin', project: '/devin/project' },
+    });
+  });
+
   it('shows worktree and Pi history cleanup targets before finishing a worktree session', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url === '/api/sessions/project-path') {
