@@ -740,7 +740,7 @@ interface ReviewVisibleMessage {
   role: 'user' | 'assistant';
   content: string;
   kind: 'text' | 'tool_call' | 'tool_result';
-  status?: 'pending' | 'success';
+  status?: 'pending' | 'success' | 'failure';
   title?: string;
   toolName?: string;
   toolInput?: string;
@@ -1138,7 +1138,7 @@ function stripReviewDetailBlocks(content: string): string {
     .replace(/<system_info>[\s\S]*?<\/system_info>/g, '')
     .replace(/<rules\b[^>]*>[\s\S]*?<\/rules>/g, '')
     .replace(/<available_skills>[\s\S]*?<\/available_skills>/g, '')
-    .replace(/<observation>[\s\S]*?<\/observation>/g, '')
+    .replace(/<observation\b[^>]*>[\s\S]*?<\/observation>/g, '')
     .replace(/<tool_call\b[^>]*>[\s\S]*?<\/tool_call>/g, '')
     .replace(/<file-view\b[^>]*>[\s\S]*?<\/file-view>/g, '');
 }
@@ -1160,9 +1160,10 @@ function thinkingOnlyBody(content: string): string | undefined {
 }
 
 function reviewObservationOutput(body: string): string {
-  const trimmed = body.trim();
+  // Remove the tag wrapper's line breaks without stripping meaningful output indentation.
+  const output = body.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
   try {
-    const parsed = JSON.parse(trimmed);
+    const parsed = JSON.parse(output.trim());
     const results = Array.isArray(parsed.results) ? parsed.results : [parsed];
     return results.map((result: unknown) => {
       if (result && typeof result === 'object' && 'content' in result && typeof result.content === 'string') {
@@ -1171,15 +1172,20 @@ function reviewObservationOutput(body: string): string {
       return JSON.stringify(result, null, 2);
     }).join('\n\n');
   } catch {
-    return trimmed;
+    return output;
   }
+}
+
+function reviewTagAttribute(attributes: string, name: string): string | undefined {
+  return attributes.match(new RegExp(`\\b${name}=["']([^"']+)["']`))?.[1]?.replace(/&quot;/g, '"');
 }
 
 function structuredReviewMessages(): ReviewVisibleMessage[] {
   const normalized: ReviewVisibleMessage[] = [];
-  // Review adapters emit calls and observations separately, in execution order.
-  const pendingTools: Array<{ name: string; input: string }> = [];
-  const detailPattern = /<tool_call\b([^>]*)>([\s\S]*?)<\/tool_call>|<observation>([\s\S]*?)<\/observation>/g;
+  // IDs keep parallel tool results attached to the right call; the queue supports older adapters.
+  const pendingTools: Array<{ id?: string; name: string; input: string }> = [];
+  const toolsById = new Map<string, { id?: string; name: string; input: string }>();
+  const detailPattern = /<tool_call\b([^>]*)>([\s\S]*?)<\/tool_call>|<observation\b([^>]*)>([\s\S]*?)<\/observation>/g;
 
   for (const [messageIndex, message] of (reviewTranscript.value?.messages || []).entries()) {
     const content = reviewMessageContentToString(message.content);
@@ -1195,9 +1201,12 @@ function structuredReviewMessages(): ReviewVisibleMessage[] {
     while (role === 'assistant' && (match = detailPattern.exec(content)) !== null) {
       pushText(content.slice(lastIndex, match.index));
       if (typeof match[2] === 'string') {
-        const name = match[1].match(/\bname=["']([^"']+)["']/)?.[1]?.replace(/&quot;/g, '"') || 'tool';
+        const name = reviewTagAttribute(match[1], 'name') || 'tool';
+        const id = reviewTagAttribute(match[1], 'id');
         const input = match[2].trim();
-        pendingTools.push({ name, input });
+        const tool = { id, name, input };
+        pendingTools.push(tool);
+        if (id) toolsById.set(id, tool);
         normalized.push({
           id: `review-${messageIndex}-${segmentIndex++}`,
           role: 'assistant',
@@ -1210,15 +1219,24 @@ function structuredReviewMessages(): ReviewVisibleMessage[] {
           timestamp: message.timestamp,
         });
       } else {
-        const tool = pendingTools.shift();
-        const output = reviewObservationOutput(match[3]);
+        const toolId = reviewTagAttribute(match[3], 'tool_call_id');
+        const tool = toolId ? toolsById.get(toolId) : pendingTools.shift();
+        if (tool) {
+          const pendingIndex = pendingTools.indexOf(tool);
+          if (pendingIndex >= 0) pendingTools.splice(pendingIndex, 1);
+          if (tool.id) toolsById.delete(tool.id);
+        }
+        const output = reviewObservationOutput(match[4]);
+        const failed = reviewTagAttribute(match[3], 'status') === 'failure';
         normalized.push({
           id: `review-${messageIndex}-${segmentIndex++}`,
           role: 'assistant',
           content: output,
           kind: 'tool_result',
-          status: 'success',
-          title: `Tool ${tool?.name || 'tool'} completed`,
+          status: failed ? 'failure' : 'success',
+          title: failed
+            ? `Tool ${tool?.name || 'tool'} failed`
+            : `Tool ${tool?.name || 'tool'} completed`,
           toolName: tool?.name || 'tool',
           toolInput: tool?.input,
           toolOutput: output,
@@ -1292,8 +1310,10 @@ const visibleMessages = computed(() => {
   }, []);
 });
 
+const pdfExportMessages = computed(() => isReviewMode.value ? visibleMessages.value : messages.value);
+
 const canExportPdf = computed(() => hasExportableMessages({
-  messages: messages.value,
+  messages: pdfExportMessages.value,
   sessionTitle: props.sessionTitle,
   projectPath: props.projectPath,
   includeDetails: showDetails.value,
@@ -1307,7 +1327,7 @@ async function handleExportPdf() {
   exportPdfError.value = '';
   try {
     await exportSessionPdf({
-      messages: messages.value,
+      messages: pdfExportMessages.value,
       sessionTitle: props.sessionTitle,
       projectPath: props.projectPath,
       includeDetails: showDetails.value,

@@ -43,7 +43,7 @@ describe('review source routes', () => {
 
     const typesResponse = await app.inject({ method: 'GET', url: '/api/review-sources/types' });
     expect(typesResponse.statusCode).toBe(200);
-    expect(typesResponse.json().types.map((type: { type: string }) => type.type)).toEqual(['devin', 'claude-code']);
+    expect(typesResponse.json().types.map((type: { type: string }) => type.type)).toEqual(['devin', 'claude-code', 'codex']);
   });
 
   it('creates and deletes a custom source', async () => {

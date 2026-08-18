@@ -55,6 +55,17 @@ describe('ReviewSourceStore', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it('auto-detects a default Codex sessions directory', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-sessions-'));
+    const codexProvider = reviewSourceProviders.find((provider) => provider.type === 'codex')!;
+    const detectedStore = new ReviewSourceStore(db, [{ ...codexProvider, defaultDataPath: tempDir }]);
+
+    expect(detectedStore.list()).toEqual([
+      expect.objectContaining({ type: 'codex', label: 'Codex', dataPath: tempDir }),
+    ]);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
   it('auto-detects the default path when another Devin source already exists', () => {
     const custom = store.create({ type: 'devin', label: 'Custom', dataPath: '/tmp/custom-devin' });
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devin-data-'));

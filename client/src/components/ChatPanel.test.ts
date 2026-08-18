@@ -47,7 +47,7 @@ vi.mock('../composables/useChat', () => ({
 
 vi.mock('./MessageBubble.vue', () => ({
   default: {
-    template: '<div class="message-bubble-stub" :data-kind="message.kind" :data-tool-name="message.toolName">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button></div>',
+    template: '<div class="message-bubble-stub" :data-kind="message.kind" :data-tool-name="message.toolName" :data-title="message.title" :data-tool-input="message.toolInput" :data-status="message.status">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button></div>',
     props: ['message', 'hideThinkingBlock'],
     emits: ['annotate'],
   },
@@ -1164,6 +1164,26 @@ describe('ChatPanel', () => {
     expect((textarea.element as HTMLTextAreaElement).value).toBe('');
   });
 
+  it('enables PDF export when a review transcript has messages', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/transcript')) {
+        return new Response(JSON.stringify({ transcript: {
+          messages: [{ role: 'assistant', content: 'Review conclusion' }],
+        } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, {
+      props: { reviewSourceId: 'codex', reviewSessionId: 'review-1' },
+    });
+    await flushPromises();
+    await wrapper.find('.view-options-toggle-btn').trigger('mouseenter');
+    await nextTick();
+
+    expect(wrapper.find('.export-pdf-btn').attributes('disabled')).toBeUndefined();
+  });
+
   it('hides Devin context blocks in clean review mode and shows them in details mode', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).includes('/api/review-sources/devin/sessions/review-1/transcript')) {
@@ -1223,8 +1243,10 @@ describe('ChatPanel', () => {
       if (String(url).includes('/api/review-sources/claude-code/sessions/review-1/transcript')) {
         return new Response(JSON.stringify({ transcript: {
           messages: [
-            { role: 'assistant', content: '<tool_call name="Bash">\n{"command":"tea pr 88"}\n</tool_call>' },
-            { role: 'assistant', content: '<observation>\ncommand output\n</observation>' },
+            { role: 'assistant', content: '<tool_call name="exec_command" id="call-1">\n{"cmd":"tea pr 88"}\n</tool_call>' },
+            { role: 'assistant', content: '<tool_call name="exec_command" id="call-2">\n{"cmd":"git status"}\n</tool_call>' },
+            { role: 'assistant', content: '<observation tool_call_id="call-2">\n   220\tfirst line\n   221\tsecond line\n</observation>' },
+            { role: 'assistant', content: '<observation tool_call_id="call-1" status="failure">\ncommand output\n</observation>' },
           ],
         } }), { status: 200 });
       }
@@ -1233,17 +1255,25 @@ describe('ChatPanel', () => {
 
     const wrapper = mount(ChatPanel, { props: { reviewSourceId: 'claude-code', reviewSessionId: 'review-1' } });
     await flushPromises();
+
+    expect(wrapper.text()).not.toContain('first line');
+    expect(wrapper.text()).not.toContain('command output');
+
     await wrapper.find('.view-options-toggle-btn').trigger('mouseenter');
     await wrapper.find('.details-toggle-btn').trigger('click');
     await nextTick();
 
-    const toolCall = wrapper.find('[data-kind="tool_call"]');
-    const toolResult = wrapper.find('[data-kind="tool_result"]');
-    expect(toolCall.attributes('data-tool-name')).toBe('Bash');
-    expect(toolCall.text()).toContain('tea pr 88');
-    expect(toolResult.attributes('data-tool-name')).toBe('Bash');
-    expect(toolResult.text()).toContain('command output');
-    expect(wrapper.text()).not.toContain('name="Bash"');
+    const toolCalls = wrapper.findAll('[data-kind="tool_call"]');
+    const toolResults = wrapper.findAll('[data-kind="tool_result"]');
+    expect(toolCalls[0].attributes('data-tool-name')).toBe('exec_command');
+    expect(toolCalls[0].text()).toContain('tea pr 88');
+    expect(toolResults[0].attributes('data-tool-input')).toContain('git status');
+    expect(toolResults[0].element.textContent).toBe('   220\tfirst line\n   221\tsecond line');
+    expect(toolResults[1].attributes('data-tool-input')).toContain('tea pr 88');
+    expect(toolResults[1].attributes('data-status')).toBe('failure');
+    expect(toolResults[1].attributes('data-title')).toBe('Tool exec_command failed');
+    expect(toolResults[1].text()).toContain('command output');
+    expect(wrapper.text()).not.toContain('name="exec_command"');
     expect(wrapper.text()).not.toContain('Observation');
   });
 

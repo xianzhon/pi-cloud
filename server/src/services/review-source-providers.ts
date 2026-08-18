@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { ReviewSourceAdapter, ReviewSourceType } from '../types.js';
 import { ClaudeCodeReviewSourceAdapter } from './review-source-adapters/claude-code-adapter.js';
+import { CodexReviewSourceAdapter } from './review-source-adapters/codex-adapter.js';
 import { DevinReviewSourceAdapter } from './review-source-adapters/devin-adapter.js';
 
 export interface ReviewSourceProvider extends ReviewSourceType {
@@ -26,6 +27,14 @@ export const reviewSourceProviders: ReviewSourceProvider[] = [
     canDeleteSessions: false,
     isAvailable: (dataPath) => fs.existsSync(dataPath) && fs.statSync(dataPath).isDirectory(),
     createAdapter: (dataPath) => new ClaudeCodeReviewSourceAdapter(dataPath),
+  },
+  {
+    type: 'codex',
+    label: 'Codex',
+    defaultDataPath: path.join(os.homedir(), '.codex', 'sessions'),
+    canDeleteSessions: false,
+    isAvailable: (dataPath) => fs.existsSync(dataPath) && fs.statSync(dataPath).isDirectory(),
+    createAdapter: (dataPath) => new CodexReviewSourceAdapter(dataPath),
   },
 ];
 

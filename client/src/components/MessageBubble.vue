@@ -413,16 +413,10 @@ const hasExpandableThinking = computed(() => {
 const eventTitle = computed(() => props.message.kind === 'thinking' ? thinkingTitle.value : props.message.title || props.message.toolName || t('components.messageBubble.event'));
 const eventPathLabel = computed(() => {
   if (props.message.kind !== 'tool_call' && props.message.kind !== 'tool_result') return '';
-  const toolName = (props.message.toolName || '').toLowerCase();
-  if (toolName === 'bash' || toolName === 'shell') return truncateMiddle(getToolInputCommand(), 120);
-  if (!['edit', 'read', 'write'].includes(toolName)) return '';
+  if (isCommandTool()) return truncateMiddle(getToolInputCommand(), 120);
   return getToolInputPath();
 });
-const eventPathTitle = computed(() => {
-  const toolName = (props.message.toolName || '').toLowerCase();
-  if (toolName === 'bash' || toolName === 'shell') return getToolInputCommand();
-  return eventPathLabel.value;
-});
+const eventPathTitle = computed(() => isCommandTool() ? getToolInputCommand() : eventPathLabel.value);
 const isCollapsibleEvent = computed(() => props.message.kind !== 'thinking' && (
   Boolean(renderedToolInput.value) ||
   Boolean(renderedToolOutput.value) ||
@@ -613,23 +607,41 @@ function getToolInputPath(): string {
   return typeof candidate === 'string' ? candidate : '';
 }
 
+function isCommandTool(): boolean {
+  return ['bash', 'shell', 'exec_command', 'shell_command'].includes((props.message.toolName || '').toLowerCase());
+}
+
+function isPatchTool(): boolean {
+  return ['apply_patch', 'apply-patch', 'applypatch', 'patch'].includes((props.message.toolName || '').toLowerCase());
+}
+
+function getPatchContent(): string {
+  const input = props.message.toolInput || '';
+  const parsed = parseJsonObject(input);
+  const patch = parsed?.patch ?? parsed?.diff;
+  return typeof patch === 'string' ? patch : input;
+}
+
 function getToolInputCommand(): string {
   const input = props.message.toolInput || '';
   const parsed = parseJsonObject(input);
-  return typeof parsed?.command === 'string' ? parsed.command : '';
+  const command = parsed?.command ?? parsed?.cmd;
+  if (typeof command === 'string') return command;
+  return Array.isArray(command) && command.every((part) => typeof part === 'string') ? command.join(' ') : '';
 }
 
 function inferToolBlockLanguage(kind: 'input' | 'output'): string {
   const toolName = (props.message.toolName || '').toLowerCase();
 
   if (kind === 'input') {
+    if (isPatchTool()) return 'diff';
     if (parseJsonObject(props.message.toolInput || '')) return 'json';
-    if (toolName === 'bash' || toolName === 'shell') return 'bash';
+    if (isCommandTool()) return 'bash';
     return '';
   }
 
-  if (toolName === 'read') return languageFromPath(getToolInputPath());
-  if (toolName === 'bash' || toolName === 'shell') return 'bash';
+  if (toolName === 'read' || toolName === 'codegraph_node') return languageFromPath(getToolInputPath());
+  if (isCommandTool()) return 'bash';
   return '';
 }
 
@@ -715,21 +727,22 @@ function renderHighlightedCode(content: string, language: string) {
   return sanitizeHtmlFragment(`<div class="code-block">${header}<pre><code class="hljs${languageClass}">${highlighted}</code></pre></div>`);
 }
 
+type DiffLineType = 'hunk' | 'added' | 'removed' | 'meta' | 'context';
+
+function diffLineType(line: string): DiffLineType {
+  if (line.startsWith('@@')) return 'hunk';
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'added';
+  if (line.startsWith('-') && !line.startsWith('---')) return 'removed';
+  if (/^(diff --git|index |---|\+\+\+|\*\*\*)/.test(line)) return 'meta';
+  return 'context';
+}
+
 function renderDiffCodeBlock(code: string, showLanguageHeaders: boolean) {
   const header = showLanguageHeaders
     ? '<div class="code-block-header">diff</div>'
     : '';
   const lines = code.replace(/\n$/, '').split('\n').map((line) => {
-    const type = line.startsWith('@@')
-      ? 'hunk'
-      : line.startsWith('+') && !line.startsWith('+++')
-        ? 'added'
-        : line.startsWith('-') && !line.startsWith('---')
-          ? 'removed'
-          : line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')
-            ? 'meta'
-            : 'context';
-    return `<span class="diff-code-line diff-${type}">${escapeHtml(line) || ' '}</span>`;
+    return `<span class="diff-code-line diff-${diffLineType(line)}">${escapeHtml(line) || ' '}</span>`;
   }).join('');
 
   return `<div class="code-block diff-code-block">${header}<pre><code class="hljs language-diff">${lines}</code></pre></div>`;
@@ -979,12 +992,14 @@ const renderedToolInput = computed(() => {
   if (props.message.kind !== 'tool_call') return '';
   const toolName = (props.message.toolName || '').toLowerCase();
   if (toolName === 'edit') return renderEditDiff();
+  if (isPatchTool()) return renderDiffCodeBlock(getPatchContent(), props.showCodeBlockLanguageHeaders);
   if (toolName === 'write') {
     const content = getWriteContent();
     if (content != null) return renderHighlightedCode(content, languageFromPath(getToolInputPath()));
   }
-  if (toolName === 'read' && getToolInputPath()) return '';
-  if (toolName === 'bash' || toolName === 'shell') {
+  if ((toolName === 'read' || toolName === 'view_image' || toolName === 'codegraph_node') && getToolInputPath()) return '';
+  if (toolName === 'exec_command' || toolName === 'shell_command') return '';
+  if (isCommandTool()) {
     const command = getToolInputCommand();
     if (command) return renderHighlightedCode(command, 'bash');
   }
