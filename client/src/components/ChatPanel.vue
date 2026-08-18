@@ -1138,7 +1138,7 @@ function stripReviewDetailBlocks(content: string): string {
     .replace(/<system_info>[\s\S]*?<\/system_info>/g, '')
     .replace(/<rules\b[^>]*>[\s\S]*?<\/rules>/g, '')
     .replace(/<available_skills>[\s\S]*?<\/available_skills>/g, '')
-    .replace(/<observation>[\s\S]*?<\/observation>/g, '')
+    .replace(/<observation\b[^>]*>[\s\S]*?<\/observation>/g, '')
     .replace(/<tool_call\b[^>]*>[\s\S]*?<\/tool_call>/g, '')
     .replace(/<file-view\b[^>]*>[\s\S]*?<\/file-view>/g, '');
 }
@@ -1309,8 +1309,10 @@ const visibleMessages = computed(() => {
   }, []);
 });
 
+const pdfExportMessages = computed(() => isReviewMode.value ? visibleMessages.value : messages.value);
+
 const canExportPdf = computed(() => hasExportableMessages({
-  messages: messages.value,
+  messages: pdfExportMessages.value,
   sessionTitle: props.sessionTitle,
   projectPath: props.projectPath,
   includeDetails: showDetails.value,
@@ -1324,7 +1326,7 @@ async function handleExportPdf() {
   exportPdfError.value = '';
   try {
     await exportSessionPdf({
-      messages: messages.value,
+      messages: pdfExportMessages.value,
       sessionTitle: props.sessionTitle,
       projectPath: props.projectPath,
       includeDetails: showDetails.value,

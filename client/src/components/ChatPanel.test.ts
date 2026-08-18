@@ -1164,6 +1164,26 @@ describe('ChatPanel', () => {
     expect((textarea.element as HTMLTextAreaElement).value).toBe('');
   });
 
+  it('enables PDF export when a review transcript has messages', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/transcript')) {
+        return new Response(JSON.stringify({ transcript: {
+          messages: [{ role: 'assistant', content: 'Review conclusion' }],
+        } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }));
+
+    const wrapper = mount(ChatPanel, {
+      props: { reviewSourceId: 'codex', reviewSessionId: 'review-1' },
+    });
+    await flushPromises();
+    await wrapper.find('.view-options-toggle-btn').trigger('mouseenter');
+    await nextTick();
+
+    expect(wrapper.find('.export-pdf-btn').attributes('disabled')).toBeUndefined();
+  });
+
   it('hides Devin context blocks in clean review mode and shows them in details mode', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).includes('/api/review-sources/devin/sessions/review-1/transcript')) {
@@ -1235,6 +1255,10 @@ describe('ChatPanel', () => {
 
     const wrapper = mount(ChatPanel, { props: { reviewSourceId: 'claude-code', reviewSessionId: 'review-1' } });
     await flushPromises();
+
+    expect(wrapper.text()).not.toContain('status output');
+    expect(wrapper.text()).not.toContain('command output');
+
     await wrapper.find('.view-options-toggle-btn').trigger('mouseenter');
     await wrapper.find('.details-toggle-btn').trigger('click');
     await nextTick();
