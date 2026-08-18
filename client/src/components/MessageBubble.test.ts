@@ -726,6 +726,36 @@ describe('MessageBubble', () => {
     expect(wrapper.text()).toContain('+  const wasActive = activeTerminalId.value === terminalId;');
   });
 
+  it('renders apply_patch input with line-level diff colors', () => {
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: client/src/App.vue',
+      '@@',
+      '-const label = "old";',
+      '+const label = "new";',
+      '*** End Patch',
+    ].join('\n');
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'patch-call-1',
+          role: 'assistant',
+          content: patch,
+          kind: 'tool_call',
+          status: 'pending',
+          toolName: 'apply_patch',
+          toolInput: patch,
+        },
+      },
+    });
+
+    expect(wrapper.find('.diff-code-block').exists()).toBe(true);
+    expect(wrapper.findAll('.diff-meta')).toHaveLength(3);
+    expect(wrapper.find('.diff-hunk').text()).toBe('@@');
+    expect(wrapper.find('.diff-removed').text()).toBe('-const label = "old";');
+    expect(wrapper.find('.diff-added').text()).toBe('+const label = "new";');
+  });
+
   it('shows write tool call path in the header and renders content as highlighted file text', () => {
     const fileContent = [
       "import { beforeEach, describe, expect, it, vi } from 'vitest';",

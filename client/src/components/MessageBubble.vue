@@ -611,6 +611,17 @@ function isCommandTool(): boolean {
   return ['bash', 'shell', 'exec_command', 'shell_command'].includes((props.message.toolName || '').toLowerCase());
 }
 
+function isPatchTool(): boolean {
+  return ['apply_patch', 'apply-patch', 'applypatch', 'patch'].includes((props.message.toolName || '').toLowerCase());
+}
+
+function getPatchContent(): string {
+  const input = props.message.toolInput || '';
+  const parsed = parseJsonObject(input);
+  const patch = parsed?.patch ?? parsed?.diff;
+  return typeof patch === 'string' ? patch : input;
+}
+
 function getToolInputCommand(): string {
   const input = props.message.toolInput || '';
   const parsed = parseJsonObject(input);
@@ -623,7 +634,7 @@ function inferToolBlockLanguage(kind: 'input' | 'output'): string {
   const toolName = (props.message.toolName || '').toLowerCase();
 
   if (kind === 'input') {
-    if (toolName === 'apply_patch') return 'diff';
+    if (isPatchTool()) return 'diff';
     if (parseJsonObject(props.message.toolInput || '')) return 'json';
     if (isCommandTool()) return 'bash';
     return '';
@@ -716,21 +727,22 @@ function renderHighlightedCode(content: string, language: string) {
   return sanitizeHtmlFragment(`<div class="code-block">${header}<pre><code class="hljs${languageClass}">${highlighted}</code></pre></div>`);
 }
 
+type DiffLineType = 'hunk' | 'added' | 'removed' | 'meta' | 'context';
+
+function diffLineType(line: string): DiffLineType {
+  if (line.startsWith('@@')) return 'hunk';
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'added';
+  if (line.startsWith('-') && !line.startsWith('---')) return 'removed';
+  if (/^(diff --git|index |---|\+\+\+|\*\*\*)/.test(line)) return 'meta';
+  return 'context';
+}
+
 function renderDiffCodeBlock(code: string, showLanguageHeaders: boolean) {
   const header = showLanguageHeaders
     ? '<div class="code-block-header">diff</div>'
     : '';
   const lines = code.replace(/\n$/, '').split('\n').map((line) => {
-    const type = line.startsWith('@@')
-      ? 'hunk'
-      : line.startsWith('+') && !line.startsWith('+++')
-        ? 'added'
-        : line.startsWith('-') && !line.startsWith('---')
-          ? 'removed'
-          : line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')
-            ? 'meta'
-            : 'context';
-    return `<span class="diff-code-line diff-${type}">${escapeHtml(line) || ' '}</span>`;
+    return `<span class="diff-code-line diff-${diffLineType(line)}">${escapeHtml(line) || ' '}</span>`;
   }).join('');
 
   return `<div class="code-block diff-code-block">${header}<pre><code class="hljs language-diff">${lines}</code></pre></div>`;
@@ -980,6 +992,7 @@ const renderedToolInput = computed(() => {
   if (props.message.kind !== 'tool_call') return '';
   const toolName = (props.message.toolName || '').toLowerCase();
   if (toolName === 'edit') return renderEditDiff();
+  if (isPatchTool()) return renderDiffCodeBlock(getPatchContent(), props.showCodeBlockLanguageHeaders);
   if (toolName === 'write') {
     const content = getWriteContent();
     if (content != null) return renderHighlightedCode(content, languageFromPath(getToolInputPath()));
