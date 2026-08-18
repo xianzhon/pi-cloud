@@ -2280,6 +2280,9 @@ async function deleteContextNode() {
 }
 
 async function closeTab(filePath: string) {
+  // Removing a hovered tab does not reliably emit mouseleave.
+  hideTabTooltip();
+
   if (dirtyPaths.value.has(filePath)) {
     const confirmed = await requestConfirm({
       title: t('components.editorPanel.discardUnsavedChanges'),
@@ -2440,7 +2443,9 @@ async function locateActiveFileInTree() {
 }
 
 watch(() => props.visible, (isVisible) => {
-  if (isVisible && editor) {
+  if (!isVisible) {
+    hideTabTooltip();
+  } else if (editor) {
     nextTick(() => editor?.layout());
   }
 });
@@ -2534,6 +2539,8 @@ onMounted(() => {
   // Listen for open-file events from file search
   window.addEventListener('open-file', handleOpenFile);
   window.addEventListener('click', closeContextMenus);
+  window.addEventListener('pointerdown', hideTabTooltip);
+  window.addEventListener('blur', hideTabTooltip);
 });
 
 function handleOpenFile(event: Event) {
@@ -2561,6 +2568,8 @@ onUnmounted(() => {
   stopFileTreeResize();
   window.removeEventListener('open-file', handleOpenFile);
   window.removeEventListener('click', closeContextMenus);
+  window.removeEventListener('pointerdown', hideTabTooltip);
+  window.removeEventListener('blur', hideTabTooltip);
 });
 
 defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
