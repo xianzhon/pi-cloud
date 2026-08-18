@@ -5,6 +5,17 @@ export interface ReviewSource {
   dataPath: string;
   createdAt: string;
   updatedAt: string;
+  capabilities: {
+    canDeleteSource: boolean;
+    canDeleteSessions: boolean;
+  };
+}
+
+export interface ReviewSourceType {
+  type: string;
+  label: string;
+  defaultDataPath: string;
+  canDeleteSessions: boolean;
 }
 
 export interface ReviewSessionListItem {
@@ -24,6 +35,7 @@ export interface ReviewSessionTranscript {
     role: string;
     content: unknown;
     timestamp?: number;
+    detailOnly?: boolean;
   }>;
   metadata?: Record<string, unknown>;
 }

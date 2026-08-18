@@ -623,15 +623,22 @@
                         <small>{{ source.dataPath }}</small>
                       </div>
                       <button
+                        v-if="source.capabilities.canDeleteSource"
                         type="button"
                         class="settings-action-btn compact-action"
-                        :disabled="source.type === 'devin' && source.label === 'Devin'"
                         @click="removeReviewSource(source.id)"
                       >
                         {{ t('app.delete') }}
                       </button>
                     </div>
                     <div class="review-source-form">
+                      <CustomSelect
+                        id="review-source-type-select"
+                        v-model="newReviewSourceType"
+                        :options="reviewSourceTypeOptions"
+                        :aria-label="t('components.settingsDialog.reviewSourceType')"
+                        @update:model-value="applyReviewSourceTypeDefaults"
+                      />
                       <input
                         v-model="newReviewSourceLabel"
                         class="settings-input"
@@ -681,6 +688,8 @@ import type { SkillPreset, SkillPresetInput } from '../composables/useSkillPrese
 import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh } from '@phosphor-icons/vue';
 import { playTaskNotification } from '../services/soundNotifications';
 import { useReviewSources } from '../composables/useReviewSources';
+import { listReviewSourceTypes } from '../services/reviewSourceService';
+import type { ReviewSourceType } from '../types/reviewSource';
 import DialogCloseButton from './DialogCloseButton.vue';
 import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
@@ -793,10 +802,16 @@ const fullscreenShortcutOptions: CustomSelectOption[] = [
 
 const activeSection = ref<'general' | 'security' | 'chat' | 'keyboard' | 'skills' | 'git' | 'gateway' | 'reviewSources'>('general');
 const { sources: reviewSources, loading: reviewSourcesLoading, error: reviewSourcesError, load: loadReviewSources, add: addReviewSource, remove: removeReviewSourceFn } = useReviewSources();
+const reviewSourceTypes = ref<ReviewSourceType[]>([]);
+const newReviewSourceType = ref('devin');
 const newReviewSourceLabel = ref('');
 const newReviewSourcePath = ref('');
 const addingReviewSource = ref(false);
 const reviewSourceActionError = ref('');
+const reviewSourceTypeOptions = computed<CustomSelectOption[]>(() => reviewSourceTypes.value.map((sourceType) => ({
+  value: sourceType.type,
+  label: sourceType.label,
+})));
 const draftGiteaServerUrl = ref(props.giteaServerUrl);
 const draftGiteaToken = ref('');
 const draftGithubServerUrl = ref(props.githubServerUrl);
@@ -1122,13 +1137,28 @@ function parseGatewayModelValue(value: string): { provider: string; id: string }
   return { provider, id };
 }
 
+function applyReviewSourceTypeDefaults(type: string): void {
+  const sourceType = reviewSourceTypes.value.find((item) => item.type === type);
+  if (!sourceType) return;
+  newReviewSourceLabel.value = sourceType.label;
+  newReviewSourcePath.value = sourceType.defaultDataPath;
+}
+
+async function loadSupportedReviewSourceTypes(): Promise<void> {
+  reviewSourceTypes.value = await listReviewSourceTypes();
+  if (!reviewSourceTypes.value.some((sourceType) => sourceType.type === newReviewSourceType.value)) {
+    newReviewSourceType.value = reviewSourceTypes.value[0]?.type || '';
+  }
+  if (!newReviewSourceLabel.value && !newReviewSourcePath.value) applyReviewSourceTypeDefaults(newReviewSourceType.value);
+}
+
 async function addCustomReviewSource() {
   if (!newReviewSourceLabel.value.trim() || !newReviewSourcePath.value.trim()) return;
   reviewSourceActionError.value = '';
   addingReviewSource.value = true;
   try {
     await addReviewSource({
-      type: 'devin',
+      type: newReviewSourceType.value,
       label: newReviewSourceLabel.value.trim(),
       dataPath: newReviewSourcePath.value.trim(),
     });
@@ -1154,7 +1184,7 @@ watch(() => props.visible, (visible) => {
   if (visible) {
     resetGitDrafts();
     resetGatewayDrafts();
-    void loadReviewSources().catch(() => undefined);
+    void Promise.all([loadReviewSources(), loadSupportedReviewSourceTypes()]).catch(() => undefined);
     if (activeSection.value === 'git') {
       void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
     }

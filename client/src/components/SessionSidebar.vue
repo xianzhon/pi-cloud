@@ -244,7 +244,7 @@
           <PhBrain :size="14" /> {{ t('components.sessionSidebar.extractMemories') }}
         </button>
         <button v-if="!isReviewMode" @click="openRenameDialog"><PhPencilSimple :size="14" /> {{ t('components.sessionSidebar.rename') }}</button>
-        <button class="danger" @click="openDeleteConfirm"><PhTrash :size="14" /> {{ t('components.sessionSidebar.delete') }}</button>
+        <button v-if="canDeleteSelectedSession" class="danger" @click="openDeleteConfirm"><PhTrash :size="14" /> {{ t('components.sessionSidebar.delete') }}</button>
       </div>
     </Teleport>
 
@@ -499,6 +499,10 @@ const selectedAgentModelSummary = computed(() => {
   return `${profile.defaultProvider} / ${profile.defaultModel}`;
 });
 const isReviewMode = computed(() => Boolean(selectedReviewSourceId.value));
+const canDeleteSelectedSession = computed(() => {
+  if (!isReviewMode.value) return true;
+  return reviewSources.value.find((source) => source.id === selectedReviewSourceId.value)?.capabilities?.canDeleteSessions ?? false;
+});
 const canGoToSessionProject = computed(() => (
   scope.value === 'all'
   && Boolean(contextMenu.value.session && getSessionProjectPath(contextMenu.value.session))

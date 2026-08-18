@@ -138,6 +138,7 @@ export class DevinReviewSourceAdapter implements ReviewSourceAdapter {
         role: String(message.role || 'unknown'),
         content: message.content,
         timestamp: typeof message.timestamp === 'number' ? message.timestamp : undefined,
+        detailOnly: this.isDetailOnlyMessage(message.content),
       }));
     }
 
@@ -176,7 +177,16 @@ export class DevinReviewSourceAdapter implements ReviewSourceAdapter {
       if (observation.trim()) parts.push(`<observation>\n${observation}\n</observation>`);
     }
 
-    return { role, content: parts.join('\n\n'), timestamp };
+    const content = parts.join('\n\n');
+    return { role, content, timestamp, detailOnly: source === 'system' || this.isDetailOnlyMessage(content) };
+  }
+
+  private isDetailOnlyMessage(content: unknown): boolean {
+    const text = typeof content === 'string' ? content.trimStart() : '';
+    return text.startsWith('You are Devin, an interactive command line')
+      || text.startsWith('You are powered by ')
+      || /^Available subagent profiles for the\s+`?run_subagent`?\s+tool\./.test(text)
+      || text.startsWith('The following skills can be invoked using the `skill` tool.');
   }
 
   private messageToText(message: ReviewSessionTranscript['messages'][number] | undefined): string | undefined {

@@ -1091,14 +1091,6 @@ function reviewMessageContentToString(content: unknown): string {
 }
 
 function stripReviewDetailBlocks(content: string): string {
-  const trimmed = content.trimStart();
-  if (trimmed.startsWith('You are Devin, an interactive command line')
-    || trimmed.startsWith('You are powered by ')
-    || /^Available subagent profiles for the\s+`?run_subagent`?\s+tool\./.test(trimmed)
-    || trimmed.startsWith('The following skills can be invoked using the `skill` tool.')) {
-    return '';
-  }
-
   return content
     .replace(/<system_info>[\s\S]*?<\/system_info>/g, '')
     .replace(/<rules\b[^>]*>[\s\S]*?<\/rules>/g, '')
@@ -1111,6 +1103,7 @@ function stripReviewDetailBlocks(content: string): string {
 const visibleMessages = computed(() => {
   if (isReviewMode.value) {
     return (reviewTranscript.value?.messages || []).flatMap((message, index) => {
+      if (!showDetails.value && message.detailOnly) return [];
       const originalContent = reviewMessageContentToString(message.content);
       const content = showDetails.value ? originalContent : stripReviewDetailBlocks(originalContent);
       if (!content.trim()) return [];

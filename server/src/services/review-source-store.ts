@@ -1,11 +1,8 @@
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { PiuiDatabase } from '../db/database.js';
 import type { CreateReviewSourceRequest, ReviewSource } from '../types.js';
-
-const DEFAULT_DEVIN_DATA_PATH = path.join(os.homedir(), '.local', 'share', 'devin', 'cli');
-const DEFAULT_DEVIN_LABEL = 'Devin';
+import { reviewSourceProviders, type ReviewSourceProvider } from './review-source-providers.js';
 
 interface ReviewSourceRow {
   id: string;
@@ -16,7 +13,9 @@ interface ReviewSourceRow {
   updated_at: string;
 }
 
-function rowToReviewSource(row: ReviewSourceRow): ReviewSource {
+type StoredReviewSource = Omit<ReviewSource, 'capabilities'>;
+
+function rowToReviewSource(row: ReviewSourceRow): StoredReviewSource {
   return {
     id: row.id,
     type: row.type,
@@ -32,25 +31,25 @@ export class ReviewSourceStore {
 
   constructor(
     private db: PiuiDatabase,
-    private defaultDevinPath: string = DEFAULT_DEVIN_DATA_PATH,
+    private providers: ReviewSourceProvider[] = reviewSourceProviders,
   ) {
-    this.ensureDefaultDevin();
+    this.ensureDefaultSources();
   }
 
-  list(): ReviewSource[] {
+  list(): StoredReviewSource[] {
     const rows = this.db.prepare('SELECT * FROM review_sources ORDER BY label').all() as ReviewSourceRow[];
     return rows.map(rowToReviewSource);
   }
 
-  get(id: string): ReviewSource | undefined {
+  get(id: string): StoredReviewSource | undefined {
     const row = this.db.prepare('SELECT * FROM review_sources WHERE id = ?').get(id) as ReviewSourceRow | undefined;
     return row ? rowToReviewSource(row) : undefined;
   }
 
-  create(request: CreateReviewSourceRequest): ReviewSource {
+  create(request: CreateReviewSourceRequest): StoredReviewSource {
     const now = new Date().toISOString();
     const id = this.generateId(request.type, request.label);
-    const dataPath = path.resolve(request.dataPath);
+    const dataPath = this.resolveDataPath(request.dataPath);
     this.db.prepare(`
       INSERT INTO review_sources (id, type, label, data_path, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -60,7 +59,7 @@ export class ReviewSourceStore {
 
   delete(id: string): void {
     if (this.autoDetectedIds.has(id)) {
-      throw new Error('Cannot delete the auto-detected Devin review source');
+      throw new Error('Cannot delete an auto-detected review source');
     }
     this.db.prepare('DELETE FROM review_sources WHERE id = ?').run(id);
   }
@@ -69,23 +68,29 @@ export class ReviewSourceStore {
     this.autoDetectedIds.add(id);
   }
 
-  private ensureDefaultDevin(): void {
-    const sessionsDbPath = path.join(this.defaultDevinPath, 'sessions.db');
-    if (!fs.existsSync(sessionsDbPath)) return;
-    const existing = this.db.prepare(
-      'SELECT id FROM review_sources WHERE type = ? AND data_path = ?',
-    ).get('devin', this.defaultDevinPath) as { id: string } | undefined;
-    if (existing) {
-      this.autoDetectedIds.add(existing.id);
-      return;
+  isAutoDetected(id: string): boolean {
+    return this.autoDetectedIds.has(id);
+  }
+
+  private ensureDefaultSources(): void {
+    for (const provider of this.providers) {
+      if (!provider.isAvailable(provider.defaultDataPath)) continue;
+      const existing = this.db.prepare(
+        'SELECT id FROM review_sources WHERE type = ? AND data_path = ?',
+      ).get(provider.type, provider.defaultDataPath) as { id: string } | undefined;
+      if (existing) {
+        this.autoDetectedIds.add(existing.id);
+        continue;
+      }
+      const source = this.create({ type: provider.type, label: provider.label, dataPath: provider.defaultDataPath });
+      this.autoDetectedIds.add(source.id);
     }
-    const now = new Date().toISOString();
-    const id = this.generateId('devin', DEFAULT_DEVIN_LABEL);
-    this.db.prepare(`
-      INSERT INTO review_sources (id, type, label, data_path, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, 'devin', DEFAULT_DEVIN_LABEL, this.defaultDevinPath, now, now);
-    this.autoDetectedIds.add(id);
+  }
+
+  private resolveDataPath(dataPath: string): string {
+    if (dataPath === '~') return os.homedir();
+    if (dataPath.startsWith(`~${path.sep}`)) return path.join(os.homedir(), dataPath.slice(2));
+    return path.resolve(dataPath);
   }
 
   private generateId(type: string, label: string): string {

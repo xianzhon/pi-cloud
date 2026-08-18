@@ -1,9 +1,16 @@
-import type { ReviewSessionListItem, ReviewSessionTranscript, ReviewSource } from '../types/reviewSource';
+import type { ReviewSessionListItem, ReviewSessionTranscript, ReviewSource, ReviewSourceType } from '../types/reviewSource';
 
 export async function listReviewSources(): Promise<ReviewSource[]> {
   const response = await fetch('/api/review-sources');
   const data = await response.json() as { sources?: ReviewSource[] };
   return data.sources || [];
+}
+
+export async function listReviewSourceTypes(): Promise<ReviewSourceType[]> {
+  const response = await fetch('/api/review-sources/types');
+  if (!response.ok) throw new Error('Failed to load review source types');
+  const data = await response.json() as { types?: ReviewSourceType[] };
+  return data.types || [];
 }
 
 export async function createReviewSource(request: { type: string; label: string; dataPath: string }): Promise<ReviewSource> {

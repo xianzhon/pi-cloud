@@ -25,6 +25,10 @@ export async function reviewSourceRoutes(app: FastifyInstance, options: ReviewSo
     return { sources: options.reviewSourceService.listSources() };
   });
 
+  app.get('/types', async () => {
+    return { types: options.reviewSourceService.listTypes() };
+  });
+
   app.post('/', async (req, reply) => {
     const body = req.body as { type?: string; label?: string; dataPath?: string };
     if (!body.type || !body.label || !body.dataPath) {

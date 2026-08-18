@@ -21,7 +21,7 @@ describe('review source routes', () => {
     tempDir = await mkdtemp(path.join(tmpdir(), 'pi-webui-review-routes-'));
     dbPath = path.join(tempDir, 'piui.db');
     db = openPiuiDatabase(dbPath);
-    store = new ReviewSourceStore(db, '/nonexistent/devin');
+    store = new ReviewSourceStore(db, []);
     service = new ReviewSourceService(store);
     app = Fastify();
     await app.register(reviewSourceRoutes, { prefix: '/api/review-sources', reviewSourceService: service });
@@ -35,11 +35,15 @@ describe('review source routes', () => {
     try { await rm(`${dbPath}-shm`, { force: true }); } catch {}
   });
 
-  it('lists review sources', async () => {
+  it('lists review sources and supported types', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/review-sources' });
     expect(response.statusCode).toBe(200);
     const data = response.json();
     expect(Array.isArray(data.sources)).toBe(true);
+
+    const typesResponse = await app.inject({ method: 'GET', url: '/api/review-sources/types' });
+    expect(typesResponse.statusCode).toBe(200);
+    expect(typesResponse.json().types.map((type: { type: string }) => type.type)).toEqual(['devin', 'claude-code']);
   });
 
   it('creates and deletes a custom source', async () => {
@@ -51,9 +55,19 @@ describe('review source routes', () => {
     expect(createResponse.statusCode).toBe(200);
     const { source } = createResponse.json();
     expect(source.type).toBe('devin');
+    expect(source.capabilities).toEqual({ canDeleteSource: true, canDeleteSessions: true });
 
     const deleteResponse = await app.inject({ method: 'DELETE', url: `/api/review-sources/${source.id}` });
     expect(deleteResponse.statusCode).toBe(200);
+  });
+
+  it('rejects an unsupported source type', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/review-sources',
+      payload: { type: 'unknown', label: 'Unknown', dataPath: '/tmp/unknown' },
+    });
+    expect(response.statusCode).toBe(400);
   });
 
   it('rejects missing fields on create', async () => {

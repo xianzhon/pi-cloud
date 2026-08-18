@@ -1116,9 +1116,9 @@ describe('ChatPanel', () => {
       if (String(url).includes('/api/review-sources/devin/sessions/review-1/transcript')) {
         return new Response(JSON.stringify({ transcript: {
           messages: [
-            { role: 'assistant', content: 'You are Devin, an interactive command line agent from Cognition.' },
-            { role: 'assistant', content: 'Available subagent profiles for the `run_subagent` tool.' },
-            { role: 'assistant', content: 'You are powered by Kimi K2.7.' },
+            { role: 'assistant', content: 'You are Devin, an interactive command line agent from Cognition.', detailOnly: true },
+            { role: 'assistant', content: 'Available subagent profiles for the `run_subagent` tool.', detailOnly: true },
+            { role: 'assistant', content: 'You are powered by Kimi K2.7.', detailOnly: true },
             { role: 'assistant', content: '<system_info>\nPlatform: linux\n</system_info>' },
             { role: 'assistant', content: '<available_skills>\nThe following skills can be invoked using the `skill` tool.\n</available_skills>' },
             { role: 'assistant', content: '<rules type="always-on">\nKeep changes focused.\n</rules>\n\nVisible rule-following text' },
