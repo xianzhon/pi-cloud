@@ -1245,7 +1245,7 @@ describe('ChatPanel', () => {
           messages: [
             { role: 'assistant', content: '<tool_call name="exec_command" id="call-1">\n{"cmd":"tea pr 88"}\n</tool_call>' },
             { role: 'assistant', content: '<tool_call name="exec_command" id="call-2">\n{"cmd":"git status"}\n</tool_call>' },
-            { role: 'assistant', content: '<observation tool_call_id="call-2">\nstatus output\n</observation>' },
+            { role: 'assistant', content: '<observation tool_call_id="call-2">\n   220\tfirst line\n   221\tsecond line\n</observation>' },
             { role: 'assistant', content: '<observation tool_call_id="call-1" status="failure">\ncommand output\n</observation>' },
           ],
         } }), { status: 200 });
@@ -1256,7 +1256,7 @@ describe('ChatPanel', () => {
     const wrapper = mount(ChatPanel, { props: { reviewSourceId: 'claude-code', reviewSessionId: 'review-1' } });
     await flushPromises();
 
-    expect(wrapper.text()).not.toContain('status output');
+    expect(wrapper.text()).not.toContain('first line');
     expect(wrapper.text()).not.toContain('command output');
 
     await wrapper.find('.view-options-toggle-btn').trigger('mouseenter');
@@ -1268,7 +1268,7 @@ describe('ChatPanel', () => {
     expect(toolCalls[0].attributes('data-tool-name')).toBe('exec_command');
     expect(toolCalls[0].text()).toContain('tea pr 88');
     expect(toolResults[0].attributes('data-tool-input')).toContain('git status');
-    expect(toolResults[0].text()).toContain('status output');
+    expect(toolResults[0].element.textContent).toBe('   220\tfirst line\n   221\tsecond line');
     expect(toolResults[1].attributes('data-tool-input')).toContain('tea pr 88');
     expect(toolResults[1].attributes('data-status')).toBe('failure');
     expect(toolResults[1].attributes('data-title')).toBe('Tool exec_command failed');

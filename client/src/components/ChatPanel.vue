@@ -1160,9 +1160,10 @@ function thinkingOnlyBody(content: string): string | undefined {
 }
 
 function reviewObservationOutput(body: string): string {
-  const trimmed = body.trim();
+  // Remove the tag wrapper's line breaks without stripping meaningful output indentation.
+  const output = body.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
   try {
-    const parsed = JSON.parse(trimmed);
+    const parsed = JSON.parse(output.trim());
     const results = Array.isArray(parsed.results) ? parsed.results : [parsed];
     return results.map((result: unknown) => {
       if (result && typeof result === 'object' && 'content' in result && typeof result.content === 'string') {
@@ -1171,7 +1172,7 @@ function reviewObservationOutput(body: string): string {
       return JSON.stringify(result, null, 2);
     }).join('\n\n');
   } catch {
-    return trimmed;
+    return output;
   }
 }
 
