@@ -48,6 +48,7 @@ import { GithubClient } from './services/github-client.js';
 import { GatewaySettingsStore } from './services/gateway-settings-store.js';
 import { GithubSettingsStore } from './services/github-settings-store.js';
 import { ProjectTaskStore } from './services/project-task-store.js';
+import { SkillPresetStore } from './services/skill-preset-store.js';
 import { CommitMessagePromptStore } from './services/commit-message-prompt-store.js';
 import { ProjectTaskStarter } from './services/project-task-starter.js';
 import { RepositoryCloner } from './services/repository-cloner.js';
@@ -230,6 +231,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   memoryRuntime.start();
   const projectTaskStore = new ProjectTaskStore(db);
+  const skillPresetStore = new SkillPresetStore(db);
   const reviewSourceStore = new ReviewSourceStore(db);
   const reviewSourceService = new ReviewSourceService(reviewSourceStore);
   const sessionActivityStore = new SessionActivityStore(db);
@@ -256,6 +258,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     sessionService: piSessionService,
     worktreeManager,
     worktreeMetadataStore,
+    presetStore: skillPresetStore,
   });
   const audit = new AuditLog(db);
   const sessions = new SessionStore(db, authConfig.cookieName);

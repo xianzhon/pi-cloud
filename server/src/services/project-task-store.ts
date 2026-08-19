@@ -15,6 +15,7 @@ export interface ProjectTaskDraft {
   modelId: string;
   skillMode: ProjectTaskSkillMode;
   skills: string[];
+  presetId?: string | null;
   worktree: CreateSessionWorktreeOptions;
 }
 
@@ -35,6 +36,7 @@ export interface AttachGiteaIssueInput {
 
 export interface ProjectTaskRecord extends ProjectTaskDraft {
   id: string;
+  presetId: string | null;
   status: ProjectTaskStatus;
   sessionId: string | null;
   giteaIssue: ProjectTaskGiteaIssue | null;
@@ -61,6 +63,7 @@ interface ProjectTaskRow {
   model_id: string;
   skill_mode: ProjectTaskSkillMode;
   skills_json: string;
+  preset_id: string | null;
   worktree_json: string;
   session_id: string | null;
   gitea_issue_owner: string | null;
@@ -99,17 +102,18 @@ export class ProjectTaskStore {
     this.db.prepare(`
       INSERT INTO project_tasks (
         id, project_path, title, prompt, notes, status, agent_profile_id,
-        model_provider, model_id, skill_mode, skills_json, worktree_json,
+        model_provider, model_id, skill_mode, skills_json, preset_id, worktree_json,
         session_id, created_at, updated_at, started_at, completed_at
       ) VALUES (
         @id, @projectPath, @title, @prompt, @notes, 'waiting', @agentProfileId,
-        @modelProvider, @modelId, @skillMode, @skillsJson, @worktreeJson,
+        @modelProvider, @modelId, @skillMode, @skillsJson, @presetId, @worktreeJson,
         NULL, @createdAt, @updatedAt, NULL, NULL
       )
     `).run({
       id,
       ...draft,
       skillsJson: JSON.stringify(draft.skills),
+      presetId: draft.presetId ?? null,
       worktreeJson: JSON.stringify(draft.worktree),
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -156,6 +160,7 @@ export class ProjectTaskStore {
         model_id = @modelId,
         skill_mode = @skillMode,
         skills_json = @skillsJson,
+        preset_id = @presetId,
         worktree_json = @worktreeJson,
         updated_at = @updatedAt
       WHERE id = @id AND status = 'waiting'
@@ -163,6 +168,7 @@ export class ProjectTaskStore {
       id,
       ...draft,
       skillsJson: JSON.stringify(draft.skills),
+      presetId: draft.presetId ?? null,
       worktreeJson: JSON.stringify(draft.worktree),
       updatedAt: this.now(),
     });
@@ -302,6 +308,7 @@ function normalizeDraft(input: ProjectTaskDraft): ProjectTaskDraft {
     modelId: requiredString(input.modelId, 'modelId'),
     skillMode: input.skillMode,
     skills: Array.from(new Set(input.skills.map((skill) => skill.trim()).filter(Boolean))),
+    presetId: typeof input.presetId === 'string' && input.presetId.trim() ? input.presetId.trim() : null,
     worktree: normalizeWorktree(input.worktree),
   };
 }
@@ -328,6 +335,7 @@ function mapRow(row: ProjectTaskRow): ProjectTaskRecord {
     modelId: row.model_id,
     skillMode: row.skill_mode,
     skills: JSON.parse(row.skills_json) as string[],
+    presetId: row.preset_id,
     worktree: JSON.parse(row.worktree_json) as CreateSessionWorktreeOptions,
     sessionId: row.session_id,
     giteaIssue: row.gitea_issue_url ? {

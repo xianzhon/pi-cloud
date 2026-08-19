@@ -121,7 +121,7 @@ describe('TaskEditorDialog', () => {
     });
   });
 
-  it('snapshots a preset without emitting its id', async () => {
+  it('stores a preset reference with its resolved skills', async () => {
     const wrapper = mountEditor();
     await vi.waitFor(() => expect(wrapper.find('input[name="task-session-mode"][value="preset"]').exists()).toBe(true));
 
@@ -132,8 +132,13 @@ describe('TaskEditorDialog', () => {
     await wrapper.get('form').trigger('submit');
 
     const saved = wrapper.emitted('save')?.[0]?.[0] as Record<string, unknown>;
-    expect(saved).toMatchObject({ skillMode: 'enabled', skills: ['brainstorming'] });
-    expect(saved).not.toHaveProperty('presetId');
+    expect(saved).toMatchObject({ skillMode: 'enabled', skills: ['brainstorming'], presetId: 'preset-1' });
+  });
+
+  it('restores a task preset when editing', async () => {
+    const wrapper = mountEditor({ task: { ...existingTask, presetId: 'preset-1' } });
+    await vi.waitFor(() => expect((wrapper.get('input[name="task-session-mode"][value="preset"]').element as HTMLInputElement).checked).toBe(true));
+    expect(wrapper.get('#task-preset').text()).toContain('Focused');
   });
 
   it('prefills an editable waiting task and reloads its profile resources', async () => {

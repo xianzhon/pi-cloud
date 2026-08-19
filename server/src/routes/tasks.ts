@@ -210,6 +210,7 @@ function parseTaskDraft(value: unknown): ProjectTaskDraft {
     modelId: requiredString(body.modelId, 'modelId'),
     skillMode: body.skillMode,
     skills,
+    ...(body.presetId === undefined ? {} : { presetId: optionalString(body.presetId, 'presetId') }),
     worktree: normalizeWorktree(body.worktree),
   };
 }
@@ -217,6 +218,12 @@ function parseTaskDraft(value: unknown): ProjectTaskDraft {
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new ProjectTaskValidationError(`${field} is required`);
   return value.trim();
+}
+
+function optionalString(value: unknown, field: string): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') throw new ProjectTaskValidationError(`${field} must be a string`);
+  return value.trim() || null;
 }
 
 function sendTaskError(reply: FastifyReply, error: unknown, validationStatus = 409) {

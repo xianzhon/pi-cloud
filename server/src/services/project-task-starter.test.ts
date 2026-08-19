@@ -26,6 +26,7 @@ describe('ProjectTaskStarter', () => {
   let sessionService: any;
   let worktreeManager: any;
   let worktreeMetadataStore: any;
+  let presetStore: any;
   let stat: any;
   let starter: ProjectTaskStarter;
 
@@ -52,8 +53,9 @@ describe('ProjectTaskStarter', () => {
       resolveSessionCwd: vi.fn().mockImplementation(async (projectPath: string) => ({ cwd: projectPath })),
     };
     worktreeMetadataStore = { save: vi.fn((value) => value) };
+    presetStore = { getById: vi.fn().mockReturnValue(null) };
     stat = vi.fn().mockResolvedValue({ isDirectory: () => true });
-    starter = new ProjectTaskStarter({ store, sessionService, worktreeManager, worktreeMetadataStore, stat });
+    starter = new ProjectTaskStarter({ store, sessionService, worktreeManager, worktreeMetadataStore, presetStore, stat });
   });
 
   afterEach(() => {
@@ -81,6 +83,30 @@ describe('ProjectTaskStarter', () => {
       task: { status: 'started', sessionId: 'session-1' },
     });
     await expect(starter.start('task-1', 'client-1')).rejects.toBeInstanceOf(ProjectTaskConflictError);
+  });
+
+  it('resolves the current preset when starting', async () => {
+    store.create(draft({ presetId: 'preset-1', skills: ['old-skill'] }));
+    presetStore.getById.mockReturnValue({ id: 'preset-1', mode: 'disabled', skills: ['brainstorming'] });
+
+    await starter.start('task-1', 'client-1');
+
+    expect(sessionService.createSession).toHaveBeenCalledWith('client-1', expect.objectContaining({
+      skillMode: 'disabled',
+      disabledSkills: ['brainstorming'],
+      presetId: 'preset-1',
+    }));
+  });
+
+  it('uses no skills if a referenced preset no longer exists', async () => {
+    store.create(draft({ presetId: 'deleted-preset' }));
+
+    await starter.start('task-1', 'client-1');
+
+    expect(sessionService.createSession).toHaveBeenCalledWith('client-1', expect.objectContaining({
+      skillMode: 'enabled',
+      enabledSkills: [],
+    }));
   });
 
   it('maps disabled and all skill snapshots to session options', async () => {

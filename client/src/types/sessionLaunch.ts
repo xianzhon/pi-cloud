@@ -32,6 +32,7 @@ export interface TaskLaunchSnapshot {
   modelId: string;
   skillMode: SkillMode;
   skills: string[];
+  presetId?: string;
   worktree: WorktreePayload;
 }
 
@@ -77,6 +78,7 @@ export function toTaskLaunchSnapshot(value: SessionLaunchValue): TaskLaunchSnaps
     modelId: value.modelId,
     skillMode,
     skills: skillMode === 'all' ? [] : normalizeSkills(value.skills),
+    ...(value.skillSelection === 'preset' ? { presetId: value.presetId } : {}),
     worktree: value.worktree,
   };
 }

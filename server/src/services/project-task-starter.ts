@@ -19,11 +19,16 @@ interface ProjectTaskWorktreeMetadataStore {
   save(info: Omit<SessionWorktreeInfo, 'createdAt' | 'updatedAt' | 'finishedAt'>): SessionWorktreeInfo;
 }
 
+interface ProjectTaskPresetStore {
+  getById(id: string): { id: string; mode: 'enabled' | 'disabled'; skills: string[] } | null;
+}
+
 interface ProjectTaskStarterOptions {
   store: ProjectTaskStore;
   sessionService: ProjectTaskSessionService;
   worktreeManager: ProjectTaskWorktreeManager;
   worktreeMetadataStore: ProjectTaskWorktreeMetadataStore;
+  presetStore: ProjectTaskPresetStore;
   stat?: (path: string) => Promise<{ isDirectory(): boolean }>;
 }
 
@@ -47,11 +52,12 @@ export class ProjectTaskStarter {
     const task = this.options.store.claimStart(taskId);
     let sessionCreated = false;
     try {
+      const launchTask = this.resolveSkillPolicy(task);
       await this.validateProject(task.projectPath);
-      await this.validateProfileModelAndSkills(task);
+      await this.validateProfileModelAndSkills(launchTask);
       await this.options.sessionService.setClientAgentProfile(clientId, task.agentProfileId);
       const resolved = await this.options.worktreeManager.resolveSessionCwd(task.projectPath, task.worktree);
-      const created = await this.options.sessionService.createSession(clientId, toSessionOptions(task, resolved.cwd));
+      const created = await this.options.sessionService.createSession(clientId, toSessionOptions(launchTask, resolved.cwd));
       sessionCreated = true;
       const worktree = resolved.metadata
         ? this.options.worktreeMetadataStore.save({ sessionId: created.session.sessionId, ...resolved.metadata })
@@ -69,6 +75,13 @@ export class ProjectTaskStarter {
       if (!sessionCreated) this.options.store.restoreWaiting(task.id);
       throw error;
     }
+  }
+
+  private resolveSkillPolicy(task: ProjectTaskRecord): ProjectTaskRecord {
+    if (!task.presetId) return task;
+    const preset = this.options.presetStore.getById(task.presetId);
+    if (!preset) return { ...task, presetId: null, skillMode: 'enabled', skills: [] };
+    return { ...task, skillMode: preset.mode, skills: preset.skills };
   }
 
   private async validateProject(projectPath: string): Promise<void> {
@@ -106,6 +119,7 @@ function toSessionOptions(task: ProjectTaskRecord, cwd: string): SessionOptions 
     modelProvider: task.modelProvider,
     modelId: task.modelId,
     skillMode: task.skillMode,
+    ...(task.presetId ? { presetId: task.presetId } : {}),
   };
   if (task.skillMode === 'enabled') options.enabledSkills = task.skills;
   if (task.skillMode === 'disabled') options.disabledSkills = task.skills;

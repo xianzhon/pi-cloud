@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openPiuiDatabase, type PiuiDatabase } from '../db/database';
+import { ProjectTaskStore } from './project-task-store';
 import { SkillPresetStore } from './skill-preset-store';
 
 describe('SkillPresetStore', () => {
@@ -77,7 +78,15 @@ describe('SkillPresetStore', () => {
       updatedAt: expect.any(String),
     });
 
+    const taskStore = new ProjectTaskStore(db);
+    const task = taskStore.create({
+      projectPath: '/repo/app', title: 'Task', prompt: 'Run it', notes: '', agentProfileId: 'codex',
+      modelProvider: 'openai', modelId: 'gpt-5.4', skillMode: updated.mode, skills: updated.skills,
+      presetId: updated.id, worktree: { mode: 'none' },
+    });
+
     store.delete(created.id, 'other');
     expect(store.list()).toEqual([]);
+    expect(taskStore.get(task.id)).toMatchObject({ presetId: null, skillMode: 'enabled', skills: [] });
   });
 });

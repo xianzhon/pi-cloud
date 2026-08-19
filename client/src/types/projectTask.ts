@@ -14,6 +14,7 @@ export interface ProjectTaskDraft {
   modelId: string;
   skillMode: ProjectTaskSkillMode;
   skills: string[];
+  presetId?: string | null;
   worktree: WorktreePayload;
 }
 

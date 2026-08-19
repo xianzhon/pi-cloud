@@ -22,7 +22,7 @@ describe('session launch conversion', () => {
     });
   });
 
-  it('snapshots resolved skills without retaining a preset dependency', () => {
+  it('stores the resolved skills and preset reference for a task', () => {
     const value = {
       ...defaultSessionLaunchValue(),
       modelProvider: 'openai',
@@ -38,6 +38,7 @@ describe('session launch conversion', () => {
       modelId: 'gpt-5.4',
       skillMode: 'disabled',
       skills: ['frontend-design'],
+      presetId: 'p1',
       worktree: { mode: 'none' },
     });
   });

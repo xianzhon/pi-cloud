@@ -404,13 +404,17 @@ function readStoredSkillOptions(projectPath: string): StoredSkillOptions {
 }
 
 function launchFromTask(task: ProjectTask): SessionLaunchValue {
+  let skillSelection: SessionLaunchValue['skillSelection'] = 'custom';
+  if (task.presetId) skillSelection = 'preset';
+  else if (task.skillMode === 'all') skillSelection = 'all';
+
   return {
     modelProvider: task.modelProvider,
     modelId: task.modelId,
-    skillSelection: task.skillMode === 'all' ? 'all' : 'custom',
+    skillSelection,
     skillMode: task.skillMode,
     skills: [...task.skills],
-    presetId: '',
+    presetId: task.presetId || '',
     worktree: task.worktree,
   };
 }

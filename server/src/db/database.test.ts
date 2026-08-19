@@ -48,7 +48,7 @@ describe('openPiuiDatabase', () => {
     expect(columns.map((column) => column.name)).toEqual([
       'id', 'project_path', 'title', 'prompt', 'notes', 'status',
       'agent_profile_id', 'model_provider', 'model_id', 'skill_mode',
-      'skills_json', 'worktree_json', 'session_id', 'created_at',
+      'skills_json', 'preset_id', 'worktree_json', 'session_id', 'created_at',
       'updated_at', 'started_at', 'completed_at', 'gitea_issue_owner',
       'gitea_issue_repo', 'gitea_issue_number', 'gitea_issue_url',
       'gitea_issue_created_at',

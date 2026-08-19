@@ -273,6 +273,7 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
       model_id TEXT NOT NULL,
       skill_mode TEXT NOT NULL CHECK (skill_mode IN ('all', 'enabled', 'disabled')),
       skills_json TEXT NOT NULL DEFAULT '[]',
+      preset_id TEXT,
       worktree_json TEXT NOT NULL DEFAULT '{"mode":"none"}',
       session_id TEXT UNIQUE,
       created_at TEXT NOT NULL,
@@ -322,6 +323,7 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
   ensureColumn(db, 'memory_extraction_runs', 'created_count', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'memory_extraction_runs', 'duplicate_count', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'memory_extraction_runs', 'replaced_count', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'project_tasks', 'preset_id', 'TEXT');
   ensureColumn(db, 'project_tasks', 'gitea_issue_owner', 'TEXT');
   ensureColumn(db, 'project_tasks', 'gitea_issue_repo', 'TEXT');
   ensureColumn(db, 'project_tasks', 'gitea_issue_number', 'INTEGER');

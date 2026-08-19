@@ -55,6 +55,7 @@ describe('ProjectTaskStore', () => {
       title: 'Fix queue',
       prompt: 'Implement it',
       status: 'waiting',
+      presetId: null,
       sessionId: null,
       giteaIssue: null,
       createdAt: now,
@@ -75,6 +76,14 @@ describe('ProjectTaskStore', () => {
     expect(store.list({ projectPath: '/repo/app', status: 'waiting' })).toEqual([first]);
     expect(store.list({ status: 'starting' })).toEqual([expect.objectContaining({ id: second.id })]);
     expect(store.listProjectPaths()).toEqual(['/repo/app', '/repo/other']);
+  });
+
+  it('stores and updates a task preset reference', () => {
+    const task = store.create({ ...baseDraft, presetId: 'preset-1' });
+    expect(task.presetId).toBe('preset-1');
+
+    const updated = store.update(task.id, { ...baseDraft, presetId: 'preset-2' });
+    expect(updated.presetId).toBe('preset-2');
   });
 
   it('updates only waiting tasks', () => {

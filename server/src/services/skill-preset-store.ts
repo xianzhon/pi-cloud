@@ -90,6 +90,14 @@ export class SkillPresetStore {
         SET mode = 'all', skills_json = '[]'
         WHERE preset_id = ?
       `).run(id);
+      // Waiting tasks with a deleted preset must start with an explicit empty allowlist, not all skills.
+      this.db.prepare(`
+        UPDATE project_tasks
+        SET skill_mode = CASE WHEN status IN ('waiting', 'starting') THEN 'enabled' ELSE skill_mode END,
+            skills_json = CASE WHEN status IN ('waiting', 'starting') THEN '[]' ELSE skills_json END,
+            preset_id = NULL
+        WHERE preset_id = ?
+      `).run(id);
       this.db.prepare('DELETE FROM skill_presets WHERE id = ?').run(id);
     })();
   }
