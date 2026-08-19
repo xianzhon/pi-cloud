@@ -55,7 +55,7 @@ Use the search box and the **Category** and **State** filters to narrow the list
 2. Click **Add memory**.
 3. Enter one concise, atomic, long-lived statement.
 4. Select a category and add tags.
-5. Optionally select **Pin for recall**. A pinned memory can be **Always applicable** or, with the adaptive policy, **Only when matched** to the current prompt.
+5. Optionally select **Pin for recall**. Pinned memories default to **Only when matched** to avoid adding rules to unrelated turns. Choose **Always applicable** only for genuinely global instructions.
 6. Click **Save memory**.
 
 Good example:

@@ -399,14 +399,14 @@ const addDraft = reactive({
   content: '',
   tags: '',
   pinned: false,
-  pinnedApplicability: 'always' as MemoryPinnedApplicability,
+  pinnedApplicability: 'matched' as MemoryPinnedApplicability,
 });
 const editDraft = reactive({
   category: 'fact' as MemoryCategory,
   content: '',
   tags: '',
   pinned: false,
-  pinnedApplicability: 'always' as MemoryPinnedApplicability,
+  pinnedApplicability: 'matched' as MemoryPinnedApplicability,
 });
 const reviewDraft = reactive({ category: 'fact' as MemoryCategory, content: '', tags: '' });
 
@@ -545,7 +545,7 @@ function startAdd(): void {
   addDraft.content = '';
   addDraft.tags = '';
   addDraft.pinned = false;
-  addDraft.pinnedApplicability = 'always';
+  addDraft.pinnedApplicability = 'matched';
   showAddEditor.value = true;
 }
 
@@ -568,7 +568,7 @@ function startEdit(memory: MemoryRecord): void {
   editDraft.content = memory.content;
   editDraft.tags = memory.tags.join(', ');
   editDraft.pinned = memory.pinned;
-  editDraft.pinnedApplicability = memory.pinnedApplicability || 'always';
+  editDraft.pinnedApplicability = memory.pinnedApplicability || 'matched';
 }
 
 async function submitEdit(memory: MemoryRecord): Promise<void> {

@@ -126,6 +126,7 @@ describe('MemoryService', () => {
         category: 'rule',
         content: `${index} ${'x'.repeat(1_850)}`,
         pinned: true,
+        pinnedApplicability: 'always',
       });
     }
 
@@ -152,6 +153,7 @@ describe('MemoryService', () => {
       category: 'rule',
       content: 'Keep changes surgical',
       pinned: true,
+      pinnedApplicability: 'always',
     });
     const relevant = service.save(context, {
       category: 'fact',
@@ -184,6 +186,7 @@ describe('MemoryService', () => {
       category: 'rule',
       content: 'Keep changes surgical',
       pinned: true,
+      pinnedApplicability: 'always',
     });
     const matched = service.save(context, {
       category: 'preference',
@@ -277,6 +280,7 @@ describe('MemoryService', () => {
       category: 'rule',
       content: 'Keep changes surgical',
       pinned: true,
+      pinnedApplicability: 'always',
     });
     const facts = Array.from({ length: 10 }, (_, index) => service.save(context, {
       category: 'fact',
