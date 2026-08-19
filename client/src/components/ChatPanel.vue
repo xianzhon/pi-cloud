@@ -107,6 +107,19 @@
     </div>
 
     <div v-if="isReviewMode" class="input-area">
+      <div
+        class="input-resize-handle"
+        :class="{ 'is-resizing': inputResizeStartY !== null }"
+        role="separator"
+        :aria-label="t('components.chatPanel.resizeMessageInput')"
+        aria-orientation="horizontal"
+        :title="t('components.chatPanel.dragToResizeMessageInput')"
+        @pointerdown="handleInputResizeStart"
+        @pointermove="handleInputResizeMove"
+        @pointerup="handleInputResizeEnd"
+        @pointercancel="handleInputResizeEnd"
+        @lostpointercapture="handleInputResizeEnd"
+      ></div>
       <FileSearchMenu
         v-if="fileSearch.isOpen.value"
         :files="fileSearch.suggestions.value"

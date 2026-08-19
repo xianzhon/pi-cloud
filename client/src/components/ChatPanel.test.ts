@@ -1133,6 +1133,7 @@ describe('ChatPanel', () => {
     expect(textarea.exists()).toBe(true);
     expect(textarea.attributes('disabled')).toBeUndefined();
     expect(textarea.attributes('placeholder')).toBe('Type @ to search and open a file...');
+    expect(wrapper.find('.input-resize-handle').exists()).toBe(true);
     expect(wrapper.find('.review-clear-btn').text()).toBe('Clear');
     expect(wrapper.find('.review-clear-btn').attributes('disabled')).toBeDefined();
     expect(wrapper.findAll('button').some((button) => button.text() === 'Send')).toBe(false);
