@@ -21,16 +21,33 @@ vi.mock('monaco-editor', () => ({
       setModel: vi.fn(),
       getModel: vi.fn(() => null),
       getValue: vi.fn(() => ''),
+      updateOptions: vi.fn(),
+      focus: vi.fn(),
       createDecorationsCollection: vi.fn(() => ({ set: vi.fn(), clear: vi.fn() })),
       dispose: vi.fn(),
       layout: vi.fn(),
     })),
+    createDiffEditor: vi.fn(() => {
+      const originalEditor = { updateOptions: vi.fn() };
+      const modifiedEditor = { updateOptions: vi.fn() };
+      return {
+        setModel: vi.fn(),
+        getOriginalEditor: vi.fn(() => originalEditor),
+        getModifiedEditor: vi.fn(() => modifiedEditor),
+        dispose: vi.fn(),
+        layout: vi.fn(),
+      };
+    }),
     createModel: vi.fn(() => ({
       onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
       getLineCount: vi.fn(() => 1),
+      getLineContent: vi.fn(() => ''),
+      setValue: vi.fn(),
       dispose: vi.fn(),
     })),
     setModelLanguage: vi.fn(),
+    defineTheme: vi.fn(),
+    setTheme: vi.fn(),
     OverviewRulerLane: { Left: 1 },
   },
   languages: {
@@ -47,7 +64,10 @@ vi.mock('monaco-editor', () => ({
   },
   KeyMod: { CtrlCmd: 2048 },
   KeyCode: { KeyS: 49 },
-  Uri: { file: (path: string) => ({ path }) },
+  Uri: {
+    file: (path: string) => ({ path }),
+    parse: (path: string) => ({ path }),
+  },
   Range: class {
     constructor(public startLineNumber: number, public startColumn: number, public endLineNumber: number, public endColumn: number) {}
   },
@@ -93,6 +113,108 @@ describe('EditorPanel', () => {
     });
   });
 
+  it('uses source line numbers and disables wrapping for virtual diffs', async () => {
+    mockFileTreeFetch();
+    const lines = [
+      'diff --git a/file.ts b/file.ts',
+      '@@ -47,3 +47,3 @@',
+      ' unchanged',
+      '-removed',
+      '+added',
+      ' unchanged again',
+    ];
+    const model = {
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getLineCount: vi.fn(() => lines.length),
+      getLineContent: vi.fn((lineNumber: number) => lines[lineNumber - 1]),
+      setValue: vi.fn(),
+      dispose: vi.fn(),
+    };
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue(model as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openVirtualDiff({ cwd: '/project', scope: 'working tree', content: lines.join('\n') });
+    await flushPromises();
+
+    const editorInstance = vi.mocked(monaco.editor.create).mock.results.at(-1)?.value as any;
+    const options = editorInstance.updateOptions.mock.calls.at(-1)?.[0];
+    expect(options).toMatchObject({
+      readOnly: true,
+      wordWrap: 'off',
+      lineNumbersMinChars: 9,
+      folding: false,
+      renderLineHighlight: 'none',
+    });
+    expect(options.lineNumbers(1)).toBe('');
+    expect(options.lineNumbers(3)).toBe('  47   47');
+    expect(options.lineNumbers(4)).toBe('  48     ');
+    expect(options.lineNumbers(5)).toBe('       48');
+    expect(options.lineNumbers(6)).toBe('  49   49');
+  });
+
+  it('uses GitHub Primer colors and a solid empty-side background', async () => {
+    mockFileTreeFetch();
+    mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await flushPromises();
+
+    expect(monaco.editor.defineTheme).toHaveBeenCalledWith('pi-github-light', expect.objectContaining({
+      colors: expect.objectContaining({
+        'diffEditor.insertedLineBackground': '#dafbe1',
+        'diffEditor.removedLineBackground': '#ffebe9',
+        'diffEditor.diagonalFill': '#f6f8fa',
+      }),
+    }));
+    expect(editorPanelSource).toContain('background-image: none;');
+  });
+
+  it('toggles virtual diffs between unified and split views', async () => {
+    mockFileTreeFetch();
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openVirtualDiff({
+      cwd: '/project',
+      scope: 'working tree',
+      content: '@@ -1 +1 @@\n-old value\n+new value',
+    });
+    await flushPromises();
+
+    const splitButton = wrapper.findAll('button').find(button => button.text() === 'Split');
+    expect(splitButton).toBeDefined();
+    await splitButton!.trigger('click');
+    await flushPromises();
+
+    const diffEditor = vi.mocked(monaco.editor.createDiffEditor).mock.results.at(-1)?.value as any;
+    expect(diffEditor.setModel.mock.calls.at(-1)?.[0]).toMatchObject({
+      original: expect.any(Object),
+      modified: expect.any(Object),
+    });
+    expect(diffEditor.getOriginalEditor().updateOptions).toHaveBeenCalled();
+    expect(diffEditor.getModifiedEditor().updateOptions).toHaveBeenCalled();
+  });
+
+  it('opens each file in a multi-file patch as a separate diff tab', async () => {
+    mockFileTreeFetch();
+    const patch = [
+      'diff --git a/src/one.ts b/src/one.ts',
+      '--- a/src/one.ts',
+      '+++ b/src/one.ts',
+      '@@ -1 +1 @@',
+      '-old one',
+      '+new one',
+      'diff --git a/src/two.ts b/src/two.ts',
+      '--- a/src/two.ts',
+      '+++ b/src/two.ts',
+      '@@ -2 +2 @@',
+      '-old two',
+      '+new two',
+    ].join('\n');
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openVirtualDiff({ cwd: '/project', scope: 'working tree', content: patch });
+    await flushPromises();
+
+    expect(wrapper.findAll('.tab').map(tab => tab.text())).toEqual(['src/one.ts', 'src/two.ts']);
+    expect(wrapper.findAll('.tab')[0].classes()).toContain('active');
+  });
+
   it('uses in-flow flex layout instead of overlaying the chat', () => {
     const panelRule = editorPanelSource.match(/\.editor-panel\s*\{[^}]+}/)?.[0] || '';
     expect(panelRule).not.toContain('position: fixed;');
@@ -102,11 +224,11 @@ describe('EditorPanel', () => {
   it('keeps editor actions and the markdown mode switch readable when tabs overflow', () => {
     const tabsRule = editorPanelSource.match(/\.editor-tabs\s*\{[^}]+}/)?.[0] || '';
     const actionsRule = editorPanelSource.match(/\.editor-actions\s*\{[^}]+}/)?.[0] || '';
-    const markdownButtonRule = editorPanelSource.match(/\.editor-actions \.markdown-mode-toggle button\s*\{[^}]+}/)?.[0] || '';
+    const modeButtonRule = editorPanelSource.match(/\.editor-actions \.view-mode-toggle button\s*\{[^}]+}/)?.[0] || '';
 
     expect(tabsRule).toContain('flex: 1 1 auto;');
     expect(actionsRule).toContain('flex: 0 0 auto;');
-    expect(markdownButtonRule).toContain('white-space: nowrap;');
+    expect(modeButtonRule).toContain('white-space: nowrap;');
   });
 
   it('uses GitHub-like alternating table row backgrounds in light markdown preview', () => {
@@ -187,7 +309,7 @@ describe('EditorPanel', () => {
     expect(preview.attributes('srcdoc')).toContain("script-src 'none'");
     expect(preview.attributes('srcdoc')).toContain('<h1>Hello</h1>');
 
-    await wrapper.find('.markdown-mode-toggle button:last-child').trigger('click');
+    await wrapper.find('.view-mode-toggle button:last-child').trigger('click');
     expect(wrapper.find('iframe.html-preview').exists()).toBe(false);
     expect(wrapper.find('.editor-container').classes()).not.toContain('hidden');
   });

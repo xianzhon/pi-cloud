@@ -109,6 +109,7 @@
   --diff-hunk-bg: rgba(56, 139, 253, 0.16);
   --diff-hunk-text: #a5d6ff;
   --diff-meta-text: #8b949e;
+  --diff-empty-bg: #161b22;
   --git-added: #3fb950;
   --git-modified: #d29922;
   --git-deleted: #f85149;
@@ -207,13 +208,15 @@
   --syntax-attr: #0550ae;
   --syntax-number: #0550ae;
   --syntax-built-in: #953800;
-  --diff-added-bg: rgba(31, 136, 61, 0.13);
-  --diff-added-text: #116329;
-  --diff-removed-bg: rgba(207, 34, 46, 0.12);
-  --diff-removed-text: #82071e;
-  --diff-hunk-bg: rgba(9, 105, 218, 0.12);
+  /* GitHub Primer light diff palette. */
+  --diff-added-bg: #dafbe1;
+  --diff-added-text: #1f2328;
+  --diff-removed-bg: #ffebe9;
+  --diff-removed-text: #1f2328;
+  --diff-hunk-bg: #ddf4ff;
   --diff-hunk-text: #0969da;
   --diff-meta-text: #57606a;
+  --diff-empty-bg: #f6f8fa;
   --git-added: #1f883d;
   --git-modified: #9a6700;
   --git-deleted: #cf222e;
