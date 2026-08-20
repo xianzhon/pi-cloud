@@ -44,6 +44,16 @@
         >
           <PhSidebarSimple :size="16" weight="bold" />
         </button>
+        <div v-if="activeVirtualFiles.length > 1" class="diff-navigation">
+          <CustomSelect
+            class="diff-file-select"
+            :model-value="activeDiffFileIndex"
+            :options="activeVirtualFileOptions"
+            :aria-label="t('components.editorPanel.changedFileNavigation')"
+            searchable
+            @update:model-value="navigateToDiffFile"
+          />
+        </div>
         <div v-if="activeIsVirtual" class="view-mode-toggle" role="group" :aria-label="t('components.editorPanel.diffViewMode')">
           <button
             :class="{ active: diffViewMode === 'unified' }"
@@ -349,6 +359,7 @@ import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import TreeNode, { type TreeNodeData } from './FileTreeNode.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import InputPromptModal from './InputPromptModal.vue';
+import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 
 const t = i18n.global.t;
 
@@ -627,6 +638,12 @@ const splitDiffModels = new Map<string, {
   oldLineNumbers: string[];
   newLineNumbers: string[];
 }>();
+interface DiffFileSection {
+  name: string;
+  line: number;
+  modifiedLine: number;
+}
+const virtualDiffFiles = new Map<string, DiffFileSection[]>();
 const modelListeners = new Map<string, monaco.IDisposable>();
 const fileTimestamps = new Map<string, number>();
 const gitChanges = ref(new Map<string, GitChangeRange[]>());
@@ -635,6 +652,12 @@ let diffDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
 const activeIsDirty = computed(() => !!activeTab.value && dirtyPaths.value.has(activeTab.value));
 const activeTabInfo = computed(() => tabs.value.find(tab => tab.path === activeTab.value));
 const activeIsVirtual = computed(() => !!activeTabInfo.value?.virtual);
+const activeVirtualFiles = computed(() => activeTab.value ? virtualDiffFiles.get(activeTab.value) || [] : []);
+const activeVirtualFileOptions = computed<CustomSelectOption[]>(() => activeVirtualFiles.value.map((file, index) => ({
+  value: String(index),
+  label: file.name,
+})));
+const activeDiffFileIndex = ref('0');
 const diffViewMode = ref<'unified' | 'split'>('unified');
 const contextTab = computed(() => tabs.value.find(tab => tab.path === tabContextMenu.value.tabPath));
 const closableTabPaths = computed(() => tabs.value.filter(tab => !tab.pinned).map(tab => tab.path));
@@ -1605,6 +1628,7 @@ async function reloadRootTree() {
     modified.dispose();
   });
   splitDiffModels.clear();
+  virtualDiffFiles.clear();
   tabs.value = [];
   activeTab.value = undefined;
   dirtyPaths.value = new Set();
@@ -1675,36 +1699,52 @@ function splitDiffFiles(content: string): Array<{ name: string; content: string 
 
 function openVirtualDiff({ cwd, scope, content }: { cwd: string; scope: string; content: string }): void {
   const files = splitDiffFiles(content);
-  const basePath = virtualDiffPath(cwd, scope);
-  const openedPaths = files.map((_, index) => virtualDiffPath(cwd, scope, files.length > 1 ? index : undefined));
-  const openedPathSet = new Set(openedPaths);
+  const path = virtualDiffPath(cwd, scope);
 
+  // Remove tabs created by the previous per-file diff layout.
   tabs.value
-    .filter(tab => (tab.path === basePath || tab.path.startsWith(`${basePath}?file=`)) && !openedPathSet.has(tab.path))
+    .filter(tab => tab.path.startsWith(`${path}?file=`))
     .forEach(tab => removeOpenTab(tab.path));
 
-  files.forEach((file, index) => {
-    const path = openedPaths[index];
-    const model = models.get(path);
-    if (model) {
-      model.setValue(file.content);
-    } else {
-      models.set(path, monaco.editor.createModel(file.content, 'diff', monaco.Uri.parse(path)));
-    }
-    updateSplitDiffModels(path, file.content);
+  const model = models.get(path);
+  if (model) model.setValue(content);
+  else models.set(path, monaco.editor.createModel(content, 'diff', monaco.Uri.parse(path)));
+  updateSplitDiffModels(path, content);
 
-    const name = files.length > 1 ? file.name : t('components.editorPanel.gitDiffScope', { scope });
-    const existingTab = tabs.value.find(tab => tab.path === path);
-    if (existingTab) existingTab.name = name;
-    else tabs.value.push({ name, path, kind: 'text', virtual: true });
-  });
+  let line = 1;
+  let modifiedLine = 1;
+  virtualDiffFiles.set(path, files.map(file => {
+    const section = { name: file.name, line, modifiedLine };
+    line += file.content.split('\n').length;
+    modifiedLine += splitDiffContent(file.content).modified.split('\n').length;
+    return section;
+  }));
 
-  activeTab.value = openedPaths[0];
+  const name = t('components.editorPanel.gitDiffScope', { scope });
+  const existingTab = tabs.value.find(tab => tab.path === path);
+  if (existingTab) existingTab.name = name;
+  else tabs.value.push({ name, path, kind: 'text', virtual: true });
+
+  activeTab.value = path;
+  activeDiffFileIndex.value = '0';
   collapseFileTreeOnMobile();
   nextTick(() => {
     editor?.focus();
-    applyDiffDecorations(activeTab.value);
+    applyDiffDecorations(path);
   });
+}
+
+function navigateToDiffFile(index: string): void {
+  activeDiffFileIndex.value = index;
+  const file = activeVirtualFiles.value[Number(index)];
+  if (!file) return;
+  if (diffViewMode.value === 'split') {
+    splitDiffEditor?.getModifiedEditor().revealLineInCenter(file.modifiedLine);
+    splitDiffEditor?.getModifiedEditor().setPosition({ lineNumber: file.modifiedLine, column: 1 });
+    splitDiffEditor?.getModifiedEditor().focus();
+  } else {
+    revealPosition(file.line);
+  }
 }
 
 async function openFile(filePath: string, line?: number, column?: number) {
@@ -2369,6 +2409,7 @@ function removeOpenTab(filePath: string) {
   splitModels?.original.dispose();
   splitModels?.modified.dispose();
   splitDiffModels.delete(filePath);
+  virtualDiffFiles.delete(filePath);
   const nextPreviewModes = new Map(previewModes.value);
   nextPreviewModes.delete(filePath);
   previewModes.value = nextPreviewModes;
@@ -2829,6 +2870,7 @@ onUnmounted(() => {
     modified.dispose();
   });
   splitDiffModels.clear();
+  virtualDiffFiles.clear();
   fileTimestamps.clear();
   gitChangeDecorations?.clear();
   diffDecorations?.clear();
@@ -2964,6 +3006,30 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 .tab:hover button {
   opacity: 1;
+}
+
+.diff-navigation {
+  flex: 0 1 260px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.diff-file-select {
+  min-width: 0;
+  max-width: 190px;
+}
+
+.diff-file-select :deep(.custom-select-trigger) {
+  height: 1.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+}
+
+.diff-file-select :deep(.custom-select-list) {
+  min-width: min(360px, calc(100vw - 2rem));
 }
 
 .editor-actions {

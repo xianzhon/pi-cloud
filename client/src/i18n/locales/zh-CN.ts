@@ -428,6 +428,7 @@ export default {
       unified: '统一',
       split: '拆分',
       diffFile: '变更文件 {index}',
+      changedFileNavigation: '变更文件导航',
       cutFile: '已剪切 {name}',
       renameType: '重命名{type}',
       deleteDirectoryMessage: '删除目录“{name}”及其所有内容？',

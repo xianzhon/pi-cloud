@@ -428,6 +428,7 @@ export default {
       unified: 'Unified',
       split: 'Split',
       diffFile: 'Changed file {index}',
+      changedFileNavigation: 'Changed file navigation',
       cutFile: 'Cut {name}',
       renameType: 'Rename {type}',
       deleteDirectoryMessage: 'Delete directory "{name}" and all of its contents?',

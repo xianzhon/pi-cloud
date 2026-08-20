@@ -23,13 +23,20 @@ vi.mock('monaco-editor', () => ({
       getValue: vi.fn(() => ''),
       updateOptions: vi.fn(),
       focus: vi.fn(),
+      revealLineInCenter: vi.fn(),
+      setPosition: vi.fn(),
       createDecorationsCollection: vi.fn(() => ({ set: vi.fn(), clear: vi.fn() })),
       dispose: vi.fn(),
       layout: vi.fn(),
     })),
     createDiffEditor: vi.fn(() => {
       const originalEditor = { updateOptions: vi.fn() };
-      const modifiedEditor = { updateOptions: vi.fn() };
+      const modifiedEditor = {
+        updateOptions: vi.fn(),
+        revealLineInCenter: vi.fn(),
+        setPosition: vi.fn(),
+        focus: vi.fn(),
+      };
       return {
         setModel: vi.fn(),
         getOriginalEditor: vi.fn(() => originalEditor),
@@ -191,7 +198,7 @@ describe('EditorPanel', () => {
     expect(diffEditor.getModifiedEditor().updateOptions).toHaveBeenCalled();
   });
 
-  it('opens each file in a multi-file patch as a separate diff tab', async () => {
+  it('opens a multi-file patch in one tab with file navigation', async () => {
     mockFileTreeFetch();
     const patch = [
       'diff --git a/src/one.ts b/src/one.ts',
@@ -211,8 +218,18 @@ describe('EditorPanel', () => {
     await wrapper.vm.openVirtualDiff({ cwd: '/project', scope: 'working tree', content: patch });
     await flushPromises();
 
-    expect(wrapper.findAll('.tab').map(tab => tab.text())).toEqual(['src/one.ts', 'src/two.ts']);
-    expect(wrapper.findAll('.tab')[0].classes()).toContain('active');
+    expect(wrapper.findAll('.tab').map(tab => tab.text())).toEqual(['Git diff · working tree']);
+    const navigation = wrapper.find('.diff-file-select');
+    await navigation.get('input').trigger('click');
+    expect(navigation.findAll('.custom-select-option').map(option => option.text())).toEqual([
+      'src/one.ts',
+      'src/two.ts',
+    ]);
+
+    await navigation.findAll('.custom-select-option')[1].trigger('click');
+    const editorInstance = vi.mocked(monaco.editor.create).mock.results.at(-1)?.value as any;
+    expect(editorInstance.revealLineInCenter).toHaveBeenCalledWith(7);
+    expect(wrapper.find('button[aria-label="Collapse all files"]').exists()).toBe(false);
   });
 
   it('uses in-flow flex layout instead of overlaying the chat', () => {
