@@ -162,6 +162,30 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('returns the change introduced by a specific abbreviated commit ID', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'committed change\n');
+      await git(cwd, 'add', 'README.md');
+      await git(cwd, 'commit', '-m', 'Change readme');
+      const commit = (await git(cwd, 'rev-parse', '--short=7', 'HEAD')).trim();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/git/diff?cwd=${encodeURIComponent(cwd)}&commit=${commit}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ commit, scope: `commit-${commit}` });
+      expect(response.json().stat).toContain('README.md');
+      expect(response.json().diff).toContain('+committed change');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('returns a small, user-friendly fallback instead of an oversized diff', async () => {
     const cwd = await createRepo();
     const app = await buildApp();

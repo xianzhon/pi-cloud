@@ -378,6 +378,26 @@ describe('MessageBubble', () => {
     expect(wrapper.find('.message-content pre code').exists()).toBe(false);
   });
 
+  it('emits the commit ID when a commit reference is clicked', async () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'git-commit-created',
+          role: 'assistant',
+          content: 'Commit: `95d5c9d` fix the editor diff',
+        },
+      },
+    });
+
+    const link = wrapper.find('.git-commit-link');
+    expect(link.text()).toBe('95d5c9d');
+    expect(link.attributes('data-commit')).toBe('95d5c9d');
+
+    await link.trigger('click');
+
+    expect(wrapper.emitted('openGitCommit')).toEqual([['95d5c9d']]);
+  });
+
   it('uses pi-agent blue for inline code text without inline code chrome', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/MessageBubble.vue'), 'utf8');
 

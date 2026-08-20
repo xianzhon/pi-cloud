@@ -170,6 +170,11 @@ function parseDiffScope(scope: string | undefined): GitDiffScope {
   throw new Error('Invalid diff scope. Use all, staged, or unstaged.');
 }
 
+function parseCommit(commit: string) {
+  if (!/^[0-9a-f]{7,40}$/i.test(commit)) throw new Error('Invalid commit ID.');
+  return commit;
+}
+
 function getDiff(cwd: string, args: string[], scope: GitDiffScope, maxBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES) {
   if (scope === 'staged') return runGit(cwd, ['diff', '--cached', ...args], maxBytes);
   if (scope === 'unstaged') return runGit(cwd, ['diff', ...args], maxBytes);
@@ -652,28 +657,32 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
   });
 
   app.get('/diff', async (req, reply) => {
-    const { cwd, scope: rawScope } = req.query as { cwd?: string; scope?: string };
+    const { cwd, scope: rawScope, commit: rawCommit } = req.query as { cwd?: string; scope?: string; commit?: string };
     const resolvedCwd = await resolveGitCwd(cwd);
 
     try {
-      const scope = parseDiffScope(rawScope);
+      const commit = rawCommit ? parseCommit(rawCommit) : undefined;
       // Generate the expensive payload first with a cumulative byte budget. Do not
       // start additional Git work when the diff is already too large to display.
+      if (commit) {
+        const diff = await runGit(resolvedCwd, ['show', '--format=', '--patch', commit]);
+        const remainingBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES - Buffer.byteLength(diff);
+        const stat = remainingBytes > 0
+          ? await runGit(resolvedCwd, ['show', '--format=', '--stat', commit], remainingBytes)
+          : '';
+        return { cwd: resolvedCwd, scope: `commit-${commit}`, commit, stat, diff };
+      }
+
+      const scope = parseDiffScope(rawScope);
       const diff = await getDiff(resolvedCwd, [], scope);
       const remainingBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES - Buffer.byteLength(diff);
       const stat = remainingBytes > 0 ? await getDiff(resolvedCwd, ['--stat'], scope, remainingBytes) : '';
-
-      return {
-        cwd: resolvedCwd,
-        scope,
-        stat,
-        diff,
-      };
+      return { cwd: resolvedCwd, scope, stat, diff };
     } catch (error) {
       if (error instanceof OversizedGitOutputError) {
         return {
           cwd: resolvedCwd,
-          scope: rawScope || 'all',
+          scope: rawCommit ? `commit-${rawCommit}` : rawScope || 'all',
           oversized: true,
           maxBytes: MAX_SLASH_COMMAND_OUTPUT_BYTES,
           message: error.message,

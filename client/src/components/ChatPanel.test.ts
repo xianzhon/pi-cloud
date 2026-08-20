@@ -47,9 +47,9 @@ vi.mock('../composables/useChat', () => ({
 
 vi.mock('./MessageBubble.vue', () => ({
   default: {
-    template: '<div class="message-bubble-stub" :data-kind="message.kind" :data-tool-name="message.toolName" :data-title="message.title" :data-tool-input="message.toolInput" :data-status="message.status">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button></div>',
+    template: '<div class="message-bubble-stub" :data-kind="message.kind" :data-tool-name="message.toolName" :data-title="message.title" :data-tool-input="message.toolInput" :data-status="message.status">{{ message.content }}<button v-if="message.images?.[0]?.path" class="annotate-stub" @click="$emit(\'annotate\', message.images[0])">Annotate</button><button v-if="message.content.includes(\'Commit: 95d5c9d\')" class="commit-stub" @click="$emit(\'openGitCommit\', \'95d5c9d\')">Commit</button></div>',
     props: ['message', 'hideThinkingBlock'],
-    emits: ['annotate'],
+    emits: ['annotate', 'openGitCommit'],
   },
 }));
 
@@ -407,6 +407,34 @@ describe('ChatPanel', () => {
       title: 'Copied',
     }), 'session-1');
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('opens a clicked commit change in the editor', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/api/git/diff')) {
+        return new Response(JSON.stringify({ cwd: '/repo', commit: '95d5c9d', diff: 'diff --git a/file.ts b/file.ts' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ commands: [] }), { status: 200 });
+    }));
+    const openDiff = vi.fn();
+    window.addEventListener('open-virtual-diff-in-editor', openDiff);
+    chatMessages.value = [{ id: 'commit-1', role: 'assistant', content: 'Commit: 95d5c9d fix the editor diff' }];
+    const wrapper = mount(ChatPanel, {
+      props: { sessionId: 'session-1', projectPath: '/repo' },
+    });
+
+    await wrapper.find('.commit-stub').trigger('click');
+    await flushPromises();
+
+    expect(fetch).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&commit=95d5c9d');
+    expect((openDiff.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      cwd: '/repo',
+      scope: 'commit-95d5c9d',
+      content: 'diff --git a/file.ts b/file.ts',
+    });
+    window.removeEventListener('open-virtual-diff-in-editor', openDiff);
+    wrapper.unmount();
   });
 
   it('shows the safe fallback message for an oversized /diff response', async () => {

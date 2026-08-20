@@ -209,7 +209,10 @@ import {
 } from '@phosphor-icons/vue';
 
 const t = i18n.global.t;
-const emit = defineEmits<{ annotate: [image: ChatImage] }>();
+const emit = defineEmits<{
+  annotate: [image: ChatImage];
+  openGitCommit: [commit: string];
+}>();
 
 const props = withDefaults(defineProps<{
   message: {
@@ -845,6 +848,16 @@ function makeFilePathsClickable(html: string): string {
   });
 }
 
+function makeGitCommitsClickable(html: string): string {
+  const link = (commit: string, content: string) => `<a href="#" class="git-commit-link" data-commit="${commit}">${content}</a>`;
+  const linkedCode = html.replace(/(\bCommit:\s*)<code>([0-9a-f]{7,40})<\/code>/gi, (_match, prefix, commit) => {
+    return `${prefix}${link(commit, `<code>${commit}</code>`)}`;
+  });
+  return linkedCode.replace(/(\bCommit:\s*)([0-9a-f]{7,40})(?=\s|<)/gi, (_match, prefix, commit) => {
+    return `${prefix}${link(commit, commit)}`;
+  });
+}
+
 function renderObservation(body: string): string {
   try {
     const parsed = JSON.parse(body);
@@ -866,7 +879,7 @@ function renderMarkdownFragment(content: string): string {
   const html = marked.parse(contentWithAnsi, {
     renderer: createMarkdownRenderer(props.showCodeBlockLanguageHeaders),
   }) as string;
-  return makeFilePathsClickable(html);
+  return makeGitCommitsClickable(makeFilePathsClickable(html));
 }
 
 function renderMarkdown(content: string) {
@@ -958,6 +971,14 @@ function renderAssistantContent(content: string) {
 
 function handleContentClick(event: MouseEvent) {
   const target = event.target as HTMLElement;
+  const commitLink = target.closest('.git-commit-link') as HTMLElement | null;
+  if (commitLink?.dataset.commit) {
+    event.preventDefault();
+    event.stopPropagation();
+    emit('openGitCommit', commitLink.dataset.commit);
+    return;
+  }
+
   const fileLink = target.closest('.file-link') as HTMLElement | null;
   if (fileLink?.dataset.path) {
     event.preventDefault();
@@ -2048,14 +2069,16 @@ async function copyContent() {
   margin-bottom: 0.5rem;
 }
 
-:deep(.file-link) {
+:deep(.file-link),
+:deep(.git-commit-link) {
   cursor: pointer;
   color: var(--markdown-accent);
   text-decoration: none;
   transition: color 0.16s ease, text-decoration-color 0.16s ease;
 }
 
-:deep(.file-link:hover) {
+:deep(.file-link:hover),
+:deep(.git-commit-link:hover) {
   color: var(--markdown-accent-hover);
   text-decoration: underline;
   text-decoration-color: var(--markdown-accent-hover);

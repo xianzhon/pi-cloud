@@ -26,6 +26,7 @@
             :expandThinkingByDefault="isStreaming"
             :showDetails="showDetails"
             @annotate="handleAnnotateImage"
+            @openGitCommit="handleOpenGitCommit"
           />
         </div>
         <div v-if="isStreaming" class="streaming-indicator" role="status" aria-live="polite">
@@ -2270,6 +2271,33 @@ async function handleTreeNavigated(result: { editorText?: string }) {
   void refreshSessionStatus();
 }
 
+async function handleOpenGitCommit(commit: string) {
+  try {
+    const params = new URLSearchParams({ cwd: props.projectPath || '~', commit });
+    const response = await fetch(`/api/git/diff?${params}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    if (data.oversized) throw new Error(data.message || t('components.chatPanel.thisDiffIsTooLargeToShow'));
+    if (typeof data.diff !== 'string' || !data.diff.trim()) return;
+
+    window.dispatchEvent(new CustomEvent('open-virtual-diff-in-editor', {
+      detail: {
+        cwd: data.cwd || props.projectPath,
+        scope: `commit-${commit}`,
+        content: data.diff,
+      },
+    }));
+  } catch (error) {
+    addLocalMessage({
+      role: 'assistant',
+      content: error instanceof Error ? error.message : t('components.chatPanel.failedToLoadGitDiff'),
+      kind: 'status',
+      status: 'failure',
+      title: t('components.chatPanel.gitDiffFailed'),
+    }, props.sessionId);
+  }
+}
+
 async function handleDiffCommand(text: string) {
   slashCommands.close();
   addLocalMessage({ role: 'user', content: text, kind: 'text' }, props.sessionId);
@@ -2573,7 +2601,7 @@ function formatCommitPreview(preview: CommitPreview) {
 function formatCommitSuccess(data: { cwd?: string; message?: string; commit?: string; output?: string }, mode: 'commit' | 'amend') {
   const output = data.output?.trim() || (mode === 'amend' ? t('components.chatPanel.commitAmended') : t('components.chatPanel.commitCreated'));
   const heading = mode === 'amend' ? '### Git commit amended' : '### Git commit created';
-  const commit = data.commit ? `\n\nCommit: \`${data.commit.slice(0, 12)}\`` : '';
+  const commit = data.commit ? `\n\nCommit: \`${data.commit.slice(0, 7)}\`` : '';
   return `${heading}\n\n\`${data.cwd || props.projectPath}\`\n\nMessage: \`${data.message || commitPreview.value?.message || ''}\`${commit}\n\n\`\`\`text\n${output}\n\`\`\``;
 }
 
