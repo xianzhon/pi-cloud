@@ -848,13 +848,15 @@ function makeFilePathsClickable(html: string): string {
   });
 }
 
-function makeGitCommitsClickable(html: string): string {
-  const link = (commit: string, content: string) => `<a href="#" class="git-commit-link" data-commit="${commit}">${content}</a>`;
-  const linkedCode = html.replace(/(\bCommit:\s*)<code>([0-9a-f]{7,40})<\/code>/gi, (_match, prefix, commit) => {
-    return `${prefix}${link(commit, `<code>${commit}</code>`)}`;
-  });
-  return linkedCode.replace(/(\bCommit:\s*)([0-9a-f]{7,40})(?=\s|<)/gi, (_match, prefix, commit) => {
-    return `${prefix}${link(commit, commit)}`;
+function makeGitShasClickable(html: string): string {
+  return html.replace(/<code>([^<]*)<\/code>/g, (match, content, offset) => {
+    // Tool output also uses bare <code> elements inside <pre>; only link inline code.
+    if (html.slice(Math.max(0, offset - 5), offset).endsWith('<pre>')) return match;
+
+    const linkedContent = content.replace(/(^|[^0-9a-z_])([0-9a-f]{7,40})(?![0-9a-z_])/gi, (_shaMatch: string, prefix: string, sha: string) => {
+      return `${prefix}<a href="#" class="git-commit-link" data-commit="${sha}">${sha}</a>`;
+    });
+    return `<code>${linkedContent}</code>`;
   });
 }
 
@@ -879,7 +881,7 @@ function renderMarkdownFragment(content: string): string {
   const html = marked.parse(contentWithAnsi, {
     renderer: createMarkdownRenderer(props.showCodeBlockLanguageHeaders),
   }) as string;
-  return makeGitCommitsClickable(makeFilePathsClickable(html));
+  return makeGitShasClickable(makeFilePathsClickable(html));
 }
 
 function renderMarkdown(content: string) {

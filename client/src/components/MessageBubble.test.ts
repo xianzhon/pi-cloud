@@ -398,6 +398,83 @@ describe('MessageBubble', () => {
     expect(wrapper.emitted('openGitCommit')).toEqual([['95d5c9d']]);
   });
 
+  it('emits the commit ID when a session activity commit is clicked', async () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'session-activity',
+          role: 'assistant',
+          kind: 'status',
+          content: '### Session activity\n\n- Commit `f6aa0cd0b7c6`: feat(editor): Add split diff views',
+        },
+      },
+    });
+
+    const link = wrapper.find('.git-commit-link');
+    expect(link.text()).toBe('f6aa0cd0b7c6');
+
+    await link.trigger('click');
+
+    expect(wrapper.emitted('openGitCommit')).toEqual([['f6aa0cd0b7c6']]);
+  });
+
+  it('links the commit ID when an activity example is entirely inline code', async () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'activity-example',
+          role: 'assistant',
+          content: '- `Commit f6aa0cd0b7c6: feat(editor): Add split diff views`',
+        },
+      },
+    });
+
+    const link = wrapper.find('.git-commit-link');
+    expect(link.text()).toBe('f6aa0cd0b7c6');
+
+    await link.trigger('click');
+
+    expect(wrapper.emitted('openGitCommit')).toEqual([['f6aa0cd0b7c6']]);
+  });
+
+  it('links the hash when the hash and subject share inline code after Commit', async () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'commit-with-inline-subject',
+          role: 'assistant',
+          content: 'Commit: `df52fd6 fix(web): delete action history without confirmation`',
+        },
+      },
+    });
+
+    const link = wrapper.find('.git-commit-link');
+    expect(link.text()).toBe('df52fd6');
+
+    await link.trigger('click');
+
+    expect(wrapper.emitted('openGitCommit')).toEqual([['df52fd6']]);
+  });
+
+  it('links an inline SHA without requiring a Commit label', async () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'sha-reference',
+          role: 'assistant',
+          content: 'Open revision `df52fd6` in the editor.',
+        },
+      },
+    });
+
+    const link = wrapper.find('.git-commit-link');
+    expect(link.text()).toBe('df52fd6');
+
+    await link.trigger('click');
+
+    expect(wrapper.emitted('openGitCommit')).toEqual([['df52fd6']]);
+  });
+
   it('uses pi-agent blue for inline code text without inline code chrome', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/MessageBubble.vue'), 'utf8');
 
