@@ -326,11 +326,11 @@ export class PiSessionService {
     const config = await this.readModelsJson(profile.path);
     const providers = this.modelsJsonProviders(config);
     const existing = this.getLocalLlmProvider(config);
-    const existingModels = new Map<string, unknown>();
+    const existingModels = new Map<string, Record<string, unknown>>();
     const configuredModels = existing?.models;
     for (const model of Array.isArray(configuredModels) ? configuredModels : []) {
       const id = this.localModelId(model);
-      if (id) existingModels.set(id, model);
+      if (id) existingModels.set(id, model as Record<string, unknown>);
     }
     const existingCompat = existing?.compat;
     providers[LOCAL_LLM_PROVIDER_ID] = {
@@ -344,7 +344,10 @@ export class PiSessionService {
         supportsDeveloperRole: false,
         supportsReasoningEffort: false,
       },
-      models: normalizedModelIds.map((id) => existingModels.get(id) || { id }),
+      models: normalizedModelIds.map((id) => ({
+        input: ['text', 'image'],
+        ...(existingModels.get(id) || { id }),
+      })),
     };
     config.providers = providers;
     await fs.mkdir(profile.path, { recursive: true });

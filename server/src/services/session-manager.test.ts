@@ -333,7 +333,10 @@ describe('PiSessionService', () => {
 
   it('saves local models without replacing other models.json providers', async () => {
     readFile.mockImplementation(async (path: string) => path.endsWith('/models.json')
-      ? JSON.stringify({ providers: { custom: { baseUrl: 'https://example.com', models: [{ id: 'remote' }] } } })
+      ? JSON.stringify({ providers: {
+        custom: { baseUrl: 'https://example.com', models: [{ id: 'remote' }] },
+        'pi-webui-local': { models: [{ id: 'qwen3:8b', contextWindow: 8192 }] },
+      } })
       : '');
     const service = new PiSessionService();
 
@@ -346,7 +349,7 @@ describe('PiSessionService', () => {
       baseUrl: 'http://127.0.0.1:11434/v1',
       api: 'openai-completions',
       apiKey: 'local',
-      models: [{ id: 'qwen3:8b' }],
+      models: [{ id: 'qwen3:8b', contextWindow: 8192, input: ['text', 'image'] }],
     });
   });
 

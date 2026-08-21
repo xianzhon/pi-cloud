@@ -63,7 +63,7 @@ PI_WEBUI_MEMORY_POLICY=legacy
 
 ## 本地 LLM 配置
 
-打开 **Agent 配置 → 本地 LLM**，选择 Ollama、LM Studio 或 llama.cpp 预设（也可以输入自定义 OpenAI 兼容服务地址），然后点击**连接并发现模型**。选择需要使用的模型并保存，无需 API 密钥。该地址由 Pi WebUI 服务器访问，因此 `127.0.0.1` 指运行服务器的设备。生成的提供商配置会写入当前 Agent 配置的 `models.json`，不会覆盖其他提供商。
+打开 **Agent 配置 → 本地 LLM**，选择 Ollama、LM Studio 或 llama.cpp 预设（也可以输入自定义 OpenAI 兼容服务地址），然后点击**连接并发现模型**。选择需要使用的模型并保存，无需 API 密钥。该地址由 Pi WebUI 服务器访问，因此 `127.0.0.1` 指运行服务器的设备。生成的提供商配置会写入当前 Agent 配置的 `models.json`，不会覆盖其他提供商。发现的模型默认配置为支持文本和图像输入；模型已有的显式能力配置会被保留。
 
 ## 提供商和网关变量
 
