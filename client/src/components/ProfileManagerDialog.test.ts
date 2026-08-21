@@ -60,6 +60,21 @@ describe('ProfileManagerDialog', () => {
     expect(wrapper.emitted('close')).toHaveLength(1);
   });
 
+  it('collapses provider setup sections by default', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'default' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+
+    await vi.waitFor(() => expect(wrapper.findAll('.profile-collapsible')).toHaveLength(2));
+    const sections = wrapper.findAll('details.profile-collapsible');
+    expect(sections.every((section) => !(section.element as HTMLDetailsElement).open)).toBe(true);
+
+    await sections[0].find('summary').trigger('click');
+    expect((sections[0].element as HTMLDetailsElement).open).toBe(true);
+  });
+
   it('selects a configured API key provider by default', async () => {
     const wrapper = mount(ProfileManagerDialog, {
       props: { visible: false, profiles, selectedId: 'work' },

@@ -31,64 +31,88 @@
             <template v-else-if="managedProfileId">
               <h3>{{ t('components.profileManagerDialog.profileName', { profile: managedProfileId }) }}</h3>
               <p class="profile-help">{{ t('components.profileManagerDialog.authenticateWithPiInATerminal') }} <code>{{ authenticationCommand }}</code></p>
-              <h3>{{ t('components.profileManagerDialog.localLlm') }}</h3>
-              <p class="profile-help">{{ t('components.profileManagerDialog.localLlmHelp') }}</p>
-              <CustomSelect
-                v-model="localLlmPreset"
-                :options="localLlmPresetOptions"
-                :aria-label="t('components.profileManagerDialog.localLlmPreset')"
-                @update:model-value="applyLocalLlmPreset"
-              />
-              <input
-                v-model="localLlmBaseUrl"
-                type="url"
-                :aria-label="t('components.profileManagerDialog.localLlmEndpoint')"
-                :placeholder="t('components.profileManagerDialog.localLlmEndpointPlaceholder')"
-                @keyup.enter="discoverLocalModels"
-              />
-              <div class="profile-key-actions">
-                <button class="profile-secondary dialog-action" type="button" :disabled="discoveringLocalModels || !localLlmBaseUrl.trim()" @click="discoverLocalModels">
-                  {{ discoveringLocalModels ? t('components.profileManagerDialog.connecting') : t('components.profileManagerDialog.connectAndDiscover') }}
-                </button>
-                <span v-if="localLlmSaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.localLlmSaved') }}</span>
-              </div>
-              <fieldset v-if="localModels.length" class="local-model-list">
-                <legend>{{ t('components.profileManagerDialog.discoveredModels') }}</legend>
-                <label v-for="model in localModels" :key="model.id">
-                  <input v-model="selectedLocalModelIds" type="checkbox" :value="model.id" />
-                  <span>{{ model.id }}</span>
-                </label>
-              </fieldset>
-              <button
-                v-if="localModels.length"
-                class="profile-primary dialog-action local-model-save"
-                type="button"
-                :disabled="savingLocalLlm || selectedLocalModelIds.length === 0"
-                @click="saveLocalLlm"
-              >
-                {{ savingLocalLlm ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveLocalLlm') }}
-              </button>
-              <h3>{{ t('components.profileManagerDialog.apiProviderKey') }}</h3>
-              <p class="profile-help">{{ t('components.profileManagerDialog.apiProviderKeyHelp') }}</p>
-              <CustomSelect
-                v-model="apiKeyProvider"
-                :options="apiKeyProviderOptions"
-                :aria-label="t('components.profileManagerDialog.apiProviderKey')"
-              />
-              <input
-                v-model="apiKey"
-                type="password"
-                autocomplete="new-password"
-                :placeholder="t('components.profileManagerDialog.enterApiKey')"
-                @keyup.enter="saveApiKey"
-              />
-              <div class="profile-key-actions">
-                <button class="profile-secondary dialog-action" type="button" :disabled="savingApiKey || !apiKeyProvider || !apiKey.trim()" @click="saveApiKey">
-                  {{ savingApiKey ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveApiKey') }}
-                </button>
-                <span v-if="selectedApiKeyProvider?.configured" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeyConfigured') }}</span>
-                <span v-else-if="apiKeySaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeySaved') }}</span>
-              </div>
+              <details :key="`local-${managedProfileId}`" class="profile-collapsible">
+                <summary>
+                  <span class="profile-section-heading">
+                    <strong>{{ t('components.profileManagerDialog.localLlm') }}</strong>
+                    <small>{{ t('components.profileManagerDialog.localLlmHelp') }}</small>
+                  </span>
+                  <span v-if="selectedLocalModelIds.length" class="profile-section-status">
+                    {{ t('components.profileManagerDialog.modelsConfigured', { count: selectedLocalModelIds.length }) }}
+                  </span>
+                  <span class="profile-section-chevron" aria-hidden="true">›</span>
+                </summary>
+                <div class="profile-collapsible-content">
+                  <CustomSelect
+                    v-model="localLlmPreset"
+                    :options="localLlmPresetOptions"
+                    :aria-label="t('components.profileManagerDialog.localLlmPreset')"
+                    @update:model-value="applyLocalLlmPreset"
+                  />
+                  <input
+                    v-model="localLlmBaseUrl"
+                    type="url"
+                    :aria-label="t('components.profileManagerDialog.localLlmEndpoint')"
+                    :placeholder="t('components.profileManagerDialog.localLlmEndpointPlaceholder')"
+                    @keyup.enter="discoverLocalModels"
+                  />
+                  <div class="profile-key-actions">
+                    <button class="profile-secondary dialog-action" type="button" :disabled="discoveringLocalModels || !localLlmBaseUrl.trim()" @click="discoverLocalModels">
+                      {{ discoveringLocalModels ? t('components.profileManagerDialog.connecting') : t('components.profileManagerDialog.connectAndDiscover') }}
+                    </button>
+                    <span v-if="localLlmSaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.localLlmSaved') }}</span>
+                  </div>
+                  <fieldset v-if="localModels.length" class="local-model-list">
+                    <legend>{{ t('components.profileManagerDialog.discoveredModels') }}</legend>
+                    <label v-for="model in localModels" :key="model.id">
+                      <input v-model="selectedLocalModelIds" type="checkbox" :value="model.id" />
+                      <span>{{ model.id }}</span>
+                    </label>
+                  </fieldset>
+                  <button
+                    v-if="localModels.length"
+                    class="profile-primary dialog-action local-model-save"
+                    type="button"
+                    :disabled="savingLocalLlm || selectedLocalModelIds.length === 0"
+                    @click="saveLocalLlm"
+                  >
+                    {{ savingLocalLlm ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveLocalLlm') }}
+                  </button>
+                </div>
+              </details>
+              <details :key="`api-${managedProfileId}`" class="profile-collapsible">
+                <summary>
+                  <span class="profile-section-heading">
+                    <strong>{{ t('components.profileManagerDialog.apiProviderKey') }}</strong>
+                    <small>{{ t('components.profileManagerDialog.apiProviderKeyHelp') }}</small>
+                  </span>
+                  <span v-if="configuredApiKeyCount" class="profile-section-status">
+                    {{ t('components.profileManagerDialog.keysConfigured', { count: configuredApiKeyCount }) }}
+                  </span>
+                  <span class="profile-section-chevron" aria-hidden="true">›</span>
+                </summary>
+                <div class="profile-collapsible-content">
+                  <CustomSelect
+                    v-model="apiKeyProvider"
+                    :options="apiKeyProviderOptions"
+                    :aria-label="t('components.profileManagerDialog.apiProviderKey')"
+                  />
+                  <input
+                    v-model="apiKey"
+                    type="password"
+                    autocomplete="new-password"
+                    :placeholder="t('components.profileManagerDialog.enterApiKey')"
+                    @keyup.enter="saveApiKey"
+                  />
+                  <div class="profile-key-actions">
+                    <button class="profile-secondary dialog-action" type="button" :disabled="savingApiKey || !apiKeyProvider || !apiKey.trim()" @click="saveApiKey">
+                      {{ savingApiKey ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveApiKey') }}
+                    </button>
+                    <span v-if="selectedApiKeyProvider?.configured" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeyConfigured') }}</span>
+                    <span v-else-if="apiKeySaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeySaved') }}</span>
+                  </div>
+                </div>
+              </details>
               <h3>{{ t('components.profileManagerDialog.defaultModel') }}</h3>
               <CustomSelect
                 v-model="defaultModel"
@@ -236,6 +260,7 @@ const apiKeyProviderOptions = computed<CustomSelectOption[]>(() => apiKeyProvide
   label: `${provider.label} (${provider.envVar})${provider.configured ? ` — ${t('components.profileManagerDialog.configured')}` : ''}`,
 })));
 const selectedApiKeyProvider = computed(() => apiKeyProviders.value.find((provider) => provider.envVar === apiKeyProvider.value));
+const configuredApiKeyCount = computed(() => apiKeyProviders.value.filter((provider) => provider.configured).length);
 const autoRenameLanguageOptions: CustomSelectOption[] = [
   { value: 'english', label: t('components.profileManagerDialog.english') },
   { value: 'chinese', label: t('components.profileManagerDialog.chinese') },
@@ -694,6 +719,74 @@ small {
 }
 .profile-manager-form h3:not(:first-child) {
   margin-top: 1.4rem;
+}
+.profile-collapsible {
+  margin-top: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+.profile-collapsible summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.15s ease;
+}
+.profile-collapsible summary::-webkit-details-marker {
+  display: none;
+}
+.profile-collapsible summary:hover {
+  background: var(--bg-surface);
+}
+.profile-collapsible summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.profile-section-heading {
+  min-width: 0;
+  flex: 1;
+}
+.profile-section-heading strong {
+  display: block;
+  font-size: 0.95rem;
+}
+.profile-section-heading small {
+  margin-top: 0.2rem;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+.profile-section-status {
+  flex: none;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.profile-section-chevron {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 1.35rem;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+.profile-collapsible[open] .profile-section-chevron {
+  transform: rotate(-90deg);
+}
+.profile-collapsible-content {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--border);
+}
+.profile-collapsible-content > :first-child {
+  margin-top: 1rem;
 }
 .profile-key-actions,
 .profile-actions {
