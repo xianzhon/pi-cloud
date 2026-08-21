@@ -31,27 +31,103 @@
             <template v-else-if="managedProfileId">
               <h3>{{ t('components.profileManagerDialog.profileName', { profile: managedProfileId }) }}</h3>
               <p class="profile-help">{{ t('components.profileManagerDialog.authenticateWithPiInATerminal') }} <code>{{ authenticationCommand }}</code></p>
-              <h3>{{ t('components.profileManagerDialog.apiProviderKey') }}</h3>
-              <p class="profile-help">{{ t('components.profileManagerDialog.apiProviderKeyHelp') }}</p>
-              <CustomSelect
-                v-model="apiKeyProvider"
-                :options="apiKeyProviderOptions"
-                :aria-label="t('components.profileManagerDialog.apiProviderKey')"
-              />
-              <input
-                v-model="apiKey"
-                type="password"
-                autocomplete="new-password"
-                :placeholder="t('components.profileManagerDialog.enterApiKey')"
-                @keyup.enter="saveApiKey"
-              />
-              <div class="profile-key-actions">
-                <button class="profile-secondary dialog-action" type="button" :disabled="savingApiKey || !apiKeyProvider || !apiKey.trim()" @click="saveApiKey">
-                  {{ savingApiKey ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveApiKey') }}
-                </button>
-                <span v-if="selectedApiKeyProvider?.configured" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeyConfigured') }}</span>
-                <span v-else-if="apiKeySaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeySaved') }}</span>
-              </div>
+              <details :key="`local-${managedProfileId}`" class="profile-collapsible">
+                <summary>
+                  <span class="profile-section-heading">
+                    <strong>{{ t('components.profileManagerDialog.localLlm') }}</strong>
+                    <small>{{ t('components.profileManagerDialog.localLlmHelp') }}</small>
+                  </span>
+                  <span v-if="selectedLocalModelIds.length" class="profile-section-status">
+                    {{ t('components.profileManagerDialog.modelsConfigured', { count: selectedLocalModelIds.length }) }}
+                  </span>
+                  <span class="profile-section-chevron" aria-hidden="true">›</span>
+                </summary>
+                <div class="profile-collapsible-content">
+                  <CustomSelect
+                    v-model="localLlmPreset"
+                    :options="localLlmPresetOptions"
+                    :aria-label="t('components.profileManagerDialog.localLlmPreset')"
+                    @update:model-value="applyLocalLlmPreset"
+                  />
+                  <input
+                    v-model="localLlmBaseUrl"
+                    type="url"
+                    :aria-label="t('components.profileManagerDialog.localLlmEndpoint')"
+                    :placeholder="t('components.profileManagerDialog.localLlmEndpointPlaceholder')"
+                    @keyup.enter="discoverLocalModels"
+                  />
+                  <div class="profile-key-actions">
+                    <button class="profile-secondary dialog-action" type="button" :disabled="discoveringLocalModels || !localLlmBaseUrl.trim()" @click="discoverLocalModels">
+                      {{ discoveringLocalModels ? t('components.profileManagerDialog.connecting') : t('components.profileManagerDialog.connectAndDiscover') }}
+                    </button>
+                    <span v-if="localLlmSaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.localLlmSaved') }}</span>
+                  </div>
+                  <fieldset v-if="localModels.length" class="local-model-list">
+                    <legend>{{ t('components.profileManagerDialog.discoveredModels') }}</legend>
+                    <label v-for="model in localModels" :key="model.id">
+                      <input v-model="selectedLocalModelIds" type="checkbox" :value="model.id" />
+                      <span>{{ model.id }}</span>
+                    </label>
+                  </fieldset>
+                  <div v-if="localModels.length" class="profile-remove-actions">
+                    <button
+                      class="profile-primary dialog-action"
+                      type="button"
+                      :disabled="savingLocalLlm || selectedLocalModelIds.length === 0"
+                      @click="saveLocalLlm"
+                    >
+                      {{ savingLocalLlm ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveLocalLlm') }}
+                    </button>
+                    <button class="profile-remove-button dialog-action" type="button" :disabled="removingLocalLlm" @click="removeLocalLlm">
+                      {{ removingLocalLlm ? t('components.profileManagerDialog.removing') : t('components.profileManagerDialog.removeLocalLlm') }}
+                    </button>
+                  </div>
+                  <span v-if="localLlmRemoved" class="profile-success" role="status">{{ t('components.profileManagerDialog.localLlmRemoved') }}</span>
+                </div>
+              </details>
+              <details :key="`api-${managedProfileId}`" class="profile-collapsible">
+                <summary>
+                  <span class="profile-section-heading">
+                    <strong>{{ t('components.profileManagerDialog.apiProviderKey') }}</strong>
+                    <small>{{ t('components.profileManagerDialog.apiProviderKeyHelp') }}</small>
+                  </span>
+                  <span v-if="configuredApiKeyCount" class="profile-section-status">
+                    {{ t('components.profileManagerDialog.keysConfigured', { count: configuredApiKeyCount }) }}
+                  </span>
+                  <span class="profile-section-chevron" aria-hidden="true">›</span>
+                </summary>
+                <div class="profile-collapsible-content">
+                  <CustomSelect
+                    v-model="apiKeyProvider"
+                    :options="apiKeyProviderOptions"
+                    :aria-label="t('components.profileManagerDialog.apiProviderKey')"
+                  />
+                  <input
+                    v-model="apiKey"
+                    type="password"
+                    autocomplete="new-password"
+                    :placeholder="t('components.profileManagerDialog.enterApiKey')"
+                    @keyup.enter="saveApiKey"
+                  />
+                  <div class="profile-key-actions">
+                    <button class="profile-secondary dialog-action" type="button" :disabled="savingApiKey || !apiKeyProvider || !apiKey.trim()" @click="saveApiKey">
+                      {{ savingApiKey ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveApiKey') }}
+                    </button>
+                    <button
+                      v-if="selectedApiKeyProvider?.source === 'stored'"
+                      class="profile-remove-button dialog-action"
+                      type="button"
+                      :disabled="removingApiKey"
+                      @click="removeApiKey"
+                    >
+                      {{ removingApiKey ? t('components.profileManagerDialog.removing') : t('components.profileManagerDialog.removeApiKey') }}
+                    </button>
+                    <span v-if="selectedApiKeyProvider?.configured" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeyConfigured') }}</span>
+                    <span v-else-if="apiKeySaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeySaved') }}</span>
+                    <span v-else-if="apiKeyRemoved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeyRemoved') }}</span>
+                  </div>
+                </div>
+              </details>
               <h3>{{ t('components.profileManagerDialog.defaultModel') }}</h3>
               <CustomSelect
                 v-model="defaultModel"
@@ -136,6 +212,11 @@ interface ApiKeyProvider {
   envVar: string;
   label: string;
   configured: boolean;
+  source?: string;
+}
+
+interface LocalModel {
+  id: string;
 }
 
 interface DeleteResult {
@@ -167,7 +248,18 @@ const apiKeyProviders = ref<ApiKeyProvider[]>([]);
 const apiKeyProvider = ref('');
 const apiKey = ref('');
 const savingApiKey = ref(false);
+const removingApiKey = ref(false);
 const apiKeySaved = ref(false);
+const apiKeyRemoved = ref(false);
+const localLlmPreset = ref('ollama');
+const localLlmBaseUrl = ref('http://127.0.0.1:11434/v1');
+const localModels = ref<LocalModel[]>([]);
+const selectedLocalModelIds = ref<string[]>([]);
+const discoveringLocalModels = ref(false);
+const savingLocalLlm = ref(false);
+const removingLocalLlm = ref(false);
+const localLlmSaved = ref(false);
+const localLlmRemoved = ref(false);
 const proxy = reactive<ProxySettings>({ ALL_PROXY: '', HTTP_PROXY: '', HTTPS_PROXY: '', NO_PROXY: '' });
 
 const authenticationCommand = computed(() => (
@@ -188,9 +280,21 @@ const apiKeyProviderOptions = computed<CustomSelectOption[]>(() => apiKeyProvide
   label: `${provider.label} (${provider.envVar})${provider.configured ? ` — ${t('components.profileManagerDialog.configured')}` : ''}`,
 })));
 const selectedApiKeyProvider = computed(() => apiKeyProviders.value.find((provider) => provider.envVar === apiKeyProvider.value));
+const configuredApiKeyCount = computed(() => apiKeyProviders.value.filter((provider) => provider.configured).length);
 const autoRenameLanguageOptions: CustomSelectOption[] = [
   { value: 'english', label: t('components.profileManagerDialog.english') },
   { value: 'chinese', label: t('components.profileManagerDialog.chinese') },
+];
+const localLlmPresets = {
+  ollama: 'http://127.0.0.1:11434/v1',
+  lmStudio: 'http://127.0.0.1:1234/v1',
+  llamaCpp: 'http://127.0.0.1:8080/v1',
+} as const;
+const localLlmPresetOptions: CustomSelectOption[] = [
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'lmStudio', label: 'LM Studio' },
+  { value: 'llamaCpp', label: 'llama.cpp' },
+  { value: 'custom', label: t('components.profileManagerDialog.customOpenAiCompatible') },
 ];
 
 function profileUrl(id: string, suffix: string = ''): string {
@@ -213,7 +317,18 @@ function resetSaveState(): void {
   apiKeyProvider.value = '';
   apiKey.value = '';
   savingApiKey.value = false;
+  removingApiKey.value = false;
   apiKeySaved.value = false;
+  apiKeyRemoved.value = false;
+  localLlmPreset.value = 'ollama';
+  localLlmBaseUrl.value = localLlmPresets.ollama;
+  localModels.value = [];
+  selectedLocalModelIds.value = [];
+  discoveringLocalModels.value = false;
+  savingLocalLlm.value = false;
+  removingLocalLlm.value = false;
+  localLlmSaved.value = false;
+  localLlmRemoved.value = false;
   error.value = '';
 }
 
@@ -249,12 +364,13 @@ async function select(id: string): Promise<void> {
   resetSaveState();
   models.value = [];
 
-  const [proxyResponse, modelsResponse, automationResponse, autoRenameResponse, apiKeyProvidersResponse] = await Promise.all([
+  const [proxyResponse, modelsResponse, automationResponse, autoRenameResponse, apiKeyProvidersResponse, localLlmResponse] = await Promise.all([
     fetch(profileUrl(id, '/proxy')),
     fetch(profileUrl(id, '/models')),
     fetch(profileUrl(id, '/automation-model')),
     fetch(profileUrl(id, '/auto-rename')),
     fetch(profileUrl(id, '/api-key-providers')),
+    fetch(profileUrl(id, '/local-llm')),
   ]);
   if (proxyResponse.ok) {
     const data = await proxyResponse.json() as { proxy?: Record<string, string> };
@@ -283,12 +399,107 @@ async function select(id: string): Promise<void> {
       || apiKeyProviders.value[0]?.envVar
       || '';
   }
+  if (localLlmResponse.ok) {
+    const data = await localLlmResponse.json() as { config?: { baseUrl?: string; modelIds?: string[] } };
+    if (data.config?.baseUrl) {
+      localLlmBaseUrl.value = data.config.baseUrl;
+      localLlmPreset.value = Object.entries(localLlmPresets).find(([, url]) => url === data.config?.baseUrl)?.[0] || 'custom';
+    }
+    selectedLocalModelIds.value = data.config?.modelIds || [];
+    localModels.value = selectedLocalModelIds.value.map((modelId) => ({ id: modelId }));
+  }
+}
+
+function applyLocalLlmPreset(preset: string): void {
+  if (preset in localLlmPresets) {
+    localLlmBaseUrl.value = localLlmPresets[preset as keyof typeof localLlmPresets];
+  }
+  localLlmSaved.value = false;
+  localLlmRemoved.value = false;
+}
+
+async function discoverLocalModels(): Promise<void> {
+  if (!localLlmBaseUrl.value.trim()) return;
+  error.value = '';
+  localLlmSaved.value = false;
+  localLlmRemoved.value = false;
+  discoveringLocalModels.value = true;
+  try {
+    const response = await fetch(profileUrl(managedProfileId.value, '/local-llm/discover'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl: localLlmBaseUrl.value }),
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToDiscoverLocalModels')));
+    const data = await response.json() as { models?: LocalModel[] };
+    localModels.value = data.models || [];
+    selectedLocalModelIds.value = localModels.value.map((model) => model.id);
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToDiscoverLocalModels');
+  } finally {
+    discoveringLocalModels.value = false;
+  }
+}
+
+async function saveLocalLlm(): Promise<void> {
+  if (!localLlmBaseUrl.value.trim() || selectedLocalModelIds.value.length === 0) return;
+  error.value = '';
+  localLlmSaved.value = false;
+  savingLocalLlm.value = true;
+  try {
+    const response = await fetch(profileUrl(managedProfileId.value, '/local-llm'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl: localLlmBaseUrl.value, modelIds: selectedLocalModelIds.value }),
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToSaveLocalLlm')));
+    const data = await response.json() as { config?: { baseUrl?: string; modelIds?: string[] } };
+    localLlmBaseUrl.value = data.config?.baseUrl || localLlmBaseUrl.value;
+    selectedLocalModelIds.value = data.config?.modelIds || selectedLocalModelIds.value;
+    localLlmSaved.value = true;
+
+    const modelsResponse = await fetch(profileUrl(managedProfileId.value, '/models'));
+    if (modelsResponse.ok) {
+      const modelsData = await modelsResponse.json() as { models?: ModelOption[] };
+      models.value = modelsData.models || [];
+    }
+    emit('updated');
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToSaveLocalLlm');
+  } finally {
+    savingLocalLlm.value = false;
+  }
+}
+
+async function removeLocalLlm(): Promise<void> {
+  error.value = '';
+  localLlmSaved.value = false;
+  localLlmRemoved.value = false;
+  removingLocalLlm.value = true;
+  try {
+    const response = await fetch(profileUrl(managedProfileId.value, '/local-llm'), { method: 'DELETE' });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToRemoveLocalLlm')));
+    localLlmPreset.value = 'ollama';
+    localLlmBaseUrl.value = localLlmPresets.ollama;
+    localModels.value = [];
+    selectedLocalModelIds.value = [];
+    models.value = models.value.filter((model) => model.provider !== 'pi-webui-local');
+    if (defaultModel.value.startsWith('pi-webui-local\u0000')) defaultModel.value = '';
+    if (automationModel.value.startsWith('pi-webui-local\u0000')) automationModel.value = '';
+    localLlmRemoved.value = true;
+    emit('updated');
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToRemoveLocalLlm');
+  } finally {
+    removingLocalLlm.value = false;
+  }
 }
 
 async function saveApiKey(): Promise<void> {
   if (!apiKeyProvider.value || !apiKey.value.trim()) return;
   error.value = '';
   apiKeySaved.value = false;
+  apiKeyRemoved.value = false;
   savingApiKey.value = true;
 
   try {
@@ -314,6 +525,35 @@ async function saveApiKey(): Promise<void> {
     error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToSaveApiKey');
   } finally {
     savingApiKey.value = false;
+  }
+}
+
+async function removeApiKey(): Promise<void> {
+  if (!apiKeyProvider.value) return;
+  error.value = '';
+  apiKeySaved.value = false;
+  apiKeyRemoved.value = false;
+  removingApiKey.value = true;
+  try {
+    const suffix = `/api-key/${encodeURIComponent(apiKeyProvider.value)}`;
+    const response = await fetch(profileUrl(managedProfileId.value, suffix), { method: 'DELETE' });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToRemoveApiKey')));
+    const data = await response.json() as { providers?: ApiKeyProvider[] };
+    apiKeyProviders.value = data.providers || apiKeyProviders.value;
+    apiKey.value = '';
+    apiKeyRemoved.value = true;
+
+    const modelsResponse = await fetch(profileUrl(managedProfileId.value, '/models'));
+    if (modelsResponse.ok) {
+      const modelsData = await modelsResponse.json() as { models?: ModelOption[] };
+      models.value = modelsData.models || [];
+      if (!models.value.some((model) => `${model.provider}\u0000${model.id}` === defaultModel.value)) defaultModel.value = '';
+    }
+    emit('updated');
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToRemoveApiKey');
+  } finally {
+    removingApiKey.value = false;
   }
 }
 
@@ -444,6 +684,7 @@ async function deleteProfile(): Promise<void> {
 watch(apiKeyProvider, () => {
   apiKey.value = '';
   apiKeySaved.value = false;
+  apiKeyRemoved.value = false;
 });
 
 watch([defaultModel, automationModel, autoRenameLanguage, proxy], () => {
@@ -560,15 +801,118 @@ small {
 .profile-manager-form h3:not(:first-child) {
   margin-top: 1.4rem;
 }
+.profile-collapsible {
+  margin-top: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+.profile-collapsible summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.15s ease;
+}
+.profile-collapsible summary::-webkit-details-marker {
+  display: none;
+}
+.profile-collapsible summary:hover {
+  background: var(--bg-surface);
+}
+.profile-collapsible summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.profile-section-heading {
+  min-width: 0;
+  flex: 1;
+}
+.profile-section-heading strong {
+  display: block;
+  font-size: 0.95rem;
+}
+.profile-section-heading small {
+  margin-top: 0.2rem;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+.profile-section-status {
+  flex: none;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.profile-section-chevron {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 1.35rem;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+.profile-collapsible[open] .profile-section-chevron {
+  transform: rotate(-90deg);
+}
+.profile-collapsible-content {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--border);
+}
+.profile-collapsible-content > :first-child {
+  margin-top: 1rem;
+}
 .profile-key-actions,
 .profile-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1.25rem;
 }
 .profile-key-actions .profile-success {
   margin: 0;
+}
+.local-model-list {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 12rem;
+  margin: 1rem 0 0;
+  padding: 0.75rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.local-model-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.profile-manager-form .local-model-list input {
+  width: auto;
+  margin: 0;
+}
+.local-model-list span {
+  overflow-wrap: anywhere;
+}
+.profile-remove-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.profile-remove-button {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: transparent;
+  color: var(--danger);
 }
 .profile-primary {
   background: var(--accent);

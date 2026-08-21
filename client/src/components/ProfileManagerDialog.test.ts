@@ -28,6 +28,18 @@ describe('ProfileManagerDialog', () => {
           { envVar: 'OPENAI_API_KEY', label: 'OpenAI GPT', configured: true, source: 'stored' },
         ] });
       }
+      if (url.includes('/api-key/') && options?.method === 'DELETE') {
+        return ok({ providers: [
+          { envVar: 'ANTHROPIC_API_KEY', label: 'Anthropic Claude', configured: false },
+          { envVar: 'OPENAI_API_KEY', label: 'OpenAI GPT', configured: false },
+        ] });
+      }
+      if (url.endsWith('/local-llm/discover')) return ok({ models: [{ id: 'qwen3:8b' }] });
+      if (url.endsWith('/local-llm') && options?.method === 'PUT') {
+        return ok({ config: { baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'] } });
+      }
+      if (url.endsWith('/local-llm') && options?.method === 'DELETE') return ok({ config: { baseUrl: '', modelIds: [] } });
+      if (url.endsWith('/local-llm')) return ok({ config: { baseUrl: '', modelIds: [] } });
       if (url.endsWith('/models')) {
         return ok({ models: [
           { provider: 'anthropic', id: 'claude-haiku-4-5', name: 'Claude Haiku', current: true },
@@ -53,6 +65,21 @@ describe('ProfileManagerDialog', () => {
     await wrapper.find('.settings-close').trigger('click');
 
     expect(wrapper.emitted('close')).toHaveLength(1);
+  });
+
+  it('collapses provider setup sections by default', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'default' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+
+    await vi.waitFor(() => expect(wrapper.findAll('.profile-collapsible')).toHaveLength(2));
+    const sections = wrapper.findAll('details.profile-collapsible');
+    expect(sections.every((section) => !(section.element as HTMLDetailsElement).open)).toBe(true);
+
+    await sections[0].find('summary').trigger('click');
+    expect((sections[0].element as HTMLDetailsElement).open).toBe(true);
   });
 
   it('selects a configured API key provider by default', async () => {
@@ -89,6 +116,52 @@ describe('ProfileManagerDialog', () => {
     ));
     await vi.waitFor(() => expect((wrapper.find('input[type="password"]').element as HTMLInputElement).value).toBe(''));
     expect(wrapper.text()).not.toContain('secret-key');
+  });
+
+  it('removes a stored API key', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+
+    await vi.waitFor(() => expect(wrapper.findAll('button').some((button) => button.text() === 'Remove saved key')).toBe(true));
+    await wrapper.findAll('button').find((button) => button.text() === 'Remove saved key')!.trigger('click');
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/api-key/OPENAI_API_KEY',
+      { method: 'DELETE' },
+    ));
+    expect(wrapper.text()).toContain('Saved API key removed.');
+  });
+
+  it('discovers, saves, and removes a local LLM without asking for authentication', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Automation model"]').text()).toContain('GPT-5'));
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Connect & discover models')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('qwen3:8b'));
+    await wrapper.findAll('button').find((button) => button.text() === 'Save local LLM')!.trigger('click');
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/local-llm',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'] }),
+      }),
+    ));
+    expect(wrapper.text()).toContain('Local LLM saved.');
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Remove local LLM')!.trigger('click');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/local-llm',
+      { method: 'DELETE' },
+    ));
+    expect(wrapper.text()).toContain('Local LLM removed.');
   });
 
   it('loads and saves all profile settings with one action', async () => {

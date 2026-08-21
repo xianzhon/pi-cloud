@@ -207,7 +207,7 @@ describe('MemoryStore', () => {
       .toEqual(['Run tests', 'Prefer concise output']);
   });
 
-  it('defaults pinned applicability to always and keeps utility neutral', () => {
+  it('defaults pinned applicability to matched and keeps utility neutral', () => {
     const project = store.getOrCreateProject('default', '/repo/app');
     const existingPin = store.createMemory(memoryInput({
       projectId: project.id,
@@ -224,7 +224,7 @@ describe('MemoryStore', () => {
     }));
 
     expect(existingPin).toMatchObject({
-      pinnedApplicability: 'always',
+      pinnedApplicability: 'matched',
       positiveUtilityCount: 0,
       negativeUtilityCount: 0,
     });

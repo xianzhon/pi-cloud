@@ -61,6 +61,10 @@ Restart the server after changing this setting.
 
 Configure the proxy for each agent profile from the WebUI profile settings. The settings are stored in the Pi WebUI SQLite database and apply only to agent and model requests; the embedded terminal is not affected. Changes take effect on the next agent action without a restart.
 
+## Local LLM Configuration
+
+Open **Agent profiles → Local LLM**, choose an Ollama, LM Studio, or llama.cpp preset (or enter a custom OpenAI-compatible endpoint), and click **Connect & discover models**. Select the models to expose and save them; no API key is required. The endpoint is reached by the Pi WebUI server, so `127.0.0.1` refers to the machine running the server. The generated provider is stored in that profile's `models.json` without replacing other providers. Discovered models are configured for text and image input by default; existing explicit model capabilities are preserved.
+
 ## Provider and Gateway Variables
 
 Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are optional because the server uses the Pi agent's own authentication by default.
