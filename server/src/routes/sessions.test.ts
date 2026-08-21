@@ -64,9 +64,11 @@ vi.mock('../services/session-manager.js', () => ({
     listAgentProfiles: vi.fn(),
     listAgentProfileApiKeyProviders: vi.fn(),
     saveAgentProfileApiKey: vi.fn(),
+    removeAgentProfileApiKey: vi.fn(),
     getAgentProfileLocalLlm: vi.fn(),
     discoverAgentProfileLocalLlm: vi.fn(),
     saveAgentProfileLocalLlm: vi.fn(),
+    removeAgentProfileLocalLlm: vi.fn(),
     getClientAgentProfile: vi.fn(),
     setClientAgentProfile: vi.fn(),
     listSessions: vi.fn(),
@@ -203,11 +205,28 @@ describe('session routes', () => {
     });
   });
 
-  it('discovers and saves local LLM models', async () => {
+  it('removes an agent profile API key', async () => {
+    vi.mocked((sessionService as any).removeAgentProfileApiKey).mockResolvedValue([
+      { envVar: 'OPENAI_API_KEY', label: 'OpenAI GPT', configured: false },
+    ]);
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+
+    const result = await handlers['DELETE /agent-profiles/:profileId/api-key/:envVar']({
+      params: { profileId: 'work', envVar: 'OPENAI_API_KEY' },
+    }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
+
+    expect(sessionService.removeAgentProfileApiKey).toHaveBeenCalledWith('work', 'OPENAI_API_KEY');
+    expect(result.providers[0].configured).toBe(false);
+  });
+
+  it('discovers, saves, and removes local LLM models', async () => {
     vi.mocked((sessionService as any).discoverAgentProfileLocalLlm).mockResolvedValue([{ id: 'qwen3:8b' }]);
     vi.mocked((sessionService as any).saveAgentProfileLocalLlm).mockResolvedValue({
       baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'],
     });
+    vi.mocked((sessionService as any).removeAgentProfileLocalLlm).mockResolvedValue({ baseUrl: '', modelIds: [] });
     const { sessionRoutes } = await import('./sessions.js');
     const { app, handlers } = createMockApp();
     await sessionRoutes(app as any);
@@ -219,9 +238,13 @@ describe('session routes', () => {
     const saved = await handlers['PUT /agent-profiles/:profileId/local-llm']({
       params: { profileId: 'work' }, body: { baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'] },
     }, reply);
+    const removed = await handlers['DELETE /agent-profiles/:profileId/local-llm']({
+      params: { profileId: 'work' },
+    }, reply);
 
     expect(discovered).toEqual({ models: [{ id: 'qwen3:8b' }] });
     expect(saved).toEqual({ config: { baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'] } });
+    expect(removed).toEqual({ config: { baseUrl: '', modelIds: [] } });
   });
 
   it('checks agent profile proxy settings', async () => {

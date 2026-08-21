@@ -111,6 +111,7 @@ function createMemoryRuntimeMock() {
 const sessionManagerList = vi.fn<(...args: any[]) => Promise<any[]>>(async () => []);
 const sessionManagerListAll = vi.fn<(...args: any[]) => Promise<any[]>>(async () => []);
 const authStorageSet = vi.fn();
+const authStorageRemove = vi.fn();
 const authStorageGetAuthStatus = vi.fn<(providerId: string) => { configured: boolean; source?: string }>(() => ({ configured: false }));
 const authStorageDrainErrors = vi.fn(() => []);
 vi.mock('@earendil-works/pi-coding-agent', () => ({
@@ -128,6 +129,7 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
     create: vi.fn(() => ({
       kind: 'auth-storage',
       set: authStorageSet,
+      remove: authStorageRemove,
       getAuthStatus: authStorageGetAuthStatus,
       drainErrors: authStorageDrainErrors,
     })),
@@ -177,6 +179,7 @@ describe('PiSessionService', () => {
     sessionManagerList.mockClear();
     sessionManagerListAll.mockClear();
     authStorageSet.mockReset();
+    authStorageRemove.mockReset();
     authStorageGetAuthStatus.mockReset();
     authStorageGetAuthStatus.mockReturnValue({ configured: false });
     authStorageDrainErrors.mockReset();
@@ -308,6 +311,14 @@ describe('PiSessionService', () => {
     expect(providers).not.toContainEqual(expect.objectContaining({ apiKey: expect.anything() }));
   });
 
+  it('removes a stored agent-profile API key', async () => {
+    const service = new PiSessionService();
+
+    await service.removeAgentProfileApiKey('default', 'ANTHROPIC_API_KEY');
+
+    expect(authStorageRemove).toHaveBeenCalledWith('anthropic');
+  });
+
   it('includes declared input capabilities in agent-profile model summaries', async () => {
     const service = new PiSessionService();
 
@@ -351,6 +362,23 @@ describe('PiSessionService', () => {
       apiKey: 'local',
       models: [{ id: 'qwen3:8b', contextWindow: 8192, input: ['text', 'image'] }],
     });
+  });
+
+  it('removes local models without replacing other models.json providers', async () => {
+    readFile.mockImplementation(async (path: string) => path.endsWith('/models.json')
+      ? JSON.stringify({ providers: {
+        custom: { baseUrl: 'https://example.com', models: [{ id: 'remote' }] },
+        'pi-webui-local': { models: [{ id: 'qwen3:8b' }] },
+      } })
+      : '');
+    const service = new PiSessionService();
+
+    await expect(service.removeAgentProfileLocalLlm('default')).resolves.toEqual({ baseUrl: '', modelIds: [] });
+
+    const writeCalls = writeFile.mock.calls as unknown as Array<[string, string, string]>;
+    const saved = JSON.parse(writeCalls.find(([path]) => path.endsWith('/models.json'))![1]);
+    expect(saved.providers.custom).toBeDefined();
+    expect(saved.providers['pi-webui-local']).toBeUndefined();
   });
 
   it('stores selected profile per client and falls back to default', async () => {

@@ -289,6 +289,15 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     }
   });
 
+  app.delete('/agent-profiles/:profileId/local-llm', async (req, reply) => {
+    try {
+      const { profileId } = req.params as { profileId: string };
+      return { config: await sessionService.removeAgentProfileLocalLlm(profileId) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to remove local LLM' });
+    }
+  });
+
   app.put('/agent-profiles/:profileId/api-key', async (req, reply) => {
     try {
       const { profileId } = req.params as { profileId: string };
@@ -297,6 +306,15 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       return { providers: await sessionService.saveAgentProfileApiKey(profileId, envVar, apiKey) };
     } catch (error) {
       return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to save API key' });
+    }
+  });
+
+  app.delete('/agent-profiles/:profileId/api-key/:envVar', async (req, reply) => {
+    try {
+      const { profileId, envVar } = req.params as { profileId: string; envVar: string };
+      return { providers: await sessionService.removeAgentProfileApiKey(profileId, envVar) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to remove API key' });
     }
   });
 

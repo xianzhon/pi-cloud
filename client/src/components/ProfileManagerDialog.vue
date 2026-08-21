@@ -69,15 +69,20 @@
                       <span>{{ model.id }}</span>
                     </label>
                   </fieldset>
-                  <button
-                    v-if="localModels.length"
-                    class="profile-primary dialog-action local-model-save"
-                    type="button"
-                    :disabled="savingLocalLlm || selectedLocalModelIds.length === 0"
-                    @click="saveLocalLlm"
-                  >
-                    {{ savingLocalLlm ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveLocalLlm') }}
-                  </button>
+                  <div v-if="localModels.length" class="profile-remove-actions">
+                    <button
+                      class="profile-primary dialog-action"
+                      type="button"
+                      :disabled="savingLocalLlm || selectedLocalModelIds.length === 0"
+                      @click="saveLocalLlm"
+                    >
+                      {{ savingLocalLlm ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveLocalLlm') }}
+                    </button>
+                    <button class="profile-remove-button dialog-action" type="button" :disabled="removingLocalLlm" @click="removeLocalLlm">
+                      {{ removingLocalLlm ? t('components.profileManagerDialog.removing') : t('components.profileManagerDialog.removeLocalLlm') }}
+                    </button>
+                  </div>
+                  <span v-if="localLlmRemoved" class="profile-success" role="status">{{ t('components.profileManagerDialog.localLlmRemoved') }}</span>
                 </div>
               </details>
               <details :key="`api-${managedProfileId}`" class="profile-collapsible">
@@ -108,8 +113,18 @@
                     <button class="profile-secondary dialog-action" type="button" :disabled="savingApiKey || !apiKeyProvider || !apiKey.trim()" @click="saveApiKey">
                       {{ savingApiKey ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveApiKey') }}
                     </button>
+                    <button
+                      v-if="selectedApiKeyProvider?.source === 'stored'"
+                      class="profile-remove-button dialog-action"
+                      type="button"
+                      :disabled="removingApiKey"
+                      @click="removeApiKey"
+                    >
+                      {{ removingApiKey ? t('components.profileManagerDialog.removing') : t('components.profileManagerDialog.removeApiKey') }}
+                    </button>
                     <span v-if="selectedApiKeyProvider?.configured" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeyConfigured') }}</span>
                     <span v-else-if="apiKeySaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeySaved') }}</span>
+                    <span v-else-if="apiKeyRemoved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeyRemoved') }}</span>
                   </div>
                 </div>
               </details>
@@ -197,6 +212,7 @@ interface ApiKeyProvider {
   envVar: string;
   label: string;
   configured: boolean;
+  source?: string;
 }
 
 interface LocalModel {
@@ -232,14 +248,18 @@ const apiKeyProviders = ref<ApiKeyProvider[]>([]);
 const apiKeyProvider = ref('');
 const apiKey = ref('');
 const savingApiKey = ref(false);
+const removingApiKey = ref(false);
 const apiKeySaved = ref(false);
+const apiKeyRemoved = ref(false);
 const localLlmPreset = ref('ollama');
 const localLlmBaseUrl = ref('http://127.0.0.1:11434/v1');
 const localModels = ref<LocalModel[]>([]);
 const selectedLocalModelIds = ref<string[]>([]);
 const discoveringLocalModels = ref(false);
 const savingLocalLlm = ref(false);
+const removingLocalLlm = ref(false);
 const localLlmSaved = ref(false);
+const localLlmRemoved = ref(false);
 const proxy = reactive<ProxySettings>({ ALL_PROXY: '', HTTP_PROXY: '', HTTPS_PROXY: '', NO_PROXY: '' });
 
 const authenticationCommand = computed(() => (
@@ -297,14 +317,18 @@ function resetSaveState(): void {
   apiKeyProvider.value = '';
   apiKey.value = '';
   savingApiKey.value = false;
+  removingApiKey.value = false;
   apiKeySaved.value = false;
+  apiKeyRemoved.value = false;
   localLlmPreset.value = 'ollama';
   localLlmBaseUrl.value = localLlmPresets.ollama;
   localModels.value = [];
   selectedLocalModelIds.value = [];
   discoveringLocalModels.value = false;
   savingLocalLlm.value = false;
+  removingLocalLlm.value = false;
   localLlmSaved.value = false;
+  localLlmRemoved.value = false;
   error.value = '';
 }
 
@@ -391,12 +415,14 @@ function applyLocalLlmPreset(preset: string): void {
     localLlmBaseUrl.value = localLlmPresets[preset as keyof typeof localLlmPresets];
   }
   localLlmSaved.value = false;
+  localLlmRemoved.value = false;
 }
 
 async function discoverLocalModels(): Promise<void> {
   if (!localLlmBaseUrl.value.trim()) return;
   error.value = '';
   localLlmSaved.value = false;
+  localLlmRemoved.value = false;
   discoveringLocalModels.value = true;
   try {
     const response = await fetch(profileUrl(managedProfileId.value, '/local-llm/discover'), {
@@ -445,10 +471,35 @@ async function saveLocalLlm(): Promise<void> {
   }
 }
 
+async function removeLocalLlm(): Promise<void> {
+  error.value = '';
+  localLlmSaved.value = false;
+  localLlmRemoved.value = false;
+  removingLocalLlm.value = true;
+  try {
+    const response = await fetch(profileUrl(managedProfileId.value, '/local-llm'), { method: 'DELETE' });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToRemoveLocalLlm')));
+    localLlmPreset.value = 'ollama';
+    localLlmBaseUrl.value = localLlmPresets.ollama;
+    localModels.value = [];
+    selectedLocalModelIds.value = [];
+    models.value = models.value.filter((model) => model.provider !== 'pi-webui-local');
+    if (defaultModel.value.startsWith('pi-webui-local\u0000')) defaultModel.value = '';
+    if (automationModel.value.startsWith('pi-webui-local\u0000')) automationModel.value = '';
+    localLlmRemoved.value = true;
+    emit('updated');
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToRemoveLocalLlm');
+  } finally {
+    removingLocalLlm.value = false;
+  }
+}
+
 async function saveApiKey(): Promise<void> {
   if (!apiKeyProvider.value || !apiKey.value.trim()) return;
   error.value = '';
   apiKeySaved.value = false;
+  apiKeyRemoved.value = false;
   savingApiKey.value = true;
 
   try {
@@ -474,6 +525,35 @@ async function saveApiKey(): Promise<void> {
     error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToSaveApiKey');
   } finally {
     savingApiKey.value = false;
+  }
+}
+
+async function removeApiKey(): Promise<void> {
+  if (!apiKeyProvider.value) return;
+  error.value = '';
+  apiKeySaved.value = false;
+  apiKeyRemoved.value = false;
+  removingApiKey.value = true;
+  try {
+    const suffix = `/api-key/${encodeURIComponent(apiKeyProvider.value)}`;
+    const response = await fetch(profileUrl(managedProfileId.value, suffix), { method: 'DELETE' });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToRemoveApiKey')));
+    const data = await response.json() as { providers?: ApiKeyProvider[] };
+    apiKeyProviders.value = data.providers || apiKeyProviders.value;
+    apiKey.value = '';
+    apiKeyRemoved.value = true;
+
+    const modelsResponse = await fetch(profileUrl(managedProfileId.value, '/models'));
+    if (modelsResponse.ok) {
+      const modelsData = await modelsResponse.json() as { models?: ModelOption[] };
+      models.value = modelsData.models || [];
+      if (!models.value.some((model) => `${model.provider}\u0000${model.id}` === defaultModel.value)) defaultModel.value = '';
+    }
+    emit('updated');
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToRemoveApiKey');
+  } finally {
+    removingApiKey.value = false;
   }
 }
 
@@ -604,6 +684,7 @@ async function deleteProfile(): Promise<void> {
 watch(apiKeyProvider, () => {
   apiKey.value = '';
   apiKeySaved.value = false;
+  apiKeyRemoved.value = false;
 });
 
 watch([defaultModel, automationModel, autoRenameLanguage, proxy], () => {
@@ -792,6 +873,7 @@ small {
 .profile-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1.25rem;
 }
@@ -821,8 +903,16 @@ small {
 .local-model-list span {
   overflow-wrap: anywhere;
 }
-.local-model-save {
+.profile-remove-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   margin-top: 0.75rem;
+}
+.profile-remove-button {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: transparent;
+  color: var(--danger);
 }
 .profile-primary {
   background: var(--accent);

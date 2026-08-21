@@ -267,6 +267,18 @@ export class PiSessionService {
     return this.listAgentProfileApiKeyProviders(profileId);
   }
 
+  async removeAgentProfileApiKey(profileId: string, envVar: string) {
+    const profile = await this.requireAgentProfile(profileId);
+    const provider = API_KEY_PROVIDERS.find((item) => item.envVar === envVar);
+    if (!provider) throw new Error('Unknown API key provider');
+
+    const authStorage = AuthStorage.create(join(profile.path, 'auth.json'));
+    for (const providerId of provider.providerIds) authStorage.remove(providerId);
+    const persistenceError = authStorage.drainErrors()[0];
+    if (persistenceError) throw persistenceError;
+    return this.listAgentProfileApiKeyProviders(profileId);
+  }
+
   async listAgentProfileModels(profileId: string) {
     const profile = await this.requireAgentProfile(profileId);
     const registry = ModelRegistry.create(
@@ -315,6 +327,33 @@ export class PiSessionService {
     });
     if (modelIds.length === 0) throw new Error('No models were returned by the local LLM');
     return [...new Set(modelIds)].sort((a, b) => a.localeCompare(b)).map((id) => ({ id }));
+  }
+
+  async removeAgentProfileLocalLlm(profileId: string) {
+    const profile = await this.requireAgentProfile(profileId);
+    const config = await this.readModelsJson(profile.path);
+    const providers = this.modelsJsonProviders(config);
+    delete providers[LOCAL_LLM_PROVIDER_ID];
+    config.providers = providers;
+    await fs.mkdir(profile.path, { recursive: true });
+    await fs.writeFile(join(profile.path, 'models.json'), `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+    const settingsPath = join(profile.path, 'settings.json');
+    const settingsContent = await fs.readFile(settingsPath, 'utf8').catch(() => '');
+    try {
+      const settings = settingsContent.trim() ? JSON.parse(settingsContent) as Record<string, unknown> : {};
+      if (settings.defaultProvider === LOCAL_LLM_PROVIDER_ID) {
+        delete settings.defaultProvider;
+        delete settings.defaultModel;
+        await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+      }
+    } catch { /* Ignore unrelated invalid settings while removing the local provider. */ }
+    this.db?.prepare(`
+      UPDATE agent_profile_settings
+      SET automation_provider = NULL, automation_model_id = NULL, updated_at = ?
+      WHERE profile_id = ? AND automation_provider = ?
+    `).run(new Date().toISOString(), profileId, LOCAL_LLM_PROVIDER_ID);
+    return { baseUrl: '', modelIds: [] };
   }
 
   async saveAgentProfileLocalLlm(profileId: string, baseUrl: string, modelIds: string[]) {
