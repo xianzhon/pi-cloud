@@ -64,6 +64,9 @@ vi.mock('../services/session-manager.js', () => ({
     listAgentProfiles: vi.fn(),
     listAgentProfileApiKeyProviders: vi.fn(),
     saveAgentProfileApiKey: vi.fn(),
+    getAgentProfileLocalLlm: vi.fn(),
+    discoverAgentProfileLocalLlm: vi.fn(),
+    saveAgentProfileLocalLlm: vi.fn(),
     getClientAgentProfile: vi.fn(),
     setClientAgentProfile: vi.fn(),
     listSessions: vi.fn(),
@@ -198,6 +201,27 @@ describe('session routes', () => {
     expect(result).toEqual({
       providers: [{ envVar: 'OPENAI_API_KEY', label: 'OpenAI GPT', configured: true, source: 'stored' }],
     });
+  });
+
+  it('discovers and saves local LLM models', async () => {
+    vi.mocked((sessionService as any).discoverAgentProfileLocalLlm).mockResolvedValue([{ id: 'qwen3:8b' }]);
+    vi.mocked((sessionService as any).saveAgentProfileLocalLlm).mockResolvedValue({
+      baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'],
+    });
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    const discovered = await handlers['POST /agent-profiles/:profileId/local-llm/discover']({
+      params: { profileId: 'work' }, body: { baseUrl: 'http://127.0.0.1:11434/v1' },
+    }, reply);
+    const saved = await handlers['PUT /agent-profiles/:profileId/local-llm']({
+      params: { profileId: 'work' }, body: { baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'] },
+    }, reply);
+
+    expect(discovered).toEqual({ models: [{ id: 'qwen3:8b' }] });
+    expect(saved).toEqual({ config: { baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'] } });
   });
 
   it('checks agent profile proxy settings', async () => {

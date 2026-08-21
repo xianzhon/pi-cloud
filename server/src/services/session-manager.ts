@@ -59,6 +59,8 @@ const SESSION_LIST_CACHE_TTL_MS = 2000;
 const USER_MESSAGE_COUNT_CONCURRENCY = 10;
 const DEFAULT_AUTOMATION_PROVIDER = 'anthropic';
 const DEFAULT_AUTOMATION_MODEL_ID = 'claude-haiku-4-5';
+const LOCAL_LLM_PROVIDER_ID = 'pi-webui-local';
+const LOCAL_LLM_DISCOVERY_TIMEOUT_MS = 10_000;
 
 // Some environment variables authenticate multiple Pi providers. Saving each provider entry
 // preserves the same behavior users get when they export the corresponding variable.
@@ -280,6 +282,118 @@ export class PiSessionService {
       input: model.input,
       current: profile.defaultProvider === model.provider && profile.defaultModel === model.id,
     }));
+  }
+
+  async getAgentProfileLocalLlm(profileId: string) {
+    const profile = await this.requireAgentProfile(profileId);
+    const config = await this.readModelsJson(profile.path);
+    const provider = this.getLocalLlmProvider(config);
+    const providerModels = provider?.models;
+    const models: unknown[] = Array.isArray(providerModels) ? providerModels : [];
+    return {
+      baseUrl: typeof provider?.baseUrl === 'string' ? provider.baseUrl : '',
+      modelIds: models.flatMap((model) => {
+        const id = this.localModelId(model);
+        return id ? [id] : [];
+      }),
+    };
+  }
+
+  async discoverAgentProfileLocalLlm(profileId: string, baseUrl: string) {
+    await this.requireAgentProfile(profileId);
+    const endpoint = `${this.normalizeLocalLlmBaseUrl(baseUrl)}/models`;
+    const response = await fetch(endpoint, { signal: AbortSignal.timeout(LOCAL_LLM_DISCOVERY_TIMEOUT_MS) });
+    if (!response.ok) throw new Error(`Local LLM returned HTTP ${response.status}`);
+
+    const body = await response.json() as { data?: unknown; models?: unknown };
+    const candidates = Array.isArray(body.data) ? body.data : Array.isArray(body.models) ? body.models : [];
+    const modelIds = candidates.flatMap((model) => {
+      if (!model || typeof model !== 'object') return [];
+      const candidate = model as { id?: unknown; name?: unknown; model?: unknown };
+      const id = [candidate.id, candidate.model, candidate.name].find((value) => typeof value === 'string' && value.trim());
+      return typeof id === 'string' ? [id.trim()] : [];
+    });
+    if (modelIds.length === 0) throw new Error('No models were returned by the local LLM');
+    return [...new Set(modelIds)].sort((a, b) => a.localeCompare(b)).map((id) => ({ id }));
+  }
+
+  async saveAgentProfileLocalLlm(profileId: string, baseUrl: string, modelIds: string[]) {
+    const profile = await this.requireAgentProfile(profileId);
+    const normalizedBaseUrl = this.normalizeLocalLlmBaseUrl(baseUrl);
+    const normalizedModelIds = [...new Set(modelIds.map((id) => id.trim()).filter(Boolean))];
+    if (normalizedModelIds.length === 0) throw new Error('Select at least one local model');
+
+    const config = await this.readModelsJson(profile.path);
+    const providers = this.modelsJsonProviders(config);
+    const existing = this.getLocalLlmProvider(config);
+    const existingModels = new Map<string, unknown>();
+    const configuredModels = existing?.models;
+    for (const model of Array.isArray(configuredModels) ? configuredModels : []) {
+      const id = this.localModelId(model);
+      if (id) existingModels.set(id, model);
+    }
+    const existingCompat = existing?.compat;
+    providers[LOCAL_LLM_PROVIDER_ID] = {
+      ...existing,
+      baseUrl: normalizedBaseUrl,
+      api: 'openai-completions',
+      // Pi requires configured auth for a custom model to become available; local servers ignore this placeholder.
+      apiKey: 'local',
+      compat: {
+        ...(existingCompat && typeof existingCompat === 'object' ? existingCompat : {}),
+        supportsDeveloperRole: false,
+        supportsReasoningEffort: false,
+      },
+      models: normalizedModelIds.map((id) => existingModels.get(id) || { id }),
+    };
+    config.providers = providers;
+    await fs.mkdir(profile.path, { recursive: true });
+    await fs.writeFile(join(profile.path, 'models.json'), `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+    return { baseUrl: normalizedBaseUrl, modelIds: normalizedModelIds };
+  }
+
+  private async readModelsJson(profilePath: string): Promise<Record<string, any>> {
+    const content = await fs.readFile(join(profilePath, 'models.json'), 'utf8').catch(() => '');
+    if (!content.trim()) return {};
+    try {
+      const parsed = JSON.parse(content);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+      return parsed;
+    } catch {
+      throw new Error('models.json contains invalid JSON');
+    }
+  }
+
+  private modelsJsonProviders(config: Record<string, any>): Record<string, any> {
+    return config.providers && typeof config.providers === 'object' && !Array.isArray(config.providers)
+      ? config.providers
+      : {};
+  }
+
+  private getLocalLlmProvider(config: Record<string, any>): Record<string, any> | undefined {
+    const provider = this.modelsJsonProviders(config)[LOCAL_LLM_PROVIDER_ID];
+    return provider && typeof provider === 'object' && !Array.isArray(provider) ? provider : undefined;
+  }
+
+  private localModelId(model: unknown): string | undefined {
+    if (!model || typeof model !== 'object') return undefined;
+    const id = (model as { id?: unknown }).id;
+    return typeof id === 'string' && id.trim() ? id.trim() : undefined;
+  }
+
+  private normalizeLocalLlmBaseUrl(baseUrl: string): string {
+    let parsed: URL;
+    try {
+      parsed = new URL(baseUrl.trim());
+    } catch {
+      throw new Error('Enter a valid local LLM endpoint URL');
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Local LLM endpoint must use HTTP or HTTPS');
+    }
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString().replace(/\/+$/, '');
   }
 
   private async requireAgentProfile(profileId: string): Promise<AgentProfile> {

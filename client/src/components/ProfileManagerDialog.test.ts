@@ -28,6 +28,11 @@ describe('ProfileManagerDialog', () => {
           { envVar: 'OPENAI_API_KEY', label: 'OpenAI GPT', configured: true, source: 'stored' },
         ] });
       }
+      if (url.endsWith('/local-llm/discover')) return ok({ models: [{ id: 'qwen3:8b' }] });
+      if (url.endsWith('/local-llm') && options?.method === 'PUT') {
+        return ok({ config: { baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'] } });
+      }
+      if (url.endsWith('/local-llm')) return ok({ config: { baseUrl: '', modelIds: [] } });
       if (url.endsWith('/models')) {
         return ok({ models: [
           { provider: 'anthropic', id: 'claude-haiku-4-5', name: 'Claude Haiku', current: true },
@@ -89,6 +94,28 @@ describe('ProfileManagerDialog', () => {
     ));
     await vi.waitFor(() => expect((wrapper.find('input[type="password"]').element as HTMLInputElement).value).toBe(''));
     expect(wrapper.text()).not.toContain('secret-key');
+  });
+
+  it('discovers and saves a local LLM without asking for authentication', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Automation model"]').text()).toContain('GPT-5'));
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Connect & discover models')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('qwen3:8b'));
+    await wrapper.findAll('button').find((button) => button.text() === 'Save local LLM')!.trigger('click');
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/local-llm',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ baseUrl: 'http://127.0.0.1:11434/v1', modelIds: ['qwen3:8b'] }),
+      }),
+    ));
+    expect(wrapper.text()).toContain('Local LLM saved.');
   });
 
   it('loads and saves all profile settings with one action', async () => {

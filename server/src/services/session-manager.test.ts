@@ -317,6 +317,39 @@ describe('PiSessionService', () => {
     ]);
   });
 
+  it('discovers models from an OpenAI-compatible local endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      data: [{ id: 'qwen3:8b' }, { id: 'devstral:latest' }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const service = new PiSessionService();
+
+    await expect(service.discoverAgentProfileLocalLlm('default', 'http://127.0.0.1:11434/v1/')).resolves.toEqual([
+      { id: 'devstral:latest' },
+      { id: 'qwen3:8b' },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:11434/v1/models', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    fetchMock.mockRestore();
+  });
+
+  it('saves local models without replacing other models.json providers', async () => {
+    readFile.mockImplementation(async (path: string) => path.endsWith('/models.json')
+      ? JSON.stringify({ providers: { custom: { baseUrl: 'https://example.com', models: [{ id: 'remote' }] } } })
+      : '');
+    const service = new PiSessionService();
+
+    await service.saveAgentProfileLocalLlm('default', 'http://127.0.0.1:11434/v1', ['qwen3:8b']);
+
+    const writeCalls = writeFile.mock.calls as unknown as Array<[string, string, string]>;
+    const saved = JSON.parse(writeCalls.find(([path]) => path.endsWith('/models.json'))![1]);
+    expect(saved.providers.custom.models).toEqual([{ id: 'remote' }]);
+    expect(saved.providers['pi-webui-local']).toMatchObject({
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+      apiKey: 'local',
+      models: [{ id: 'qwen3:8b' }],
+    });
+  });
+
   it('stores selected profile per client and falls back to default', async () => {
     readdir.mockResolvedValue([
       { name: 'work', isDirectory: () => true },

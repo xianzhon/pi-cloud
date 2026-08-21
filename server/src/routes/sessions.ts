@@ -258,6 +258,37 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     }
   });
 
+  app.get('/agent-profiles/:profileId/local-llm', async (req, reply) => {
+    try {
+      const { profileId } = req.params as { profileId: string };
+      return { config: await sessionService.getAgentProfileLocalLlm(profileId) };
+    } catch (error) {
+      return reply.status(404).send({ error: error instanceof Error ? error.message : 'Profile not found' });
+    }
+  });
+
+  app.post('/agent-profiles/:profileId/local-llm/discover', async (req, reply) => {
+    try {
+      const { profileId } = req.params as { profileId: string };
+      const { baseUrl } = req.body as { baseUrl?: string };
+      if (!baseUrl) return reply.status(400).send({ error: 'baseUrl is required' });
+      return { models: await sessionService.discoverAgentProfileLocalLlm(profileId, baseUrl) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to discover local models' });
+    }
+  });
+
+  app.put('/agent-profiles/:profileId/local-llm', async (req, reply) => {
+    try {
+      const { profileId } = req.params as { profileId: string };
+      const { baseUrl, modelIds } = req.body as { baseUrl?: string; modelIds?: string[] };
+      if (!baseUrl || !Array.isArray(modelIds)) return reply.status(400).send({ error: 'baseUrl and modelIds are required' });
+      return { config: await sessionService.saveAgentProfileLocalLlm(profileId, baseUrl, modelIds) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to save local LLM' });
+    }
+  });
+
   app.put('/agent-profiles/:profileId/api-key', async (req, reply) => {
     try {
       const { profileId } = req.params as { profileId: string };

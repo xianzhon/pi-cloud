@@ -31,6 +31,43 @@
             <template v-else-if="managedProfileId">
               <h3>{{ t('components.profileManagerDialog.profileName', { profile: managedProfileId }) }}</h3>
               <p class="profile-help">{{ t('components.profileManagerDialog.authenticateWithPiInATerminal') }} <code>{{ authenticationCommand }}</code></p>
+              <h3>{{ t('components.profileManagerDialog.localLlm') }}</h3>
+              <p class="profile-help">{{ t('components.profileManagerDialog.localLlmHelp') }}</p>
+              <CustomSelect
+                v-model="localLlmPreset"
+                :options="localLlmPresetOptions"
+                :aria-label="t('components.profileManagerDialog.localLlmPreset')"
+                @update:model-value="applyLocalLlmPreset"
+              />
+              <input
+                v-model="localLlmBaseUrl"
+                type="url"
+                :aria-label="t('components.profileManagerDialog.localLlmEndpoint')"
+                :placeholder="t('components.profileManagerDialog.localLlmEndpointPlaceholder')"
+                @keyup.enter="discoverLocalModels"
+              />
+              <div class="profile-key-actions">
+                <button class="profile-secondary dialog-action" type="button" :disabled="discoveringLocalModels || !localLlmBaseUrl.trim()" @click="discoverLocalModels">
+                  {{ discoveringLocalModels ? t('components.profileManagerDialog.connecting') : t('components.profileManagerDialog.connectAndDiscover') }}
+                </button>
+                <span v-if="localLlmSaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.localLlmSaved') }}</span>
+              </div>
+              <fieldset v-if="localModels.length" class="local-model-list">
+                <legend>{{ t('components.profileManagerDialog.discoveredModels') }}</legend>
+                <label v-for="model in localModels" :key="model.id">
+                  <input v-model="selectedLocalModelIds" type="checkbox" :value="model.id" />
+                  <span>{{ model.id }}</span>
+                </label>
+              </fieldset>
+              <button
+                v-if="localModels.length"
+                class="profile-primary dialog-action local-model-save"
+                type="button"
+                :disabled="savingLocalLlm || selectedLocalModelIds.length === 0"
+                @click="saveLocalLlm"
+              >
+                {{ savingLocalLlm ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveLocalLlm') }}
+              </button>
               <h3>{{ t('components.profileManagerDialog.apiProviderKey') }}</h3>
               <p class="profile-help">{{ t('components.profileManagerDialog.apiProviderKeyHelp') }}</p>
               <CustomSelect
@@ -138,6 +175,10 @@ interface ApiKeyProvider {
   configured: boolean;
 }
 
+interface LocalModel {
+  id: string;
+}
+
 interface DeleteResult {
   id: string;
   activeProfileChanged: boolean;
@@ -168,6 +209,13 @@ const apiKeyProvider = ref('');
 const apiKey = ref('');
 const savingApiKey = ref(false);
 const apiKeySaved = ref(false);
+const localLlmPreset = ref('ollama');
+const localLlmBaseUrl = ref('http://127.0.0.1:11434/v1');
+const localModels = ref<LocalModel[]>([]);
+const selectedLocalModelIds = ref<string[]>([]);
+const discoveringLocalModels = ref(false);
+const savingLocalLlm = ref(false);
+const localLlmSaved = ref(false);
 const proxy = reactive<ProxySettings>({ ALL_PROXY: '', HTTP_PROXY: '', HTTPS_PROXY: '', NO_PROXY: '' });
 
 const authenticationCommand = computed(() => (
@@ -192,6 +240,17 @@ const autoRenameLanguageOptions: CustomSelectOption[] = [
   { value: 'english', label: t('components.profileManagerDialog.english') },
   { value: 'chinese', label: t('components.profileManagerDialog.chinese') },
 ];
+const localLlmPresets = {
+  ollama: 'http://127.0.0.1:11434/v1',
+  lmStudio: 'http://127.0.0.1:1234/v1',
+  llamaCpp: 'http://127.0.0.1:8080/v1',
+} as const;
+const localLlmPresetOptions: CustomSelectOption[] = [
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'lmStudio', label: 'LM Studio' },
+  { value: 'llamaCpp', label: 'llama.cpp' },
+  { value: 'custom', label: t('components.profileManagerDialog.customOpenAiCompatible') },
+];
 
 function profileUrl(id: string, suffix: string = ''): string {
   return `/api/sessions/agent-profiles/${encodeURIComponent(id)}${suffix}`;
@@ -214,6 +273,13 @@ function resetSaveState(): void {
   apiKey.value = '';
   savingApiKey.value = false;
   apiKeySaved.value = false;
+  localLlmPreset.value = 'ollama';
+  localLlmBaseUrl.value = localLlmPresets.ollama;
+  localModels.value = [];
+  selectedLocalModelIds.value = [];
+  discoveringLocalModels.value = false;
+  savingLocalLlm.value = false;
+  localLlmSaved.value = false;
   error.value = '';
 }
 
@@ -249,12 +315,13 @@ async function select(id: string): Promise<void> {
   resetSaveState();
   models.value = [];
 
-  const [proxyResponse, modelsResponse, automationResponse, autoRenameResponse, apiKeyProvidersResponse] = await Promise.all([
+  const [proxyResponse, modelsResponse, automationResponse, autoRenameResponse, apiKeyProvidersResponse, localLlmResponse] = await Promise.all([
     fetch(profileUrl(id, '/proxy')),
     fetch(profileUrl(id, '/models')),
     fetch(profileUrl(id, '/automation-model')),
     fetch(profileUrl(id, '/auto-rename')),
     fetch(profileUrl(id, '/api-key-providers')),
+    fetch(profileUrl(id, '/local-llm')),
   ]);
   if (proxyResponse.ok) {
     const data = await proxyResponse.json() as { proxy?: Record<string, string> };
@@ -282,6 +349,74 @@ async function select(id: string): Promise<void> {
     apiKeyProvider.value = apiKeyProviders.value.find((provider) => provider.configured)?.envVar
       || apiKeyProviders.value[0]?.envVar
       || '';
+  }
+  if (localLlmResponse.ok) {
+    const data = await localLlmResponse.json() as { config?: { baseUrl?: string; modelIds?: string[] } };
+    if (data.config?.baseUrl) {
+      localLlmBaseUrl.value = data.config.baseUrl;
+      localLlmPreset.value = Object.entries(localLlmPresets).find(([, url]) => url === data.config?.baseUrl)?.[0] || 'custom';
+    }
+    selectedLocalModelIds.value = data.config?.modelIds || [];
+    localModels.value = selectedLocalModelIds.value.map((modelId) => ({ id: modelId }));
+  }
+}
+
+function applyLocalLlmPreset(preset: string): void {
+  if (preset in localLlmPresets) {
+    localLlmBaseUrl.value = localLlmPresets[preset as keyof typeof localLlmPresets];
+  }
+  localLlmSaved.value = false;
+}
+
+async function discoverLocalModels(): Promise<void> {
+  if (!localLlmBaseUrl.value.trim()) return;
+  error.value = '';
+  localLlmSaved.value = false;
+  discoveringLocalModels.value = true;
+  try {
+    const response = await fetch(profileUrl(managedProfileId.value, '/local-llm/discover'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl: localLlmBaseUrl.value }),
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToDiscoverLocalModels')));
+    const data = await response.json() as { models?: LocalModel[] };
+    localModels.value = data.models || [];
+    selectedLocalModelIds.value = localModels.value.map((model) => model.id);
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToDiscoverLocalModels');
+  } finally {
+    discoveringLocalModels.value = false;
+  }
+}
+
+async function saveLocalLlm(): Promise<void> {
+  if (!localLlmBaseUrl.value.trim() || selectedLocalModelIds.value.length === 0) return;
+  error.value = '';
+  localLlmSaved.value = false;
+  savingLocalLlm.value = true;
+  try {
+    const response = await fetch(profileUrl(managedProfileId.value, '/local-llm'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl: localLlmBaseUrl.value, modelIds: selectedLocalModelIds.value }),
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToSaveLocalLlm')));
+    const data = await response.json() as { config?: { baseUrl?: string; modelIds?: string[] } };
+    localLlmBaseUrl.value = data.config?.baseUrl || localLlmBaseUrl.value;
+    selectedLocalModelIds.value = data.config?.modelIds || selectedLocalModelIds.value;
+    localLlmSaved.value = true;
+
+    const modelsResponse = await fetch(profileUrl(managedProfileId.value, '/models'));
+    if (modelsResponse.ok) {
+      const modelsData = await modelsResponse.json() as { models?: ModelOption[] };
+      models.value = modelsData.models || [];
+    }
+    emit('updated');
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToSaveLocalLlm');
+  } finally {
+    savingLocalLlm.value = false;
   }
 }
 
@@ -569,6 +704,32 @@ small {
 }
 .profile-key-actions .profile-success {
   margin: 0;
+}
+.local-model-list {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 12rem;
+  margin: 1rem 0 0;
+  padding: 0.75rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.local-model-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.profile-manager-form .local-model-list input {
+  width: auto;
+  margin: 0;
+}
+.local-model-list span {
+  overflow-wrap: anywhere;
+}
+.local-model-save {
+  margin-top: 0.75rem;
 }
 .profile-primary {
   background: var(--accent);
