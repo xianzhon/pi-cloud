@@ -2720,7 +2720,7 @@ function showActiveEditor(path = activeTab.value): void {
   if (typeof editor?.updateOptions === 'function') {
     editor.updateOptions({
       readOnly: isVirtualDiff,
-      wordWrap: isVirtualDiff ? 'off' : 'on',
+      wordWrap: 'on',
       lineNumbers: isVirtualDiff && model ? diffLineNumbers(model) : 'on',
       lineNumbersMinChars: isVirtualDiff ? 9 : 5,
       folding: !isVirtualDiff,
@@ -2833,7 +2833,7 @@ onMounted(() => {
       originalEditable: false,
       renderSideBySide: true,
       minimap: { enabled: false },
-      wordWrap: 'off',
+      wordWrap: 'on',
       folding: false,
       renderLineHighlight: 'none',
       fontSize: 14,

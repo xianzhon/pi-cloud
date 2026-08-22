@@ -120,7 +120,7 @@ describe('EditorPanel', () => {
     });
   });
 
-  it('uses source line numbers and disables wrapping for virtual diffs', async () => {
+  it('uses source line numbers and enables wrapping for virtual diffs', async () => {
     mockFileTreeFetch();
     const lines = [
       'diff --git a/file.ts b/file.ts',
@@ -147,7 +147,7 @@ describe('EditorPanel', () => {
     const options = editorInstance.updateOptions.mock.calls.at(-1)?.[0];
     expect(options).toMatchObject({
       readOnly: true,
-      wordWrap: 'off',
+      wordWrap: 'on',
       lineNumbersMinChars: 9,
       folding: false,
       renderLineHighlight: 'none',
@@ -189,7 +189,10 @@ describe('EditorPanel', () => {
     await splitButton!.trigger('click');
     await flushPromises();
 
-    const diffEditor = vi.mocked(monaco.editor.createDiffEditor).mock.results.at(-1)?.value as any;
+    const createDiffEditor = vi.mocked(monaco.editor.createDiffEditor);
+    expect(createDiffEditor.mock.calls.at(-1)?.[1]).toMatchObject({ wordWrap: 'on' });
+
+    const diffEditor = createDiffEditor.mock.results.at(-1)?.value as any;
     expect(diffEditor.setModel.mock.calls.at(-1)?.[0]).toMatchObject({
       original: expect.any(Object),
       modified: expect.any(Object),
