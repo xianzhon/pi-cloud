@@ -51,7 +51,7 @@ describe('FolderPickerModal', () => {
     }]);
   });
 
-  it('toggles folder sorting by modified time from the button before hidden folders', async () => {
+  it('defaults to modified-time sorting and toggles to name sorting', async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ path: '/workspace', tree: [] }),
@@ -68,11 +68,13 @@ describe('FolderPickerModal', () => {
     const hiddenButton = wrapper.find('[aria-label="Show hidden folders"]');
     expect(sortButton.find('svg').exists()).toBe(true);
     expect(sortButton.element.nextElementSibling).toBe(hiddenButton.element);
+    expect(fetchMock).toHaveBeenCalledWith('/api/files/tree?path=%2Fworkspace&depth=1&type=directory&hidden=false&sort=modified');
 
     fetchMock.mockClear();
     await sortButton.trigger('click');
     await vi.waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/files/tree?path=%2Fworkspace&depth=1&type=directory&hidden=false&sort=modified');
+      expect(wrapper.find('[aria-label="Sort by name"]').exists()).toBe(true);
+      expect(fetchMock).toHaveBeenCalledWith('/api/files/tree?path=%2Fworkspace&depth=1&type=directory&hidden=false');
     });
   });
 

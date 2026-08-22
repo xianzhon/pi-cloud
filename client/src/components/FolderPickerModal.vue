@@ -64,8 +64,8 @@
             :class="{ active: directorySort === 'modified' }"
             type="button"
             @click="toggleDirectorySort"
-            :data-tooltip="directorySort === 'modified' ? t('components.folderPickerModal.sortByName') : t('components.folderPickerModal.sortByModifiedDate')"
-            :aria-label="directorySort === 'modified' ? t('components.folderPickerModal.sortByName') : t('components.folderPickerModal.sortByModifiedDate')"
+            :data-tooltip="directorySort === 'modified' ? t('components.folderPickerModal.sortByModifiedDate') : t('components.folderPickerModal.sortByName')"
+            :aria-label="directorySort === 'modified' ? t('components.folderPickerModal.sortByModifiedDate') : t('components.folderPickerModal.sortByName')"
             :aria-pressed="directorySort === 'modified'"
           >
             <PhTextAa v-if="directorySort === 'name'" :size="15" />
@@ -221,7 +221,7 @@ const error = ref('');
 const moveMode = ref<MoveMode | undefined>('rename');
 const projectName = ref('');
 const showHiddenFolders = ref(false);
-const directorySort = ref<'name' | 'modified'>('name');
+const directorySort = ref<'name' | 'modified'>('modified');
 const searchQuery = ref('');
 const activeTab = ref<'browse' | 'clone'>('browse');
 const newFolderDialogVisible = ref(false);
