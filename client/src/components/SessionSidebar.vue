@@ -83,7 +83,6 @@
       </button>
       <button
         :class="{ active: scope === 'pinned' }"
-        :disabled="isReviewMode"
         @click="scope = 'pinned'; loadSessions()"
       >
         {{ t('components.sessionSidebar.pinned') }}
@@ -138,7 +137,7 @@
       <div v-if="projectPathError" class="project-path-error">{{ projectPathError }}</div>
     </div>
     
-    <div v-if="isReviewMode" class="review-search">
+    <div v-if="isReviewMode && scope !== 'pinned'" class="review-search">
       <input
         v-model="reviewSearchQuery"
         class="review-search-input"
@@ -256,7 +255,7 @@
         >
           <PhPlus :size="14" /> {{ t('components.sessionSidebar.newSessionWithSameSettings') }}
         </button>
-        <div v-if="!isReviewMode" class="pin-group-submenu">
+        <div class="pin-group-submenu">
           <button class="pin-session-btn" type="button" aria-haspopup="menu">
             <PhPushPin :size="14" />
             <span>{{ t(scope === 'pinned' ? 'components.sessionSidebar.moveToGroup' : 'components.sessionSidebar.pinToGroup') }}</span>
@@ -278,7 +277,7 @@
             </button>
           </div>
         </div>
-        <button v-if="scope === 'pinned' && !isReviewMode" class="remove-pin-btn" @click="unpinContextSession">
+        <button v-if="scope === 'pinned'" class="remove-pin-btn" @click="unpinContextSession">
           <PhX :size="14" /> {{ t('components.sessionSidebar.removeFromGroup') }}
         </button>
         <button v-if="!isReviewMode" class="move-session-btn" @click="openMoveSessionDialog">
@@ -773,7 +772,10 @@ async function loadSessions(options: { append?: boolean } = {}) {
 
   try {
     if (scope.value === 'pinned') {
-      const response = await fetch(`/api/sessions/pinned?clientId=${encodeURIComponent(props.clientId)}`);
+      const url = isReviewMode.value
+        ? `/api/review-sources/${encodeURIComponent(selectedReviewSourceId.value)}/pinned`
+        : `/api/sessions/pinned?clientId=${encodeURIComponent(props.clientId)}`;
+      const response = await fetch(url);
       const data = await response.json() as { groups?: PinGroup[] };
       if (requestId !== sessionRequestId) return;
       pinGroups.value = Array.isArray(data.groups)
@@ -972,6 +974,7 @@ async function chooseAgentProfile(profileId: string) {
   isAgentProfileListOpen.value = false;
   selectedReviewSourceId.value = '';
   await syncAgentProfile(profileId);
+  await loadPinGroups();
   await loadProjectPathOptions();
   await refreshProjectPath({ preferSaved: false });
   await loadSessions();
@@ -984,6 +987,7 @@ async function chooseReviewSource(sourceId: string) {
   sessionStorage.setItem(agentProfileStorageKey, selectedAgentProfile.value);
   const source = reviewSources.value.find((item) => item.id === sourceId);
   emit('reviewSourceSelected', sourceId, source?.label ?? sourceId);
+  await loadPinGroups();
   await loadProjectPathOptions(sourceId);
   scope.value = 'project';
   await refreshProjectPath({ preferSaved: true });
@@ -1338,7 +1342,10 @@ function togglePinGroup(groupId: string) {
 }
 
 async function loadPinGroups() {
-  const response = await fetch('/api/sessions/pin-groups');
+  const url = isReviewMode.value
+    ? `/api/review-sources/${encodeURIComponent(selectedReviewSourceId.value)}/pin-groups`
+    : '/api/sessions/pin-groups';
+  const response = await fetch(url);
   const data = await response.json() as { groups?: Array<Omit<PinGroup, 'sessions'>> };
   pinGroups.value = (data.groups || []).map((group) => ({ ...group, sessionIds: group.sessionIds || [], sessions: [] }));
 }
@@ -1368,7 +1375,10 @@ async function pinContextSession(groupId: string) {
   const session = contextMenu.value.session;
   closeContextMenu();
   if (!session) return;
-  const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/pin`, {
+  const pinUrl = isReviewMode.value
+    ? `/api/review-sources/${encodeURIComponent(selectedReviewSourceId.value)}/sessions/${encodeURIComponent(session.id)}/pin`
+    : `/api/sessions/${encodeURIComponent(session.id)}/pin`;
+  const response = await fetch(pinUrl, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ groupId }),
@@ -1382,7 +1392,10 @@ async function unpinContextSession() {
   const session = contextMenu.value.session;
   closeContextMenu();
   if (!session) return;
-  const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/pin`, { method: 'DELETE' });
+  const pinUrl = isReviewMode.value
+    ? `/api/review-sources/${encodeURIComponent(selectedReviewSourceId.value)}/sessions/${encodeURIComponent(session.id)}/pin`
+    : `/api/sessions/${encodeURIComponent(session.id)}/pin`;
+  const response = await fetch(pinUrl, { method: 'DELETE' });
   if (response.ok) await loadSessions();
 }
 

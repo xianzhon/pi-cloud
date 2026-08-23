@@ -8,6 +8,7 @@ import { openPiuiDatabase } from '../db/database.js';
 import { reviewSourceRoutes } from './review-sources.js';
 import { ReviewSourceService } from '../services/review-source-service.js';
 import { ReviewSourceStore } from '../services/review-source-store.js';
+import { DEFAULT_PIN_GROUP_ID, SessionPinStore } from '../services/session-pin-store.js';
 
 describe('review source routes', () => {
   let tempDir: string;
@@ -15,6 +16,7 @@ describe('review source routes', () => {
   let db: Database.Database;
   let store: ReviewSourceStore;
   let service: ReviewSourceService;
+  let pinStore: SessionPinStore;
   let app: ReturnType<typeof Fastify>;
 
   beforeEach(async () => {
@@ -23,8 +25,9 @@ describe('review source routes', () => {
     db = openPiuiDatabase(dbPath);
     store = new ReviewSourceStore(db, []);
     service = new ReviewSourceService(store);
+    pinStore = new SessionPinStore(db);
     app = Fastify();
-    await app.register(reviewSourceRoutes, { prefix: '/api/review-sources', reviewSourceService: service });
+    await app.register(reviewSourceRoutes, { prefix: '/api/review-sources', reviewSourceService: service, pinStore });
   });
 
   afterEach(async () => {
@@ -77,6 +80,31 @@ describe('review source routes', () => {
       payload: { type: 'devin' },
     });
     expect(response.statusCode).toBe(400);
+  });
+
+  it('pins and lists review sessions independently by source', async () => {
+    const sourceId = 'codex-source';
+    const session = {
+      id: 'session-1', sourceId, path: '/tmp/session.jsonl', cwd: '/tmp/project',
+      created: '2026-08-01T00:00:00.000Z', modified: '2026-08-01T00:00:00.000Z', messageCount: 1,
+    };
+    service.listSessions = async () => [session];
+
+    const pinResponse = await app.inject({
+      method: 'PUT',
+      url: `/api/review-sources/${sourceId}/sessions/${session.id}/pin`,
+      payload: { groupId: DEFAULT_PIN_GROUP_ID },
+    });
+    expect(pinResponse.statusCode).toBe(200);
+
+    const groupsResponse = await app.inject({ method: 'GET', url: `/api/review-sources/${sourceId}/pin-groups` });
+    expect(groupsResponse.json().groups[0].sessionIds).toEqual([session.id]);
+
+    const pinnedResponse = await app.inject({ method: 'GET', url: `/api/review-sources/${sourceId}/pinned` });
+    expect(pinnedResponse.json().groups[0].sessions).toEqual([session]);
+
+    await app.inject({ method: 'DELETE', url: `/api/review-sources/${sourceId}/sessions/${session.id}/pin` });
+    expect(pinStore.listSessionIdsByGroup(sourceId).get(DEFAULT_PIN_GROUP_ID)).toBeUndefined();
   });
 
   it('returns project paths for a Devin review source', async () => {

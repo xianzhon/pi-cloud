@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import type { ReviewSourceListOptions } from '../types.js';
 import type { ReviewSourceService } from '../services/review-source-service.js';
+import type { SessionPinStore } from '../services/session-pin-store.js';
 
 export interface ReviewSourceRouteOptions {
   reviewSourceService: ReviewSourceService;
+  pinStore?: SessionPinStore;
 }
 
 type ReviewSourceListQuery = {
@@ -66,6 +68,58 @@ export async function reviewSourceRoutes(app: FastifyInstance, options: ReviewSo
     } catch (error) {
       return reply.status(404).send({ error: error instanceof Error ? error.message : 'Review source not found' });
     }
+  });
+
+  app.get('/:id/pin-groups', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { id } = req.params as { id: string };
+    const idsByGroup = options.pinStore.listSessionIdsByGroup(id);
+    return {
+      groups: options.pinStore.listGroups().map((group) => ({
+        ...group,
+        sessionIds: idsByGroup.get(group.id) || [],
+      })),
+    };
+  });
+
+  app.get('/:id/pinned', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { id } = req.params as { id: string };
+    try {
+      const sessions = await options.reviewSourceService.listSessions(id);
+      const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+      const idsByGroup = options.pinStore.listSessionIdsByGroup(id);
+      return {
+        groups: options.pinStore.listGroups().map((group) => ({
+          ...group,
+          sessions: (idsByGroup.get(group.id) || [])
+            .map((sessionId) => sessionsById.get(sessionId))
+            .filter((session): session is NonNullable<typeof session> => Boolean(session)),
+        })),
+      };
+    } catch (error) {
+      return reply.status(404).send({ error: error instanceof Error ? error.message : 'Review source not found' });
+    }
+  });
+
+  app.put('/:id/sessions/:sessionId/pin', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { id, sessionId } = req.params as { id: string; sessionId: string };
+    const { groupId } = req.body as { groupId?: string };
+    if (!groupId) return reply.status(400).send({ error: 'groupId is required' });
+    try {
+      options.pinStore.pinSession(sessionId, groupId, id);
+      return { success: true };
+    } catch (error) {
+      return reply.status(404).send({ error: error instanceof Error ? error.message : 'Pin group not found' });
+    }
+  });
+
+  app.delete('/:id/sessions/:sessionId/pin', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { id, sessionId } = req.params as { id: string; sessionId: string };
+    options.pinStore.unpinSession(sessionId, id);
+    return { success: true };
   });
 
   app.get('/:id/project-paths', async (req, reply) => {

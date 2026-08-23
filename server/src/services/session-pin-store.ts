@@ -43,25 +43,25 @@ export class SessionPinStore {
     return { id, name: trimmed, isDefault: false, createdAt };
   }
 
-  pinSession(sessionId: string, groupId: string): void {
+  pinSession(sessionId: string, groupId: string, sourceId = ''): void {
     if (!this.db.prepare('SELECT 1 FROM session_pin_groups WHERE id = ?').get(groupId)) {
       throw new Error('Pin group not found');
     }
     this.db.prepare(`
-      INSERT INTO session_pins (session_id, group_id, created_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(session_id) DO UPDATE SET group_id = excluded.group_id
-    `).run(sessionId, groupId, new Date().toISOString());
+      INSERT INTO session_pins (session_id, source_id, group_id, created_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(session_id, source_id) DO UPDATE SET group_id = excluded.group_id
+    `).run(sessionId, sourceId, groupId, new Date().toISOString());
   }
 
-  unpinSession(sessionId: string): void {
-    this.db.prepare('DELETE FROM session_pins WHERE session_id = ?').run(sessionId);
+  unpinSession(sessionId: string, sourceId = ''): void {
+    this.db.prepare('DELETE FROM session_pins WHERE session_id = ? AND source_id = ?').run(sessionId, sourceId);
   }
 
-  listSessionIdsByGroup(): Map<string, string[]> {
+  listSessionIdsByGroup(sourceId = ''): Map<string, string[]> {
     const rows = this.db.prepare(`
-      SELECT group_id, session_id FROM session_pins ORDER BY created_at, session_id
-    `).all() as Array<{ group_id: string; session_id: string }>;
+      SELECT group_id, session_id FROM session_pins WHERE source_id = ? ORDER BY created_at, session_id
+    `).all(sourceId) as Array<{ group_id: string; session_id: string }>;
     const result = new Map<string, string[]>();
     for (const row of rows) {
       const ids = result.get(row.group_id) || [];

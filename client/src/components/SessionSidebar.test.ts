@@ -1206,6 +1206,52 @@ describe('SessionSidebar', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('Later'));
   });
 
+  it('pins review sessions and displays them in pinned groups', async () => {
+    window.history.replaceState(null, '', '/?profile=codex&project=%2Fproject');
+    const reviewSession = {
+      id: 'review-1', sourceId: 'codex', path: '/tmp/review-1.jsonl', cwd: '/project', name: 'Review one',
+      created: '2026-08-01T00:00:00.000Z', modified: '2026-08-01T00:00:00.000Z', messageCount: 1,
+    };
+    let pinned = false;
+    const group = { id: 'default', name: 'Default', isDefault: true, createdAt: '', sessionIds: [] as string[] };
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      const ok = (payload: object) => ({ ok: true, json: async () => payload });
+      if (url === '/api/sessions/agent-profiles') return ok({ profiles: defaultProfiles });
+      if (url === '/api/review-sources') return ok({ sources: [{ id: 'codex', label: 'Codex', type: 'codex', dataPath: '/tmp/codex' }] });
+      if (url === '/api/review-sources/codex/project-paths') return ok({ projectPaths: ['/project'] });
+      if (url === '/api/review-sources/codex/pin-groups') return ok({ groups: [{ ...group, sessionIds: pinned ? ['review-1'] : [] }] });
+      if (url === '/api/review-sources/codex/sessions/review-1/pin' && options?.method === 'PUT') {
+        pinned = true;
+        return ok({ success: true });
+      }
+      if (url === '/api/review-sources/codex/pinned') {
+        return ok({ groups: [{ ...group, sessions: pinned ? [reviewSession] : [] }] });
+      }
+      if (String(url).startsWith('/api/review-sources/codex/sessions')) return ok({ sessions: [reviewSession] });
+      if (String(url).startsWith('/api/sessions/project-path')) return ok({ projectPath: '/project' });
+      return ok({ sessions: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mountSidebar();
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Review one'));
+    expect((wrapper.findAll('.scope-toggle button')[2].element as HTMLButtonElement).disabled).toBe(false);
+    await wrapper.get('.session-item').trigger('contextmenu');
+    const defaultGroup = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.pin-group-choices button'))
+      .find((button) => button.textContent?.includes('Default'))!;
+    defaultGroup.click();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/review-sources/codex/sessions/review-1/pin',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ groupId: 'default' }) }),
+    ));
+
+    await wrapper.findAll('.scope-toggle button')[2].trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Review one'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/review-sources/codex/pinned');
+    await wrapper.get('.session-item').trigger('click');
+    expect(wrapper.emitted('reviewSessionSelected')?.at(-1)).toEqual([{ sourceId: 'codex', sessionId: 'review-1' }]);
+  });
+
   it('pins a session to the selected group from the Project context menu', async () => {
     const session = {
       id: 'session-1', path: '/project', cwd: '/project', name: 'Session one',

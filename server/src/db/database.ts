@@ -26,6 +26,7 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
   db.pragma('foreign_keys = ON');
 
   migrateSessionBuiltinEventsTable(db);
+  migrateSessionPinsTable(db);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -114,9 +115,11 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
     );
 
     CREATE TABLE IF NOT EXISTS session_pins (
-      session_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      source_id TEXT NOT NULL DEFAULT '',
       group_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      PRIMARY KEY (session_id, source_id),
       FOREIGN KEY (group_id) REFERENCES session_pin_groups(id) ON DELETE CASCADE
     );
 
@@ -374,6 +377,27 @@ function migrateSessionBuiltinEventsTable(db: PiuiDatabase): void {
     INSERT INTO session_builtin_events (id, session_id, kind, data_json, created_at)
       SELECT id, session_id, kind, data_json, created_at FROM session_builtin_events_legacy;
     DROP TABLE session_builtin_events_legacy;
+  `);
+}
+
+function migrateSessionPinsTable(db: PiuiDatabase): void {
+  if (!tableExists(db, 'session_pins')) return;
+  const columns = db.prepare('PRAGMA table_info(session_pins)').all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === 'source_id')) return;
+
+  db.exec(`
+    ALTER TABLE session_pins RENAME TO session_pins_legacy;
+    CREATE TABLE session_pins (
+      session_id TEXT NOT NULL,
+      source_id TEXT NOT NULL DEFAULT '',
+      group_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (session_id, source_id),
+      FOREIGN KEY (group_id) REFERENCES session_pin_groups(id) ON DELETE CASCADE
+    );
+    INSERT INTO session_pins (session_id, source_id, group_id, created_at)
+      SELECT session_id, '', group_id, created_at FROM session_pins_legacy;
+    DROP TABLE session_pins_legacy;
   `);
 }
 

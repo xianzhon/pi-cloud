@@ -23,6 +23,13 @@ describe('SessionPinStore', () => {
     expect(store.listSessionIdsByGroup().get(group.id)).toBeUndefined();
     expect(store.listSessionIdsByGroup().get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
 
+    store.pinSession('session-1', group.id, 'codex');
+    expect(store.listSessionIdsByGroup('codex').get(group.id)).toEqual(['session-1']);
+    expect(store.listSessionIdsByGroup().get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
+
+    store.unpinSession('session-1', 'codex');
+    expect(store.listSessionIdsByGroup('codex').get(group.id)).toBeUndefined();
+
     store.unpinSession('session-1');
     expect(store.listSessionIdsByGroup().get(DEFAULT_PIN_GROUP_ID)).toBeUndefined();
   });
