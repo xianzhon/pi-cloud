@@ -2,6 +2,25 @@
 
 All notable changes to Pi WebUI are documented here.
 
+## [1.0.4] - 2026-08-23
+
+### Added
+
+- Added local LLM endpoint and model discovery/configuration, plus removal controls for local LLM settings and stored API keys.
+- Added unified and split diff views, multi-file diff tabs and navigation, and GitHub-style diff coloring in the editor.
+- Added clickable commit references in chat that open the corresponding commit diff in the editor.
+- Added a resizable message input for review sessions.
+- Added persistent skill preset references for queued tasks.
+
+### Changed
+
+- Pinned memories now default to applying only when matched to the current prompt.
+
+### Fixed
+
+- Enabled word wrapping for virtual diffs.
+- Corrected directory sort toggle labels in the folder picker.
+
 ## [1.0.3] - 2026-08-19
 
 ### Added
