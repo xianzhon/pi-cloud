@@ -366,7 +366,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   await app.register(slashCommandRoutes, { prefix: '/api/slash-commands' });
   await app.register(changelogRoutes, { prefix: '/api/changelog' });
-  await app.register(reviewSourceRoutes, { prefix: '/api/review-sources', reviewSourceService });
+  await app.register(reviewSourceRoutes, { prefix: '/api/review-sources', reviewSourceService, pinStore: sessionPinStore });
   await app.register(chatWebSocket);
   await app.register(terminalWebSocket);
 

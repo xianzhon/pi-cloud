@@ -26,6 +26,7 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
   db.pragma('foreign_keys = ON');
 
   migrateSessionBuiltinEventsTable(db);
+  resetLegacySessionPinTables(db);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -107,20 +108,29 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
     );
 
     CREATE TABLE IF NOT EXISTS session_pin_groups (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      owner_type TEXT NOT NULL CHECK (owner_type IN ('profile', 'review')),
+      owner_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      name TEXT NOT NULL COLLATE NOCASE,
       is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (owner_type, owner_id, id),
+      UNIQUE (owner_type, owner_id, name)
     );
 
     CREATE TABLE IF NOT EXISTS session_pins (
-      session_id TEXT PRIMARY KEY,
+      owner_type TEXT NOT NULL CHECK (owner_type IN ('profile', 'review')),
+      owner_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
       group_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (group_id) REFERENCES session_pin_groups(id) ON DELETE CASCADE
+      PRIMARY KEY (owner_type, owner_id, session_id),
+      FOREIGN KEY (owner_type, owner_id, group_id)
+        REFERENCES session_pin_groups(owner_type, owner_id, id) ON DELETE CASCADE
     );
 
-    CREATE INDEX IF NOT EXISTS session_pins_group_idx ON session_pins(group_id, created_at);
+    CREATE INDEX IF NOT EXISTS session_pins_group_idx
+      ON session_pins(owner_type, owner_id, group_id, created_at);
 
     CREATE TABLE IF NOT EXISTS session_worktrees (
       session_id TEXT PRIMARY KEY,
@@ -374,6 +384,17 @@ function migrateSessionBuiltinEventsTable(db: PiuiDatabase): void {
     INSERT INTO session_builtin_events (id, session_id, kind, data_json, created_at)
       SELECT id, session_id, kind, data_json, created_at FROM session_builtin_events_legacy;
     DROP TABLE session_builtin_events_legacy;
+  `);
+}
+
+function resetLegacySessionPinTables(db: PiuiDatabase): void {
+  if (!tableExists(db, 'session_pin_groups')) return;
+  const columns = db.prepare('PRAGMA table_info(session_pin_groups)').all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === 'owner_type')) return;
+
+  db.exec(`
+    DROP TABLE IF EXISTS session_pins;
+    DROP TABLE session_pin_groups;
   `);
 }
 

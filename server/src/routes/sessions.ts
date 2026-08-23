@@ -530,11 +530,14 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     return worktreeManager.getGitStatus(projectPath);
   });
 
-  app.get('/pin-groups', async (_req, reply) => {
+  app.get('/pin-groups', async (req, reply) => {
     if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
-    const idsByGroup = options.pinStore.listSessionIdsByGroup();
+    const { profileId } = req.query as { profileId?: string };
+    if (!profileId) return reply.status(400).send({ error: 'profileId is required' });
+    const owner = { type: 'profile' as const, id: profileId };
+    const idsByGroup = options.pinStore.listSessionIdsByGroup(owner);
     return {
-      groups: options.pinStore.listGroups().map((group) => ({
+      groups: options.pinStore.listGroups(owner).map((group) => ({
         ...group,
         sessionIds: idsByGroup.get(group.id) || [],
       })),
@@ -543,10 +546,10 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
 
   app.post('/pin-groups', async (req, reply) => {
     if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
-    const { name } = req.body as { name?: string };
-    if (!name?.trim()) return reply.status(400).send({ error: 'name is required' });
+    const { name, profileId } = req.body as { name?: string; profileId?: string };
+    if (!name?.trim() || !profileId) return reply.status(400).send({ error: 'name and profileId are required' });
     try {
-      return { group: options.pinStore.createGroup(name) };
+      return { group: options.pinStore.createGroup({ type: 'profile', id: profileId }, name) };
     } catch (error) {
       return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to create pin group' });
     }
@@ -555,10 +558,10 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
   app.put('/:id/pin', async (req, reply) => {
     if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
     const { id } = req.params as { id: string };
-    const { groupId } = req.body as { groupId?: string };
-    if (!groupId) return reply.status(400).send({ error: 'groupId is required' });
+    const { groupId, profileId } = req.body as { groupId?: string; profileId?: string };
+    if (!groupId || !profileId) return reply.status(400).send({ error: 'groupId and profileId are required' });
     try {
-      options.pinStore.pinSession(id, groupId);
+      options.pinStore.pinSession({ type: 'profile', id: profileId }, id, groupId);
       return { success: true };
     } catch (error) {
       return reply.status(404).send({ error: error instanceof Error ? error.message : 'Pin group not found' });
@@ -568,23 +571,26 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
   app.delete('/:id/pin', async (req, reply) => {
     if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
     const { id } = req.params as { id: string };
-    options.pinStore.unpinSession(id);
+    const { profileId } = req.query as { profileId?: string };
+    if (!profileId) return reply.status(400).send({ error: 'profileId is required' });
+    options.pinStore.unpinSession({ type: 'profile', id: profileId }, id);
     return { success: true };
   });
 
   app.get('/pinned', async (req, reply) => {
     if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
-    const { clientId } = req.query as { clientId?: string };
-    if (!clientId) return reply.status(400).send({ error: 'clientId is required' });
+    const { clientId, profileId } = req.query as { clientId?: string; profileId?: string };
+    if (!clientId || !profileId) return reply.status(400).send({ error: 'clientId and profileId are required' });
 
     const sessions = await sessionService.listSessions(clientId, undefined);
     const sessionsById = new Map(sessions.map((session) => [session.id, withWorktree({
       ...session,
       isStreaming: sessionService.isSessionStreaming(session.id),
     })]));
-    const idsByGroup = options.pinStore.listSessionIdsByGroup();
+    const owner = { type: 'profile' as const, id: profileId };
+    const idsByGroup = options.pinStore.listSessionIdsByGroup(owner);
     return {
-      groups: options.pinStore.listGroups().map((group) => ({
+      groups: options.pinStore.listGroups(owner).map((group) => ({
         ...group,
         sessions: (idsByGroup.get(group.id) || [])
           .map((id) => sessionsById.get(id))

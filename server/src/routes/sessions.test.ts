@@ -1120,12 +1120,15 @@ describe('session routes', () => {
     await sessionRoutes(app as any, { pinStore } as any);
 
     const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
-    const result = await handlers['GET /pinned']({ query: { clientId: 'client-1' } }, reply);
-    const pinGroups = await handlers['GET /pin-groups']({}, reply);
-    await handlers['DELETE /:id/pin']({ params: { id: 'session-1' } }, reply);
+    const owner = { type: 'profile', id: 'work' };
+    const result = await handlers['GET /pinned']({ query: { clientId: 'client-1', profileId: 'work' } }, reply);
+    const pinGroups = await handlers['GET /pin-groups']({ query: { profileId: 'work' } }, reply);
+    await handlers['DELETE /:id/pin']({ params: { id: 'session-1' }, query: { profileId: 'work' } }, reply);
 
     expect(result.groups[0]).toMatchObject({ id: 'important', sessions: [{ id: 'session-1', name: 'Pinned' }] });
     expect(pinGroups.groups[0]).toMatchObject({ id: 'important', sessionIds: ['session-1'] });
-    expect(pinStore.unpinSession).toHaveBeenCalledWith('session-1');
+    expect(pinStore.listGroups).toHaveBeenCalledWith(owner);
+    expect(pinStore.listSessionIdsByGroup).toHaveBeenCalledWith(owner);
+    expect(pinStore.unpinSession).toHaveBeenCalledWith(owner, 'session-1');
   });
 });
