@@ -1214,9 +1214,12 @@ describe('SessionSidebar', () => {
     await vi.waitFor(() => expect(wrapper.find('.session-item').exists()).toBe(true));
 
     await wrapper.get('.session-item').trigger('contextmenu');
-    (document.body.querySelector('.pin-session-btn') as HTMLButtonElement).click();
-    await wrapper.vm.$nextTick();
-    const choices = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.pin-group-choices button'));
+    const pinTrigger = document.body.querySelector<HTMLButtonElement>('.pin-session-btn');
+    const choicesMenu = document.body.querySelector<HTMLElement>('.pin-group-choices');
+    expect(pinTrigger?.getAttribute('aria-haspopup')).toBe('menu');
+    expect(choicesMenu?.parentElement?.classList.contains('pin-group-submenu')).toBe(true);
+
+    const choices = Array.from(choicesMenu!.querySelectorAll<HTMLButtonElement>('button'));
     choices.find((button) => button.textContent?.includes('Important'))!.click();
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', expect.objectContaining({

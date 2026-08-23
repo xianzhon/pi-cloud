@@ -256,13 +256,23 @@
         >
           <PhPlus :size="14" /> {{ t('components.sessionSidebar.newSessionWithSameSettings') }}
         </button>
-        <button v-if="scope !== 'pinned' && !isReviewMode" class="pin-session-btn" @click="showPinGroupChoices = !showPinGroupChoices">
-          <PhPushPin :size="14" /> {{ t('components.sessionSidebar.pinToGroup') }}
-        </button>
-        <div v-if="showPinGroupChoices" class="pin-group-choices">
-          <button v-for="group in pinGroups" :key="group.id" type="button" @click="pinContextSession(group.id)">
-            {{ group.isDefault ? t('components.sessionSidebar.defaultPinGroup') : group.name }}
+        <div v-if="scope !== 'pinned' && !isReviewMode" class="pin-group-submenu">
+          <button class="pin-session-btn" type="button" aria-haspopup="menu">
+            <PhPushPin :size="14" />
+            <span>{{ t('components.sessionSidebar.pinToGroup') }}</span>
+            <PhCaretRight class="submenu-caret" :size="14" weight="bold" />
           </button>
+          <div class="pin-group-choices" role="menu">
+            <button
+              v-for="group in pinGroups"
+              :key="group.id"
+              type="button"
+              role="menuitem"
+              @click="pinContextSession(group.id)"
+            >
+              {{ group.isDefault ? t('components.sessionSidebar.defaultPinGroup') : group.name }}
+            </button>
+          </div>
         </div>
         <button v-if="!isReviewMode" class="move-session-btn" @click="openMoveSessionDialog">
           <PhFolder :size="14" /> {{ t('components.sessionSidebar.moveToFolder') }}
@@ -498,7 +508,6 @@ const scope = ref<'project' | 'all' | 'pinned'>('project');
 const pinGroups = ref<PinGroup[]>([]);
 const collapsedPinGroups = ref(new Set<string>());
 const addPinGroupDialog = ref({ visible: false });
-const showPinGroupChoices = ref(false);
 
 const sessionListEntries = computed<SessionListEntry[]>(() => {
   if (scope.value !== 'pinned') {
@@ -1289,7 +1298,6 @@ watch(sessions, (items) => {
 
 function showContextMenu(event: MouseEvent, session: Session) {
   closeContextMenu();
-  showPinGroupChoices.value = false;
   contextMenu.value = { visible: true, left: event.clientX, top: event.clientY, session };
   nextTick(() => {
     document.addEventListener('click', closeContextMenu, { once: true });
@@ -2068,9 +2076,42 @@ defineExpose({ focusProjectPath, loadSessions, showContextMenuForSession, switch
   background: var(--accent-muted);
 }
 
+.pin-group-submenu {
+  position: relative;
+}
+
+.pin-session-btn .submenu-caret {
+  margin-left: auto;
+}
+
 .pin-group-choices {
-  padding-left: 0.75rem;
-  border-left: 2px solid var(--border);
+  position: absolute;
+  top: -0.25rem;
+  left: calc(100% - 1px);
+  min-width: 10rem;
+  max-height: min(20rem, calc(100vh - 1rem));
+  overflow-y: auto;
+  padding: 0.25rem 0;
+  visibility: hidden;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-0.25rem);
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    visibility var(--duration-fast);
+}
+
+.pin-group-submenu:hover > .pin-group-choices,
+.pin-group-submenu:focus-within > .pin-group-choices {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
 }
 
 .session-context-menu button:disabled {
