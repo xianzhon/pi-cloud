@@ -1155,7 +1155,7 @@ describe('SessionSidebar', () => {
       { id: 'default', name: 'Default', isDefault: true, createdAt: '2026-08-01T00:00:00.000Z' },
       { id: 'important', name: 'Important', isDefault: false, createdAt: '2026-08-02T00:00:00.000Z' },
     ];
-    vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
       const ok = (payload: object) => ({ ok: true, json: async () => payload });
       if (url === '/api/sessions/agent-profiles') return ok({ profiles: defaultProfiles });
       if (String(url).startsWith('/api/sessions/agent-profile?')) return ok({ profile: defaultProfiles[0] });
@@ -1171,7 +1171,8 @@ describe('SessionSidebar', () => {
         return ok({ groups: groups.map((group) => ({ ...group, sessions: group.id === 'important' ? [pinnedSession] : [] })) });
       }
       return ok({ sessions: [] });
-    }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
     const wrapper = mountSidebar();
 
     await vi.waitFor(() => expect(wrapper.findAll('.scope-toggle button')).toHaveLength(3));
@@ -1179,6 +1180,20 @@ describe('SessionSidebar', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('Pinned session'));
     expect(wrapper.text()).toContain('Default');
     expect(wrapper.text()).toContain('Important');
+
+    await wrapper.get('.session-item').trigger('contextmenu');
+    expect(document.body.querySelector('.pin-session-btn')?.textContent).toContain('Move to group');
+    const moveChoices = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.pin-group-choices button'));
+    expect(moveChoices.find((button) => button.textContent?.includes('Important'))?.getAttribute('aria-checked')).toBe('true');
+    moveChoices.find((button) => button.textContent?.includes('Default'))!.click();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ groupId: 'default' }),
+    })));
+
+    await wrapper.get('.session-item').trigger('contextmenu');
+    (document.body.querySelector('.remove-pin-btn') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', { method: 'DELETE' }));
 
     await wrapper.findAll('.pin-group-header')[1].trigger('click');
     expect(wrapper.text()).not.toContain('Pinned session');
@@ -1204,8 +1219,8 @@ describe('SessionSidebar', () => {
       if (String(url).startsWith('/api/sessions/project-path')) return ok({ projectPath: '/project' });
       if (url === '/api/review-sources') return ok({ sources: [] });
       if (url === '/api/sessions/pin-groups') return ok({ groups: [
-        { id: 'default', name: 'Default', isDefault: true, createdAt: '' },
-        { id: 'important', name: 'Important', isDefault: false, createdAt: '' },
+        { id: 'default', name: 'Default', isDefault: true, createdAt: '', sessionIds: ['session-1'] },
+        { id: 'important', name: 'Important', isDefault: false, createdAt: '', sessionIds: [] },
       ] });
       return ok({ sessions: [session] });
     });
@@ -1220,6 +1235,7 @@ describe('SessionSidebar', () => {
     expect(choicesMenu?.parentElement?.classList.contains('pin-group-submenu')).toBe(true);
 
     const choices = Array.from(choicesMenu!.querySelectorAll<HTMLButtonElement>('button'));
+    expect(choices.find((button) => button.textContent?.includes('Default'))?.getAttribute('aria-checked')).toBe('true');
     choices.find((button) => button.textContent?.includes('Important'))!.click();
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', expect.objectContaining({

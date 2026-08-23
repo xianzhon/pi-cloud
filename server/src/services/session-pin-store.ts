@@ -54,6 +54,10 @@ export class SessionPinStore {
     `).run(sessionId, groupId, new Date().toISOString());
   }
 
+  unpinSession(sessionId: string): void {
+    this.db.prepare('DELETE FROM session_pins WHERE session_id = ?').run(sessionId);
+  }
+
   listSessionIdsByGroup(): Map<string, string[]> {
     const rows = this.db.prepare(`
       SELECT group_id, session_id FROM session_pins ORDER BY created_at, session_id

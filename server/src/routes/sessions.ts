@@ -159,7 +159,7 @@ function sanitizeSessionTree(tree: any[]): any[] {
 
 interface SessionRouteOptions {
   projectTaskStore?: Pick<ProjectTaskStore, 'listProjectPaths' | 'replaceProjectPath'>;
-  pinStore?: Pick<SessionPinStore, 'listGroups' | 'createGroup' | 'pinSession' | 'listSessionIdsByGroup'>;
+  pinStore?: Pick<SessionPinStore, 'listGroups' | 'createGroup' | 'pinSession' | 'unpinSession' | 'listSessionIdsByGroup'>;
   activityStore?: Pick<SessionActivityStore, 'listForSession'> & Partial<Pick<SessionActivityStore, 'listLatestPrForSessions' | 'updatePrStatus'>>;
   refreshPrStatus?: (activity: SessionActivityRecord) => Promise<PullRequestStatus>;
   repositoryCloner?: Pick<RepositoryCloner, 'preview' | 'start' | 'getJob' | 'subscribe' | 'cancel'>;
@@ -532,7 +532,13 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
 
   app.get('/pin-groups', async (_req, reply) => {
     if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
-    return { groups: options.pinStore.listGroups() };
+    const idsByGroup = options.pinStore.listSessionIdsByGroup();
+    return {
+      groups: options.pinStore.listGroups().map((group) => ({
+        ...group,
+        sessionIds: idsByGroup.get(group.id) || [],
+      })),
+    };
   });
 
   app.post('/pin-groups', async (req, reply) => {
@@ -557,6 +563,13 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     } catch (error) {
       return reply.status(404).send({ error: error instanceof Error ? error.message : 'Pin group not found' });
     }
+  });
+
+  app.delete('/:id/pin', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { id } = req.params as { id: string };
+    options.pinStore.unpinSession(id);
+    return { success: true };
   });
 
   app.get('/pinned', async (req, reply) => {

@@ -1112,14 +1112,20 @@ describe('session routes', () => {
       listGroups: vi.fn(() => [group]),
       createGroup: vi.fn(),
       pinSession: vi.fn(),
+      unpinSession: vi.fn(),
       listSessionIdsByGroup: vi.fn(() => new Map([['important', ['session-1']]])),
     };
     const { sessionRoutes } = await import('./sessions.js');
     const { app, handlers } = createMockApp();
     await sessionRoutes(app as any, { pinStore } as any);
 
-    const result = await handlers['GET /pinned']({ query: { clientId: 'client-1' } }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const result = await handlers['GET /pinned']({ query: { clientId: 'client-1' } }, reply);
+    const pinGroups = await handlers['GET /pin-groups']({}, reply);
+    await handlers['DELETE /:id/pin']({ params: { id: 'session-1' } }, reply);
 
     expect(result.groups[0]).toMatchObject({ id: 'important', sessions: [{ id: 'session-1', name: 'Pinned' }] });
+    expect(pinGroups.groups[0]).toMatchObject({ id: 'important', sessionIds: ['session-1'] });
+    expect(pinStore.unpinSession).toHaveBeenCalledWith('session-1');
   });
 });

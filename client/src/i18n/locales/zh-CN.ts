@@ -818,6 +818,8 @@ export default {
       enterGroupName: '输入分组名称',
       add: '添加',
       pinToGroup: '置顶到分组…',
+      moveToGroup: '移动到分组…',
+      removeFromGroup: '从当前分组移除',
       projectSessionsTooltip: '仅显示所选项目的会话',
       allSessionsTooltip: '显示所有项目的会话历史',
       noSessionsFound: '未找到会话',

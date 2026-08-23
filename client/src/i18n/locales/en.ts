@@ -818,6 +818,8 @@ export default {
       enterGroupName: 'Enter a group name',
       add: 'Add',
       pinToGroup: 'Pin to group…',
+      moveToGroup: 'Move to group…',
+      removeFromGroup: 'Remove from group',
       projectSessionsTooltip: 'Show sessions for the selected project only',
       allSessionsTooltip: 'Show all session history across projects',
       noSessionsFound: 'No sessions found',

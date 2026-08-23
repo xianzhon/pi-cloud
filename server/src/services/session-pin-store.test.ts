@@ -22,5 +22,8 @@ describe('SessionPinStore', () => {
     store.pinSession('session-1', DEFAULT_PIN_GROUP_ID);
     expect(store.listSessionIdsByGroup().get(group.id)).toBeUndefined();
     expect(store.listSessionIdsByGroup().get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
+
+    store.unpinSession('session-1');
+    expect(store.listSessionIdsByGroup().get(DEFAULT_PIN_GROUP_ID)).toBeUndefined();
   });
 });

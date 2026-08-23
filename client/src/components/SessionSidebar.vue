@@ -166,7 +166,7 @@
           class="session-item"
           :class="{ active: entry.session.id === activeSessionId || entry.session.id === activeReviewSessionId }"
           @click="selectSession(entry.session)"
-          @contextmenu.prevent="showContextMenu($event, entry.session)"
+          @contextmenu.prevent="showContextMenu($event, entry.session, entry.groupId)"
           @mouseenter="showTooltip($event, formatSessionTitle(entry.session))"
           @mouseleave="hideTooltip"
           @touchstart="hideTooltip"
@@ -256,10 +256,10 @@
         >
           <PhPlus :size="14" /> {{ t('components.sessionSidebar.newSessionWithSameSettings') }}
         </button>
-        <div v-if="scope !== 'pinned' && !isReviewMode" class="pin-group-submenu">
+        <div v-if="!isReviewMode" class="pin-group-submenu">
           <button class="pin-session-btn" type="button" aria-haspopup="menu">
             <PhPushPin :size="14" />
-            <span>{{ t('components.sessionSidebar.pinToGroup') }}</span>
+            <span>{{ t(scope === 'pinned' ? 'components.sessionSidebar.moveToGroup' : 'components.sessionSidebar.pinToGroup') }}</span>
             <PhCaretRight class="submenu-caret" :size="14" weight="bold" />
           </button>
           <div class="pin-group-choices" role="menu">
@@ -267,13 +267,20 @@
               v-for="group in pinGroups"
               :key="group.id"
               type="button"
-              role="menuitem"
+              role="menuitemradio"
+              :aria-checked="isContextSessionInPinGroup(group.id)"
+              :disabled="isContextSessionInPinGroup(group.id)"
               @click="pinContextSession(group.id)"
             >
+              <PhCheck v-if="isContextSessionInPinGroup(group.id)" :size="14" weight="bold" />
+              <span v-else class="group-check-placeholder" aria-hidden="true"></span>
               {{ group.isDefault ? t('components.sessionSidebar.defaultPinGroup') : group.name }}
             </button>
           </div>
         </div>
+        <button v-if="scope === 'pinned' && !isReviewMode" class="remove-pin-btn" @click="unpinContextSession">
+          <PhX :size="14" /> {{ t('components.sessionSidebar.removeFromGroup') }}
+        </button>
         <button v-if="!isReviewMode" class="move-session-btn" @click="openMoveSessionDialog">
           <PhFolder :size="14" /> {{ t('components.sessionSidebar.moveToFolder') }}
         </button>
@@ -394,7 +401,7 @@
 import { i18n } from '../i18n';
 import { formatHomePath } from '../utils/paths';
 import { computed, ref, nextTick, onMounted, onUnmounted, watch } from 'vue';
-import { PhBrain, PhFolder, PhX, PhPencilSimple, PhTrash, PhSignOut, PhPlus, PhArrowSquareOut, PhGitMerge, PhGitPullRequest, PhGitBranch, PhMagnifyingGlass, PhCaretRight, PhPushPin } from '@phosphor-icons/vue';
+import { PhBrain, PhCheck, PhFolder, PhX, PhPencilSimple, PhTrash, PhSignOut, PhPlus, PhArrowSquareOut, PhGitMerge, PhGitPullRequest, PhGitBranch, PhMagnifyingGlass, PhCaretRight, PhPushPin } from '@phosphor-icons/vue';
 import FolderPickerModal from './FolderPickerModal.vue';
 import InputPromptModal from './InputPromptModal.vue';
 import ConfirmModal from './ConfirmModal.vue';
@@ -439,12 +446,14 @@ interface PinGroup {
   name: string;
   isDefault: boolean;
   createdAt: string;
+  sessionIds: string[];
   sessions: Session[];
 }
 
 interface SessionListEntry {
   key: string;
   group?: PinGroup;
+  groupId?: string;
   session?: Session;
 }
 
@@ -516,13 +525,13 @@ const sessionListEntries = computed<SessionListEntry[]>(() => {
   return pinGroups.value.flatMap<SessionListEntry>((group) => [
     { key: `group-${group.id}`, group },
     ...(!collapsedPinGroups.value.has(group.id)
-      ? group.sessions.map((session) => ({ key: `session-${group.id}-${session.id}`, session }))
+      ? group.sessions.map((session) => ({ key: `session-${group.id}-${session.id}`, groupId: group.id, session }))
       : []),
   ]);
 });
 
 // Context menu
-const contextMenu = ref({ visible: false, left: 0, top: 0, session: null as Session | null });
+const contextMenu = ref({ visible: false, left: 0, top: 0, session: null as Session | null, groupId: null as string | null });
 
 const moveSessionDialog = ref({ visible: false, session: null as Session | null });
 
@@ -767,7 +776,9 @@ async function loadSessions(options: { append?: boolean } = {}) {
       const response = await fetch(`/api/sessions/pinned?clientId=${encodeURIComponent(props.clientId)}`);
       const data = await response.json() as { groups?: PinGroup[] };
       if (requestId !== sessionRequestId) return;
-      pinGroups.value = Array.isArray(data.groups) ? data.groups : [];
+      pinGroups.value = Array.isArray(data.groups)
+        ? data.groups.map((group) => ({ ...group, sessionIds: group.sessions.map((session) => session.id) }))
+        : [];
       sessions.value = pinGroups.value.flatMap((group) => group.sessions);
       nextSessionOffset.value = sessions.value.length;
       hasMoreSessions.value = false;
@@ -1296,9 +1307,9 @@ watch(sessions, (items) => {
 
 // ── Context menu ───────────────────────────────────────────────────────────
 
-function showContextMenu(event: MouseEvent, session: Session) {
+function showContextMenu(event: MouseEvent, session: Session, groupId?: string) {
   closeContextMenu();
-  contextMenu.value = { visible: true, left: event.clientX, top: event.clientY, session };
+  contextMenu.value = { visible: true, left: event.clientX, top: event.clientY, session, groupId: groupId || null };
   nextTick(() => {
     document.addEventListener('click', closeContextMenu, { once: true });
     document.addEventListener('keydown', handleContextMenuEscape, { once: true });
@@ -1329,7 +1340,7 @@ function togglePinGroup(groupId: string) {
 async function loadPinGroups() {
   const response = await fetch('/api/sessions/pin-groups');
   const data = await response.json() as { groups?: Array<Omit<PinGroup, 'sessions'>> };
-  pinGroups.value = (data.groups || []).map((group) => ({ ...group, sessions: [] }));
+  pinGroups.value = (data.groups || []).map((group) => ({ ...group, sessionIds: group.sessionIds || [], sessions: [] }));
 }
 
 async function createPinGroup(name: string) {
@@ -1346,6 +1357,13 @@ async function createPinGroup(name: string) {
   else await loadPinGroups();
 }
 
+function isContextSessionInPinGroup(groupId: string): boolean {
+  const sessionId = contextMenu.value.session?.id;
+  if (!sessionId) return false;
+  if (contextMenu.value.groupId) return contextMenu.value.groupId === groupId;
+  return pinGroups.value.some((group) => group.id === groupId && group.sessionIds.includes(sessionId));
+}
+
 async function pinContextSession(groupId: string) {
   const session = contextMenu.value.session;
   closeContextMenu();
@@ -1355,7 +1373,17 @@ async function pinContextSession(groupId: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ groupId }),
   });
-  if (response.ok) await loadPinGroups();
+  if (!response.ok) return;
+  if (scope.value === 'pinned') await loadSessions();
+  else await loadPinGroups();
+}
+
+async function unpinContextSession() {
+  const session = contextMenu.value.session;
+  closeContextMenu();
+  if (!session) return;
+  const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/pin`, { method: 'DELETE' });
+  if (response.ok) await loadSessions();
 }
 
 async function goToSessionProject() {
@@ -2082,6 +2110,11 @@ defineExpose({ focusProjectPath, loadSessions, showContextMenuForSession, switch
 
 .pin-session-btn .submenu-caret {
   margin-left: auto;
+}
+
+.group-check-placeholder {
+  width: 14px;
+  flex: 0 0 14px;
 }
 
 .pin-group-choices {
