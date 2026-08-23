@@ -63,9 +63,21 @@ const loadPresets = vi.fn(async () => {});
 const createPreset = vi.fn(async () => {});
 const updatePreset = vi.fn(async () => {});
 const deletePreset = vi.fn(async () => {});
-const { editorOpenFile, submitExternalPrompt } = vi.hoisted(() => ({
+const {
+  editorOpenFile,
+  submitExternalPrompt,
+  heavyModuleLoads,
+} = vi.hoisted(() => ({
   editorOpenFile: vi.fn(),
   submitExternalPrompt: vi.fn(async () => true),
+  heavyModuleLoads: {
+    editor: 0,
+    memory: 0,
+    settings: 0,
+    tasks: 0,
+    terminalPanel: 0,
+    terminalRuntime: 0,
+  },
 }));
 const setShowHintInfo = vi.fn((value: boolean) => {
   showHintInfo.value = value;
@@ -164,14 +176,26 @@ vi.mock('./components/ChatPanel.vue', () => ({
     template: '<button class="stub-ensure" :data-session-id="sessionId || \'\'" :data-show-hint-info="String(showHintInfo)" :data-client-id="clientId" :data-show-go-to-top="String(showGoToTopButton)" :data-show-view-options="String(showChatViewOptionsButton)" @click="ensureSession?.(undefined, \'first prompt\')">ensure</button>',
   },
 }));
-vi.mock('./components/TerminalPanel.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./components/TerminalPanel.vue', () => {
+  heavyModuleLoads.terminalPanel += 1;
+  return { __esModule: true, default: { props: ['visible'], template: '<div class="terminal-panel-stub" :data-visible="String(visible)" />' } };
+});
 vi.mock('./components/EditorPanel.vue', () => ({
-  default: {
-    props: ['visible'],
-    methods: { openFile: editorOpenFile },
-    template: '<div class="editor-panel-stub" :data-visible="String(visible)" />',
-  },
+  __esModule: true,
+  default: (() => {
+    heavyModuleLoads.editor += 1;
+    return {
+      name: 'EditorPanel',
+      props: ['visible'],
+      methods: { openFile: editorOpenFile },
+      template: '<div class="editor-panel-stub" :data-visible="String(visible)" />',
+    };
+  })(),
 }));
+vi.mock('./components/TaskQueuePanel.vue', () => {
+  heavyModuleLoads.tasks += 1;
+  return { __esModule: true, default: { props: ['visible'], template: '<div class="task-queue-panel" :class="{ visible }" />' } };
+});
 vi.mock('./components/NewSessionDialog.vue', () => ({
   default: {
     props: ['visible'],
@@ -186,12 +210,16 @@ vi.mock('./components/NewSessionDialog.vue', () => ({
 }));
 
 vi.mock('./components/MemoryCenter.vue', () => ({
-  default: {
-    name: 'MemoryCenter',
-    props: ['visible', 'controller'],
-    emits: ['close', 'openSession'],
-    template: '<section v-if="visible" class="memory-center-stub" />',
-  },
+  __esModule: true,
+  default: (() => {
+    heavyModuleLoads.memory += 1;
+    return {
+      name: 'MemoryCenter',
+      props: ['visible', 'controller'],
+      emits: ['close', 'openSession'],
+      template: '<section v-if="visible" class="memory-center-stub" />',
+    };
+  })(),
 }));
 
 vi.mock('./components/MemoryToast.vue', () => ({
@@ -199,20 +227,37 @@ vi.mock('./components/MemoryToast.vue', () => ({
 }));
 
 vi.mock('./components/SettingsDialog.vue', () => ({
-  default: {
-    props: ['visible', 'totpEnabled', 'showHintInfo'],
-    emits: ['close', 'updated', 'update:showHintInfo'],
-    template: `
-      <section v-if="visible" class="settings-dialog-stub">
-        <span class="totp-enabled">{{ totpEnabled ? 'enabled' : 'disabled' }}</span>
-        <span class="hint-info-state">{{ showHintInfo ? 'hints shown' : 'hints hidden' }}</span>
-        <button class="settings-close-stub" @click="$emit('close')">close</button>
-        <button class="settings-updated-stub" @click="$emit('updated')">updated</button>
-        <button class="settings-hint-toggle-stub" @click="$emit('update:showHintInfo', false)">hide hints</button>
-      </section>
-    `,
-  },
+  __esModule: true,
+  default: (() => {
+    heavyModuleLoads.settings += 1;
+    return {
+      props: ['visible', 'totpEnabled', 'showHintInfo'],
+      emits: ['close', 'updated', 'update:showHintInfo'],
+      template: `
+        <section v-if="visible" class="settings-dialog-stub">
+          <span class="totp-enabled">{{ totpEnabled ? 'enabled' : 'disabled' }}</span>
+          <span class="hint-info-state">{{ showHintInfo ? 'hints shown' : 'hints hidden' }}</span>
+          <button class="settings-close-stub" @click="$emit('close')">close</button>
+          <button class="settings-updated-stub" @click="$emit('updated')">updated</button>
+          <button class="settings-hint-toggle-stub" @click="$emit('update:showHintInfo', false)">hide hints</button>
+        </section>
+      `,
+    };
+  })(),
 }));
+
+vi.mock('./composables/useTerminal', () => {
+  heavyModuleLoads.terminalRuntime += 1;
+  return {
+    createTerminalInstance: vi.fn(() => ({ terminal: { options: {} } })),
+    openTerminal: vi.fn(),
+    fitTerminal: vi.fn(),
+    connectTerminal: vi.fn(),
+    disconnectTerminal: vi.fn(),
+    disposeTerminal: vi.fn(),
+    applyTerminalTheme: vi.fn(),
+  };
+});
 
 describe('App routing', () => {
   beforeEach(() => {
@@ -274,6 +319,31 @@ describe('App routing', () => {
       }
       return { json: async () => ({}) };
     }));
+  });
+
+  it('does not load opt-in feature modules during application startup', async () => {
+    expect(heavyModuleLoads).toEqual({
+      editor: 0,
+      memory: 0,
+      settings: 0,
+      tasks: 0,
+      terminalPanel: 0,
+      terminalRuntime: 0,
+    });
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(heavyModuleLoads).toEqual({
+      editor: 0,
+      memory: 0,
+      settings: 0,
+      tasks: 0,
+      terminalPanel: 0,
+      terminalRuntime: 0,
+    });
+
+    wrapper.unmount();
   });
 
   it('waits for the socket and sidebar before submitting a new-tab queued task', async () => {
@@ -495,7 +565,7 @@ describe('App routing', () => {
     });
     expect(wrapper.get('[data-rail-action="memory"] .memory-pending-badge').text()).toBe('3');
     await wrapper.get('[data-rail-action="memory"]').trigger('click');
-    await wrapper.vm.$nextTick();
+    await flushPromises();
     expect(wrapper.find('.memory-center-stub').exists()).toBe(true);
   });
 
@@ -530,12 +600,12 @@ describe('App routing', () => {
     });
 
     await flushPromises();
-    expect(wrapper.find('.task-queue-panel').classes()).not.toContain('visible');
+    expect(wrapper.find('.task-queue-panel').exists()).toBe(false);
 
     window.dispatchEvent(new KeyboardEvent('keydown', { ctrlKey: true, code: 'KeyQ', key: 'q', cancelable: true }));
-    await wrapper.vm.$nextTick();
+    await flushPromises();
 
-    expect(wrapper.find('.task-queue-panel').classes()).toContain('visible');
+    expect(wrapper.get('[data-header-action="tasks"]').classes()).toContain('active');
     expect(wrapper.find('.title-new-btn').attributes('aria-label')).toBe('New Session');
 
     await wrapper.find('.title-new-btn').trigger('click');
@@ -1028,7 +1098,7 @@ describe('App routing', () => {
     }));
     await flushPromises();
 
-    expect(editorOpenFile).toHaveBeenCalledWith('/workspace/AGENTS.md', undefined, undefined);
+    await vi.waitFor(() => expect(editorOpenFile).toHaveBeenCalledWith('/workspace/AGENTS.md', undefined, undefined));
     expect(fetchMock).not.toHaveBeenCalledWith('/api/files/search?pattern=**%2FAGENTS.md&path=%2Fworkspace');
   });
 
@@ -1064,7 +1134,7 @@ describe('App routing', () => {
     }));
     await flushPromises();
 
-    expect(editorOpenFile).toHaveBeenCalledWith('D:/develop/project/MyTT.py', undefined, undefined);
+    await vi.waitFor(() => expect(editorOpenFile).toHaveBeenCalledWith('D:/develop/project/MyTT.py', undefined, undefined));
   });
 
   it('opens home-relative file paths without resolving them against the workspace', async () => {
@@ -1086,7 +1156,7 @@ describe('App routing', () => {
     }));
     await flushPromises();
 
-    expect(editorOpenFile).toHaveBeenCalledWith('~/ai/260815-sshd-usepam-systemd-user-service.md', undefined, undefined);
+    await vi.waitFor(() => expect(editorOpenFile).toHaveBeenCalledWith('~/ai/260815-sshd-usepam-systemd-user-service.md', undefined, undefined));
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/files/search?'))).toBe(false);
   });
 
@@ -1124,7 +1194,7 @@ describe('App routing', () => {
     }));
     await flushPromises();
 
-    expect(editorOpenFile).toHaveBeenCalledWith('/workspace/server/src/index.ts', undefined, undefined);
+    await vi.waitFor(() => expect(editorOpenFile).toHaveBeenCalledWith('/workspace/server/src/index.ts', undefined, undefined));
   });
 
   it('clears route state when the agent profile changes away from the active session store', async () => {
@@ -1345,9 +1415,9 @@ describe('App routing', () => {
     document.body.appendChild(input);
     input.focus();
     dispatchCtrlE(input);
-    await wrapper.vm.$nextTick();
+    await flushPromises();
 
-    expect(wrapper.find('.editor-panel-stub').attributes('data-visible')).toBe('true');
+    expect(wrapper.get('[data-header-action="editor"]').classes()).toContain('active');
 
     input.remove();
     wrapper.unmount();
@@ -1369,9 +1439,9 @@ describe('App routing', () => {
     document.body.appendChild(messageBlock);
     messageBlock.focus();
     dispatchCtrlE(messageBlock);
-    await wrapper.vm.$nextTick();
+    await flushPromises();
 
-    expect(wrapper.find('.editor-panel-stub').attributes('data-visible')).toBe('true');
+    expect(wrapper.get('[data-header-action="editor"]').classes()).toContain('active');
 
     messageBlock.remove();
     wrapper.unmount();

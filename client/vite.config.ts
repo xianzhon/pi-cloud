@@ -21,6 +21,11 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(pkg.version),
     },
+    build: {
+      manifest: true,
+      // Monaco is an opt-in feature chunk with its own gzip budget in CI.
+      chunkSizeWarningLimit: 3500,
+    },
     server: {
       host: devHost,
       port: 5173,

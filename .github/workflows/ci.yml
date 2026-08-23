@@ -32,5 +32,8 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check client bundle budget
+        run: pnpm --dir client check:bundle
+
       - name: Test
         run: pnpm test
