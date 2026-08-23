@@ -1166,7 +1166,7 @@ describe('SessionSidebar', () => {
         groups.push({ id: 'later', name: JSON.parse(String(options.body)).name, isDefault: false, createdAt: '2026-08-03T00:00:00.000Z' });
         return ok({ group: groups.at(-1) });
       }
-      if (url === '/api/sessions/pin-groups') return ok({ groups });
+      if (url === '/api/sessions/pin-groups?profileId=default') return ok({ groups });
       if (String(url).startsWith('/api/sessions/pinned?')) {
         return ok({ groups: groups.map((group) => ({ ...group, sessions: group.id === 'important' ? [pinnedSession] : [] })) });
       }
@@ -1188,12 +1188,12 @@ describe('SessionSidebar', () => {
     moveChoices.find((button) => button.textContent?.includes('Default'))!.click();
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', expect.objectContaining({
       method: 'PUT',
-      body: JSON.stringify({ groupId: 'default' }),
+      body: JSON.stringify({ groupId: 'default', profileId: 'default' }),
     })));
 
     await wrapper.get('.session-item').trigger('contextmenu');
     (document.body.querySelector('.remove-pin-btn') as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', { method: 'DELETE' }));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin?profileId=default', { method: 'DELETE' }));
 
     await wrapper.findAll('.pin-group-header')[1].trigger('click');
     expect(wrapper.text()).not.toContain('Pinned session');
@@ -1204,6 +1204,10 @@ describe('SessionSidebar', () => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     (document.body.querySelector('.prompt-form') as HTMLFormElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await vi.waitFor(() => expect(wrapper.text()).toContain('Later'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/pin-groups', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ name: 'Later', profileId: 'default' }),
+    }));
   });
 
   it('pins review sessions and displays them in pinned groups', async () => {
@@ -1264,7 +1268,7 @@ describe('SessionSidebar', () => {
       if (String(url).startsWith('/api/sessions/project-paths')) return ok({ projectPaths: ['/project'] });
       if (String(url).startsWith('/api/sessions/project-path')) return ok({ projectPath: '/project' });
       if (url === '/api/review-sources') return ok({ sources: [] });
-      if (url === '/api/sessions/pin-groups') return ok({ groups: [
+      if (url === '/api/sessions/pin-groups?profileId=default') return ok({ groups: [
         { id: 'default', name: 'Default', isDefault: true, createdAt: '', sessionIds: ['session-1'] },
         { id: 'important', name: 'Important', isDefault: false, createdAt: '', sessionIds: [] },
       ] });
@@ -1286,7 +1290,7 @@ describe('SessionSidebar', () => {
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', expect.objectContaining({
       method: 'PUT',
-      body: JSON.stringify({ groupId: 'important' }),
+      body: JSON.stringify({ groupId: 'important', profileId: 'default' }),
     })));
   });
 

@@ -774,7 +774,7 @@ async function loadSessions(options: { append?: boolean } = {}) {
     if (scope.value === 'pinned') {
       const url = isReviewMode.value
         ? `/api/review-sources/${encodeURIComponent(selectedReviewSourceId.value)}/pinned`
-        : `/api/sessions/pinned?clientId=${encodeURIComponent(props.clientId)}`;
+        : `/api/sessions/pinned?clientId=${encodeURIComponent(props.clientId)}&profileId=${encodeURIComponent(selectedAgentProfile.value)}`;
       const response = await fetch(url);
       const data = await response.json() as { groups?: PinGroup[] };
       if (requestId !== sessionRequestId) return;
@@ -1344,7 +1344,7 @@ function togglePinGroup(groupId: string) {
 async function loadPinGroups() {
   const url = isReviewMode.value
     ? `/api/review-sources/${encodeURIComponent(selectedReviewSourceId.value)}/pin-groups`
-    : '/api/sessions/pin-groups';
+    : `/api/sessions/pin-groups?profileId=${encodeURIComponent(selectedAgentProfile.value)}`;
   const response = await fetch(url);
   const data = await response.json() as { groups?: Array<Omit<PinGroup, 'sessions'>> };
   pinGroups.value = (data.groups || []).map((group) => ({ ...group, sessionIds: group.sessionIds || [], sessions: [] }));
@@ -1353,10 +1353,13 @@ async function loadPinGroups() {
 async function createPinGroup(name: string) {
   const trimmed = name.trim();
   if (!trimmed) return;
-  const response = await fetch('/api/sessions/pin-groups', {
+  const url = isReviewMode.value
+    ? `/api/review-sources/${encodeURIComponent(selectedReviewSourceId.value)}/pin-groups`
+    : '/api/sessions/pin-groups';
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: trimmed }),
+    body: JSON.stringify(isReviewMode.value ? { name: trimmed } : { name: trimmed, profileId: selectedAgentProfile.value }),
   });
   if (!response.ok) return;
   addPinGroupDialog.value.visible = false;
@@ -1381,7 +1384,7 @@ async function pinContextSession(groupId: string) {
   const response = await fetch(pinUrl, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ groupId }),
+    body: JSON.stringify(isReviewMode.value ? { groupId } : { groupId, profileId: selectedAgentProfile.value }),
   });
   if (!response.ok) return;
   if (scope.value === 'pinned') await loadSessions();
@@ -1394,7 +1397,7 @@ async function unpinContextSession() {
   if (!session) return;
   const pinUrl = isReviewMode.value
     ? `/api/review-sources/${encodeURIComponent(selectedReviewSourceId.value)}/sessions/${encodeURIComponent(session.id)}/pin`
-    : `/api/sessions/${encodeURIComponent(session.id)}/pin`;
+    : `/api/sessions/${encodeURIComponent(session.id)}/pin?profileId=${encodeURIComponent(selectedAgentProfile.value)}`;
   const response = await fetch(pinUrl, { method: 'DELETE' });
   if (response.ok) await loadSessions();
 }

@@ -8,7 +8,7 @@ import { openPiuiDatabase } from '../db/database.js';
 import { reviewSourceRoutes } from './review-sources.js';
 import { ReviewSourceService } from '../services/review-source-service.js';
 import { ReviewSourceStore } from '../services/review-source-store.js';
-import { DEFAULT_PIN_GROUP_ID, SessionPinStore } from '../services/session-pin-store.js';
+import { SessionPinStore } from '../services/session-pin-store.js';
 
 describe('review source routes', () => {
   let tempDir: string;
@@ -90,21 +90,29 @@ describe('review source routes', () => {
     };
     service.listSessions = async () => [session];
 
+    const createGroupResponse = await app.inject({
+      method: 'POST',
+      url: `/api/review-sources/${sourceId}/pin-groups`,
+      payload: { name: 'Later' },
+    });
+    expect(createGroupResponse.statusCode).toBe(200);
+    const groupId = createGroupResponse.json().group.id;
+
     const pinResponse = await app.inject({
       method: 'PUT',
       url: `/api/review-sources/${sourceId}/sessions/${session.id}/pin`,
-      payload: { groupId: DEFAULT_PIN_GROUP_ID },
+      payload: { groupId },
     });
     expect(pinResponse.statusCode).toBe(200);
 
     const groupsResponse = await app.inject({ method: 'GET', url: `/api/review-sources/${sourceId}/pin-groups` });
-    expect(groupsResponse.json().groups[0].sessionIds).toEqual([session.id]);
+    expect(groupsResponse.json().groups.find((group: { id: string }) => group.id === groupId).sessionIds).toEqual([session.id]);
 
     const pinnedResponse = await app.inject({ method: 'GET', url: `/api/review-sources/${sourceId}/pinned` });
-    expect(pinnedResponse.json().groups[0].sessions).toEqual([session]);
+    expect(pinnedResponse.json().groups.find((group: { id: string }) => group.id === groupId).sessions).toEqual([session]);
 
     await app.inject({ method: 'DELETE', url: `/api/review-sources/${sourceId}/sessions/${session.id}/pin` });
-    expect(pinStore.listSessionIdsByGroup(sourceId).get(DEFAULT_PIN_GROUP_ID)).toBeUndefined();
+    expect(pinStore.listSessionIdsByGroup({ type: 'review', id: sourceId }).get(groupId)).toBeUndefined();
   });
 
   it('returns project paths for a Devin review source', async () => {

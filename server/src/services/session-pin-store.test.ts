@@ -7,30 +7,32 @@ describe('SessionPinStore', () => {
 
   afterEach(() => db?.close());
 
-  it('creates the default group and assigns a session to any selected group', () => {
+  it('isolates groups and pins by profile or review source owner', () => {
     db = openPiuiDatabase(':memory:');
     const store = new SessionPinStore(db);
+    const defaultProfile = { type: 'profile', id: 'default' } as const;
+    const workProfile = { type: 'profile', id: 'work' } as const;
+    const codexSource = { type: 'review', id: 'codex' } as const;
 
-    expect(store.listGroups()).toMatchObject([
+    expect(store.listGroups(defaultProfile)).toMatchObject([
+      { id: DEFAULT_PIN_GROUP_ID, name: 'Default', isDefault: true },
+    ]);
+    expect(store.listGroups(workProfile)).toMatchObject([
       { id: DEFAULT_PIN_GROUP_ID, name: 'Default', isDefault: true },
     ]);
 
-    const group = store.createGroup('Important');
-    store.pinSession('session-1', group.id);
-    expect(store.listSessionIdsByGroup().get(group.id)).toEqual(['session-1']);
+    const group = store.createGroup(defaultProfile, 'Important');
+    store.pinSession(defaultProfile, 'session-1', group.id);
+    store.pinSession(workProfile, 'session-1', DEFAULT_PIN_GROUP_ID);
+    store.pinSession(codexSource, 'session-1', DEFAULT_PIN_GROUP_ID);
 
-    store.pinSession('session-1', DEFAULT_PIN_GROUP_ID);
-    expect(store.listSessionIdsByGroup().get(group.id)).toBeUndefined();
-    expect(store.listSessionIdsByGroup().get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
+    expect(store.listSessionIdsByGroup(defaultProfile).get(group.id)).toEqual(['session-1']);
+    expect(store.listSessionIdsByGroup(workProfile).get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
+    expect(store.listSessionIdsByGroup(codexSource).get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
+    expect(store.listGroups(workProfile)).toHaveLength(1);
 
-    store.pinSession('session-1', group.id, 'codex');
-    expect(store.listSessionIdsByGroup('codex').get(group.id)).toEqual(['session-1']);
-    expect(store.listSessionIdsByGroup().get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
-
-    store.unpinSession('session-1', 'codex');
-    expect(store.listSessionIdsByGroup('codex').get(group.id)).toBeUndefined();
-
-    store.unpinSession('session-1');
-    expect(store.listSessionIdsByGroup().get(DEFAULT_PIN_GROUP_ID)).toBeUndefined();
+    store.unpinSession(workProfile, 'session-1');
+    expect(store.listSessionIdsByGroup(workProfile).get(DEFAULT_PIN_GROUP_ID)).toBeUndefined();
+    expect(store.listSessionIdsByGroup(codexSource).get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
   });
 });

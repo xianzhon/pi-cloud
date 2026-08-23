@@ -73,13 +73,26 @@ export async function reviewSourceRoutes(app: FastifyInstance, options: ReviewSo
   app.get('/:id/pin-groups', async (req, reply) => {
     if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
     const { id } = req.params as { id: string };
-    const idsByGroup = options.pinStore.listSessionIdsByGroup(id);
+    const owner = { type: 'review' as const, id };
+    const idsByGroup = options.pinStore.listSessionIdsByGroup(owner);
     return {
-      groups: options.pinStore.listGroups().map((group) => ({
+      groups: options.pinStore.listGroups(owner).map((group) => ({
         ...group,
         sessionIds: idsByGroup.get(group.id) || [],
       })),
     };
+  });
+
+  app.post('/:id/pin-groups', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { id } = req.params as { id: string };
+    const { name } = req.body as { name?: string };
+    if (!name?.trim()) return reply.status(400).send({ error: 'name is required' });
+    try {
+      return { group: options.pinStore.createGroup({ type: 'review', id }, name) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to create pin group' });
+    }
   });
 
   app.get('/:id/pinned', async (req, reply) => {
@@ -88,9 +101,10 @@ export async function reviewSourceRoutes(app: FastifyInstance, options: ReviewSo
     try {
       const sessions = await options.reviewSourceService.listSessions(id);
       const sessionsById = new Map(sessions.map((session) => [session.id, session]));
-      const idsByGroup = options.pinStore.listSessionIdsByGroup(id);
+      const owner = { type: 'review' as const, id };
+      const idsByGroup = options.pinStore.listSessionIdsByGroup(owner);
       return {
-        groups: options.pinStore.listGroups().map((group) => ({
+        groups: options.pinStore.listGroups(owner).map((group) => ({
           ...group,
           sessions: (idsByGroup.get(group.id) || [])
             .map((sessionId) => sessionsById.get(sessionId))
@@ -108,7 +122,7 @@ export async function reviewSourceRoutes(app: FastifyInstance, options: ReviewSo
     const { groupId } = req.body as { groupId?: string };
     if (!groupId) return reply.status(400).send({ error: 'groupId is required' });
     try {
-      options.pinStore.pinSession(sessionId, groupId, id);
+      options.pinStore.pinSession({ type: 'review', id }, sessionId, groupId);
       return { success: true };
     } catch (error) {
       return reply.status(404).send({ error: error instanceof Error ? error.message : 'Pin group not found' });
@@ -118,7 +132,7 @@ export async function reviewSourceRoutes(app: FastifyInstance, options: ReviewSo
   app.delete('/:id/sessions/:sessionId/pin', async (req, reply) => {
     if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
     const { id, sessionId } = req.params as { id: string; sessionId: string };
-    options.pinStore.unpinSession(sessionId, id);
+    options.pinStore.unpinSession({ type: 'review', id }, sessionId);
     return { success: true };
   });
 
