@@ -148,7 +148,12 @@ export class WorktreeManager {
   }
 
   private safeBranchDir(branchName: string): string {
-    return branchName.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
+    const sanitized = branchName.replace(/[^a-zA-Z0-9._-]+/g, '-');
+    let start = 0;
+    let end = sanitized.length;
+    while (sanitized[start] === '-') start += 1;
+    while (end > start && sanitized[end - 1] === '-') end -= 1;
+    return sanitized.slice(start, end) || 'branch';
   }
 
   private assertSafeBranchName(branchName: string): void {

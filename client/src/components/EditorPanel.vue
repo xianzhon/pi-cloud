@@ -728,10 +728,10 @@ function resolveMarkdownImageHref(href: string): string {
 const markdownHeadingCounts = new Map<string, number>();
 
 function markdownHeadingId(raw: string): string {
-  const base = raw
+  const text = DOMPurify.sanitize(raw, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+  const base = text
     .trim()
     .toLowerCase()
-    .replace(/<[^>]*>/g, '')
     .replace(/[^\p{Letter}\p{Number}\s_-]/gu, '')
     .replace(/\s+/g, '-');
   const count = markdownHeadingCounts.get(base) || 0;
@@ -852,7 +852,9 @@ function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function monacoLanguageForFile(filePath: string): string | undefined {

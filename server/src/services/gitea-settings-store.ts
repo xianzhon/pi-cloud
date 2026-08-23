@@ -60,9 +60,12 @@ export class GiteaSettingsStore {
 }
 
 export function normalizeServerUrl(value: string): string {
-  const trimmed = value.trim().replace(/\/+$/, '');
+  const trimmed = value.trim();
   if (!trimmed) return '';
   const parsed = new URL(trimmed);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('Gitea server URL must start with http:// or https://');
-  return parsed.toString().replace(/\/+$/, '');
+  const normalized = parsed.toString();
+  let end = normalized.length;
+  while (normalized[end - 1] === '/') end -= 1;
+  return normalized.slice(0, end);
 }

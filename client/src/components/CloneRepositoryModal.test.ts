@@ -59,7 +59,7 @@ describe('CloneRepositoryModal', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       if (!url.endsWith('/preview')) return ok({ status: 'started', jobId: 'clone_1' });
       const body = JSON.parse(String(init?.body));
-      if (body.remoteUrl.includes('github.com')) return ok({ preview: { remoteUrl: body.remoteUrl, isGithub: true, suggestedPath: '/Users/test/git/github/acme/tool' } });
+      if (new URL(body.remoteUrl).hostname === 'github.com') return ok({ preview: { remoteUrl: body.remoteUrl, isGithub: true, suggestedPath: '/Users/test/git/github/acme/tool' } });
       return ok({ preview: { remoteUrl: body.remoteUrl, isGithub: false } });
     }));
     vi.stubGlobal('EventSource', FakeEventSource as any);

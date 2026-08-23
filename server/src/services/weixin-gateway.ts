@@ -183,7 +183,7 @@ export class WeixinGatewayService {
       this.running = false;
       this.pollPromise = undefined;
     });
-    console.info('[weixin-gateway] started', { accountId: safeId(config.accountId), baseUrl: config.baseUrl });
+    console.info('[weixin-gateway] started', { accountId: safeId(config.accountId) });
   }
 
   async stop(): Promise<void> {

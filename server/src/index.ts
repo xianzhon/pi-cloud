@@ -79,9 +79,13 @@ async function refreshPullRequestStatus(
   const number = typeof data.number === 'number' ? data.number : Number(data.number);
   if (!owner || !repo || !Number.isInteger(number)) throw new Error('PR activity is missing repository metadata');
 
-  const provider = data.provider === 'github' || (typeof data.url === 'string' && data.url.includes('github.com'))
-    ? 'github'
-    : 'gitea';
+  let urlProvider: 'github' | 'gitea' = 'gitea';
+  if (typeof data.url === 'string') {
+    try {
+      urlProvider = new URL(data.url).hostname.toLowerCase() === 'github.com' ? 'github' : 'gitea';
+    } catch { /* Invalid legacy activity URLs fall back to Gitea. */ }
+  }
+  const provider = data.provider === 'github' ? 'github' : urlProvider;
   const result = provider === 'github'
     ? await new GithubClient(stores.githubSettings.get()).getPullRequestStatus(owner, repo, number)
     : await new GiteaClient(stores.giteaSettings.get()).getPullRequestStatus(owner, repo, number);
