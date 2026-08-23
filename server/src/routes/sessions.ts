@@ -11,6 +11,7 @@ import { expandHomePath } from '../utils/paths.js';
 import type { ProjectTaskStore } from '../services/project-task-store.js';
 import type { RepositoryCloner } from '../services/repository-cloner.js';
 import type { PullRequestStatus, SessionActivityRecord, SessionActivityStore } from '../services/session-activity-store.js';
+import type { SessionPinStore } from '../services/session-pin-store.js';
 import type {
   AgentProfileQuery,
   AgentProfileSelectionRequest,
@@ -158,6 +159,7 @@ function sanitizeSessionTree(tree: any[]): any[] {
 
 interface SessionRouteOptions {
   projectTaskStore?: Pick<ProjectTaskStore, 'listProjectPaths' | 'replaceProjectPath'>;
+  pinStore?: Pick<SessionPinStore, 'listGroups' | 'createGroup' | 'pinSession' | 'unpinSession' | 'listSessionIdsByGroup'>;
   activityStore?: Pick<SessionActivityStore, 'listForSession'> & Partial<Pick<SessionActivityStore, 'listLatestPrForSessions' | 'updatePrStatus'>>;
   refreshPrStatus?: (activity: SessionActivityRecord) => Promise<PullRequestStatus>;
   repositoryCloner?: Pick<RepositoryCloner, 'preview' | 'start' | 'getJob' | 'subscribe' | 'cancel'>;
@@ -526,6 +528,70 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     }
 
     return worktreeManager.getGitStatus(projectPath);
+  });
+
+  app.get('/pin-groups', async (_req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const idsByGroup = options.pinStore.listSessionIdsByGroup();
+    return {
+      groups: options.pinStore.listGroups().map((group) => ({
+        ...group,
+        sessionIds: idsByGroup.get(group.id) || [],
+      })),
+    };
+  });
+
+  app.post('/pin-groups', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { name } = req.body as { name?: string };
+    if (!name?.trim()) return reply.status(400).send({ error: 'name is required' });
+    try {
+      return { group: options.pinStore.createGroup(name) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to create pin group' });
+    }
+  });
+
+  app.put('/:id/pin', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { id } = req.params as { id: string };
+    const { groupId } = req.body as { groupId?: string };
+    if (!groupId) return reply.status(400).send({ error: 'groupId is required' });
+    try {
+      options.pinStore.pinSession(id, groupId);
+      return { success: true };
+    } catch (error) {
+      return reply.status(404).send({ error: error instanceof Error ? error.message : 'Pin group not found' });
+    }
+  });
+
+  app.delete('/:id/pin', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { id } = req.params as { id: string };
+    options.pinStore.unpinSession(id);
+    return { success: true };
+  });
+
+  app.get('/pinned', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { clientId } = req.query as { clientId?: string };
+    if (!clientId) return reply.status(400).send({ error: 'clientId is required' });
+
+    const sessions = await sessionService.listSessions(clientId, undefined);
+    const sessionsById = new Map(sessions.map((session) => [session.id, withWorktree({
+      ...session,
+      isStreaming: sessionService.isSessionStreaming(session.id),
+    })]));
+    const idsByGroup = options.pinStore.listSessionIdsByGroup();
+    return {
+      groups: options.pinStore.listGroups().map((group) => ({
+        ...group,
+        sessions: (idsByGroup.get(group.id) || [])
+          .map((id) => sessionsById.get(id))
+          .filter((session): session is NonNullable<typeof session> => Boolean(session))
+          .map(toSessionListItem),
+      })),
+    };
   });
 
   app.get('/project-paths', async (req) => {

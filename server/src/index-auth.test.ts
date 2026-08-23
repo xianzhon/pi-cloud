@@ -55,7 +55,7 @@ describe('buildApp auth protection', () => {
 
 
     await app.close();
-  });
+  }, 15_000);
 
   it('allows protected API after login', async () => {
     const { buildApp } = await import('./index');

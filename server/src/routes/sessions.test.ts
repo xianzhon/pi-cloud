@@ -1101,4 +1101,31 @@ describe('session routes', () => {
     expect(raw.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({ 'Content-Type': 'text/event-stream' }));
     expect(raw.write).toHaveBeenCalledWith('data: {"type":"progress","status":"Receiving objects…","percent":50}\n\n');
   });
+
+  it('returns pinned sessions under their assigned groups', async () => {
+    vi.mocked(sessionService.listSessions).mockResolvedValue([{
+      id: 'session-1', name: 'Pinned', path: '/project/session-1.jsonl', cwd: '/project',
+      created: '2026-08-01T00:00:00.000Z', modified: '2026-08-01T00:00:00.000Z', messageCount: 1,
+    }]);
+    const group = { id: 'important', name: 'Important', isDefault: false, createdAt: '2026-08-01T00:00:00.000Z' };
+    const pinStore = {
+      listGroups: vi.fn(() => [group]),
+      createGroup: vi.fn(),
+      pinSession: vi.fn(),
+      unpinSession: vi.fn(),
+      listSessionIdsByGroup: vi.fn(() => new Map([['important', ['session-1']]])),
+    };
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any, { pinStore } as any);
+
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const result = await handlers['GET /pinned']({ query: { clientId: 'client-1' } }, reply);
+    const pinGroups = await handlers['GET /pin-groups']({}, reply);
+    await handlers['DELETE /:id/pin']({ params: { id: 'session-1' } }, reply);
+
+    expect(result.groups[0]).toMatchObject({ id: 'important', sessions: [{ id: 'session-1', name: 'Pinned' }] });
+    expect(pinGroups.groups[0]).toMatchObject({ id: 'important', sessionIds: ['session-1'] });
+    expect(pinStore.unpinSession).toHaveBeenCalledWith('session-1');
+  });
 });

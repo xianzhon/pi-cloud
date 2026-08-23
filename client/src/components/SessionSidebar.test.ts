@@ -1146,4 +1146,102 @@ describe('SessionSidebar', () => {
     expect(wrapper.emitted('createSessionWithSameSettings')).toBeUndefined();
   });
 
+  it('renders pinned sessions in collapsible groups and creates groups', async () => {
+    const pinnedSession = {
+      id: 'session-1', path: '/project', cwd: '/project', name: 'Pinned session',
+      created: '2026-08-01T00:00:00.000Z', modified: '2026-08-01T00:00:00.000Z', messageCount: 2,
+    };
+    const groups = [
+      { id: 'default', name: 'Default', isDefault: true, createdAt: '2026-08-01T00:00:00.000Z' },
+      { id: 'important', name: 'Important', isDefault: false, createdAt: '2026-08-02T00:00:00.000Z' },
+    ];
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      const ok = (payload: object) => ({ ok: true, json: async () => payload });
+      if (url === '/api/sessions/agent-profiles') return ok({ profiles: defaultProfiles });
+      if (String(url).startsWith('/api/sessions/agent-profile?')) return ok({ profile: defaultProfiles[0] });
+      if (String(url).startsWith('/api/sessions/project-paths')) return ok({ projectPaths: ['/project'] });
+      if (String(url).startsWith('/api/sessions/project-path')) return ok({ projectPath: '/project' });
+      if (url === '/api/review-sources') return ok({ sources: [] });
+      if (url === '/api/sessions/pin-groups' && options?.method === 'POST') {
+        groups.push({ id: 'later', name: JSON.parse(String(options.body)).name, isDefault: false, createdAt: '2026-08-03T00:00:00.000Z' });
+        return ok({ group: groups.at(-1) });
+      }
+      if (url === '/api/sessions/pin-groups') return ok({ groups });
+      if (String(url).startsWith('/api/sessions/pinned?')) {
+        return ok({ groups: groups.map((group) => ({ ...group, sessions: group.id === 'important' ? [pinnedSession] : [] })) });
+      }
+      return ok({ sessions: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mountSidebar();
+
+    await vi.waitFor(() => expect(wrapper.findAll('.scope-toggle button')).toHaveLength(3));
+    await wrapper.findAll('.scope-toggle button')[2].trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Pinned session'));
+    expect(wrapper.text()).toContain('Default');
+    expect(wrapper.text()).toContain('Important');
+
+    await wrapper.get('.session-item').trigger('contextmenu');
+    expect(document.body.querySelector('.pin-session-btn')?.textContent).toContain('Move to group');
+    const moveChoices = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.pin-group-choices button'));
+    expect(moveChoices.find((button) => button.textContent?.includes('Important'))?.getAttribute('aria-checked')).toBe('true');
+    moveChoices.find((button) => button.textContent?.includes('Default'))!.click();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ groupId: 'default' }),
+    })));
+
+    await wrapper.get('.session-item').trigger('contextmenu');
+    (document.body.querySelector('.remove-pin-btn') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', { method: 'DELETE' }));
+
+    await wrapper.findAll('.pin-group-header')[1].trigger('click');
+    expect(wrapper.text()).not.toContain('Pinned session');
+    await wrapper.get('.add-pin-group-btn').trigger('click');
+    await vi.waitFor(() => expect(document.body.querySelector('.prompt-input')).not.toBeNull());
+    const input = document.body.querySelector('.prompt-input') as HTMLInputElement;
+    input.value = 'Later';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    (document.body.querySelector('.prompt-form') as HTMLFormElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Later'));
+  });
+
+  it('pins a session to the selected group from the Project context menu', async () => {
+    const session = {
+      id: 'session-1', path: '/project', cwd: '/project', name: 'Session one',
+      created: '2026-08-01T00:00:00.000Z', modified: '2026-08-01T00:00:00.000Z', messageCount: 1,
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      const ok = (payload: object) => ({ ok: true, json: async () => payload });
+      if (url === '/api/sessions/agent-profiles') return ok({ profiles: defaultProfiles });
+      if (String(url).startsWith('/api/sessions/agent-profile?')) return ok({ profile: defaultProfiles[0] });
+      if (String(url).startsWith('/api/sessions/project-paths')) return ok({ projectPaths: ['/project'] });
+      if (String(url).startsWith('/api/sessions/project-path')) return ok({ projectPath: '/project' });
+      if (url === '/api/review-sources') return ok({ sources: [] });
+      if (url === '/api/sessions/pin-groups') return ok({ groups: [
+        { id: 'default', name: 'Default', isDefault: true, createdAt: '', sessionIds: ['session-1'] },
+        { id: 'important', name: 'Important', isDefault: false, createdAt: '', sessionIds: [] },
+      ] });
+      return ok({ sessions: [session] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mountSidebar();
+    await vi.waitFor(() => expect(wrapper.find('.session-item').exists()).toBe(true));
+
+    await wrapper.get('.session-item').trigger('contextmenu');
+    const pinTrigger = document.body.querySelector<HTMLButtonElement>('.pin-session-btn');
+    const choicesMenu = document.body.querySelector<HTMLElement>('.pin-group-choices');
+    expect(pinTrigger?.getAttribute('aria-haspopup')).toBe('menu');
+    expect(choicesMenu?.parentElement?.classList.contains('pin-group-submenu')).toBe(true);
+
+    const choices = Array.from(choicesMenu!.querySelectorAll<HTMLButtonElement>('button'));
+    expect(choices.find((button) => button.textContent?.includes('Default'))?.getAttribute('aria-checked')).toBe('true');
+    choices.find((button) => button.textContent?.includes('Important'))!.click();
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/pin', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ groupId: 'important' }),
+    })));
+  });
+
 });
