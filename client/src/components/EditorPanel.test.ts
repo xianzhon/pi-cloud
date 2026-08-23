@@ -205,12 +205,14 @@ describe('EditorPanel', () => {
     mockFileTreeFetch();
     const patch = [
       'diff --git a/src/one.ts b/src/one.ts',
+      'index 1111111..2222222 100644',
       '--- a/src/one.ts',
       '+++ b/src/one.ts',
       '@@ -1 +1 @@',
       '-old one',
       '+new one',
       'diff --git a/src/two.ts b/src/two.ts',
+      'index 3333333..4444444 100644',
       '--- a/src/two.ts',
       '+++ b/src/two.ts',
       '@@ -2 +2 @@',
@@ -221,6 +223,27 @@ describe('EditorPanel', () => {
     await wrapper.vm.openVirtualDiff({ cwd: '/project', scope: 'working tree', content: patch });
     await flushPromises();
 
+    const diffModelCall = [...vi.mocked(monaco.editor.createModel).mock.calls]
+      .reverse()
+      .find(([, language]) => language === 'diff');
+    expect(diffModelCall?.[0]).toBe([
+      '// ============================================================',
+      '// File: src/one.ts',
+      '// ============================================================',
+      '',
+      '@@ -1 +1 @@',
+      '-old one',
+      '+new one',
+      '',
+      '// ============================================================',
+      '// File: src/two.ts',
+      '// ============================================================',
+      '',
+      '@@ -2 +2 @@',
+      '-old two',
+      '+new two',
+    ].join('\n'));
+    expect(editorPanelSource).toContain(':deep(.git-diff-file-header)');
     expect(wrapper.findAll('.tab').map(tab => tab.text())).toEqual(['Git diff · working tree']);
     const navigation = wrapper.find('.diff-file-select');
     await navigation.get('input').trigger('click');
@@ -231,7 +254,7 @@ describe('EditorPanel', () => {
 
     await navigation.findAll('.custom-select-option')[1].trigger('click');
     const editorInstance = vi.mocked(monaco.editor.create).mock.results.at(-1)?.value as any;
-    expect(editorInstance.revealLineInCenter).toHaveBeenCalledWith(7);
+    expect(editorInstance.revealLineInCenter).toHaveBeenCalledWith(9);
     expect(wrapper.find('button[aria-label="Collapse all files"]').exists()).toBe(false);
   });
 

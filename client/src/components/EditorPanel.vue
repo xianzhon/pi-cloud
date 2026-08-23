@@ -1422,8 +1422,9 @@ function registerMonacoThemes(): void {
 }
 
 function diffLineClass(line: string): string | undefined {
+  if (line.startsWith('diff --git') || line.startsWith('// ---------- file:')) return 'git-diff-file-header';
   if (line.startsWith('@@')) return 'git-diff-hunk';
-  if (/^(diff --git|index |---|\+\+\+|new file mode|deleted file mode|similarity index|rename from|rename to)/.test(line)) {
+  if (/^(index |---|\+\+\+|new file mode|deleted file mode|similarity index|rename from|rename to)/.test(line)) {
     return 'git-diff-meta';
   }
   if (line.startsWith('+')) return 'git-diff-added';
@@ -1444,7 +1445,7 @@ function diffLineNumbers(model: monaco.editor.ITextModel): (lineNumber: number) 
       newLine = Number(hunk[2]);
       continue;
     }
-    if (line.startsWith('diff --git')) {
+    if (line.startsWith('diff --git') || line.startsWith('// ---------- file:')) {
       oldLine = undefined;
       newLine = undefined;
     }
@@ -1483,7 +1484,7 @@ function splitDiffContent(content: string): {
 
   for (const line of content.split('\n')) {
     const hunk = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-    if (line.startsWith('diff --git')) {
+    if (line.startsWith('diff --git') || line.startsWith('// ---------- file:')) {
       oldLine = undefined;
       newLine = undefined;
       appendOriginal(line);
@@ -1685,7 +1686,9 @@ function splitDiffFiles(content: string): Array<{ name: string; content: string 
     (current ||= []).push(line);
   }
   if (current) sections.push(current);
-  if (sections.length <= 1) return [{ name: '', content }];
+  if (sections.length === 1 && !sections[0].some(line => line.startsWith('diff --git '))) {
+    return [{ name: '', content }];
+  }
 
   return sections.map((lines, index) => {
     const newPath = lines.find(line => line.startsWith('+++ b/'))?.slice(6);
@@ -1697,8 +1700,32 @@ function splitDiffFiles(content: string): Array<{ name: string; content: string 
   });
 }
 
+function formatDiffFiles(content: string): Array<{ name: string; content: string }> {
+  return splitDiffFiles(content).map(file => {
+    if (!file.content.startsWith('diff --git ')) return file;
+
+    const body = file.content
+      .split('\n')
+      .slice(1)
+      .filter(line => !/^(index |--- |\+\+\+ )/.test(line));
+    return {
+      ...file,
+      content: [
+        '// ============================================================',
+        `// File: ${file.name}`,
+        '// ============================================================',
+        '',
+        ...body,
+      ].join('\n'),
+    };
+  });
+}
+
 function openVirtualDiff({ cwd, scope, content }: { cwd: string; scope: string; content: string }): void {
-  const files = splitDiffFiles(content);
+  const files = formatDiffFiles(content);
+  const displayContent = files
+    .map((file, index) => index < files.length - 1 ? file.content.replace(/\n+$/, '') : file.content)
+    .join('\n\n');
   const path = virtualDiffPath(cwd, scope);
 
   // Remove tabs created by the previous per-file diff layout.
@@ -1707,16 +1734,17 @@ function openVirtualDiff({ cwd, scope, content }: { cwd: string; scope: string; 
     .forEach(tab => removeOpenTab(tab.path));
 
   const model = models.get(path);
-  if (model) model.setValue(content);
-  else models.set(path, monaco.editor.createModel(content, 'diff', monaco.Uri.parse(path)));
-  updateSplitDiffModels(path, content);
+  if (model) model.setValue(displayContent);
+  else models.set(path, monaco.editor.createModel(displayContent, 'diff', monaco.Uri.parse(path)));
+  updateSplitDiffModels(path, displayContent);
 
   let line = 1;
   let modifiedLine = 1;
-  virtualDiffFiles.set(path, files.map(file => {
+  virtualDiffFiles.set(path, files.map((file, index) => {
     const section = { name: file.name, line, modifiedLine };
-    line += file.content.split('\n').length;
-    modifiedLine += splitDiffContent(file.content).modified.split('\n').length;
+    const separatorLines = index < files.length - 1 ? 1 : 0;
+    line += file.content.split('\n').length + separatorLines;
+    modifiedLine += splitDiffContent(file.content).modified.split('\n').length + separatorLines;
     return section;
   }));
 
@@ -3569,6 +3597,11 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 :deep(.git-diff-meta) {
   color: var(--diff-meta-text);
+}
+
+:deep(.git-diff-file-header) {
+  color: var(--diff-meta-text);
+  font-weight: 600;
 }
 
 /* GitHub uses a quiet solid fill where one side has no corresponding lines. */
