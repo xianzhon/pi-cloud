@@ -241,6 +241,7 @@ export default {
       openASessionToGenerateACommitMessage: 'Open a session to generate a commit message with AI',
       generating: 'Generating...',
       aiGenerate: 'AI generate',
+      stagedChangesOnly: 'Staged changes only',
       generatePrTitleAndBodyWithAi: 'Generate PR title and body with AI',
       openASessionToGeneratePrContentWith: 'Open a session to generate PR content with AI',
       saving: 'Saving...',

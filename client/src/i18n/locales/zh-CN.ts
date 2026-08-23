@@ -241,6 +241,7 @@ export default {
       openASessionToGenerateACommitMessage: '请先打开会话，再使用 AI 生成提交消息',
       generating: '生成...',
       aiGenerate: 'AI 生成',
+      stagedChangesOnly: '仅已暂存的变更',
       generatePrTitleAndBodyWithAi: '使用 AI 生成 PR 标题和正文',
       openASessionToGeneratePrContentWith: '请先打开会话，再使用 AI 生成 PR 内容',
       saving: '保存...',

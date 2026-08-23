@@ -117,6 +117,37 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('filters commit previews and commits to staged changes when requested', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'staged change\n');
+      await git(cwd, 'add', 'README.md');
+      await writeFile(join(cwd, 'unstaged.txt'), 'unstaged change\n');
+
+      const preview = await app.inject({
+        method: 'GET',
+        url: `/api/git/status?cwd=${encodeURIComponent(cwd)}&stagedOnly=true`,
+      });
+
+      expect(preview.statusCode).toBe(200);
+      expect(preview.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/commit',
+        payload: { cwd, message: 'Commit staged change', stagedOnly: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(await git(cwd, 'status', '--porcelain')).toBe('?? unstaged.txt');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('commits staged-only changes', async () => {
     const cwd = await createRepo();
     const app = await buildApp();
@@ -477,6 +508,37 @@ describe('gitRoutes branch', () => {
       expect(completeSimpleMock.mock.calls[0][2].maxTokens).toBe(220);
       expect(completeSimpleMock.mock.calls[0][2].sessionId).toMatch(/^commit-message:[a-f0-9]{32}$/);
       expect(completeSimpleMock.mock.calls[0][2].sessionId.length).toBeLessThanOrEqual(64);
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('generates a commit message from staged changes only when requested', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Update staged content' }],
+      stopReason: 'stop',
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      api: 'mock-api', provider: 'mock', model: 'model', timestamp: Date.now(),
+    });
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'staged change\n');
+      await git(cwd, 'add', 'README.md');
+      await writeFile(join(cwd, 'README.md'), 'unstaged change\n');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/git/commit-message?cwd=${encodeURIComponent(cwd)}&clientId=client-1&stagedOnly=true`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      const prompt = completeSimpleMock.mock.calls[0][1].messages[0].content;
+      expect(prompt).toContain('+staged change');
+      expect(prompt).not.toContain('+unstaged change');
     } finally {
       await app.close();
       await rm(cwd, { recursive: true, force: true });

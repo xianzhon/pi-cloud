@@ -630,6 +630,47 @@ describe('ChatPanel', () => {
     expect(clearMessages).toHaveBeenCalledOnce();
   });
 
+  it('filters the commit dialog and AI request to staged changes', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/api/git/status') && url.includes('stagedOnly=true')) {
+        return new Response(JSON.stringify({ cwd: '/repo', files: [{ status: 'M', path: 'staged.ts' }] }), { status: 200 });
+      }
+      if (url.includes('/api/git/status')) {
+        return new Response(JSON.stringify({
+          cwd: '/repo',
+          message: 'Update changes',
+          files: [{ status: 'M', path: 'staged.ts' }, { status: '??', path: 'unstaged.ts' }],
+        }), { status: 200 });
+      }
+      if (url.includes('/api/git/commit-message')) {
+        return new Response(JSON.stringify({ message: 'feat: update staged file' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ commands: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(ChatPanel, { props: { clientId: 'client-1', projectPath: '/repo' } });
+
+    await wrapper.find('textarea').setValue('/commit');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    const checkbox = document.querySelector<HTMLInputElement>('.commit-staged-only input');
+    expect(checkbox?.checked).toBe(false);
+    expect(document.querySelector('.commit-file-list')?.textContent).toContain('unstaged.ts');
+
+    checkbox?.click();
+    await flushPromises();
+
+    expect(document.querySelector('.commit-file-list')?.textContent).toContain('staged.ts');
+    expect(document.querySelector('.commit-file-list')?.textContent).not.toContain('unstaged.ts');
+
+    document.querySelector<HTMLButtonElement>('.pr-ai-generate-btn')?.click();
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/git/commit-message?cwd=%2Frepo&clientId=client-1&stagedOnly=true');
+  });
+
   it('defaults to deleting the original branch when switching', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);

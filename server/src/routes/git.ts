@@ -92,6 +92,14 @@ function parseStatusFiles(status: string): GitStatusFile[] {
   });
 }
 
+function getStagedStatus(status: string): string {
+  return status
+    .split('\n')
+    .filter((line) => line && line[0] !== ' ' && line[0] !== '?')
+    .map((line) => `${line[0]}  ${line.slice(3)}`)
+    .join('\n');
+}
+
 function describeArea(path: string) {
   const [first, second] = path.split('/');
   if (!second) return first;
@@ -383,15 +391,15 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
   });
 
   app.get('/status', async (req, reply) => {
-    const { cwd, message } = req.query as { cwd?: string; message?: string };
+    const { cwd, message, stagedOnly } = req.query as { cwd?: string; message?: string; stagedOnly?: string };
     const resolvedCwd = await resolveGitCwd(cwd);
 
     try {
-      const [status, output] = await Promise.all([
+      const [workingTreeStatus, output] = await Promise.all([
         runGit(resolvedCwd, ['status', '--porcelain']),
         runGit(resolvedCwd, ['status', '--short', '--branch']),
       ]);
-      const files = parseStatusFiles(status);
+      const files = parseStatusFiles(stagedOnly === 'true' ? getStagedStatus(workingTreeStatus) : workingTreeStatus);
       return {
         cwd: resolvedCwd,
         files,
@@ -451,7 +459,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
   });
 
   app.get('/commit-message', async (req, reply) => {
-    const { cwd, clientId } = req.query as { cwd?: string; clientId?: string };
+    const { cwd, clientId, stagedOnly } = req.query as { cwd?: string; clientId?: string; stagedOnly?: string };
     const resolvedCwd = await resolveGitCwd(cwd);
 
     if (!clientId) {
@@ -459,10 +467,12 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     }
 
     try {
-      const [status, diff] = await Promise.all([
+      const onlyStaged = stagedOnly === 'true';
+      const [workingTreeStatus, diff] = await Promise.all([
         runGit(resolvedCwd, ['status', '--porcelain']),
-        getCombinedDiff(resolvedCwd, []),
+        onlyStaged ? runGit(resolvedCwd, ['diff', '--cached']) : getCombinedDiff(resolvedCwd, []),
       ]);
+      const status = onlyStaged ? getStagedStatus(workingTreeStatus) : workingTreeStatus;
       const files = parseStatusFiles(status);
       if (!files.length) {
         return reply.status(400).send({ error: 'No git changes to generate a commit message from' });
@@ -557,7 +567,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
   }
 
   app.post('/commit', async (req, reply) => {
-    const body = (req.body || {}) as { cwd?: string; message?: string; sessionId?: string };
+    const body = (req.body || {}) as { cwd?: string; message?: string; sessionId?: string; stagedOnly?: boolean };
     const resolvedCwd = await resolveGitCwd(body.cwd);
     const message = body.message?.trim();
 
@@ -566,9 +576,10 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     }
 
     try {
-      await runGit(resolvedCwd, ['add', '-A']);
-      const status = await runGit(resolvedCwd, ['status', '--porcelain']);
-      const files = parseStatusFiles(status);
+      const onlyStaged = body.stagedOnly === true;
+      if (!onlyStaged) await runGit(resolvedCwd, ['add', '-A']);
+      const workingTreeStatus = await runGit(resolvedCwd, ['status', '--porcelain']);
+      const files = parseStatusFiles(onlyStaged ? getStagedStatus(workingTreeStatus) : workingTreeStatus);
       if (!files.length) {
         return reply.status(400).send({ error: 'No changes to commit' });
       }

@@ -371,6 +371,10 @@
             rows="3"
             :placeholder="t('components.chatPanel.commitMessage')"
           ></textarea>
+          <label v-if="commitPreview.mode === 'commit'" class="branch-checkbox-row commit-staged-only">
+            <input v-model="commitStagedOnly" type="checkbox" @change="refreshCommitFiles" />
+            <span>{{ t('components.chatPanel.stagedChangesOnly') }}</span>
+          </label>
           <div class="commit-preview-label">{{ t('components.chatPanel.files') }}</div>
           <ul v-if="commitPreview.files.length" class="commit-file-list">
             <li v-for="file in commitPreview.files" :key="`${file.status}:${file.path}`">
@@ -844,6 +848,7 @@ const commitPreview = ref<CommitPreview | null>(null);
 const commitStatusMessage = ref<ChatLocalMessage | null>(null);
 const commitGeneratingMessage = ref(false);
 const commitGenerationError = ref('');
+const commitStagedOnly = ref(false);
 const prPreview = ref<GitHostingPrPreview | null>(null);
 const prStatusMessage = ref<ChatLocalMessage | null>(null);
 const prGeneratingContent = ref(false);
@@ -2641,6 +2646,7 @@ async function handleCommitCommand(text: string) {
       mode: 'commit',
     };
     commitGenerationError.value = '';
+    commitStagedOnly.value = false;
     commitPreview.value = preview;
     commitStatusMessage.value = responseMessage;
     responseMessage.kind = 'text';
@@ -2696,6 +2702,23 @@ async function handleAmendCommand(text: string) {
   }
 }
 
+async function refreshCommitFiles() {
+  const preview = commitPreview.value;
+  if (!preview || preview.mode !== 'commit') return;
+
+  commitGenerationError.value = '';
+  try {
+    const params = new URLSearchParams({ cwd: preview.cwd });
+    if (commitStagedOnly.value) params.set('stagedOnly', 'true');
+    const response = await fetch(`/api/git/status?${params}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    preview.files = Array.isArray(data.files) ? data.files : [];
+  } catch (error) {
+    commitGenerationError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToPrepareGitCommit');
+  }
+}
+
 async function generateCommitMessage() {
   const preview = commitPreview.value;
   if (!preview) return;
@@ -2712,6 +2735,7 @@ async function generateCommitMessage() {
   commitGenerationError.value = '';
   try {
     const params = new URLSearchParams({ cwd: preview.cwd, clientId: props.clientId });
+    if (preview.mode === 'commit' && commitStagedOnly.value) params.set('stagedOnly', 'true');
     const response = await fetch(`/api/git/commit-message?${params}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
@@ -2749,7 +2773,12 @@ async function confirmCommit() {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cwd: preview.cwd, message: preview.message, sessionId: props.sessionId }),
+      body: JSON.stringify({
+        cwd: preview.cwd,
+        message: preview.message,
+        sessionId: props.sessionId,
+        ...(preview.mode === 'commit' && commitStagedOnly.value ? { stagedOnly: true } : {}),
+      }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
