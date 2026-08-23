@@ -37,6 +37,7 @@ import { SessionStore } from './auth/sessions.js';
 import { TotpService } from './auth/totp.js';
 import { initializeSessionService, sessionService } from './services/session-manager.js';
 import { SessionActivityStore, type SessionActivityRecord } from './services/session-activity-store.js';
+import { SessionPinStore } from './services/session-pin-store.js';
 import { SkillPolicyStore } from './services/skill-policy-store.js';
 import { initializeWorktreeMetadataStore } from './services/worktree-metadata-store.js';
 import { createMemoryRuntime, type MemoryRuntime } from './memory/runtime.js';
@@ -235,6 +236,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const reviewSourceStore = new ReviewSourceStore(db);
   const reviewSourceService = new ReviewSourceService(reviewSourceStore);
   const sessionActivityStore = new SessionActivityStore(db);
+  const sessionPinStore = new SessionPinStore(db);
   projectTaskStore.restoreAllStarting();
   const giteaSettings = new GiteaSettingsStore(db);
   const gatewaySettings = new GatewaySettingsStore(db);
@@ -331,6 +333,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(sessionRoutes, {
     prefix: '/api/sessions',
     projectTaskStore,
+    pinStore: sessionPinStore,
     activityStore: sessionActivityStore,
     refreshPrStatus: (activity: SessionActivityRecord) => refreshPullRequestStatus(activity, { giteaSettings, githubSettings }),
     repositoryCloner,

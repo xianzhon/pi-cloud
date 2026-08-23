@@ -106,6 +106,22 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
       FOREIGN KEY (preset_id) REFERENCES skill_presets(id) ON DELETE SET NULL
     );
 
+    CREATE TABLE IF NOT EXISTS session_pin_groups (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS session_pins (
+      session_id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (group_id) REFERENCES session_pin_groups(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS session_pins_group_idx ON session_pins(group_id, created_at);
+
     CREATE TABLE IF NOT EXISTS session_worktrees (
       session_id TEXT PRIMARY KEY,
       base_repo_path TEXT NOT NULL,

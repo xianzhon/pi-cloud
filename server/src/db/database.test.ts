@@ -39,6 +39,8 @@ describe('openPiuiDatabase', () => {
       'review_sources',
       'security_settings',
       'session_builtin_events',
+      'session_pin_groups',
+      'session_pins',
       'session_skill_policies',
       'session_worktrees',
       'sessions',
