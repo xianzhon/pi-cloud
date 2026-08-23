@@ -23,9 +23,9 @@ const { MockTerminal } = vi.hoisted(() => {
   return { MockTerminal };
 });
 
-vi.mock('xterm', () => ({ Terminal: MockTerminal }));
+vi.mock('@xterm/xterm', () => ({ Terminal: MockTerminal }));
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { fit = vi.fn(); } }));
-vi.mock('xterm/css/xterm.css', () => ({}));
+vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
 
 class MockWebSocket {
   static OPEN = 1;

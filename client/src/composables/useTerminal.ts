@@ -1,9 +1,9 @@
 // client/src/composables/useTerminal.ts
 import { ref, onUnmounted, type Ref } from 'vue'
-import { Terminal } from 'xterm'
+import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import 'xterm/css/xterm.css'
-import type { ITheme } from 'xterm'
+import '@xterm/xterm/css/xterm.css'
+import type { ITheme } from '@xterm/xterm'
 
 export type TerminalThemeName = 'dark' | 'light'
 
