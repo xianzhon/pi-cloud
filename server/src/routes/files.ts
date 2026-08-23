@@ -100,13 +100,13 @@ function rewritePreviewCss(css: string, root: string, cssPath: string): string {
     .replace(/(@import\s+)(['"])([^'"]+)\2/gi, (_match, prefix: string, quote: string, reference: string) => `${prefix}${quote}${rewriteReference(reference)}${quote}`);
 }
 
-function getSystemOpenCommand(filePath: string): { command: string; args: string[] } {
-  if (process.platform === 'darwin') {
+export function getSystemOpenCommand(filePath: string, platform: NodeJS.Platform = process.platform): { command: string; args: string[] } {
+  if (platform === 'darwin') {
     return { command: 'open', args: [filePath] };
   }
 
-  if (process.platform === 'win32') {
-    return { command: 'cmd', args: ['/c', 'start', '', filePath] };
+  if (platform === 'win32') {
+    return { command: 'rundll32.exe', args: ['url.dll,FileProtocolHandler', filePath] };
   }
 
   return { command: 'xdg-open', args: [filePath] };

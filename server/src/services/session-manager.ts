@@ -62,6 +62,26 @@ const DEFAULT_AUTOMATION_MODEL_ID = 'claude-haiku-4-5';
 const LOCAL_LLM_PROVIDER_ID = 'pi-webui-local';
 const LOCAL_LLM_DISCOVERY_TIMEOUT_MS = 10_000;
 
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost'
+    || hostname.endsWith('.localhost')
+    || hostname === '[::1]'
+    || /^127(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
+function localLlmAllowedOrigins(): Set<string> {
+  const origins = new Set<string>();
+  for (const value of (process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS || '').split(',')) {
+    try {
+      const parsed = new URL(value.trim());
+      if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && !parsed.username && !parsed.password) {
+        origins.add(parsed.origin);
+      }
+    } catch { /* Ignore malformed allowlist entries. */ }
+  }
+  return origins;
+}
+
 // Some environment variables authenticate multiple Pi providers. Saving each provider entry
 // preserves the same behavior users get when they export the corresponding variable.
 const API_KEY_PROVIDERS = [
@@ -314,7 +334,10 @@ export class PiSessionService {
   async discoverAgentProfileLocalLlm(profileId: string, baseUrl: string) {
     await this.requireAgentProfile(profileId);
     const endpoint = `${this.normalizeLocalLlmBaseUrl(baseUrl)}/models`;
-    const response = await fetch(endpoint, { signal: AbortSignal.timeout(LOCAL_LLM_DISCOVERY_TIMEOUT_MS) });
+    const response = await fetch(endpoint, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(LOCAL_LLM_DISCOVERY_TIMEOUT_MS),
+    });
     if (!response.ok) throw new Error(`Local LLM returned HTTP ${response.status}`);
 
     const body = await response.json() as { data?: unknown; models?: unknown };
@@ -432,6 +455,12 @@ export class PiSessionService {
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new Error('Local LLM endpoint must use HTTP or HTTPS');
+    }
+    if (parsed.username || parsed.password) {
+      throw new Error('Local LLM endpoint must not include credentials');
+    }
+    if (!isLoopbackHostname(parsed.hostname) && !localLlmAllowedOrigins().has(parsed.origin)) {
+      throw new Error('Local LLM endpoint origin is not allowed');
     }
     parsed.search = '';
     parsed.hash = '';

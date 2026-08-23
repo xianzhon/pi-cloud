@@ -159,6 +159,7 @@ const { PiSessionService, initializeSessionService } = sessionManagerModule;
 
 describe('PiSessionService', () => {
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const originalLocalLlmAllowedOrigins = process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS;
   let db: PiuiDatabase;
   let dbPath: string;
 
@@ -218,6 +219,7 @@ describe('PiSessionService', () => {
       }
     });
     process.env.PI_CODING_AGENT_DIR = '/app/config';
+    delete process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS;
   });
 
   afterEach(() => {
@@ -227,6 +229,11 @@ describe('PiSessionService', () => {
       delete process.env.PI_CODING_AGENT_DIR;
     } else {
       process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+    }
+    if (originalLocalLlmAllowedOrigins === undefined) {
+      delete process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS;
+    } else {
+      process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS = originalLocalLlmAllowedOrigins;
     }
   });
 
@@ -328,7 +335,47 @@ describe('PiSessionService', () => {
     ]);
   });
 
-  it('discovers models from an OpenAI-compatible local endpoint', async () => {
+  it('rejects local LLM discovery against non-loopback origins by default', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      data: [{ id: 'metadata' }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const service = new PiSessionService();
+
+    try {
+      await expect(service.discoverAgentProfileLocalLlm('default', 'http://169.254.169.254/latest'))
+        .rejects.toThrow('Local LLM endpoint origin is not allowed');
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('allows only configured non-loopback local LLM origins with an exact port match', async () => {
+    process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS = 'http://192.168.1.20:11434';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      data: [{ id: 'qwen3:8b' }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const service = new PiSessionService();
+
+    try {
+      await expect(service.discoverAgentProfileLocalLlm('default', 'http://192.168.1.20:11434/v1'))
+        .resolves.toEqual([{ id: 'qwen3:8b' }]);
+      await expect(service.discoverAgentProfileLocalLlm('default', 'http://192.168.1.20:11435/v1'))
+        .rejects.toThrow('Local LLM endpoint origin is not allowed');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('rejects credentials in local LLM endpoint URLs', async () => {
+    const service = new PiSessionService();
+
+    await expect(service.discoverAgentProfileLocalLlm('default', 'http://user:password@127.0.0.1:11434/v1'))
+      .rejects.toThrow('Local LLM endpoint must not include credentials');
+  });
+
+  it('discovers models from an OpenAI-compatible local endpoint without following redirects', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       data: [{ id: 'qwen3:8b' }, { id: 'devstral:latest' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
@@ -338,7 +385,10 @@ describe('PiSessionService', () => {
       { id: 'devstral:latest' },
       { id: 'qwen3:8b' },
     ]);
-    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:11434/v1/models', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:11434/v1/models', expect.objectContaining({
+      redirect: 'manual',
+      signal: expect.any(AbortSignal),
+    }));
     fetchMock.mockRestore();
   });
 

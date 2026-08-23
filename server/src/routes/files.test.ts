@@ -3,13 +3,24 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { fileRoutes } from './files';
+import { fileRoutes, getSystemOpenCommand } from './files';
 
 async function buildApp() {
   const app = Fastify();
   await app.register(fileRoutes, { prefix: '/api/files' });
   return app;
 }
+
+describe('getSystemOpenCommand', () => {
+  it('passes Windows file paths with shell metacharacters as one non-shell argument', () => {
+    const filePath = String.raw`C:\workspace\report & calc.exe.txt`;
+
+    expect(getSystemOpenCommand(filePath, 'win32')).toEqual({
+      command: 'rundll32.exe',
+      args: ['url.dll,FileProtocolHandler', filePath],
+    });
+  });
+});
 
 describe('fileRoutes', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
