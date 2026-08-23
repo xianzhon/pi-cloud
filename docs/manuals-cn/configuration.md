@@ -24,7 +24,10 @@ Pi WebUI 从 shell 环境变量和 `.env` 文件中读取配置，shell 变量�
 | `PI_WEBUI_DB_PATH` | 用户配置目录 | 自定义 SQLite 数据库路径 |
 | `PI_WEBUI_ALLOWED_ROOTS` | 用户主目录 | 文件浏览器和终端可以访问的目录，以逗号分隔 |
 | `PI_WEBUI_DISABLE_PATH_CHECK` | Windows 上为 `true`；macOS/Linux 上为 `false` | 禁用文件、终端初始目录和 Git API 路径的允许根目录检查 |
+| `PI_WEBUI_ENABLE_SYSTEM_OPEN` | `false` | 允许通过非 localhost URL（例如本地 nginx 主机名）使用**通过系统工具打开** |
 | `PI_WEBUI_TERMINAL_SHELL` | Windows 上为 `COMSPEC`/`cmd.exe`；macOS/Linux 上为 `SHELL`/`bash` | 终端 shell 可执行文件，例如 `powershell.exe`、`pwsh.exe` 或 `/bin/zsh` |
+
+通过 `localhost`、`127.0.0.1`、`::1` 和 `*.localhost` 访问时，**通过系统工具打开**会自动可用。若通过自定义反向代理主机名访问同一台本地设备，请设置 `PI_WEBUI_ENABLE_SYSTEM_OPEN=true`。该操作会在运行 Pi WebUI 的设备上启动应用程序，因此仅应在可信的本地部署中启用。更改此设置后请重启服务器。
 
 当 `PI_WEBUI_DISABLE_PATH_CHECK=true` 时，`PI_WEBUI_ALLOWED_ROOTS` 会被忽略。Windows 默认禁用这些检查，以便访问其他磁盘上的路径；如需限制访问，请设置 `PI_WEBUI_DISABLE_PATH_CHECK=false` 并配置 `PI_WEBUI_ALLOWED_ROOTS`。禁用检查后，WebUI 文件系统端点可以访问服务器进程有权限访问的任何路径，因此请仅在可信部署中使用。
 

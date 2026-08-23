@@ -24,7 +24,10 @@ On the first run of a global installation, Pi WebUI copies the complete sample c
 | `PI_WEBUI_DB_PATH` | User configuration directory | Custom SQLite database path |
 | `PI_WEBUI_ALLOWED_ROOTS` | User home directory | Comma-separated directories the file browser and terminal may access |
 | `PI_WEBUI_DISABLE_PATH_CHECK` | `true` on Windows; `false` on macOS/Linux | Disable allowed-root checks for file, terminal cwd, and Git API paths |
+| `PI_WEBUI_ENABLE_SYSTEM_OPEN` | `false` | Enable **Open with system tool** through non-localhost URLs, such as a local nginx hostname |
 | `PI_WEBUI_TERMINAL_SHELL` | `COMSPEC`/`cmd.exe` on Windows; `SHELL`/`bash` on macOS/Linux | Terminal shell executable, such as `powershell.exe`, `pwsh.exe`, or `/bin/zsh` |
+
+**Open with system tool** is automatically available through `localhost`, `127.0.0.1`, `::1`, and `*.localhost`. Set `PI_WEBUI_ENABLE_SYSTEM_OPEN=true` when accessing the same local machine through a custom reverse-proxy hostname. The action launches an application on the machine running Pi WebUI, so enable it only for trusted local deployments. Restart the server after changing this setting.
 
 When `PI_WEBUI_DISABLE_PATH_CHECK=true`, `PI_WEBUI_ALLOWED_ROOTS` is ignored. Windows disables these checks by default so paths on other drives remain accessible; set `PI_WEBUI_DISABLE_PATH_CHECK=false` and configure `PI_WEBUI_ALLOWED_ROOTS` to restrict access. Disabling the check allows WebUI filesystem endpoints to access any path permitted to the server process, so use it only in a trusted deployment.
 

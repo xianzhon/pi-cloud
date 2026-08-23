@@ -810,6 +810,31 @@ describe('EditorPanel', () => {
     expect(writeText).toHaveBeenCalledWith('src/demo.ts');
   });
 
+  it('opens a file with the system tool from the tab context menu', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: 'export {}', mtime: 1 }) };
+      if (String(url).startsWith('/api/files/open-system') && init?.method === 'POST') return { ok: true };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/src/demo.ts');
+    await wrapper.find('.editor-tabs .tab').trigger('contextmenu', { clientX: 10, clientY: 20 });
+
+    const openButton = wrapper.findAll('.tab-context-menu button')
+      .find(button => button.text() === 'Open with system tool');
+    expect(openButton).toBeDefined();
+    await openButton!.trigger('click');
+
+    expect(fetch).toHaveBeenCalledWith('/api/files/open-system', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/project/src/demo.ts' }),
+    });
+  });
+
   it('closes other open tabs from the tab context menu', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };

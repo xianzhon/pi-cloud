@@ -274,6 +274,12 @@
       <button @click="addContextTabToReference">{{ t('components.editorPanel.addToReference') }}</button>
       <button @click="copyContextTabRelativePath">{{ t('components.editorPanel.copyRelativePath') }}</button>
       <button @click="downloadContextTab">{{ t('components.editorPanel.download') }}</button>
+      <button
+        v-if="canOpenWithSystemTool && !contextTab.virtual"
+        @click="openContextTabWithSystemTool"
+      >
+        {{ t('components.editorPanel.openWithSystemTool') }}
+      </button>
       <button @click="renameContextTab">{{ t('components.editorPanel.rename') }}</button>
       <button @click="closeContextTab">{{ t('components.editorPanel.close') }}</button>
       <button @click="closeAllTabs" :disabled="!hasClosableTabs">{{ t('components.editorPanel.closeAll') }}</button>
@@ -696,7 +702,9 @@ const activeHtmlDocument = computed(() => {
   const model = filePath ? models.get(filePath) : undefined;
   return filePath && model ? renderHtmlPreview(model.getValue(), filePath) : '';
 });
-const canOpenWithSystemTool = isLocalHostname(window.location.hostname);
+const isLocalSystemOpen = isLocalHostname(window.location.hostname);
+const systemOpenExplicitlyEnabled = ref(false);
+const canOpenWithSystemTool = computed(() => isLocalSystemOpen || systemOpenExplicitlyEnabled.value);
 
 function resolveMarkdownImageHref(href: string): string {
   if (!activeTab.value || !href || href.startsWith('/') || href.startsWith('#') || /^[a-z][a-z\d+.-]*:/i.test(href)) {
@@ -1073,6 +1081,19 @@ function isLocalHostname(hostname: string): boolean {
     || hostname === '127.0.0.1'
     || hostname === '::1'
     || hostname.endsWith('.localhost');
+}
+
+async function loadFileCapabilities(): Promise<void> {
+  if (isLocalSystemOpen) return;
+
+  try {
+    const response = await fetch('/api/files/capabilities');
+    if (!response.ok) return;
+    const capabilities = await response.json() as { systemOpen?: boolean };
+    systemOpenExplicitlyEnabled.value = capabilities.systemOpen === true;
+  } catch {
+    // Keep system open unavailable when capability detection fails.
+  }
 }
 
 function requestInput(options: {
@@ -2175,6 +2196,12 @@ function downloadContextTab(): void {
   if (filePath) void downloadPath(filePath);
 }
 
+async function openContextTabWithSystemTool(): Promise<void> {
+  const tab = contextTab.value;
+  closeTabContextMenu();
+  if (tab && !tab.virtual) await openFileWithSystemTool(tab.path);
+}
+
 function downloadContextNode(): void {
   const node = fileContextMenu.value.node;
   closeFileContextMenu();
@@ -2820,8 +2847,22 @@ function stopAutoRefresh() {
   }
 }
 
+function registerSystemOpenEditorAction(): void {
+  if (!editor || !canOpenWithSystemTool.value) return;
+  editor.addAction({
+    id: 'open-with-system-tool',
+    label: t('components.editorPanel.openWithSystemTool'),
+    contextMenuGroupId: 'navigation',
+    contextMenuOrder: 1.5,
+    run: openActiveFileWithSystemTool,
+  });
+}
+
 onMounted(() => {
   reloadRootTree();
+  if (!isLocalSystemOpen) {
+    void loadFileCapabilities().then(registerSystemOpenEditorAction);
+  }
   registerMonacoThemes();
 
   if (editorContainer.value) {
@@ -2840,15 +2881,7 @@ onMounted(() => {
       saveFile();
     });
 
-    if (canOpenWithSystemTool) {
-      editor.addAction({
-        id: 'open-with-system-tool',
-        label: t('components.editorPanel.openWithSystemTool'),
-        contextMenuGroupId: 'navigation',
-        contextMenuOrder: 1.5,
-        run: openActiveFileWithSystemTool,
-      });
-    }
+    registerSystemOpenEditorAction();
 
     applyGitChangeDecorations();
   }

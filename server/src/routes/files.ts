@@ -112,6 +112,17 @@ function getSystemOpenCommand(filePath: string): { command: string; args: string
   return { command: 'xdg-open', args: [filePath] };
 }
 
+function isLocalHostname(hostname: string): boolean {
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '::1'
+    || hostname.endsWith('.localhost');
+}
+
+function isSystemOpenExplicitlyEnabled(): boolean {
+  return parseBoolean(process.env.PI_WEBUI_ENABLE_SYSTEM_OPEN, false);
+}
+
 function openWithSystemTool(filePath: string): void {
   const { command, args } = getSystemOpenCommand(filePath);
   const child = spawn(command, args, {
@@ -503,7 +514,15 @@ export async function fileRoutes(app: FastifyInstance) {
     return { success: true };
   });
 
+  app.get('/capabilities', async () => ({
+    systemOpen: isSystemOpenExplicitlyEnabled(),
+  }));
+
   app.post('/open-system', async (req, reply) => {
+    if (!isLocalHostname(req.hostname) && !isSystemOpenExplicitlyEnabled()) {
+      return reply.code(403).send({ error: 'System open is not enabled for this hostname' });
+    }
+
     const { path: filePath } = req.body as { path?: string };
     if (!filePath?.trim()) {
       return reply.code(400).send({ error: 'File path is required' });

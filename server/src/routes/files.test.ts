@@ -30,6 +30,7 @@ describe('fileRoutes', () => {
   afterEach(async () => {
     await app.close();
     delete process.env.PI_WEBUI_ALLOWED_ROOTS;
+    delete process.env.PI_WEBUI_ENABLE_SYSTEM_OPEN;
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -407,6 +408,34 @@ describe('fileRoutes', () => {
 
     expect(emptyResponse.statusCode).toBe(200);
     await expect(fs.access(emptyDir)).rejects.toThrow();
+  });
+
+  it('reports whether system open is explicitly enabled', async () => {
+    const disabledResponse = await app.inject({
+      method: 'GET',
+      url: '/api/files/capabilities',
+    });
+    expect(disabledResponse.statusCode).toBe(200);
+    expect(disabledResponse.json()).toEqual({ systemOpen: false });
+
+    process.env.PI_WEBUI_ENABLE_SYSTEM_OPEN = 'true';
+    const enabledResponse = await app.inject({
+      method: 'GET',
+      url: '/api/files/capabilities',
+    });
+    expect(enabledResponse.json()).toEqual({ systemOpen: true });
+  });
+
+  it('rejects system open from non-local hostnames unless explicitly enabled', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/files/open-system',
+      headers: { host: 'pi.example.test' },
+      payload: { path: path.join(tempDir, 'README.md') },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: 'System open is not enabled for this hostname' });
   });
 
   it('searches files relative to a requested path', async () => {
