@@ -4,9 +4,8 @@ import * as os from 'os';
 import { dirname } from 'path';
 import { projectMover } from '../services/project-mover.js';
 import { sessionFileRelocator } from '../services/session-file-relocator.js';
-import { sessionService } from '../services/session-manager.js';
-import { worktreeManager } from '../services/worktree-manager.js';
-import { getWorktreeMetadataStore } from '../services/worktree-metadata-store.js';
+import type { PiSessionService } from '../services/session-manager.js';
+import type { WorktreeMetadataStore } from '../services/worktree-metadata-store.js';
 import { expandHomePath } from '../utils/paths.js';
 import type { ProjectTaskStore } from '../services/project-task-store.js';
 import type { RepositoryCloner } from '../services/repository-cloner.js';
@@ -41,10 +40,13 @@ function extractSnippet(text: string, query: string, contextChars: number = 100)
   return snippet;
 }
 
-function withWorktree<T extends { id?: string; sessionId?: string }>(session: T): T & { worktree?: unknown } {
+function withWorktree<T extends { id?: string; sessionId?: string }>(
+  session: T,
+  worktreeMetadata: WorktreeMetadataStore,
+): T & { worktree?: unknown } {
   const id = session.id || session.sessionId;
   if (!id) return session;
-  const worktree = getWorktreeMetadataStore().get(id);
+  const worktree = worktreeMetadata.get(id);
   return worktree ? { ...session, worktree } : session;
 }
 
@@ -67,14 +69,20 @@ function sortSessionsByModified<T extends { modified?: string; created?: string 
   });
 }
 
-async function listSessionsForRoute(clientId: string, scope?: 'project' | 'all', projectPath?: string) {
+async function listSessionsForRoute(
+  sessionService: PiSessionService,
+  worktreeMetadata: WorktreeMetadataStore,
+  clientId: string,
+  scope?: 'project' | 'all',
+  projectPath?: string,
+) {
   if (scope === 'all' || !projectPath) return sessionService.listSessions(clientId, undefined);
 
   const baseSessions = await sessionService.listSessions(clientId, projectPath);
   let worktreeSessions: Awaited<ReturnType<typeof sessionService.listSessions>> = [];
   try {
     const worktreePaths = Array.from(new Set(
-      getWorktreeMetadataStore()
+      worktreeMetadata
         .listByBaseRepoPath(projectPath)
         .map((worktree) => worktree.worktreePath)
         .filter((path): path is string => Boolean(path && path !== projectPath)),
@@ -93,7 +101,7 @@ async function listSessionsForRoute(clientId: string, scope?: 'project' | 'all',
 }
 
 async function resolveMemoryProject(app: FastifyInstance, clientId: string, cwd: string) {
-  const profile = await sessionService.getClientAgentProfile(clientId);
+  const profile = await app.services.sessions.getClientAgentProfile(clientId);
   return (await app.memoryRuntime.service.resolveContext({ profileId: profile.id, cwd })).project;
 }
 
@@ -213,6 +221,9 @@ function pullRequestFromActivity(activity?: { data: Record<string, unknown> }): 
 }
 
 export async function sessionRoutes(app: FastifyInstance, options: SessionRouteOptions = {}) {
+  const sessionService = app.services.sessions;
+  const worktreeManager = app.services.worktrees;
+  const worktreeMetadata = app.services.worktreeMetadata;
   function requireRepositoryCloner(reply: FastifyReply) {
     if (options.repositoryCloner) return options.repositoryCloner;
     reply.status(503).send({ error: 'Repository clone is not configured' });
@@ -586,7 +597,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     const sessionsById = new Map(sessions.map((session) => [session.id, withWorktree({
       ...session,
       isStreaming: sessionService.isSessionStreaming(session.id),
-    })]));
+    }, worktreeMetadata)]));
     const owner = { type: 'profile' as const, id: profileId };
     const idsByGroup = options.pinStore.listSessionIdsByGroup(owner);
     return {
@@ -631,7 +642,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     const offset = Math.max(0, Number.parseInt(rawOffset || '0', 10) || 0);
     const requestedLimit = rawLimit === undefined ? undefined : Number.parseInt(rawLimit, 10);
     const limit = requestedLimit === undefined ? undefined : Math.min(100, Math.max(1, requestedLimit || 1));
-    const sessions = await listSessionsForRoute(clientId, scope, projectPath);
+    const sessions = await listSessionsForRoute(sessionService, worktreeMetadata, clientId, scope, projectPath);
     const latestPrs = await refreshPrActivities(
       options.activityStore?.listLatestPrForSessions?.(sessions.map((session) => session.id)) || new Map(),
       options,
@@ -640,7 +651,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       ...session,
       isStreaming: sessionService.isSessionStreaming(session.id),
       pullRequest: pullRequestFromActivity(latestPrs.get(session.id)),
-    }));
+    }, worktreeMetadata));
     const filteredSessions = decoratedSessions
       .filter((session) => scope === 'all' || belongsToProject(session, projectPath));
     const page = limit === undefined
@@ -757,7 +768,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       const resolved = await worktreeManager.resolveSessionCwd(sessionOptions.cwd || process.cwd(), worktree);
       const result = await sessionService.createSession(clientId, { ...sessionOptions, cwd: resolved.cwd });
       const savedWorktree = resolved.metadata
-        ? (getWorktreeMetadataStore().save({ sessionId: result.session.sessionId, ...resolved.metadata }) || { sessionId: result.session.sessionId, ...resolved.metadata })
+        ? (worktreeMetadata.save({ sessionId: result.session.sessionId, ...resolved.metadata }) || { sessionId: result.session.sessionId, ...resolved.metadata })
         : undefined;
 
       return {
@@ -879,7 +890,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     const newCwd = expandHomePath(newProjectPath);
     if (oldCwd === newCwd) return { success: true, path: session.path, cwd: newCwd };
 
-    const worktree = getWorktreeMetadataStore().get(id);
+    const worktree = worktreeMetadata.get(id);
     if (worktree?.worktreeManaged === true && worktree.worktreeStatus === 'active') {
       return reply.status(409).send({ error: 'Cannot move an active worktree session' });
     }
@@ -1029,7 +1040,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     return toSessionListItem(withWorktree({
       ...session,
       pullRequest: pullRequestFromActivity(latestPrs.get(id)),
-    }));
+    }, worktreeMetadata));
   });
 
   app.get('/:id/status', async (req, reply) => {
@@ -1160,7 +1171,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
         thinkingLevel: foundSession.thinkingLevel,
         isStreaming: foundSession.isStreaming,
         activity: options.activityStore?.listForSession(foundSession.sessionId) || [],
-      });
+      }, worktreeMetadata);
     }
 
     const sessionInfo = await sessionService.findPersistedSession(clientId, id);
@@ -1171,7 +1182,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     return withWorktree({
       ...(await sessionService.readSessionSnapshot(clientId, sessionInfo.path)),
       activity: options.activityStore?.listForSession(id) || [],
-    });
+    }, worktreeMetadata);
   });
 
   app.get('/:id/finish-worktree-preview', async (req, reply) => {
@@ -1182,7 +1193,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       return reply.status(400).send({ error: 'clientId is required' });
     }
 
-    const metadata = getWorktreeMetadataStore().get(id);
+    const metadata = worktreeMetadata.get(id);
     if (!metadata || metadata.worktreeStatus !== 'active' || metadata.worktreeManaged !== true) {
       return reply.status(404).send({ error: 'Active managed worktree session not found' });
     }
@@ -1215,7 +1226,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       return reply.status(409).send({ error: 'Cannot finish a streaming session' });
     }
 
-    const metadata = getWorktreeMetadataStore().get(id);
+    const metadata = worktreeMetadata.get(id);
     if (!metadata || metadata.worktreeStatus !== 'active' || metadata.worktreeManaged !== true) {
       return reply.status(404).send({ error: 'Active managed worktree session not found' });
     }
@@ -1231,7 +1242,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     });
     await worktreeManager.removeWorktree(metadata.baseRepoPath, metadata.worktreePath);
     await worktreeManager.pullFastForwardOnly(metadata.baseRepoPath);
-    getWorktreeMetadataStore().markFinished(id);
+    worktreeMetadata.markFinished(id);
 
     return { success: true };
   });

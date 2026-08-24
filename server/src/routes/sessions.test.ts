@@ -59,8 +59,7 @@ vi.mock('../services/project-mover.js', () => ({
   projectMover: { move: moveProject },
 }));
 
-vi.mock('../services/session-manager.js', () => ({
-  sessionService: {
+const sessionService = {
     listAgentProfiles: vi.fn(),
     listAgentProfileApiKeyProviders: vi.fn(),
     saveAgentProfileApiKey: vi.fn(),
@@ -104,10 +103,7 @@ vi.mock('../services/session-manager.js', () => ({
     getClientAgentDirForRoutes: vi.fn(),
     getProjectSessionDirForPath: vi.fn(),
     invalidateSessionListCache: vi.fn(),
-  },
-}));
-
-import { sessionService } from '../services/session-manager.js';
+};
 
 function createMockApp() {
   const handlers: Record<string, Function> = {};
@@ -118,6 +114,17 @@ function createMockApp() {
     put: vi.fn((path: string, handler: Function) => { handlers[`PUT ${path}`] = handler; }),
     delete: vi.fn((path: string, handler: Function) => { handlers[`DELETE ${path}`] = handler; }),
     authServices: { audit: { record: vi.fn() } },
+    services: {
+      sessions: sessionService,
+      worktrees: { resolveSessionCwd, listLocalBranches, getGitStatus, removeWorktree, pullFastForwardOnly },
+      worktreeMetadata: {
+        save: saveWorktreeMetadata,
+        get: getWorktreeMetadata,
+        getMany: vi.fn(() => new Map()),
+        listByBaseRepoPath: listWorktreeMetadataByBase,
+        markFinished: markWorktreeFinished,
+      },
+    },
     memoryRuntime: {
       service: { resolveContext: resolveMemoryContext },
       relocateProject: relocateMemoryProject,
@@ -163,6 +170,24 @@ describe('session routes', () => {
       id: 'default', label: 'default', path: '/Users/test/.pi/agent', isDefault: true,
     });
     resolveMemoryContext.mockResolvedValue({ project: { id: 'memory-project-1' } });
+  });
+
+  it('keeps session services isolated between app instances', async () => {
+    const first = createMockApp();
+    const second = createMockApp();
+    const secondSessionService = {
+      ...sessionService,
+      listAgentProfiles: vi.fn().mockResolvedValue([{ id: 'second' }]),
+    };
+    second.app.services.sessions = secondSessionService;
+    vi.mocked(sessionService.listAgentProfiles).mockResolvedValue([{ id: 'first' }] as any);
+
+    const { sessionRoutes } = await import('./sessions.js');
+    await sessionRoutes(first.app as any);
+    await sessionRoutes(second.app as any);
+
+    await expect(first.handlers['GET /agent-profiles']()).resolves.toEqual({ profiles: [{ id: 'first' }] });
+    await expect(second.handlers['GET /agent-profiles']()).resolves.toEqual({ profiles: [{ id: 'second' }] });
   });
 
   it('returns discovered agent profiles', async () => {

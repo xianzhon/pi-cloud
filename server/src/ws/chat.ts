@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { isAllowedRequestOrigin } from '../auth/origin.js';
 import { getRequestContext, getSessionFromRequest } from '../auth/request.js';
 import { validateImages, type ImageValidationResult } from '../services/image-input.js';
-import { sessionService } from '../services/session-manager.js';
+import type { PiSessionService } from '../services/session-manager.js';
 import { saveUploadedImages } from '../services/uploaded-image-store.js';
 import { sendJson } from './safe-send.js';
 
@@ -67,7 +67,7 @@ async function abortSessionBestEffort(session: { sessionId: string; abortCompact
   }
 }
 
-function formatCompactResult(result: any, status: ReturnType<typeof sessionService.getRuntimeStatus>): string {
+function formatCompactResult(result: any, status: ReturnType<PiSessionService['getRuntimeStatus']>): string {
   const lines = [
     '## Session compacted',
     '',
@@ -99,6 +99,7 @@ function formatCompactResult(result: any, status: ReturnType<typeof sessionServi
 }
 
 export async function chatWebSocket(app: FastifyInstance) {
+  const sessionService = app.services.sessions;
   app.get('/ws/chat', { websocket: true }, (socket, req) => {
     const auth = app.authServices;
     if (!isAllowedRequestOrigin(req)) {

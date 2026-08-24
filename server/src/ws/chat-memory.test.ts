@@ -18,7 +18,6 @@ const sessionService = vi.hoisted(() => ({
 
 vi.mock('./safe-send.js', () => ({ sendJson }));
 vi.mock('../auth/request.js', () => ({ getSessionFromRequest, getRequestContext }));
-vi.mock('../services/session-manager.js', () => ({ sessionService }));
 
 class FakeSocket {
   handlers = new Map<string, Function>();
@@ -62,6 +61,7 @@ async function setup() {
       audit: { record: vi.fn() },
     },
     memoryRuntime: runtime,
+    services: { sessions: sessionService },
     get: vi.fn((path: string, _options: unknown, handler: Function) => routes.set(path, handler)),
   };
   const { chatWebSocket } = await import('./chat.js');

@@ -109,17 +109,3 @@ export class WorktreeMetadataStore {
     this.db.prepare('DELETE FROM session_worktrees WHERE session_id = ?').run(sessionId);
   }
 }
-
-let worktreeMetadataStore: WorktreeMetadataStore | undefined;
-
-export function initializeWorktreeMetadataStore(db: PiuiDatabase): WorktreeMetadataStore {
-  worktreeMetadataStore = new WorktreeMetadataStore(db);
-  return worktreeMetadataStore;
-}
-
-export function getWorktreeMetadataStore(): WorktreeMetadataStore {
-  if (!worktreeMetadataStore) {
-    throw new Error('Worktree metadata store has not been initialized');
-  }
-  return worktreeMetadataStore;
-}

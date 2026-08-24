@@ -16,15 +16,6 @@ vi.mock('../auth/request.js', () => ({
   getRequestContext: vi.fn(() => ({})),
 }));
 
-vi.mock('../services/terminal-manager.js', () => ({
-  terminalManager: {
-    create: mocks.create,
-    writeTo: mocks.writeTo,
-    resize: mocks.resize,
-    dispose: mocks.dispose,
-  },
-}));
-
 class FakeSocket {
   readonly sent: string[] = [];
   readonly close = vi.fn();
@@ -50,6 +41,9 @@ async function openSocket(cwd: string) {
       authConfig: { trustProxy: false },
       sessions: {},
       audit: { record: vi.fn() },
+    },
+    services: {
+      terminals: { create: mocks.create, writeTo: mocks.writeTo, resize: mocks.resize, dispose: mocks.dispose },
     },
     get: vi.fn((routePath: string, _options: unknown, handler: Function) => routes.set(routePath, handler)),
   };

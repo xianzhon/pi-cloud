@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { DefaultResourceLoader, RpcClient, getAgentDir, getPackageDir, type Skill } from '@earendil-works/pi-coding-agent';
-import { sessionService } from '../services/session-manager.js';
+import type { PiSessionService } from '../services/session-manager.js';
 
 type SlashCommandCategory = 'skill' | 'extension' | 'built-in';
 type PiCommandSource = 'extension' | 'prompt' | 'skill';
@@ -190,7 +190,7 @@ function getCliPath(): string {
   return join(getPackageDir(), 'dist', 'cli.js');
 }
 
-async function getContextAgentDir(context?: LoadCommandsContext): Promise<string> {
+async function getContextAgentDir(sessionService: PiSessionService, context?: LoadCommandsContext): Promise<string> {
   if (!context?.clientId) return getAgentDir();
   return sessionService.getClientAgentDirForRoutes(context.clientId);
 }
@@ -268,6 +268,7 @@ function mergeCommands(...groups: SlashCommandItem[][]) {
 }
 
 async function filterSessionSkillCommands(
+  sessionService: PiSessionService,
   commands: SlashCommandItem[],
   context?: LoadCommandsContext,
 ): Promise<SlashCommandItem[]> {
@@ -281,15 +282,15 @@ async function filterSessionSkillCommands(
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-async function loadCommands(context?: LoadCommandsContext): Promise<SlashCommandItem[]> {
-  const agentDir = await getContextAgentDir(context);
+async function loadCommands(sessionService: PiSessionService, context?: LoadCommandsContext): Promise<SlashCommandItem[]> {
+  const agentDir = await getContextAgentDir(sessionService, context);
   const commands = mergeCommands(await loadCachedBaseCommands(agentDir), builtInCommands);
-  return filterSessionSkillCommands(commands, context);
+  return filterSessionSkillCommands(sessionService, commands, context);
 }
 
 export async function slashCommandRoutes(app: FastifyInstance) {
   app.get('/', async (req) => {
     const { clientId, sessionId } = req.query as { clientId?: string; sessionId?: string };
-    return { commands: await loadCommands({ clientId, sessionId }) };
+    return { commands: await loadCommands(app.services.sessions, { clientId, sessionId }) };
   });
 }

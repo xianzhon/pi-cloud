@@ -2,7 +2,6 @@ import { dirname } from 'node:path';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { MemoryContext, MemoryPatch } from '../memory/types.js';
-import { sessionService } from '../services/session-manager.js';
 
 const MEMORY_SCOPES = ['project', 'global'] as const;
 const MEMORY_CATEGORIES = ['rule', 'preference', 'decision', 'fact', 'pitfall'] as const;
@@ -95,8 +94,8 @@ export async function memoryRoutes(app: FastifyInstance) {
       const body = requestBody(req.body);
       const clientId = requiredString(body.clientId, 'clientId');
       const sessionId = requiredString(body.sessionId, 'sessionId');
-      const profile = await sessionService.getClientAgentProfile(clientId);
-      const sessionInfo = await sessionService.findPersistedSession(clientId, sessionId);
+      const profile = await app.services.sessions.getClientAgentProfile(clientId);
+      const sessionInfo = await app.services.sessions.findPersistedSession(clientId, sessionId);
       if (!sessionInfo) throw new MemoryRouteError(404, 'Session not found');
 
       const manager = SessionManager.open(sessionInfo.path, dirname(sessionInfo.path));
@@ -251,10 +250,10 @@ export async function memoryRoutes(app: FastifyInstance) {
 
 async function resolveContext(app: FastifyInstance, input: ContextInput): Promise<MemoryContext> {
   const clientId = requiredString(input.clientId, 'clientId');
-  const profile = await sessionService.getClientAgentProfile(clientId);
+  const profile = await app.services.sessions.getClientAgentProfile(clientId);
   const sessionId = optionalString(input.sessionId);
   if (sessionId) {
-    const session = await sessionService.findPersistedSession(clientId, sessionId);
+    const session = await app.services.sessions.findPersistedSession(clientId, sessionId);
     if (!session) throw new MemoryRouteError(404, 'Session not found');
     const cwd = session.cwd || optionalString(input.projectPath);
     if (!cwd) throw new MemoryRouteError(400, 'Session project path is unavailable');

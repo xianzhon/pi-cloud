@@ -75,5 +75,3 @@ export class TerminalManager {
     }
   }
 }
-
-export const terminalManager = new TerminalManager();

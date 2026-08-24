@@ -8,7 +8,7 @@ import { AuthStorage, ModelRegistry } from '@earendil-works/pi-coding-agent';
 import type { FastifyInstance } from 'fastify';
 import type { SessionActivityStore } from '../services/session-activity-store.js';
 import { CommitMessagePromptStore, DEFAULT_COMMIT_MESSAGE_PROMPTS, type CommitMessagePrompts } from '../services/commit-message-prompt-store.js';
-import { sessionService } from '../services/session-manager.js';
+import type { PiSessionService } from '../services/session-manager.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
 
 const execFileAsync = promisify(execFile);
@@ -223,7 +223,7 @@ ${diff.trim() || '(empty)'}
 --- END GIT DIFF ---`;
 }
 
-async function completeWithClientModel(clientId: string, unavailableMessage: string, request: Parameters<typeof completeSimple>[1], options: { maxTokens: number; sessionId: string; operation: string }) {
+async function completeWithClientModel(sessionService: PiSessionService, clientId: string, unavailableMessage: string, request: Parameters<typeof completeSimple>[1], options: { maxTokens: number; sessionId: string; operation: string }) {
   const agentDir = await sessionService.getClientAgentDirForRoutes(clientId);
   return sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
     const profile = await sessionService.getClientAgentProfile(clientId);
@@ -260,8 +260,8 @@ async function completeWithClientModel(clientId: string, unavailableMessage: str
   });
 }
 
-async function generateBranchNameWithAi(clientId: string, cwd: string, status: string, diff: string) {
-  const response = await completeWithClientModel(clientId, 'No available AI model configured for branch naming', {
+async function generateBranchNameWithAi(sessionService: PiSessionService, clientId: string, cwd: string, status: string, diff: string) {
+  const response = await completeWithClientModel(sessionService, clientId, 'No available AI model configured for branch naming', {
     systemPrompt: 'You create safe, concise git branch names from code changes.',
     messages: [{ role: 'user', content: branchPrompt(status, diff), timestamp: Date.now() }],
     tools: [],
@@ -280,8 +280,8 @@ async function generateBranchNameWithAi(clientId: string, cwd: string, status: s
   return name;
 }
 
-async function generateCommitMessageWithAi(clientId: string, cwd: string, status: string, diff: string, prompts: CommitMessagePrompts) {
-  const response = await completeWithClientModel(clientId, 'No available AI model configured for commit message generation', {
+async function generateCommitMessageWithAi(sessionService: PiSessionService, clientId: string, cwd: string, status: string, diff: string, prompts: CommitMessagePrompts) {
+  const response = await completeWithClientModel(sessionService, clientId, 'No available AI model configured for commit message generation', {
     systemPrompt: prompts.systemPrompt,
     messages: [{ role: 'user', content: commitMessagePrompt(prompts.userPrompt, status, diff), timestamp: Date.now() }],
     tools: [],
@@ -450,7 +450,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
         return reply.status(400).send({ error: 'No git changes to suggest a branch name from' });
       }
 
-      const name = await generateBranchNameWithAi(clientId, resolvedCwd, status, diff);
+      const name = await generateBranchNameWithAi(app.services.sessions, clientId, resolvedCwd, status, diff);
       return { cwd: resolvedCwd, name, files };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate git branch name';
@@ -479,7 +479,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
       }
 
       const prompts = options.commitMessagePrompts?.get(resolvedCwd).effective || DEFAULT_COMMIT_MESSAGE_PROMPTS;
-      const message = await generateCommitMessageWithAi(clientId, resolvedCwd, status, diff, prompts);
+      const message = await generateCommitMessageWithAi(app.services.sessions, clientId, resolvedCwd, status, diff, prompts);
       return { cwd: resolvedCwd, message, files };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate commit message';

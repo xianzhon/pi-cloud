@@ -1,12 +1,10 @@
 import Fastify from 'fastify';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-vi.mock('../services/session-manager.js', () => ({
-  sessionService: {
-    getClientAgentDirForRoutes: vi.fn(),
-    listSessionAvailableSkillNames: vi.fn(),
-  },
-}));
+const sessionService = {
+  getClientAgentDirForRoutes: vi.fn(),
+  listSessionAvailableSkillNames: vi.fn(),
+};
 
 const mockReload = vi.fn();
 const mockGetSkills = vi.fn();
@@ -29,11 +27,10 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
   getPackageDir: vi.fn(() => '/opt/pi-coding-agent'),
 }));
 
-const { sessionService } = await import('../services/session-manager.js');
-
 async function buildApp() {
   const { slashCommandRoutes } = await import('./slash-commands');
   const app = Fastify();
+  app.decorate('services', { sessions: sessionService } as any);
   await app.register(slashCommandRoutes, { prefix: '/api/slash-commands' });
   return app;
 }

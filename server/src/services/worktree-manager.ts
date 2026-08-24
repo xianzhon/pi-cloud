@@ -166,5 +166,3 @@ export class WorktreeManager {
     return Boolean(name.trim()) && !isAbsolute(name) && !name.includes('/') && !name.includes('\\') && basename(name) === name;
   }
 }
-
-export const worktreeManager = new WorktreeManager();

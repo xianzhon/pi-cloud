@@ -2,10 +2,10 @@
 import type { FastifyInstance } from 'fastify';
 import { isAllowedRequestOrigin } from '../auth/origin.js';
 import { getRequestContext, getSessionFromRequest } from '../auth/request.js';
-import { terminalManager } from '../services/terminal-manager.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
 
 export async function terminalWebSocket(app: FastifyInstance) {
+  const terminalManager = app.services.terminals;
   app.get('/ws/terminal', { websocket: true }, async (socket, req) => {
     const { clientId, cwd } = req.query as { 
       clientId?: string; 

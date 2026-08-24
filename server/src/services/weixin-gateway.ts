@@ -8,7 +8,7 @@ import type { PiuiDatabase } from '../db/database.js';
 import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_COUNT, sniffImageMimeType, validateImages } from './image-input.js';
-import { sessionService } from './session-manager.js';
+import type { PiSessionService } from './session-manager.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
 import { saveWeixinImage } from './weixin-image-store.js';
 import { buildWeixinCdnDownloadUrl, decryptWeixinMedia, parseWeixinAesKey } from './weixin-media-crypto.js';
@@ -110,7 +110,11 @@ export class WeixinGatewayService {
   private pairingState: WeixinPairingState = { status: 'idle' };
   private pairingPromise?: Promise<void>;
 
-  constructor(private readonly db: PiuiDatabase, gatewaySettings?: GatewaySettingsStore) {
+  constructor(
+    private readonly db: PiuiDatabase,
+    gatewaySettings: GatewaySettingsStore | undefined,
+    private readonly sessionService: PiSessionService,
+  ) {
     this.presetStore = new SkillPresetStore(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
   }
@@ -517,7 +521,7 @@ export class WeixinGatewayService {
 
     const stopTypingIndicator = this.startTypingIndicator(config, message.chatId);
     try {
-      await sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
+      await this.sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
         await session.prompt(promptText, imageResult.images.length ? { images: imageResult.images } : undefined);
       });
     } finally {
@@ -548,18 +552,18 @@ export class WeixinGatewayService {
   }
 
   private async ensureSession(clientId: string, config: WeixinGatewayConfig) {
-    await sessionService.setClientAgentProfile(clientId, config.agentProfile || 'default');
+    await this.sessionService.setClientAgentProfile(clientId, config.agentProfile || 'default');
 
-    const active = sessionService.getSession(clientId);
+    const active = this.sessionService.getSession(clientId);
     if (active) return active;
 
     const mappedSessionId = this.getMappedSessionId(clientId);
     if (mappedSessionId) {
-      const persisted = await sessionService.findPersistedSession(clientId, mappedSessionId);
-      if (persisted) return sessionService.resumeSession(clientId, persisted.path);
+      const persisted = await this.sessionService.findPersistedSession(clientId, mappedSessionId);
+      if (persisted) return this.sessionService.resumeSession(clientId, persisted.path);
     }
 
-    const result = await sessionService.createSession(clientId, await this.createSessionOptions(config));
+    const result = await this.sessionService.createSession(clientId, await this.createSessionOptions(config));
     this.saveSessionMapping(clientId, result.session.sessionId);
     return result.session;
   }
@@ -702,14 +706,14 @@ export class WeixinGatewayService {
   }
 
   private resetSession(clientId: string): void {
-    sessionService.disposeSession(clientId);
+    this.sessionService.disposeSession(clientId);
     this.deleteSessionMapping(clientId);
   }
 
   private async setChatProfile(clientId: string, profileId?: string): Promise<void> {
     const profile = profileId?.trim();
     if (!profile) throw new Error('Usage: /profile <profile-id>');
-    const profiles = await sessionService.listAgentProfiles();
+    const profiles = await this.sessionService.listAgentProfiles();
     if (!profiles.some((item) => item.id === profile)) throw new Error(`Unknown profile: ${profile}`);
     this.saveChatConfig(clientId, { agentProfile: profile });
   }
@@ -732,9 +736,9 @@ export class WeixinGatewayService {
   }
 
   private async formatStatus(clientId: string, config: WeixinGatewayConfig, prefix?: string): Promise<string> {
-    const profiles = await sessionService.listAgentProfiles();
+    const profiles = await this.sessionService.listAgentProfiles();
     const profile = profiles.find((item) => item.id === (config.agentProfile || 'default')) || profiles[0];
-    const active = sessionService.getSession(clientId);
+    const active = this.sessionService.getSession(clientId);
     return [
       prefix,
       'Pi session status',
@@ -749,7 +753,7 @@ export class WeixinGatewayService {
   }
 
   private async formatProfiles(currentProfile: string): Promise<string> {
-    const profiles = await sessionService.listAgentProfiles();
+    const profiles = await this.sessionService.listAgentProfiles();
     return ['Available profiles:', ...profiles.map((profile) => `${profile.id === currentProfile ? '*' : ' '} ${profile.id}`)].join('\n');
   }
 
