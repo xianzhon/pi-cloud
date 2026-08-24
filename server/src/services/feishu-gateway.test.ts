@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { openPiuiDatabase } from '../db/database';
 import { FeishuGatewayService } from './feishu-gateway';
 import { GatewaySettingsStore } from './gateway-settings-store';
 import { sessionService } from './session-manager';
@@ -26,7 +26,7 @@ describe('FeishuGatewayService', () => {
     process.env.PI_WEBUI_FEISHU_APP_SECRET = 'secret_test';
     process.env.PI_WEBUI_FEISHU_VERIFICATION_TOKEN = 'verify_test';
     process.env.PI_WEBUI_FEISHU_ENCRYPT_KEY = 'encrypt_test';
-    const service = new FeishuGatewayService(new Database(':memory:') as any);
+    const service = new FeishuGatewayService(openPiuiDatabase(':memory:') as any);
 
     const encrypted = encryptFeishuPayload(process.env.PI_WEBUI_FEISHU_ENCRYPT_KEY, {
       type: 'url_verification',
@@ -43,7 +43,7 @@ describe('FeishuGatewayService', () => {
     process.env.PI_WEBUI_FEISHU_APP_ID = 'cli_test';
     process.env.PI_WEBUI_FEISHU_APP_SECRET = 'secret_test';
     delete process.env.PI_WEBUI_FEISHU_VERIFICATION_TOKEN;
-    const service = new FeishuGatewayService(new Database(':memory:') as any);
+    const service = new FeishuGatewayService(openPiuiDatabase(':memory:') as any);
 
     await expect(service.handleCallback({ type: 'url_verification', challenge: 'challenge_test' })).rejects.toMatchObject({
       message: 'Feishu gateway is not configured',
@@ -56,7 +56,7 @@ describe('FeishuGatewayService', () => {
     process.env.PI_WEBUI_FEISHU_APP_SECRET = 'secret_test';
     process.env.PI_WEBUI_FEISHU_VERIFICATION_TOKEN = 'verify_test';
     delete process.env.PI_WEBUI_FEISHU_ENCRYPT_KEY;
-    const service = new FeishuGatewayService(new Database(':memory:') as any);
+    const service = new FeishuGatewayService(openPiuiDatabase(':memory:') as any);
     const encrypted = encryptFeishuPayload('encrypt_test', { type: 'url_verification' });
 
     await expect(service.handleCallback({ encrypt: encrypted })).rejects.toMatchObject({
@@ -66,7 +66,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('persists a Feishu chat profile selected by command', async () => {
-    const db = new Database(':memory:');
+    const db = openPiuiDatabase(':memory:');
     const service = new FeishuGatewayService(db as any);
     const replies: string[] = [];
     (service as any).sendReply = vi.fn(async (_config, _messageId, text) => replies.push(text));
@@ -85,8 +85,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('loads default gateway profile and skillset from Web UI settings', () => {
-    const db = new Database(':memory:');
-    createSkillPresetTable(db);
+    const db = openPiuiDatabase(':memory:');
     db.prepare(`
       INSERT INTO skill_presets (id, username, name, mode, skills_json, created_at, updated_at)
       VALUES ('preset-debug', 'me', 'debug', 'enabled', '["systematic-debugging"]', 'now', 'now')
@@ -103,7 +102,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('saves gateway cwd choices and lists them by command', async () => {
-    const db = new Database(':memory:');
+    const db = openPiuiDatabase(':memory:');
     const settings = new GatewaySettingsStore(db as any);
     const service = new FeishuGatewayService(db as any);
     const replies: string[] = [];
@@ -123,7 +122,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('uses the first Web UI cwd choice as the default cwd', () => {
-    const db = new Database(':memory:');
+    const db = openPiuiDatabase(':memory:');
     const settings = new GatewaySettingsStore(db as any);
     settings.save({ cwds: ['/workspace/default', '/workspace/other'] });
     const service = new FeishuGatewayService(db as any, settings);
@@ -135,7 +134,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('reports no gateway folders when no Web UI cwd choices exist', async () => {
-    const service = new FeishuGatewayService(new Database(':memory:') as any);
+    const service = new FeishuGatewayService(openPiuiDatabase(':memory:') as any);
     const replies: string[] = [];
     (service as any).sendReply = vi.fn(async (_config, _messageId, text) => replies.push(text));
     const config = (service as any).loadConfig();
@@ -146,7 +145,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('switches Feishu cwd only through Web UI configured cwd choices', async () => {
-    const db = new Database(':memory:');
+    const db = openPiuiDatabase(':memory:');
     const service = new FeishuGatewayService(db as any);
     (service as any).sendReply = vi.fn(async () => undefined);
     sessionService.listAgentProfiles = vi.fn(async () => [
@@ -163,7 +162,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('rejects arbitrary Feishu cwd paths', async () => {
-    const service = new FeishuGatewayService(new Database(':memory:') as any);
+    const service = new FeishuGatewayService(openPiuiDatabase(':memory:') as any);
     const replies: string[] = [];
     (service as any).sendReply = vi.fn(async (_config, _messageId, text) => replies.push(text));
     const config = { ...minimalConfig(), cwdChoices: [process.cwd()] };
@@ -174,8 +173,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('persists a Feishu chat skillset selected by command', async () => {
-    const db = new Database(':memory:');
-    createSkillPresetTable(db);
+    const db = openPiuiDatabase(':memory:');
     db.prepare(`
       INSERT INTO skill_presets (id, username, name, mode, skills_json, created_at, updated_at)
       VALUES ('preset-debug', 'me', 'debug', 'enabled', '["systematic-debugging"]', 'now', 'now')
@@ -200,7 +198,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('formats Feishu status as a readable bullet summary', async () => {
-    const service = new FeishuGatewayService(new Database(':memory:') as any);
+    const service = new FeishuGatewayService(openPiuiDatabase(':memory:') as any);
     sessionService.listAgentProfiles = vi.fn(async () => [
       { id: 'default', label: 'default', path: '/tmp/default', isDefault: true, defaultProvider: 'openrouter', defaultModel: 'model-a' },
     ] as any);
@@ -218,7 +216,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('lists common command aliases in help', () => {
-    const service = new FeishuGatewayService(new Database(':memory:') as any);
+    const service = new FeishuGatewayService(openPiuiDatabase(':memory:') as any);
 
     const help = (service as any).formatHelp();
 
@@ -229,7 +227,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('returns status summary after /new resets the Feishu session', async () => {
-    const service = new FeishuGatewayService(new Database(':memory:') as any);
+    const service = new FeishuGatewayService(openPiuiDatabase(':memory:') as any);
     const replies: string[] = [];
     (service as any).sendReply = vi.fn(async (_config, _messageId, text) => replies.push(text));
     sessionService.listAgentProfiles = vi.fn(async () => [
@@ -246,21 +244,6 @@ describe('FeishuGatewayService', () => {
     expect(replies[0]).toContain('- Session: not started');
   });
 });
-
-function createSkillPresetTable(db: Database.Database): void {
-  db.exec(`
-    CREATE TABLE skill_presets (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL,
-      name TEXT NOT NULL,
-      mode TEXT NOT NULL CHECK (mode IN ('enabled', 'disabled')),
-      skills_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      UNIQUE (username, name)
-    )
-  `);
-}
 
 function minimalConfig() {
   return {

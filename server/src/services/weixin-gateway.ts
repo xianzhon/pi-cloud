@@ -98,53 +98,6 @@ const TYPING_STATUS_CANCEL = 2;
 const TYPING_KEEPALIVE_INTERVAL_MS = 5000;
 const directImageFetchAgent = new Agent();
 
-const WEIXIN_SESSION_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_sessions (
-    session_key TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    pi_session_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`;
-const WEIXIN_CONFIG_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_configs (
-    client_id TEXT PRIMARY KEY,
-    agent_profile TEXT,
-    default_cwd TEXT,
-    skill_mode TEXT,
-    skill_preset_id TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`;
-const WEIXIN_STATE_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_state (
-    account_id TEXT PRIMARY KEY,
-    sync_buf TEXT,
-    updated_at TEXT NOT NULL
-  )
-`;
-const WEIXIN_CONTEXT_TOKEN_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_context_tokens (
-    account_id TEXT NOT NULL,
-    peer_id TEXT NOT NULL,
-    context_token TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (account_id, peer_id)
-  )
-`;
-const WEIXIN_CREDENTIAL_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_credentials (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    account_id TEXT NOT NULL,
-    token TEXT NOT NULL,
-    base_url TEXT NOT NULL,
-    user_id TEXT,
-    updated_at TEXT NOT NULL
-  )
-`;
-
 export class WeixinGatewayService {
   private readonly presetStore: SkillPresetStore;
   private readonly gatewaySettings: GatewaySettingsStore;
@@ -160,12 +113,6 @@ export class WeixinGatewayService {
   constructor(private readonly db: PiuiDatabase, gatewaySettings?: GatewaySettingsStore) {
     this.presetStore = new SkillPresetStore(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
-    this.db.exec(WEIXIN_SESSION_TABLE_SQL);
-    this.db.exec(WEIXIN_CONFIG_TABLE_SQL);
-    this.db.exec(WEIXIN_STATE_TABLE_SQL);
-    this.db.exec(WEIXIN_CONTEXT_TOKEN_TABLE_SQL);
-    this.db.exec(WEIXIN_CREDENTIAL_TABLE_SQL);
-    this.ensureConfigColumns();
   }
 
   start(): void {
@@ -248,16 +195,6 @@ export class WeixinGatewayService {
       dmPolicy: parseDmPolicy(process.env.PI_WEBUI_WECHAT_DM_POLICY),
       allowedUsers: parseList(process.env.PI_WEBUI_WECHAT_ALLOWED_USERS),
     };
-  }
-
-  private ensureConfigColumns(): void {
-    for (const column of ['skill_mode TEXT', 'skill_preset_id TEXT']) {
-      try {
-        this.db.exec(`ALTER TABLE weixin_gateway_configs ADD COLUMN ${column}`);
-      } catch {
-        // Existing installations may already have the column.
-      }
-    }
   }
 
   private async pollPairing(qrcode: string): Promise<void> {

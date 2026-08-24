@@ -48,27 +48,6 @@ const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000;
 const NO_GATEWAY_FOLDERS_MESSAGE = 'No gateway folders configured.';
 const GATEWAY_FOLDERS_REQUIRED_MESSAGE = `${NO_GATEWAY_FOLDERS_MESSAGE} Add at least one allowed folder in Web UI Settings > Gateway.`;
 
-const FEISHU_SESSION_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS feishu_gateway_sessions (
-    session_key TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    pi_session_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`;
-const FEISHU_CONFIG_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS feishu_gateway_configs (
-    client_id TEXT PRIMARY KEY,
-    agent_profile TEXT,
-    default_cwd TEXT,
-    skill_mode TEXT,
-    skill_preset_id TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`;
-
 export class FeishuGatewayService {
   private readonly presetStore: SkillPresetStore;
   private readonly gatewaySettings: GatewaySettingsStore;
@@ -79,9 +58,6 @@ export class FeishuGatewayService {
   constructor(private readonly db: PiuiDatabase, gatewaySettings?: GatewaySettingsStore) {
     this.presetStore = new SkillPresetStore(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
-    this.db.exec(FEISHU_SESSION_TABLE_SQL);
-    this.db.exec(FEISHU_CONFIG_TABLE_SQL);
-    this.ensureConfigColumns();
   }
 
   async handleCallback(body: unknown): Promise<Record<string, unknown>> {
@@ -128,16 +104,6 @@ export class FeishuGatewayService {
       modelId: gatewaySettings.defaultModelId,
       ...this.resolveSkillsetConfig(gatewaySettings.defaultSkillset),
     };
-  }
-
-  private ensureConfigColumns(): void {
-    for (const column of ['skill_mode TEXT', 'skill_preset_id TEXT']) {
-      try {
-        this.db.exec(`ALTER TABLE feishu_gateway_configs ADD COLUMN ${column}`);
-      } catch {
-        // Existing installations may already have the column.
-      }
-    }
   }
 
   private isConfigured(config: FeishuGatewayConfig): boolean {
