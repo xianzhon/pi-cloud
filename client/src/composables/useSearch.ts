@@ -1,5 +1,5 @@
 // client/src/composables/useSearch.ts
-import { ref, watch } from 'vue';
+import { ref } from 'vue';
 import { getTabClientId } from '../utils/tabClientId';
 
 export interface SearchResult {

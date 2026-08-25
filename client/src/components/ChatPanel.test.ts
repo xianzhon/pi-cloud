@@ -672,7 +672,7 @@ describe('ChatPanel', () => {
   });
 
   it('defaults to deleting the original branch when switching', async () => {
-    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
       const url = String(input);
       if (url.includes('/api/git/branches')) {
         return new Response(JSON.stringify({ current: 'feature/old', branches: ['feature/old', 'main'] }), { status: 200 });

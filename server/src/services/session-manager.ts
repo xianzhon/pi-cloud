@@ -793,7 +793,6 @@ export class PiSessionService {
     const sessionManager = options.noSession
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd, this.getProjectSessionDir(cwd, agentDir));
-    const sessionId = sessionManager.getSessionId();
     const availableSkills = await this.loadSkills(cwd, agentDir);
     const skillPolicy = this.resolveAppliedSkillPolicy(availableSkills, options);
     const memoryEnabled = Boolean(this.memoryRuntime) && options.memoryEnabled !== false && !options.noSession;
@@ -837,7 +836,6 @@ export class PiSessionService {
 
     const { profile, agentDir } = await this.getClientProfileProxyEnv(clientId);
     const sessionManager = SessionManager.open(sessionPath, dirname(sessionPath));
-    const sessionId = sessionManager.getSessionId();
     const cwd = this.getSessionManagerCwd(sessionManager, sessionPath);
     const extensionFactories = this.createInlineExtensions({
       profileId: profile.id,

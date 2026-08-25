@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openPiuiDatabase } from '../db/database';
 import { FeishuGatewayService } from './feishu-gateway';
 import { GatewaySettingsStore } from './gateway-settings-store';

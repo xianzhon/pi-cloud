@@ -42,7 +42,10 @@
     "start": "pnpm -r run start",
     "start:prod": "pnpm --filter @pi-webui/server start",
     "test": "pnpm -r --if-present run test:run",
-    "test:watch": "pnpm -r --if-present run test"
+    "test:coverage": "pnpm -r --if-present run test:coverage",
+    "test:watch": "pnpm -r --if-present run test",
+    "lint": "oxlint --deny-warnings client/src server/src bin client/*.config.ts server/*.config.ts server/build.mjs",
+    "format:check": "prettier --check package.json client/package.json server/package.json pnpm-workspace.yaml .oxlintrc.json .prettierrc.json .github client/*.config.ts server/*.config.ts server/build.mjs client/src/test/setup.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "catalog:",
@@ -61,5 +64,9 @@
     "qrcode": "catalog:",
     "typebox": "catalog:",
     "undici": "catalog:"
+  },
+  "devDependencies": {
+    "oxlint": "^1.80.0",
+    "prettier": "^3.9.6"
   }
 }

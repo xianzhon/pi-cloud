@@ -689,7 +689,7 @@ const activeEditTitle = computed(() => t(activeIsHtml.value
   ? 'components.editorPanel.editHtmlSource'
   : 'components.editorPanel.editMarkdownSource'));
 const activeMarkdownHtml = computed(() => {
-  previewVersion.value;
+  void previewVersion.value;
   const filePath = activeTab.value;
   if (!filePath) return '';
   const model = models.get(filePath);
@@ -697,7 +697,7 @@ const activeMarkdownHtml = computed(() => {
   return sanitizeHtmlFragment(renderMarkdownPreview(model.getValue()));
 });
 const activeHtmlDocument = computed(() => {
-  previewVersion.value;
+  void previewVersion.value;
   const filePath = activeTab.value;
   const model = filePath ? models.get(filePath) : undefined;
   return filePath && model ? renderHtmlPreview(model.getValue(), filePath) : '';

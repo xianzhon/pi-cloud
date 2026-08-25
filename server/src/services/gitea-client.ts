@@ -87,7 +87,7 @@ export class GiteaClient {
       Accept: 'application/json',
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       Authorization: `token ${this.settings.token}`,
-      ...(init.headers || {}),
+      ...init.headers,
     };
   }
 }
