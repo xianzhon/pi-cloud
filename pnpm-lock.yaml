@@ -4,6 +4,54 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@earendil-works/pi-ai':
+      specifier: 0.80.6
+      version: 0.80.6
+    '@earendil-works/pi-coding-agent':
+      specifier: 0.80.6
+      version: 0.80.6
+    '@fastify/cookie':
+      specifier: ^11.0.2
+      version: 11.0.2
+    '@fastify/cors':
+      specifier: ^10.0.0
+      version: 10.0.0
+    '@fastify/static':
+      specifier: ^10.1.3
+      version: 10.1.3
+    '@fastify/websocket':
+      specifier: ^11.2.0
+      version: 11.2.0
+    '@lydell/node-pty':
+      specifier: 1.1.0
+      version: 1.1.0
+    archiver:
+      specifier: ^8.0.0
+      version: 8.0.0
+    better-sqlite3:
+      specifier: ^13.0.3
+      version: 13.0.3
+    dotenv:
+      specifier: ^17.4.2
+      version: 17.4.2
+    fastify:
+      specifier: ^5.11.3
+      version: 5.11.3
+    glob:
+      specifier: ^13.0.6
+      version: 13.0.6
+    otplib:
+      specifier: ^13.4.1
+      version: 13.4.1
+    qrcode:
+      specifier: ^1.5.4
+      version: 1.5.4
+    typebox:
+      specifier: 1.1.38
+      version: 1.1.38
+
 overrides:
   brace-expansion: '>=5.0.9'
   nanoid: '>=3.3.17'
@@ -15,49 +63,49 @@ importers:
   .:
     dependencies:
       '@earendil-works/pi-ai':
-        specifier: 0.80.6
+        specifier: 'catalog:'
         version: 0.80.6(ws@8.21.3)(zod@4.4.3)
       '@earendil-works/pi-coding-agent':
-        specifier: 0.80.6
+        specifier: 'catalog:'
         version: 0.80.6(ws@8.21.3)(zod@4.4.3)
       '@fastify/cookie':
-        specifier: ^11.0.2
+        specifier: 'catalog:'
         version: 11.0.2
       '@fastify/cors':
-        specifier: ^10.0.0
+        specifier: 'catalog:'
         version: 10.0.0
       '@fastify/static':
-        specifier: ^10.1.3
+        specifier: 'catalog:'
         version: 10.1.3
       '@fastify/websocket':
-        specifier: ^11.2.0
+        specifier: 'catalog:'
         version: 11.2.0
       '@lydell/node-pty':
-        specifier: 1.1.0
+        specifier: 'catalog:'
         version: 1.1.0
       archiver:
-        specifier: ^8.0.0
+        specifier: 'catalog:'
         version: 8.0.0
       better-sqlite3:
-        specifier: ^13.0.3
+        specifier: 'catalog:'
         version: 13.0.3
       dotenv:
-        specifier: ^17.4.2
+        specifier: 'catalog:'
         version: 17.4.2
       fastify:
-        specifier: ^5.11.3
+        specifier: 'catalog:'
         version: 5.11.3
       glob:
-        specifier: ^13.0.6
+        specifier: 'catalog:'
         version: 13.0.6
       otplib:
-        specifier: ^13.4.1
+        specifier: 'catalog:'
         version: 13.4.1
       qrcode:
-        specifier: ^1.5.4
+        specifier: 'catalog:'
         version: 1.5.4
       typebox:
-        specifier: 1.1.38
+        specifier: 'catalog:'
         version: 1.1.38
       undici:
         specifier: '>=8.9.0'
@@ -124,49 +172,49 @@ importers:
   server:
     dependencies:
       '@earendil-works/pi-ai':
-        specifier: 0.80.6
+        specifier: 'catalog:'
         version: 0.80.6(ws@8.21.3)(zod@4.4.3)
       '@earendil-works/pi-coding-agent':
-        specifier: 0.80.6
+        specifier: 'catalog:'
         version: 0.80.6(ws@8.21.3)(zod@4.4.3)
       '@fastify/cookie':
-        specifier: ^11.0.2
+        specifier: 'catalog:'
         version: 11.0.2
       '@fastify/cors':
-        specifier: ^10.0.0
+        specifier: 'catalog:'
         version: 10.0.0
       '@fastify/static':
-        specifier: ^10.1.3
+        specifier: 'catalog:'
         version: 10.1.3
       '@fastify/websocket':
-        specifier: ^11.2.0
+        specifier: 'catalog:'
         version: 11.2.0
       '@lydell/node-pty':
-        specifier: 1.1.0
+        specifier: 'catalog:'
         version: 1.1.0
       archiver:
-        specifier: ^8.0.0
+        specifier: 'catalog:'
         version: 8.0.0
       better-sqlite3:
-        specifier: ^13.0.3
+        specifier: 'catalog:'
         version: 13.0.3
       dotenv:
-        specifier: ^17.4.2
+        specifier: 'catalog:'
         version: 17.4.2
       fastify:
-        specifier: ^5.11.3
+        specifier: 'catalog:'
         version: 5.11.3
       glob:
-        specifier: ^13.0.6
+        specifier: 'catalog:'
         version: 13.0.6
       otplib:
-        specifier: ^13.4.1
+        specifier: 'catalog:'
         version: 13.4.1
       qrcode:
-        specifier: ^1.5.4
+        specifier: 'catalog:'
         version: 1.5.4
       typebox:
-        specifier: 1.1.38
+        specifier: 'catalog:'
         version: 1.1.38
       undici:
         specifier: '>=8.9.0'
@@ -1293,10 +1341,6 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  agent-base@7.1.0:
-    resolution: {integrity: sha512-o/zjMZRhJxny7OyEF+Op8X+efiELC7k7yOjMzgfzVqOzXqkBkWI79YoTdOtsuWd5BWhAGAuOY/Xa6xpiaWXiNg==}
-    engines: {node: '>= 14'}
-
   agent-base@7.1.2:
     resolution: {integrity: sha512-JVzqkCNRT+VfqzzgPWDPnwvDheSAUdiMUn3NoLXpDJF5lRqeJqyC9iGsAxIOAW+mzIdq+uP1TvcX6bMtrH0agg==}
     engines: {node: '>= 14'}
@@ -1501,10 +1545,6 @@ packages:
 
   content-disposition@2.0.1:
     resolution: {integrity: sha512-e+H0ZXHSWYrENhQzw1LPuP4oF5MzVKmDU6d3hxlvaPEYLLg62MxtQNPRx4SYSuYJSBUgnQIG4HIN2tEtNv7Dog==}
-    engines: {node: '>=18'}
-
-  cookie@1.0.1:
-    resolution: {integrity: sha512-Xd8lFX4LM9QEEwxQpF9J9NTUh8pmdJO0cyRJhFiDoLTk2eH8FXlRv2IFGYVadZpqI3j8fhNrSdKCeYPxiAhLXw==}
     engines: {node: '>=18'}
 
   cookie@1.1.1:
@@ -4031,12 +4071,6 @@ snapshots:
 
   acorn@8.16.0: {}
 
-  agent-base@7.1.0:
-    dependencies:
-      debug: 4.4.3
-    transitivePeerDependencies:
-      - supports-color
-
   agent-base@7.1.2:
     dependencies:
       debug: 4.4.3
@@ -4223,8 +4257,6 @@ snapshots:
       proto-list: 1.2.4
 
   content-disposition@2.0.1: {}
-
-  cookie@1.0.1: {}
 
   cookie@1.1.1: {}
 
@@ -4487,7 +4519,7 @@ snapshots:
       '@one-ini/wasm': 0.1.1
       commander: 10.0.1
       minimatch: 9.0.9
-      semver: 7.8.1
+      semver: 7.8.5
 
   emoji-regex@8.0.0: {}
 
@@ -4725,7 +4757,7 @@ snapshots:
 
   http-proxy-agent@7.0.2:
     dependencies:
-      agent-base: 7.1.0
+      agent-base: 7.1.2
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
@@ -4831,7 +4863,7 @@ snapshots:
 
   light-my-request@6.6.0:
     dependencies:
-      cookie: 1.0.1
+      cookie: 1.1.1
       process-warning: 4.0.0
       set-cookie-parser: 2.6.0
 
@@ -5087,7 +5119,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 20.19.41
+      '@types/node': 22.20.1
       long: 5.3.2
 
   qrcode@1.5.4:
