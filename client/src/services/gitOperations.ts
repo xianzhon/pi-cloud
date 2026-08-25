@@ -1,3 +1,5 @@
+import { apiRequest } from './apiClient';
+
 type JsonRecord = Record<string, any>;
 
 function queryString(values: Record<string, string | boolean | undefined>): string {
@@ -8,18 +10,14 @@ function queryString(values: Record<string, string | boolean | undefined>): stri
   return params.toString();
 }
 
-async function requestJson(url: string, init?: RequestInit): Promise<JsonRecord> {
-  const response = init ? await fetch(url, init) : await fetch(url);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-  return data;
+function requestJson(url: string): Promise<JsonRecord> {
+  return apiRequest<JsonRecord>(url);
 }
 
-function postJson(url: string, body: Record<string, unknown>) {
-  return requestJson(url, {
+function postJson<TRequest extends Record<string, unknown>>(url: string, body: TRequest): Promise<JsonRecord> {
+  return apiRequest<JsonRecord, TRequest>(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body,
   });
 }
 

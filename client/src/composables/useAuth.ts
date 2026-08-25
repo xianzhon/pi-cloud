@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
+import { apiRequest, getApiErrorMessage, onSessionExpired } from '../services/apiClient';
 
-interface AuthUser {
+export interface AuthUser {
   username: string;
   totpEnabled: boolean;
 }
@@ -12,13 +13,37 @@ const loginError = ref<string | null>(null);
 const sessionExpiresAt = ref<string | null>(null);
 const stagedCredentials = ref<{ username: string; password: string } | null>(null);
 
+interface AuthStatusResponse {
+  authenticated: boolean;
+  user: AuthUser | null;
+  sessionExpiresAt?: string | null;
+}
+
+interface LoginRequest {
+  username: string;
+  password: string;
+  totpCode?: string;
+}
+
+interface LoginResponse extends AuthStatusResponse {
+  requires2fa: boolean;
+}
+
+function clearSession(): void {
+  user.value = null;
+  sessionExpiresAt.value = null;
+  requires2fa.value = false;
+  stagedCredentials.value = null;
+}
+
+onSessionExpired(clearSession);
+
 async function refresh() {
   loading.value = true;
   try {
-    const response = await fetch('/api/auth/me');
-    const data = await response.json();
-    user.value = response.ok && data.authenticated ? data.user : null;
-    sessionExpiresAt.value = response.ok && data.authenticated ? data.sessionExpiresAt || null : null;
+    const data = await apiRequest<AuthStatusResponse>('/api/auth/me');
+    user.value = data.authenticated ? data.user : null;
+    sessionExpiresAt.value = data.authenticated ? data.sessionExpiresAt || null : null;
     requires2fa.value = false;
   } finally {
     loading.value = false;
@@ -27,15 +52,15 @@ async function refresh() {
 
 async function login(username: string, password: string, totpCode?: string) {
   loginError.value = null;
-  const response = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, totpCode }),
-  });
-  const data = await response.json();
-
-  if (!response.ok) {
-    loginError.value = data.error || 'Login failed';
+  let data: LoginResponse;
+  try {
+    data = await apiRequest<LoginResponse, LoginRequest>('/api/auth/login', {
+      method: 'POST',
+      body: { username, password, totpCode },
+      handleUnauthorized: false,
+    });
+  } catch (error) {
+    loginError.value = getApiErrorMessage(error, 'Login failed');
     return false;
   }
 
@@ -58,11 +83,8 @@ async function submitTotp(code: string) {
 }
 
 async function logout() {
-  await fetch('/api/auth/logout', { method: 'POST' });
-  user.value = null;
-  sessionExpiresAt.value = null;
-  requires2fa.value = false;
-  stagedCredentials.value = null;
+  await apiRequest<void>('/api/auth/logout', { method: 'POST' });
+  clearSession();
 }
 
 export function useAuth() {
@@ -81,10 +103,7 @@ export function useAuth() {
 }
 
 export function resetAuthForTests() {
-  user.value = null;
+  clearSession();
   loading.value = false;
-  requires2fa.value = false;
   loginError.value = null;
-  sessionExpiresAt.value = null;
-  stagedCredentials.value = null;
 }

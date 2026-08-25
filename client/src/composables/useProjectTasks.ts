@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { apiRequest, getApiErrorMessage } from '../services/apiClient';
 import type {
   ProjectTask,
   ProjectTaskDraft,
@@ -22,7 +23,9 @@ export function useProjectTasks(clientId: string) {
     try {
       const params = new URLSearchParams({ scope: scope.value, status: status.value });
       if (scope.value === 'project' && projectPath) params.set('projectPath', projectPath);
-      const data = await requestJson<{ tasks?: ProjectTask[] }>(`/api/tasks?${params.toString()}`);
+      const data = await apiRequest<{ tasks?: ProjectTask[] }>(`/api/tasks?${params.toString()}`, {
+        fallbackMessage: 'Task request failed',
+      });
       tasks.value = data.tasks || [];
     } catch (exception) {
       error.value = errorMessage(exception);
@@ -55,10 +58,10 @@ export function useProjectTasks(clientId: string) {
     startingTaskId.value = id;
     error.value = '';
     try {
-      const result = await requestJson<ProjectTaskStartResult>(`/api/tasks/${encodeURIComponent(id)}/start`, {
+      const result = await apiRequest<ProjectTaskStartResult, { clientId: string }>(`/api/tasks/${encodeURIComponent(id)}/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId }),
+        body: { clientId },
+        fallbackMessage: 'Task request failed',
       });
       notifyChanged();
       await load(lastProjectPath);
@@ -74,12 +77,10 @@ export function useProjectTasks(clientId: string) {
   async function mutate<T = unknown>(url: string, method: string, body?: unknown): Promise<T> {
     error.value = '';
     try {
-      const data = await requestJson<T>(url, {
+      const data = await apiRequest<T, unknown>(url, {
         method,
-        ...(body === undefined ? {} : {
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }),
+        body,
+        fallbackMessage: 'Task request failed',
       });
       notifyChanged();
       await load(lastProjectPath);
@@ -110,13 +111,6 @@ export function useProjectTasks(clientId: string) {
   };
 }
 
-async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = options ? await fetch(url, options) : await fetch(url);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Task request failed (${response.status})`);
-  return data as T;
-}
-
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Task request failed';
+  return getApiErrorMessage(error, 'Task request failed');
 }
