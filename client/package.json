@@ -21,7 +21,7 @@
     "highlight.js": "^11.9.0",
     "marked": "^11.0.0",
     "mermaid": "^11.16.1",
-    "monaco-editor": "^0.50.0",
+    "monaco-editor": "^0.56.0",
     "vue": "^3.4.0",
     "vue-i18n": "^11.4.8",
     "vue-router": "^5.1.0"
