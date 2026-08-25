@@ -727,7 +727,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
   });
 
   app.post('/', async (req, reply) => {
-    const { clientId, cwd, modelProvider, modelId, enabledSkills, disabledSkills, presetId, copySettingsFromSessionId, worktree } = req.body as CreateSessionRequest;
+    const { clientId, cwd, agentProfileId, modelProvider, modelId, enabledSkills, disabledSkills, presetId, copySettingsFromSessionId, worktree } = req.body as CreateSessionRequest;
 
     if (!clientId) {
       return { error: 'clientId is required' };
@@ -741,7 +741,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       return reply.status(400).send({ error: 'Cannot combine copied session settings with explicit model or skill settings' });
     }
 
-    let sessionOptions: SessionOptions = { cwd, modelProvider, modelId, enabledSkills, disabledSkills, presetId };
+    let sessionOptions: SessionOptions = { cwd, agentProfileId, modelProvider, modelId, enabledSkills, disabledSkills, presetId };
     if (copySettingsFromSessionId) {
       const source = await sessionService.findPersistedSession(clientId, copySettingsFromSessionId);
       if (!source) {
@@ -755,6 +755,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       const policy = sessionService.getSkillPolicy(copySettingsFromSessionId);
       sessionOptions = {
         cwd: source.cwd || cwd,
+        agentProfileId,
         modelProvider: status.model?.provider,
         modelId: status.model?.id,
         enabledSkills: policy?.mode === 'enabled' ? policy.skills : undefined,
@@ -765,6 +766,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     }
 
     try {
+      if (agentProfileId) await sessionService.setClientAgentProfile(clientId, agentProfileId);
       const resolved = await worktreeManager.resolveSessionCwd(sessionOptions.cwd || process.cwd(), worktree);
       const result = await sessionService.createSession(clientId, { ...sessionOptions, cwd: resolved.cwd });
       const savedWorktree = resolved.metadata

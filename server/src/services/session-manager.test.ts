@@ -698,6 +698,22 @@ describe('PiSessionService', () => {
     );
   });
 
+  it('uses an explicit profile when creating a session before client selection is synchronized', async () => {
+    readdir.mockResolvedValue([
+      { name: 'work', isDirectory: () => true },
+    ]);
+    const service = new PiSessionService();
+
+    await service.createSession('new-tab-client', { cwd: '/workspace', agentProfileId: 'work' });
+
+    expect(sessionManagerCreate).toHaveBeenCalledWith('/workspace', '/Users/test/.pi/work/sessions/--workspace--');
+    expect(createAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentDir: '/Users/test/.pi/work',
+      }),
+    );
+  });
+
   it('uses the selected profile path as agent dir when resuming a session', async () => {
     readdir.mockResolvedValue([
       { name: 'work', isDirectory: () => true },

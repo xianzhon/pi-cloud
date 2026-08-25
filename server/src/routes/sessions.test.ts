@@ -623,12 +623,17 @@ describe('session routes', () => {
       body: {
         clientId: 'client-1',
         cwd: '/repo/app',
+        agentProfileId: 'work',
         worktree: { mode: 'managed', branchMode: 'new', branchName: 'feature/a', baseBranch: 'main' },
       },
     }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
 
+    expect(sessionService.setClientAgentProfile).toHaveBeenCalledWith('client-1', 'work');
     expect(resolveSessionCwd).toHaveBeenCalledWith('/repo/app', { mode: 'managed', branchMode: 'new', branchName: 'feature/a', baseBranch: 'main' });
-    expect(sessionService.createSession).toHaveBeenCalledWith('client-1', expect.objectContaining({ cwd: '/repo/.app-worktrees/feature-a' }));
+    expect(sessionService.createSession).toHaveBeenCalledWith('client-1', expect.objectContaining({
+      cwd: '/repo/.app-worktrees/feature-a',
+      agentProfileId: 'work',
+    }));
     expect(saveWorktreeMetadata).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-1', branchName: 'feature/a' }));
     expect(result).toMatchObject({ success: true, sessionId: 'session-1', worktree: { branchName: 'feature/a' } });
   });

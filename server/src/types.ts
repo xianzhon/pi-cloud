@@ -76,6 +76,7 @@ export interface ResolvedWorktreeSession {
 
 export interface SessionOptions {
   cwd?: string;
+  agentProfileId?: string;
   modelProvider?: string;
   modelId?: string;
   enabledSkills?: string[];
@@ -107,6 +108,7 @@ export interface AvailableSkillInfo {
 export interface CreateSessionRequest {
   clientId: string;
   cwd?: string;
+  agentProfileId?: string;
   modelProvider?: string;
   modelId?: string;
   enabledSkills?: string[];

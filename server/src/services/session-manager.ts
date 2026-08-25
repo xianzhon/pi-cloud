@@ -789,7 +789,7 @@ export class PiSessionService {
     this.cancelCleanup(clientId);
 
     const cwd = expandHomePath(options.cwd || process.cwd());
-    const { profile, agentDir } = await this.getClientProfileProxyEnv(clientId);
+    const { profile, agentDir } = await this.getClientProfileProxyEnv(clientId, options.agentProfileId);
     const sessionManager = options.noSession
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd, this.getProjectSessionDir(cwd, agentDir));
@@ -1465,12 +1465,15 @@ export class PiSessionService {
     return (await this.getClientAgentProfile(clientId)).path;
   }
 
-  private async getClientProfileProxyEnv(clientId: string): Promise<{
+  private async getClientProfileProxyEnv(clientId: string, profileId?: string): Promise<{
     profile: AgentProfile;
     agentDir: string;
     proxyEnv: Record<string, string>;
   }> {
-    const profile = await this.getClientAgentProfile(clientId);
+    const profile = profileId
+      ? (await this.listAgentProfiles()).find((item) => item.id === profileId)
+      : await this.getClientAgentProfile(clientId);
+    if (!profile) throw new Error(`Unknown agent profile: ${profileId}`);
     const agentDir = profile.path;
     const proxyEnv = this.getProfileSettings(profile.id).proxy;
     return { profile, agentDir, proxyEnv };

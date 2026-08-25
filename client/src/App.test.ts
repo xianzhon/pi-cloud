@@ -923,9 +923,12 @@ describe('App routing', () => {
     expect(wrapper.text()).toContain('Rewrite session cwd');
   });
 
-  it('opens the new session dialog from the sidebar and sends selected skill payloads', async () => {
+  it('opens the new session dialog and creates it with the selected profile and skills', async () => {
     route.params.id = undefined;
     vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+      if (String(url).startsWith('/api/sessions/agent-profile?')) {
+        return { json: async () => ({ profile: { id: 'work', label: 'work (~/.pi/work)' } }) };
+      }
       if (url === '/api/sessions/project-path') {
         return { json: async () => ({ projectPath: '/workspace' }) };
       }
@@ -966,7 +969,7 @@ describe('App routing', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/sessions', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ clientId: 'client-1', cwd: '/workspace', enabledSkills: ['systematic-debugging'] }),
+      body: JSON.stringify({ clientId: 'client-1', cwd: '/workspace', agentProfileId: 'work', enabledSkills: ['systematic-debugging'] }),
     }));
   });
 

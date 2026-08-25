@@ -1114,6 +1114,7 @@ async function createNewSession(options?: { cwd?: string; firstMessage?: string;
       body: JSON.stringify({
         clientId,
         cwd: newSessionCwd,
+        agentProfileId: selectedAgentProfileId.value,
         modelProvider: options?.modelProvider,
         modelId: options?.modelId,
         enabledSkills: options?.enabledSkills,
@@ -1435,7 +1436,7 @@ async function refreshSelectedAgentProfileDetails() {
 }
 
 async function handleAgentProfileChanged(profileId: string) {
-  void profileId;
+  selectedAgentProfileId.value = profileId;
   activeReviewSession.value = null;
   selectedReviewSourceLabel.value = '';
   // Stash current UI state into optimisticSessions so it survives the
