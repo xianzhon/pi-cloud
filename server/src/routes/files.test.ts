@@ -108,7 +108,7 @@ describe('fileRoutes', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: `/api/files/tree?path=${encodeURIComponent(tempDir)}&depth=1`,
+      url: `/api/files/tree?path=${encodeURIComponent(tempDir)}&depth=2`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -131,6 +131,7 @@ describe('fileRoutes', () => {
         targetType: 'directory',
       })
     );
+    expect(tree.find((node: { name: string }) => node.name === 'src-link')).not.toHaveProperty('children');
   });
 
   it('downloads a file as an attachment', async () => {

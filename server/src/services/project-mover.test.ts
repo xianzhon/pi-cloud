@@ -1,14 +1,19 @@
 import { mkdir, readFile, stat, writeFile, mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { ProjectMover } from './project-mover.js';
 
 async function tempRoot() {
-  return mkdtemp(join(tmpdir(), 'piui-project-mover-'));
+  const root = await mkdtemp(join(tmpdir(), 'piui-project-mover-'));
+  process.env.PI_WEBUI_ALLOWED_ROOTS = root;
+  return root;
 }
 
 describe('ProjectMover', () => {
+  afterEach(() => {
+    delete process.env.PI_WEBUI_ALLOWED_ROOTS;
+  });
   it('moves a project directory into a selected parent with a new name', async () => {
     const root = await tempRoot();
     const source = join(root, 'old-app');
@@ -50,6 +55,18 @@ describe('ProjectMover', () => {
       destinationParentPath: join(root, 'archive'),
       newProjectName: 'old-app',
     })).rejects.toThrow('Destination project folder already exists');
+  });
+
+  it('rejects project moves outside the configured roots', async () => {
+    const root = await tempRoot();
+    const outside = await mkdtemp(join(tmpdir(), 'piui-project-mover-outside-'));
+    await mkdir(join(root, 'old-app'));
+
+    await expect(new ProjectMover().move({
+      oldProjectPath: join(root, 'old-app'),
+      destinationParentPath: outside,
+      newProjectName: 'copy',
+    })).rejects.toThrow('Path is outside the configured allowed roots');
   });
 
   it('rejects moving a project into itself', async () => {

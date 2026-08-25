@@ -1,5 +1,6 @@
 import { access, rename, stat } from 'fs/promises';
 import { join, relative, sep } from 'path';
+import { resolveAllowedPath } from '../utils/path-security.js';
 
 export interface MoveProjectOptions {
   oldProjectPath: string;
@@ -14,8 +15,8 @@ export interface MoveProjectResult {
 export class ProjectMover {
   async move(options: MoveProjectOptions): Promise<MoveProjectResult> {
     const projectName = this.validateProjectName(options.newProjectName);
-    const oldProjectPath = options.oldProjectPath;
-    const destinationParentPath = options.destinationParentPath;
+    const oldProjectPath = await resolveAllowedPath(options.oldProjectPath);
+    const destinationParentPath = await resolveAllowedPath(options.destinationParentPath);
     const projectPath = join(destinationParentPath, projectName);
 
     await this.assertDirectory(oldProjectPath, 'Current project folder does not exist');

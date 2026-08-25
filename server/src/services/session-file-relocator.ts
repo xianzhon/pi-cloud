@@ -36,9 +36,10 @@ export interface RelocateProjectSessionFilesResult {
 
 export class SessionFileRelocator {
   async plan(options: RelocateSessionFileOptions): Promise<RelocateSessionFilePlan> {
-    const sourcePath = await this.findSourceSessionFile(options.sourceSessionDir, options.sessionId);
-    const fallbackSourcePath = join(options.sourceSessionDir, `${options.sessionId}.jsonl`);
-    const sourceFileName = sourcePath ? basename(sourcePath) : `${options.sessionId}.jsonl`;
+    const sessionId = this.validateSessionId(options.sessionId);
+    const sourcePath = await this.findSourceSessionFile(options.sourceSessionDir, sessionId);
+    const fallbackSourcePath = join(options.sourceSessionDir, `${sessionId}.jsonl`);
+    const sourceFileName = sourcePath ? basename(sourcePath) : `${sessionId}.jsonl`;
 
     return {
       sourcePath: sourcePath || fallbackSourcePath,
@@ -125,6 +126,13 @@ export class SessionFileRelocator {
 
     await this.removeEmptySourceSessionDir(options.sourceSessionDir);
     return { moved, skipped: entries.length - sessionFiles.length, conflicts: [] };
+  }
+
+  private validateSessionId(sessionId: string): string {
+    if (!/^[A-Za-z0-9_-]+$/.test(sessionId)) {
+      throw new Error('Invalid session id');
+    }
+    return sessionId;
   }
 
   private async findSourceSessionFile(sourceSessionDir: string, sessionId: string): Promise<string | null> {

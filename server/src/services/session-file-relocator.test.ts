@@ -12,7 +12,19 @@ function jsonl(records: unknown[]) {
   return `${records.map((record) => JSON.stringify(record)).join('\n')}\n`;
 }
 
-describe('SessionFileRelocator.relocateProject', () => {
+describe('SessionFileRelocator', () => {
+  it('rejects session ids containing path separators', async () => {
+    const root = await makeTempDir();
+
+    await expect(new SessionFileRelocator().plan({
+      sessionId: '../../outside',
+      sourceSessionDir: join(root, 'old'),
+      destinationSessionDir: join(root, 'new'),
+      expectedOldCwd: '/old/project',
+      newCwd: '/new/project',
+    })).rejects.toThrow('Invalid session id');
+  });
+
   it('moves all session files and rewrites matching cwd fields', async () => {
     const root = await makeTempDir();
     const sourceDir = join(root, 'old');

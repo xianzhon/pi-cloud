@@ -68,6 +68,17 @@ export async function resolveAllowedPath(requestedPath: string | undefined): Pro
   const resolvedPath = path.resolve(expandHomePath(requestedPath));
   if (isPathCheckDisabled()) return resolvedPath;
 
+  const configuredRoots = configuredAllowedRoots().map(root => path.resolve(expandHomePath(root)));
+  const matchedRoot = configuredRoots.find(root => isInsideRoot(resolvedPath, root));
+  if (!matchedRoot) throw new PathAccessError(resolvedPath);
+
+  // Keep this guard local so static analysis can verify that the normalized
+  // request cannot traverse above its configured root.
+  const relativePath = path.relative(matchedRoot, resolvedPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new PathAccessError(resolvedPath);
+  }
+
   const existingPath = await nearestExistingPath(resolvedPath);
   const realExistingPath = await realpathIfExists(existingPath);
   const roots = await allowedRoots();

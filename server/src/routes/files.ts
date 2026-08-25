@@ -203,7 +203,7 @@ async function buildFileTree(
       continue;
     }
 
-    if (node.type === 'directory') {
+    if (node.type === 'directory' && !node.isSymlink) {
       node.children = await buildFileTree(node.path, depth, currentDepth + 1, options);
     }
 
