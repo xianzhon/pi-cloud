@@ -4,6 +4,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import { openPiuiDatabase } from './database';
+import { runDatabaseMigrations } from './migrations/index';
 
 describe('openPiuiDatabase', () => {
   let tempDir: string;
@@ -30,6 +31,8 @@ describe('openPiuiDatabase', () => {
       'agent_profile_settings',
       'audit_events',
       'commit_message_prompts',
+      'feishu_gateway_configs',
+      'feishu_gateway_sessions',
       'memories',
       'memory_extraction_runs',
       'memory_fts',
@@ -37,6 +40,7 @@ describe('openPiuiDatabase', () => {
       'memory_recall_events',
       'project_tasks',
       'review_sources',
+      'schema_migrations',
       'security_settings',
       'session_builtin_events',
       'session_pin_groups',
@@ -45,6 +49,11 @@ describe('openPiuiDatabase', () => {
       'session_worktrees',
       'sessions',
       'skill_presets',
+      'weixin_gateway_configs',
+      'weixin_gateway_context_tokens',
+      'weixin_gateway_credentials',
+      'weixin_gateway_sessions',
+      'weixin_gateway_state',
     ]);
     const columns = db.prepare('PRAGMA table_info(project_tasks)').all() as Array<{ name: string; notnull: number }>;
     expect(columns.map((column) => column.name)).toEqual([
@@ -217,10 +226,59 @@ describe('openPiuiDatabase', () => {
     db.close();
   });
 
-  it('creates the application schema', () => {
+  it('records migrations and does not reapply them', () => {
     const db = openPiuiDatabase(':memory:');
 
+    expect(db.prepare('SELECT version, name FROM schema_migrations ORDER BY version').all()).toEqual([
+      { version: 1, name: 'application-schema' },
+      { version: 2, name: 'gateway-schema' },
+    ]);
 
+    runDatabaseMigrations(db);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 2 });
+    db.close();
+  });
+
+  it('adds gateway config columns to existing tables after inspecting their schema', async () => {
+    await fs.mkdir(path.dirname(dbPath), { recursive: true });
+    const legacyDb = new Database(dbPath);
+    legacyDb.exec(`
+      CREATE TABLE feishu_gateway_configs (
+        client_id TEXT PRIMARY KEY, agent_profile TEXT, default_cwd TEXT,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE weixin_gateway_configs (
+        client_id TEXT PRIMARY KEY, agent_profile TEXT, default_cwd TEXT,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+    `);
+    legacyDb.close();
+
+    const db = openPiuiDatabase(dbPath);
+    for (const table of ['feishu_gateway_configs', 'weixin_gateway_configs']) {
+      const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+      expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining(['skill_mode', 'skill_preset_id']));
+    }
+    db.close();
+  });
+
+  it('rolls back a failed migration without recording it', () => {
+    const db = new Database(':memory:');
+    db.exec('CREATE VIEW project_tasks AS SELECT 1 AS id');
+
+    expect(() => runDatabaseMigrations(db)).toThrow();
+    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([]);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sessions'").get()).toBeUndefined();
+    db.close();
+  });
+
+  it('surfaces gateway migration errors instead of treating them as duplicate columns', () => {
+    const db = new Database(':memory:');
+    db.exec('CREATE VIEW feishu_gateway_configs AS SELECT 1 AS client_id');
+
+    expect(() => runDatabaseMigrations(db)).toThrow();
+    expect(db.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }]);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'weixin_gateway_sessions'").get()).toBeUndefined();
     db.close();
   });
 

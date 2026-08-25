@@ -42,24 +42,31 @@
     "start": "pnpm -r run start",
     "start:prod": "pnpm --filter @pi-webui/server start",
     "test": "pnpm -r --if-present run test:run",
-    "test:watch": "pnpm -r --if-present run test"
+    "test:coverage": "pnpm -r --if-present run test:coverage",
+    "test:watch": "pnpm -r --if-present run test",
+    "lint": "oxlint --deny-warnings client/src server/src bin client/*.config.ts server/*.config.ts server/build.mjs",
+    "format:check": "prettier --check package.json client/package.json server/package.json pnpm-workspace.yaml .oxlintrc.json .prettierrc.json .github client/*.config.ts server/*.config.ts server/build.mjs client/src/test/setup.ts"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.80.6",
-    "@earendil-works/pi-coding-agent": "0.80.6",
-    "@fastify/cookie": "^11.0.2",
-    "@fastify/cors": "^10.0.0",
-    "@fastify/static": "^10.1.3",
-    "@fastify/websocket": "^11.2.0",
-    "@lydell/node-pty": "1.1.0",
-    "archiver": "^8.0.0",
-    "better-sqlite3": "^13.0.3",
-    "dotenv": "^17.4.2",
-    "fastify": "^5.11.3",
-    "glob": "^13.0.6",
-    "otplib": "^13.4.1",
-    "qrcode": "^1.5.4",
-    "typebox": "1.1.38",
-    "undici": "^8.10.0"
+    "@earendil-works/pi-ai": "catalog:",
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@fastify/cookie": "catalog:",
+    "@fastify/cors": "catalog:",
+    "@fastify/static": "catalog:",
+    "@fastify/websocket": "catalog:",
+    "@lydell/node-pty": "catalog:",
+    "archiver": "catalog:",
+    "better-sqlite3": "catalog:",
+    "dotenv": "catalog:",
+    "fastify": "catalog:",
+    "glob": "catalog:",
+    "otplib": "catalog:",
+    "qrcode": "catalog:",
+    "typebox": "catalog:",
+    "undici": "catalog:"
+  },
+  "devDependencies": {
+    "oxlint": "^1.80.0",
+    "prettier": "^3.9.6"
   }
 }

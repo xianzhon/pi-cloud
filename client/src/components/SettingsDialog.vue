@@ -687,6 +687,7 @@ import type { AvailableSkill } from '../composables/useAvailableSkills';
 import type { SkillPreset, SkillPresetInput } from '../composables/useSkillPresets';
 import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh } from '@phosphor-icons/vue';
 import { playTaskNotification } from '../services/soundNotifications';
+import { apiRequest } from '../services/apiClient';
 import { useReviewSources } from '../composables/useReviewSources';
 import { listReviewSourceTypes } from '../services/reviewSourceService';
 import type { ReviewSourceType } from '../types/reviewSource';
@@ -1107,11 +1108,11 @@ function startWeixinPairingPoll() {
   }, 1500);
 }
 
-async function gatewayRequest<T>(url: string, method = 'GET'): Promise<T> {
-  const response = await fetch(url, { method });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || t('components.settingsDialog.gatewayRequestFailed', { status: response.status }));
-  return data as T;
+function gatewayRequest<T>(url: string, method = 'GET'): Promise<T> {
+  return apiRequest<T>(url, {
+    method,
+    fallbackMessage: (status) => t('components.settingsDialog.gatewayRequestFailed', { status }),
+  });
 }
 
 function withCurrentOption(options: CustomSelectOption[], currentValue: string): CustomSelectOption[] {

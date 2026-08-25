@@ -15,7 +15,18 @@ const mocks = vi.hoisted(() => {
     abortCompaction: vi.fn(),
   };
   const saveUploadedImages = vi.fn(async () => ['/project/tmp/upload_images/chart.png']);
-  return { prompt, saveUploadedImages, session };
+  const sessionService = {
+    getSession: vi.fn(() => session),
+    listSessions: vi.fn(async () => []),
+    resumeSession: vi.fn(),
+    cancelCleanup: vi.fn(),
+    scheduleCleanup: vi.fn(),
+    runWithClientProfileProxy: vi.fn(async (_clientId: string, fn: () => Promise<unknown>) => fn()),
+    runForegroundWithClientProfileProxy: vi.fn(async (_clientId: string, fn: () => Promise<unknown>) => fn()),
+    getRuntimeStatus: vi.fn(),
+    forceDisposeBySessionId: vi.fn(),
+  };
+  return { prompt, saveUploadedImages, session, sessionService };
 });
 
 vi.mock('../auth/request.js', () => ({
@@ -25,20 +36,6 @@ vi.mock('../auth/request.js', () => ({
 
 vi.mock('../services/uploaded-image-store.js', () => ({
   saveUploadedImages: mocks.saveUploadedImages,
-}));
-
-vi.mock('../services/session-manager.js', () => ({
-  sessionService: {
-    getSession: vi.fn(() => mocks.session),
-    listSessions: vi.fn(async () => []),
-    resumeSession: vi.fn(),
-    cancelCleanup: vi.fn(),
-    scheduleCleanup: vi.fn(),
-    runWithClientProfileProxy: vi.fn(async (_clientId: string, fn: () => Promise<unknown>) => fn()),
-    runForegroundWithClientProfileProxy: vi.fn(async (_clientId: string, fn: () => Promise<unknown>) => fn()),
-    getRuntimeStatus: vi.fn(),
-    forceDisposeBySessionId: vi.fn(),
-  },
 }));
 
 class FakeSocket {
@@ -71,6 +68,7 @@ async function openSocket() {
       sessions: {},
       audit: { record: vi.fn() },
     },
+    services: { sessions: mocks.sessionService },
     get: vi.fn((path: string, _options: unknown, handler: Function) => routes.set(path, handler)),
   };
   const { chatWebSocket } = await import('./chat.js');

@@ -14,13 +14,14 @@ import { createWebuiAutoRenameExtension } from '../extensions/auto-rename.js';
 import { expandHomePath } from '../utils/paths.js';
 import { runWithAgentDirAndProxyEnv } from './profile-proxy.js';
 import { SkillPolicyStore, type SkillPolicyRecord } from './skill-policy-store.js';
-import { getWorktreeMetadataStore } from './worktree-metadata-store.js';
+import type { WorktreeMetadataStore } from './worktree-metadata-store.js';
 
 interface PiSessionServiceOptions {
   skillPolicyStore?: SkillPolicyStore;
   username?: string;
   db?: PiuiDatabase;
   memoryRuntime?: MemoryRuntime;
+  worktreeMetadataStore?: Pick<WorktreeMetadataStore, 'getMany'>;
 }
 
 interface ResolvedSkillPolicy {
@@ -130,6 +131,7 @@ export class PiSessionService {
   private username: string;
   private memoryRuntime?: MemoryRuntime;
   private db?: PiuiDatabase;
+  private worktreeMetadataStore?: Pick<WorktreeMetadataStore, 'getMany'>;
   private sessions: Map<string, AgentSession> = new Map();
   private clientSessions: Map<string, Set<string>> = new Map();
   private currentClientSession: Map<string, string> = new Map();
@@ -143,6 +145,7 @@ export class PiSessionService {
     this.username = options.username || 'me';
     this.db = options.db;
     this.memoryRuntime = options.memoryRuntime;
+    this.worktreeMetadataStore = options.worktreeMetadataStore;
   }
 
   async listAgentProfiles(): Promise<AgentProfile[]> {
@@ -675,12 +678,8 @@ export class PiSessionService {
         .map((entry) => this.readSessionDirHeader(join(sessionsRoot, entry.name))),
     );
     const validHeaders = headers.filter((header): header is SessionDirHeader => Boolean(header?.id && header.cwd));
-    let worktrees = new Map<string, { baseRepoPath: string }>();
-    try {
-      worktrees = getWorktreeMetadataStore().getMany(validHeaders.map((header) => header.id));
-    } catch {
-      // Worktree metadata is optional in tests and early initialization.
-    }
+    const worktrees = this.worktreeMetadataStore?.getMany(validHeaders.map((header) => header.id))
+      ?? new Map<string, { baseRepoPath: string }>();
     const paths = validHeaders.map((header) => worktrees.get(header.id)?.baseRepoPath || header.cwd);
     return Array.from(new Set(paths.filter((path) => path.trim())));
   }
@@ -794,7 +793,6 @@ export class PiSessionService {
     const sessionManager = options.noSession
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd, this.getProjectSessionDir(cwd, agentDir));
-    const sessionId = sessionManager.getSessionId();
     const availableSkills = await this.loadSkills(cwd, agentDir);
     const skillPolicy = this.resolveAppliedSkillPolicy(availableSkills, options);
     const memoryEnabled = Boolean(this.memoryRuntime) && options.memoryEnabled !== false && !options.noSession;
@@ -838,7 +836,6 @@ export class PiSessionService {
 
     const { profile, agentDir } = await this.getClientProfileProxyEnv(clientId);
     const sessionManager = SessionManager.open(sessionPath, dirname(sessionPath));
-    const sessionId = sessionManager.getSessionId();
     const cwd = this.getSessionManagerCwd(sessionManager, sessionPath);
     const extensionFactories = this.createInlineExtensions({
       profileId: profile.id,
@@ -1612,13 +1609,6 @@ export class PiSessionService {
     await fs.rm(sessionPath, { recursive: true, force: true });
     this.invalidateSessionListCache();
   }
-}
-
-export let sessionService = new PiSessionService();
-
-export function initializeSessionService(options: PiSessionServiceOptions = {}): PiSessionService {
-  sessionService = new PiSessionService(options);
-  return sessionService;
 }
 
 function normalizeSkillNames(names?: string[]): string[] {

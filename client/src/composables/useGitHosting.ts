@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { apiRequest } from '../services/apiClient';
 import type { ProjectTask } from '../types/projectTask';
 
 export type GitProvider = 'github' | 'gitea';
@@ -80,10 +81,11 @@ function applySettings(data: GitSettingsResponse): void {
   if (data.githubSettings) githubSettings.value = data.githubSettings;
 }
 
-async function request<T>(url: string, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(url, { method, ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Git hosting request failed (${response.status})`);
-  return data as T;
+function request<T>(url: string, method = 'GET', body?: unknown): Promise<T> {
+  return apiRequest<T, unknown>(url, {
+    method,
+    body,
+    fallbackMessage: 'Git hosting request failed',
+  });
 }
 

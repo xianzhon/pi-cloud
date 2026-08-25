@@ -4,14 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
 import { createMemoryRuntime, type MemoryRuntime } from '../memory/runtime.js';
 
-vi.mock('../services/session-manager.js', () => ({
-  sessionService: {
-    getClientAgentProfile: vi.fn(),
-    findPersistedSession: vi.fn(),
-  },
-}));
-
-const { sessionService } = await import('../services/session-manager.js');
+const sessionService = {
+  getClientAgentProfile: vi.fn(),
+  findPersistedSession: vi.fn(),
+};
 
 describe('memory routes', () => {
   let app: FastifyInstance;
@@ -46,6 +42,7 @@ describe('memory routes', () => {
     const { memoryRoutes } = await import('./memories.js');
     app = Fastify();
     app.decorate('memoryRuntime', runtime);
+    app.decorate('services', { sessions: sessionService } as any);
     await app.register(memoryRoutes, { prefix: '/api/memories' });
   });
 

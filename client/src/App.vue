@@ -309,7 +309,8 @@
         @branch-changed="handleBranchChanged"
         @toggle-fullscreen="toggleFullscreen"
       />
-      <TerminalPanel 
+      <LazyTerminalPanel
+        v-if="terminalFeatureLoaded"
         :visible="showTerminal"
         :mode="terminalMode"
         :isMaximized="isTerminalMaximized"
@@ -334,7 +335,8 @@
       />
     </main>
 
-    <TaskQueuePanel
+    <LazyTaskQueuePanel
+      v-if="taskQueueFeatureLoaded"
       :visible="showTaskQueue"
       :client-id="clientId"
       :current-project-path="selectedProjectPath"
@@ -346,7 +348,8 @@
       @open-session="openTaskSession"
     />
     
-    <EditorPanel 
+    <LazyEditorPanel
+      v-if="editorFeatureLoaded"
       ref="editorPanelRef"
       :visible="showEditor"
       :cwd="sessionCwd || selectedProjectPath"
@@ -413,7 +416,8 @@
       @selectSession="handleSearchSelect"
     />
 
-    <MemoryCenter
+    <LazyMemoryCenter
+      v-if="memoryFeatureLoaded"
       :visible="showMemoryCenter"
       :controller="memory"
       :profileLabel="selectedAgentProfileLabel"
@@ -432,7 +436,8 @@
       @dismiss="memory.dismissToast"
     />
 
-    <SettingsDialog
+    <LazySettingsDialog
+      v-if="settingsFeatureLoaded"
       :visible="showSettings"
       :client-id="clientId"
       :project-path="activeProjectPath"
@@ -520,7 +525,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, defineAsyncComponent } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useWebSocket } from './composables/useWebSocket';
 import { useAuth } from './composables/useAuth';
@@ -529,27 +534,13 @@ import { useTheme } from './composables/useTheme';
 import { i18n, setLocale } from './i18n';
 import { PhBrain, PhGear, PhMagnifyingGlass, PhPlus, PhTrash, PhTerminal, PhNotePencil, PhTray, PhGitBranch, PhGitMerge, PhGitPullRequest, PhSidebarSimple, PhRobot, PhFolderSimple, PhDotsThreeVertical, PhCornersOut, PhCornersIn, PhX } from '@phosphor-icons/vue';
 import LoginView from './components/LoginView.vue';
-import SettingsDialog from './components/SettingsDialog.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
 import NewSessionDialog from './components/NewSessionDialog.vue';
 import ChatPanel from './components/ChatPanel.vue';
-import TaskQueuePanel from './components/TaskQueuePanel.vue';
 import type { ProjectTaskStartResult } from './types/projectTask';
-import TerminalPanel from './components/TerminalPanel.vue';
 import { useTerminalPanel } from './composables/useTerminalPanel';
-import {
-  createTerminalInstance,
-  openTerminal,
-  fitTerminal,
-  connectTerminal,
-  disconnectTerminal,
-  disposeTerminal,
-  applyTerminalTheme,
-} from './composables/useTerminal';
-import EditorPanel from './components/EditorPanel.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import SearchModal from './components/SearchModal.vue';
-import MemoryCenter from './components/MemoryCenter.vue';
 import MemoryToast from './components/MemoryToast.vue';
 import { useAvailableSkills } from './composables/useAvailableSkills';
 import { useSkillPresets } from './composables/useSkillPresets';
@@ -559,6 +550,30 @@ import { useGitHosting } from './composables/useGitHosting';
 import { useGatewaySettings } from './composables/useGatewaySettings';
 import { cachedLaunchResource, invalidateLaunchResourceCache, launchCacheKey } from './composables/useLaunchResourceCache';
 import { normalizePathSeparators } from './utils/paths';
+
+let editorPanelPromise: ReturnType<typeof importEditorPanel> | undefined;
+function importEditorPanel() {
+  return import('./components/EditorPanel.vue').then((module) => module.default);
+}
+const loadEditorPanel = () => (editorPanelPromise ??= importEditorPanel());
+const LazyEditorPanel = defineAsyncComponent(loadEditorPanel);
+const LazySettingsDialog = defineAsyncComponent(() => import('./components/SettingsDialog.vue').then((module) => module.default));
+const LazyMemoryCenter = defineAsyncComponent(() => import('./components/MemoryCenter.vue').then((module) => module.default));
+const LazyTaskQueuePanel = defineAsyncComponent(() => import('./components/TaskQueuePanel.vue').then((module) => module.default));
+const LazyTerminalPanel = defineAsyncComponent(() => import('./components/TerminalPanel.vue').then((module) => module.default));
+type TerminalRuntime = typeof import('./composables/useTerminal');
+type TerminalInstance = ReturnType<TerminalRuntime['createTerminalInstance']>;
+
+let terminalRuntime: TerminalRuntime | undefined;
+let terminalRuntimePromise: Promise<TerminalRuntime> | undefined;
+
+function loadTerminalRuntime(): Promise<TerminalRuntime> {
+  terminalRuntimePromise ??= import('./composables/useTerminal').then((runtime) => {
+    terminalRuntime = runtime;
+    return runtime;
+  });
+  return terminalRuntimePromise;
+}
 
 const router = useRouter();
 const route = useRoute();
@@ -712,6 +727,7 @@ const isSessionContextReady = computed(() => !activeSessionId.value || sidebarIn
 const activeProjectPath = computed(() => sessionCwd.value || selectedProjectPath.value);
 const sessionCwdDisplay = computed(() => formatHomePath(sessionCwd.value));
 const showTaskQueue = ref(false);
+const taskQueueFeatureLoaded = ref(false);
 const headerTitle = computed(() => sessionTitle.value || 'Pi WebUI');
 const headerSubtitle = computed(() => sessionCwdDisplay.value || formatHomePath(selectedProjectPath.value));
 const headerProjectName = computed(() => formatProjectName(headerSubtitle.value));
@@ -758,11 +774,29 @@ const selectedAgentName = computed(() => selectedReviewSourceLabel.value || form
 const isReviewProfileSelected = computed(() => Boolean(selectedReviewSourceLabel.value));
 const selectedAgentModelSummary = ref('');
 const showEditor = ref(false);
+const editorFeatureLoaded = ref(false);
 const isFullscreen = ref(false);
 const fullscreenLabel = computed(() => t(isFullscreen.value ? 'app.exitFullscreen' : 'app.fullscreen'));
 const fullscreenTooltip = computed(() => `${fullscreenLabel.value} (${formatFullscreenShortcut(fullscreenShortcut.value)})`);
 const fullscreenAriaLabel = computed(() => t(isFullscreen.value ? 'app.exitFullscreen' : 'app.enterFullscreen'));
-const editorPanelRef = ref<InstanceType<typeof EditorPanel>>();
+interface EditorPanelHandle {
+  openFile(path: string, line?: number, column?: number): void;
+  openVirtualDiff(detail: { cwd: string; scope: string; content: string }): void;
+}
+const editorPanelRef = ref<EditorPanelHandle>();
+
+async function waitForEditorPanel() {
+  await loadEditorPanel();
+  await nextTick();
+  if (editorPanelRef.value) return editorPanelRef.value;
+  return new Promise<EditorPanelHandle>((resolve) => {
+    const stop = watch(editorPanelRef, (panel) => {
+      if (!panel) return;
+      stop();
+      resolve(panel);
+    }, { flush: 'post' });
+  });
+}
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const sessionSidebarRef = ref<InstanceType<typeof SessionSidebar> | null>(null);
 
@@ -852,6 +886,7 @@ const finishWorktreePreviewError = ref('');
 const showDeleteConfirm = ref(false);
 const showSearch = ref(false);
 const showSettings = ref(false);
+const settingsFeatureLoaded = ref(false);
 const gitSettingsSaving = ref(false);
 const gitSaveSuccessTick = ref(0);
 const gatewaySettingsSaving = ref(false);
@@ -868,6 +903,7 @@ const memory = useMemories({ clientId, autoConnect: false });
 const gitHosting = useGitHosting();
 const gatewaySettings = useGatewaySettings();
 const showMemoryCenter = ref(false);
+const memoryFeatureLoaded = ref(false);
 const memoryReviewRunId = ref<string>();
 const memoryPendingCount = computed(() => memory.counts.value.globalPending);
 const memoryHasError = computed(() => Boolean(memory.error.value || memory.warning.value));
@@ -903,9 +939,26 @@ watch([isAuthenticated, activeProjectPath], async ([authenticated, projectPath])
 // Auto-create a terminal when the panel opens with no sessions
 watch(showTerminal, (visible) => {
   if (visible && terminalSessions.value.length === 0) {
-    handleCreateTerminal();
+    void handleCreateTerminal();
   }
 });
+
+const terminalFeatureLoaded = ref(false);
+watch(showTerminal, (visible) => {
+  if (visible) terminalFeatureLoaded.value = true;
+}, { flush: 'sync' });
+watch(showTaskQueue, (visible) => {
+  if (visible) taskQueueFeatureLoaded.value = true;
+}, { flush: 'sync' });
+watch(showEditor, (visible) => {
+  if (visible) editorFeatureLoaded.value = true;
+}, { flush: 'sync' });
+watch(showMemoryCenter, (visible) => {
+  if (visible) memoryFeatureLoaded.value = true;
+}, { flush: 'sync' });
+watch(showSettings, (visible) => {
+  if (visible) settingsFeatureLoaded.value = true;
+}, { flush: 'sync' });
 
 watch(tabTitle, (title) => {
   document.title = title;
@@ -1894,17 +1947,16 @@ async function resolveSearchableFilePath(filePath: string, cwd: string): Promise
   return suffixMatch ? resolveFilePath(suffixMatch, cwd) : undefined;
 }
 
-function handleOpenVirtualDiffInEditor(event: Event) {
+async function handleOpenVirtualDiffInEditor(event: Event) {
   const detail = (event as CustomEvent).detail;
   if (!detail?.cwd || !detail.scope || typeof detail.content !== 'string') return;
 
   showEditor.value = true;
-  nextTick(() => {
-    editorPanelRef.value?.openVirtualDiff({
-      cwd: detail.cwd,
-      scope: detail.scope,
-      content: detail.content,
-    });
+  const editorPanel = await waitForEditorPanel();
+  editorPanel.openVirtualDiff({
+    cwd: detail.cwd,
+    scope: detail.scope,
+    content: detail.content,
   });
 }
 
@@ -1935,32 +1987,34 @@ async function handleOpenFileInEditor(event: Event) {
   }
 
   showEditor.value = true;
-  nextTick(() => {
-    editorPanelRef.value?.openFile(filePath, detail.line, detail.column);
-  });
+  const editorPanel = await waitForEditorPanel();
+  editorPanel.openFile(filePath, detail.line, detail.column);
 }
 
 // Terminal management: maps terminal_id -> TerminalInstance for cleanup
-const terminalInstanceMap = new Map<string, ReturnType<typeof createTerminalInstance>>();
+const terminalInstanceMap = new Map<string, TerminalInstance>();
 
 watch(resolvedTheme, (theme) => {
-  terminalInstanceMap.forEach((instance) => applyTerminalTheme(instance, theme));
+  if (!terminalRuntime) return;
+  terminalInstanceMap.forEach((instance) => terminalRuntime?.applyTerminalTheme(instance, theme));
 });
 
-function handleCreateTerminal() {
+async function handleCreateTerminal() {
+  const runtime = await loadTerminalRuntime();
+  if (!showTerminal.value) return;
   const terminalId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const session = createTerminalSession(terminalId, 'shell', activeProjectPath.value);
 
   // Create terminal instance
-  const instance = createTerminalInstance();
-  applyTerminalTheme(instance, resolvedTheme.value);
+  const instance = runtime.createTerminalInstance();
+  runtime.applyTerminalTheme(instance, resolvedTheme.value);
   terminalInstanceMap.set(terminalId, instance);
 
   // After DOM update, open terminal in host element and connect
   const checkAndInit = () => {
     if (session.hostEl) {
-      openTerminal(instance, session.hostEl);
-      connectTerminal(instance, clientId, session.cwd, (_termId, shell) => {
+      runtime.openTerminal(instance, session.hostEl);
+      runtime.connectTerminal(instance, clientId, session.cwd, (_termId, shell) => {
         // Update the session label with the actual shell name from the server
         const s = terminalSessions.value.find(t => t.terminal_id === terminalId);
         if (s) s.label = shell;
@@ -1976,7 +2030,7 @@ function handleCreateTerminal() {
       // Set up resize observer
       if (typeof ResizeObserver !== 'undefined') {
         const observer = new ResizeObserver(() => {
-          fitTerminal(instance);
+          runtime.fitTerminal(instance);
         });
         observer.observe(session.hostEl);
         session.resizeObserver = observer;
@@ -1992,7 +2046,7 @@ function handleCreateTerminal() {
 function handleCloseTerminal(terminalId: string) {
   const instance = terminalInstanceMap.get(terminalId);
   if (instance) {
-    disposeTerminal(instance);
+    terminalRuntime?.disposeTerminal(instance);
     terminalInstanceMap.delete(terminalId);
   }
   removeTerminalSession(terminalId);
@@ -2078,7 +2132,7 @@ onUnmounted(() => {
   authRefreshMounted = false;
   clearAuthRefreshTimer();
   disposeAllTerminals();
-  terminalInstanceMap.forEach(instance => disposeTerminal(instance));
+  terminalInstanceMap.forEach(instance => terminalRuntime?.disposeTerminal(instance));
   terminalInstanceMap.clear();
 });
 </script>

@@ -28,13 +28,11 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
   },
 }));
 
-vi.mock('../services/session-manager.js', () => ({
-  sessionService: {
-    getClientAgentDirForRoutes: vi.fn(async () => '/tmp/pi-agent'),
-    getClientAgentProfile: vi.fn(async () => ({ defaultProvider: 'chat', defaultModel: 'chat-model', automationProvider: 'mock', automationModel: 'automation-model' })),
-    runForegroundWithClientProfileProxy: vi.fn(async (_clientId: string, fn: () => Promise<unknown>) => fn()),
-  },
-}));
+const sessionService = {
+  getClientAgentDirForRoutes: vi.fn(async () => '/tmp/pi-agent'),
+  getClientAgentProfile: vi.fn(async () => ({ defaultProvider: 'chat', defaultModel: 'chat-model', automationProvider: 'mock', automationModel: 'automation-model' })),
+  runForegroundWithClientProfileProxy: vi.fn(async (_clientId: string, fn: () => Promise<unknown>) => fn()),
+};
 
 import { DEFAULT_COMMIT_MESSAGE_PROMPTS } from '../services/commit-message-prompt-store';
 import { gitRoutes, type GitRouteOptions } from './git';
@@ -59,6 +57,7 @@ async function createRepo() {
 
 async function buildApp(options: GitRouteOptions = {}) {
   const app = Fastify();
+  app.decorate('services', { sessions: sessionService } as any);
   await app.register(gitRoutes, { prefix: '/api/git', ...options });
   return app;
 }

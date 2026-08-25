@@ -15,7 +15,7 @@ import {
   type ProjectTaskStatus,
   type ProjectTaskStore,
 } from '../services/project-task-store';
-import { sessionService } from '../services/session-manager.js';
+import type { PiSessionService } from '../services/session-manager.js';
 import type { SessionActivityRecord, SessionActivityStore } from '../services/session-activity-store.js';
 
 export interface TaskRouteOptions {
@@ -73,7 +73,7 @@ export async function taskRoutes(app: FastifyInstance, options: TaskRouteOptions
     if (!body?.clientId) return reply.status(400).send({ error: 'clientId is required to polish task content with AI' });
     if (!body.prompt?.trim()) return reply.status(400).send({ error: 'prompt is required to polish task content with AI' });
     try {
-      return { content: await polishTaskContentWithAi(body.clientId, body.title || '', body.prompt) };
+      return { content: await polishTaskContentWithAi(app.services.sessions, body.clientId, body.title || '', body.prompt) };
     } catch (error) {
       return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to polish task content with AI' });
     }
@@ -152,7 +152,12 @@ function parsePolishedTaskContent(text: string): { title: string; prompt: string
   return { title, prompt };
 }
 
-async function polishTaskContentWithAi(clientId: string, title: string, prompt: string): Promise<{ title: string; prompt: string }> {
+async function polishTaskContentWithAi(
+  sessionService: PiSessionService,
+  clientId: string,
+  title: string,
+  prompt: string,
+): Promise<{ title: string; prompt: string }> {
   const agentDir = await sessionService.getClientAgentDirForRoutes(clientId);
   return sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
     const profile = await sessionService.getClientAgentProfile(clientId);

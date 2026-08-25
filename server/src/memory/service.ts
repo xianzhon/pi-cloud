@@ -97,7 +97,7 @@ export class MemoryService {
   }
 
   update(context: MemoryContext, id: string, expectedRevision: number, patch: MemoryPatch): MemoryRecord {
-    const memory = this.requireAccessible(context, id);
+    this.requireAccessible(context, id);
     const replacesContent = patch.content !== undefined || patch.category !== undefined || patch.tags !== undefined;
     if (!replacesContent) return this.store.updateMemory(id, expectedRevision, patch);
     return this.store.replaceMemory(id, expectedRevision, {

@@ -8,7 +8,7 @@ import type { PiuiDatabase } from '../db/database.js';
 import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_COUNT, sniffImageMimeType, validateImages } from './image-input.js';
-import { sessionService } from './session-manager.js';
+import type { PiSessionService } from './session-manager.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
 import { saveWeixinImage } from './weixin-image-store.js';
 import { buildWeixinCdnDownloadUrl, decryptWeixinMedia, parseWeixinAesKey } from './weixin-media-crypto.js';
@@ -98,53 +98,6 @@ const TYPING_STATUS_CANCEL = 2;
 const TYPING_KEEPALIVE_INTERVAL_MS = 5000;
 const directImageFetchAgent = new Agent();
 
-const WEIXIN_SESSION_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_sessions (
-    session_key TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    pi_session_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`;
-const WEIXIN_CONFIG_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_configs (
-    client_id TEXT PRIMARY KEY,
-    agent_profile TEXT,
-    default_cwd TEXT,
-    skill_mode TEXT,
-    skill_preset_id TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`;
-const WEIXIN_STATE_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_state (
-    account_id TEXT PRIMARY KEY,
-    sync_buf TEXT,
-    updated_at TEXT NOT NULL
-  )
-`;
-const WEIXIN_CONTEXT_TOKEN_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_context_tokens (
-    account_id TEXT NOT NULL,
-    peer_id TEXT NOT NULL,
-    context_token TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (account_id, peer_id)
-  )
-`;
-const WEIXIN_CREDENTIAL_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS weixin_gateway_credentials (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    account_id TEXT NOT NULL,
-    token TEXT NOT NULL,
-    base_url TEXT NOT NULL,
-    user_id TEXT,
-    updated_at TEXT NOT NULL
-  )
-`;
-
 export class WeixinGatewayService {
   private readonly presetStore: SkillPresetStore;
   private readonly gatewaySettings: GatewaySettingsStore;
@@ -157,15 +110,13 @@ export class WeixinGatewayService {
   private pairingState: WeixinPairingState = { status: 'idle' };
   private pairingPromise?: Promise<void>;
 
-  constructor(private readonly db: PiuiDatabase, gatewaySettings?: GatewaySettingsStore) {
+  constructor(
+    private readonly db: PiuiDatabase,
+    gatewaySettings: GatewaySettingsStore | undefined,
+    private readonly sessionService: PiSessionService,
+  ) {
     this.presetStore = new SkillPresetStore(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
-    this.db.exec(WEIXIN_SESSION_TABLE_SQL);
-    this.db.exec(WEIXIN_CONFIG_TABLE_SQL);
-    this.db.exec(WEIXIN_STATE_TABLE_SQL);
-    this.db.exec(WEIXIN_CONTEXT_TOKEN_TABLE_SQL);
-    this.db.exec(WEIXIN_CREDENTIAL_TABLE_SQL);
-    this.ensureConfigColumns();
   }
 
   start(): void {
@@ -248,16 +199,6 @@ export class WeixinGatewayService {
       dmPolicy: parseDmPolicy(process.env.PI_WEBUI_WECHAT_DM_POLICY),
       allowedUsers: parseList(process.env.PI_WEBUI_WECHAT_ALLOWED_USERS),
     };
-  }
-
-  private ensureConfigColumns(): void {
-    for (const column of ['skill_mode TEXT', 'skill_preset_id TEXT']) {
-      try {
-        this.db.exec(`ALTER TABLE weixin_gateway_configs ADD COLUMN ${column}`);
-      } catch {
-        // Existing installations may already have the column.
-      }
-    }
   }
 
   private async pollPairing(qrcode: string): Promise<void> {
@@ -580,7 +521,7 @@ export class WeixinGatewayService {
 
     const stopTypingIndicator = this.startTypingIndicator(config, message.chatId);
     try {
-      await sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
+      await this.sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
         await session.prompt(promptText, imageResult.images.length ? { images: imageResult.images } : undefined);
       });
     } finally {
@@ -611,18 +552,18 @@ export class WeixinGatewayService {
   }
 
   private async ensureSession(clientId: string, config: WeixinGatewayConfig) {
-    await sessionService.setClientAgentProfile(clientId, config.agentProfile || 'default');
+    await this.sessionService.setClientAgentProfile(clientId, config.agentProfile || 'default');
 
-    const active = sessionService.getSession(clientId);
+    const active = this.sessionService.getSession(clientId);
     if (active) return active;
 
     const mappedSessionId = this.getMappedSessionId(clientId);
     if (mappedSessionId) {
-      const persisted = await sessionService.findPersistedSession(clientId, mappedSessionId);
-      if (persisted) return sessionService.resumeSession(clientId, persisted.path);
+      const persisted = await this.sessionService.findPersistedSession(clientId, mappedSessionId);
+      if (persisted) return this.sessionService.resumeSession(clientId, persisted.path);
     }
 
-    const result = await sessionService.createSession(clientId, await this.createSessionOptions(config));
+    const result = await this.sessionService.createSession(clientId, await this.createSessionOptions(config));
     this.saveSessionMapping(clientId, result.session.sessionId);
     return result.session;
   }
@@ -765,14 +706,14 @@ export class WeixinGatewayService {
   }
 
   private resetSession(clientId: string): void {
-    sessionService.disposeSession(clientId);
+    this.sessionService.disposeSession(clientId);
     this.deleteSessionMapping(clientId);
   }
 
   private async setChatProfile(clientId: string, profileId?: string): Promise<void> {
     const profile = profileId?.trim();
     if (!profile) throw new Error('Usage: /profile <profile-id>');
-    const profiles = await sessionService.listAgentProfiles();
+    const profiles = await this.sessionService.listAgentProfiles();
     if (!profiles.some((item) => item.id === profile)) throw new Error(`Unknown profile: ${profile}`);
     this.saveChatConfig(clientId, { agentProfile: profile });
   }
@@ -795,9 +736,9 @@ export class WeixinGatewayService {
   }
 
   private async formatStatus(clientId: string, config: WeixinGatewayConfig, prefix?: string): Promise<string> {
-    const profiles = await sessionService.listAgentProfiles();
+    const profiles = await this.sessionService.listAgentProfiles();
     const profile = profiles.find((item) => item.id === (config.agentProfile || 'default')) || profiles[0];
-    const active = sessionService.getSession(clientId);
+    const active = this.sessionService.getSession(clientId);
     return [
       prefix,
       'Pi session status',
@@ -812,7 +753,7 @@ export class WeixinGatewayService {
   }
 
   private async formatProfiles(currentProfile: string): Promise<string> {
-    const profiles = await sessionService.listAgentProfiles();
+    const profiles = await this.sessionService.listAgentProfiles();
     return ['Available profiles:', ...profiles.map((profile) => `${profile.id === currentProfile ? '*' : ' '} ${profile.id}`)].join('\n');
   }
 

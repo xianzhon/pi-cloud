@@ -1,38 +1,72 @@
 import type { ReviewSessionListItem, ReviewSessionTranscript, ReviewSource, ReviewSourceType } from '../types/reviewSource';
+import { apiRequest } from './apiClient';
 
-export async function listReviewSources(): Promise<ReviewSource[]> {
-  const response = await fetch('/api/review-sources');
-  const data = await response.json() as { sources?: ReviewSource[] };
+export interface ReviewSourcesResponse {
+  sources?: ReviewSource[];
+}
+
+export interface ReviewSourceTypesResponse {
+  types?: ReviewSourceType[];
+}
+
+export interface CreateReviewSourceRequest {
+  type: string;
+  label: string;
+  dataPath: string;
+}
+
+export interface CreateReviewSourceResponse {
+  source: ReviewSource;
+}
+
+export interface ReviewSessionsResponse {
+  sessions?: ReviewSessionListItem[];
+}
+
+export interface ReviewTranscriptResponse {
+  transcript: ReviewSessionTranscript;
+}
+
+export interface ReviewSourceProjectPathsResponse {
+  projectPaths?: string[];
+}
+
+export async function listReviewSources(signal?: AbortSignal): Promise<ReviewSource[]> {
+  const data = await apiRequest<ReviewSourcesResponse>('/api/review-sources', { signal });
   return data.sources || [];
 }
 
-export async function listReviewSourceTypes(): Promise<ReviewSourceType[]> {
-  const response = await fetch('/api/review-sources/types');
-  if (!response.ok) throw new Error('Failed to load review source types');
-  const data = await response.json() as { types?: ReviewSourceType[] };
+export async function listReviewSourceTypes(signal?: AbortSignal): Promise<ReviewSourceType[]> {
+  const data = await apiRequest<ReviewSourceTypesResponse>('/api/review-sources/types', {
+    signal,
+    fallbackMessage: 'Failed to load review source types',
+  });
   return data.types || [];
 }
 
-export async function createReviewSource(request: { type: string; label: string; dataPath: string }): Promise<ReviewSource> {
-  const response = await fetch('/api/review-sources', {
+export async function createReviewSource(request: CreateReviewSourceRequest, signal?: AbortSignal): Promise<ReviewSource> {
+  const data = await apiRequest<CreateReviewSourceResponse, CreateReviewSourceRequest>('/api/review-sources', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
+    body: request,
+    signal,
+    fallbackMessage: 'Failed to create review source',
   });
-  if (!response.ok) throw new Error('Failed to create review source');
-  const data = await response.json() as { source: ReviewSource };
   return data.source;
 }
 
-export async function deleteReviewSource(id: string): Promise<void> {
-  const response = await fetch(`/api/review-sources/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error('Failed to delete review source');
+export async function deleteReviewSource(id: string, signal?: AbortSignal): Promise<void> {
+  await apiRequest<void>(`/api/review-sources/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    signal,
+    fallbackMessage: 'Failed to delete review source',
+  });
 }
 
 export interface ReviewSessionListOptions {
   projectPath?: string;
   offset?: number;
   limit?: number;
+  signal?: AbortSignal;
 }
 
 function buildSessionListParams(options: ReviewSessionListOptions): URLSearchParams {
@@ -46,36 +80,43 @@ function buildSessionListParams(options: ReviewSessionListOptions): URLSearchPar
 export async function listReviewSessions(sourceId: string, options: ReviewSessionListOptions = {}): Promise<ReviewSessionListItem[]> {
   const params = buildSessionListParams(options);
   const query = params.size > 0 ? `?${params.toString()}` : '';
-  const response = await fetch(`/api/review-sources/${encodeURIComponent(sourceId)}/sessions${query}`);
-  if (!response.ok) throw new Error('Failed to load review sessions');
-  const data = await response.json() as { sessions?: ReviewSessionListItem[] };
+  const data = await apiRequest<ReviewSessionsResponse>(`/api/review-sources/${encodeURIComponent(sourceId)}/sessions${query}`, {
+    signal: options.signal,
+    fallbackMessage: 'Failed to load review sessions',
+  });
   return data.sessions || [];
 }
 
 export async function searchReviewSessions(sourceId: string, query: string, options: ReviewSessionListOptions = {}): Promise<ReviewSessionListItem[]> {
   const params = buildSessionListParams(options);
   params.set('q', query);
-  const response = await fetch(`/api/review-sources/${encodeURIComponent(sourceId)}/search?${params.toString()}`);
-  if (!response.ok) throw new Error('Failed to search review sessions');
-  const data = await response.json() as { sessions?: ReviewSessionListItem[] };
+  const data = await apiRequest<ReviewSessionsResponse>(`/api/review-sources/${encodeURIComponent(sourceId)}/search?${params.toString()}`, {
+    signal: options.signal,
+    fallbackMessage: 'Failed to search review sessions',
+  });
   return data.sessions || [];
 }
 
-export async function getReviewTranscript(sourceId: string, sessionId: string): Promise<ReviewSessionTranscript> {
-  const response = await fetch(`/api/review-sources/${encodeURIComponent(sourceId)}/sessions/${encodeURIComponent(sessionId)}/transcript`);
-  if (!response.ok) throw new Error('Failed to load transcript');
-  const data = await response.json() as { transcript: ReviewSessionTranscript };
+export async function getReviewTranscript(sourceId: string, sessionId: string, signal?: AbortSignal): Promise<ReviewSessionTranscript> {
+  const data = await apiRequest<ReviewTranscriptResponse>(`/api/review-sources/${encodeURIComponent(sourceId)}/sessions/${encodeURIComponent(sessionId)}/transcript`, {
+    signal,
+    fallbackMessage: 'Failed to load transcript',
+  });
   return data.transcript;
 }
 
-export async function deleteReviewSession(sourceId: string, sessionId: string): Promise<void> {
-  const response = await fetch(`/api/review-sources/${encodeURIComponent(sourceId)}/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error('Failed to delete session');
+export async function deleteReviewSession(sourceId: string, sessionId: string, signal?: AbortSignal): Promise<void> {
+  await apiRequest<void>(`/api/review-sources/${encodeURIComponent(sourceId)}/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+    signal,
+    fallbackMessage: 'Failed to delete session',
+  });
 }
 
-export async function listReviewSourceProjectPaths(sourceId: string): Promise<string[]> {
-  const response = await fetch(`/api/review-sources/${encodeURIComponent(sourceId)}/project-paths`);
-  if (!response.ok) throw new Error('Failed to load review source project paths');
-  const data = await response.json() as { projectPaths?: string[] };
+export async function listReviewSourceProjectPaths(sourceId: string, signal?: AbortSignal): Promise<string[]> {
+  const data = await apiRequest<ReviewSourceProjectPathsResponse>(`/api/review-sources/${encodeURIComponent(sourceId)}/project-paths`, {
+    signal,
+    fallbackMessage: 'Failed to load review source project paths',
+  });
   return data.projectPaths || [];
 }

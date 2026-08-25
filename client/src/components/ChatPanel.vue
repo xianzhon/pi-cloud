@@ -644,7 +644,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useChat, type ChatImage, type MessageMemoryRecall } from '../composables/useChat';
 import { replaceSlashToken, useSlashCommands } from '../composables/useSlashCommands';
 import { useFileSearch, replaceFileToken } from '../composables/useFileSearch';
-import { useGitHosting, type GitHostingPrPreview } from '../composables/useGitHosting';
 import type { SlashCommandItem } from '../types/slashCommands';
 import type { FileSearchResult } from '../types/fileSearch';
 import { PhArrowUp, PhCamera, PhCornersIn, PhCornersOut, PhDownloadSimple, PhEye, PhImage, PhLightbulb, PhListChecks, PhListDashes, PhMagicWand, PhRobot, PhX } from '@phosphor-icons/vue';
@@ -660,8 +659,13 @@ import type { AvailableSkill } from '../composables/useAvailableSkills';
 import { exportSessionPdf, hasExportableMessages } from '../utils/sessionPdfExport';
 import { getReviewTranscript } from '../services/reviewSourceService';
 import type { ReviewSessionTranscript } from '../types/reviewSource';
+import { formatFileSize, useChatAttachments, type PendingAttachment } from '../composables/useChatAttachments';
+import { useSessionRuntime } from '../composables/useSessionRuntime';
+import { useChatPullRequests } from '../composables/useChatPullRequests';
+import { createGitOperations } from '../services/gitOperations';
 
 const t = i18n.global.t;
+const gitOperations = createGitOperations();
 
 const {
   messages,
@@ -675,7 +679,6 @@ const {
   loadSessionHistory,
   clearMessages,
 } = useChat();
-const gitHosting = useGitHosting();
 
 const props = withDefaults(defineProps<{
   sessionId?: string;
@@ -704,6 +707,40 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ branchChanged: []; toggleFullscreen: []; }>();
 
+const {
+  sessionStatus,
+  thinkingLevelChanging,
+  modelSelectorOpen,
+  thinkingSelectorOpen,
+  modelSelectorLoading,
+  modelSelectorError,
+  modelOptions,
+  modelSearch,
+  activeModelIndex,
+  modelSearchRef,
+  modelListRef,
+  filteredModels,
+  thinkingLevels,
+  composerModelLabel,
+  refreshSessionStatus,
+  handleModelSelectorClick,
+  openModelSelector,
+  closeModelSelector,
+  handleModelSearchKeydown,
+  openThinkingSelector,
+  closeThinkingSelector,
+  selectThinkingLevel,
+  selectModel,
+} = useSessionRuntime({
+  sessionId: () => props.sessionId,
+  clientId: () => props.clientId,
+  modelInfo: () => props.modelInfo,
+  isStreaming,
+  configureNewSession: props.configureNewSession,
+  notify: (message) => { addLocalMessage(message, props.sessionId); },
+  t: (key, params) => t(key, params || {}),
+});
+
 interface CommitStatusFile {
   path: string;
   status: string;
@@ -718,21 +755,6 @@ interface CommitPreview {
 
 type BranchDialogMode = 'switch' | 'changes' | 'base';
 type GitSyncCommand = 'push' | 'pull';
-
-interface ModelOption {
-  provider: string;
-  id: string;
-  name?: string;
-  current?: boolean;
-  input?: string[];
-}
-
-interface PendingAttachment extends ChatImage {
-  id: string;
-  name: string;
-  size: number;
-  previewUrl: string;
-}
 
 type SkillMode = 'all' | 'enabled' | 'disabled';
 
@@ -771,35 +793,6 @@ interface SummaryGeneratedDetail {
   content?: string;
 }
 
-interface SessionRuntimeStatus {
-  model?: {
-    provider?: string;
-    id?: string;
-    contextWindow?: number;
-    reasoning?: boolean;
-    input?: string[];
-  };
-  thinkingLevel?: string;
-  thinkingLevels?: string[];
-  usingSubscription?: boolean;
-  autoCompactionEnabled?: boolean;
-  stats?: {
-    tokens?: {
-      input?: number;
-      output?: number;
-      cacheRead?: number;
-      cacheWrite?: number;
-      total?: number;
-    };
-    cost?: number;
-  };
-  contextUsage?: {
-    tokens: number | null;
-    contextWindow: number;
-    percent: number | null;
-  };
-}
-
 interface SessionCommandInfo {
   name?: string;
   workDir?: string;
@@ -827,13 +820,23 @@ interface SessionCommandInfo {
 }
 
 const inputText = ref('');
-const attachments = ref<PendingAttachment[]>([]);
-const attachmentPreview = ref<PendingAttachment | null>(null);
-const attachmentError = ref('');
-const isDraggingImages = ref(false);
+const {
+  attachments,
+  attachmentPreview,
+  attachmentError,
+  isDraggingImages,
+  handleImageInput,
+  handleImagePaste,
+  handleImageDrag,
+  handleDragLeave,
+  handleImageDrop,
+  removeAttachment,
+  openAttachmentPreview,
+  closeAttachmentPreview,
+  clearAcceptedAttachments,
+} = useChatAttachments((key, params) => t(key, params || {}));
 const isPolishingPrompt = ref(false);
 const promptPolishError = ref('');
-const sessionStatus = ref<SessionRuntimeStatus | null>(null);
 const selectedMessageIndex = ref(0);
 const reviewTranscript = ref<ReviewSessionTranscript | null>(null);
 let reviewTranscriptRequestId = 0;
@@ -843,17 +846,11 @@ const showViewOptions = ref(false);
 const isExportingPdf = ref(false);
 const exportPdfError = ref('');
 const isPreparingSession = ref(false);
-const thinkingLevelChanging = ref(false);
 const commitPreview = ref<CommitPreview | null>(null);
 const commitStatusMessage = ref<ChatLocalMessage | null>(null);
 const commitGeneratingMessage = ref(false);
 const commitGenerationError = ref('');
 const commitStagedOnly = ref(false);
-const prPreview = ref<GitHostingPrPreview | null>(null);
-const prStatusMessage = ref<ChatLocalMessage | null>(null);
-const prGeneratingContent = ref(false);
-const prUpdatingTargetBranch = ref(false);
-const prGenerationError = ref('');
 const branchDialogOpen = ref(false);
 const branchDialogMode = ref<BranchDialogMode>('switch');
 const branchDialogLoading = ref(false);
@@ -867,8 +864,6 @@ const branchBaseName = ref('');
 const branchNewName = ref('');
 const branchPullAfterSwitch = ref(false);
 const branchDeleteOriginal = ref(true);
-const modelSelectorOpen = ref(false);
-const thinkingSelectorOpen = ref(false);
 const BRANCH_SELECTION_STORAGE_KEY = 'pi-webui:last-branch-selection';
 
 function branchSelectionStorageKey(): string {
@@ -876,35 +871,49 @@ function branchSelectionStorageKey(): string {
 }
 const skillSelectorOpen = ref(false);
 const treeModalOpen = ref(false);
-const modelSelectorLoading = ref(false);
 const skillSelectorLoading = ref(false);
 const skillSelectorSaving = ref(false);
-const modelSelectorError = ref('');
 const skillSelectorError = ref('');
-const modelOptions = ref<ModelOption[]>([]);
 const skillOptions = ref<AvailableSkill[]>([]);
 const selectedSkills = ref<string[]>([]);
 const skillMode = ref<SkillMode>('all');
 const skillConfigurationLoaded = ref(false);
-const modelSearch = ref('');
-const activeModelIndex = ref(-1);
 const inputRef = ref<HTMLTextAreaElement>();
 const imageInputRef = ref<HTMLInputElement>();
 const cameraInputRef = ref<HTMLInputElement>();
 const commitMessageInputRef = ref<HTMLTextAreaElement>();
-const modelSearchRef = ref<HTMLInputElement>();
-const modelListRef = ref<HTMLElement>();
 const messagesRef = ref<HTMLElement>();
 const streamingStartedAt = ref<number | null>(null);
 const streamingElapsedSeconds = ref(0);
 let streamingElapsedTimerId: number | undefined;
 let isUnmounted = false;
 const slashCommands = useSlashCommands();
+const {
+  prPreview,
+  prGeneratingContent,
+  prUpdatingTargetBranch,
+  prGenerationError,
+  prTargetBranchOptions,
+  handlePrCommand,
+  cancelPr,
+  updatePrTargetBranch,
+  generatePrContent,
+  confirmPr,
+} = useChatPullRequests({
+  projectPath: () => props.projectPath,
+  sessionId: () => props.sessionId,
+  clientId: () => props.clientId,
+  branchOptions,
+  closeCommands: slashCommands.close,
+  clearComposer: () => {
+    inputText.value = '';
+    void resizeInputAfterDomUpdate();
+  },
+  addLocalMessage: (message, sessionId) => addLocalMessage(message, sessionId),
+  t: (key, params) => t(key, params || {}),
+});
 const fileSearch = useFileSearch(() => props.projectPath);
 const MAX_INPUT_HEIGHT = 276;
-const MAX_IMAGE_COUNT = 4;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 32;
 const SESSION_SUMMARY_PROMPT = `Please summarize the current session for handoff to a new chat and for note-taking.
 
@@ -1368,14 +1377,6 @@ const composerContextText = computed(() => {
   const percent = status?.contextUsage?.percent == null ? '?' : status.contextUsage.percent.toFixed(1);
   return `${percent}%/${formatTokens(contextWindow)}`;
 });
-function modelLabelWithoutProvider(label?: string): string {
-  return label?.split(/\s+\/\s+/).pop()?.trim() || '';
-}
-
-const composerModelLabel = computed(() => {
-  const model = sessionStatus.value?.model;
-  return modelLabelWithoutProvider(model?.id) || props.modelInfo || t('components.chatPanel.selectModel');
-});
 const composerSkillLabel = computed(() => {
   if (!skillConfigurationLoaded.value) return t('components.chatPanel.skills');
   const count = activeSkillCount.value;
@@ -1386,66 +1387,10 @@ const activeSkillCount = computed(() => {
   if (skillMode.value === 'disabled') return Math.max(skillOptions.value.length - selectedSkills.value.length, 0);
   return skillOptions.value.length;
 });
-const thinkingLevels = computed(() => sessionStatus.value?.thinkingLevels || []);
 const commitDialogTitle = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amendPreviousCommit') : t('components.chatPanel.commitChanges'));
 const commitDialogConfirmText = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amend') : t('components.chatPanel.commit'));
 const branchDialogActionLabel = computed(() => branchDialogMode.value === 'switch' ? t('components.chatPanel.switchBranch') : t('components.chatPanel.createBranch'));
 const branchSelectOptions = computed<CustomSelectOption[]>(() => branchOptions.value.map((branch) => ({ value: branch, label: branch })));
-const prTargetBranchOptions = computed<CustomSelectOption[]>(() => {
-  const targetBranch = prPreview.value?.targetBranch || 'main';
-  return Array.from(new Set([targetBranch, 'main', ...branchOptions.value]))
-    .filter(Boolean)
-    .map((branch) => ({ value: branch, label: branch }));
-});
-
-const filteredModels = computed(() => {
-  const query = modelSearch.value.trim().toLowerCase();
-  if (!query) return modelOptions.value;
-  return modelOptions.value.filter((model) => [model.provider, model.id, model.name || ''].join(' ').toLowerCase().includes(query));
-});
-
-watch(filteredModels, (models) => {
-  if (!models.length) {
-    activeModelIndex.value = -1;
-    return;
-  }
-
-  if (activeModelIndex.value >= models.length) {
-    activeModelIndex.value = models.length - 1;
-  }
-});
-
-watch(activeModelIndex, async () => {
-  await nextTick();
-  modelListRef.value?.querySelector<HTMLElement>('.model-option.keyboard-active')?.scrollIntoView({ block: 'nearest' });
-});
-
-function moveModelSelection(delta: number) {
-  const lastIndex = filteredModels.value.length - 1;
-  if (lastIndex < 0) return;
-  activeModelIndex.value = Math.min(Math.max(activeModelIndex.value + delta, 0), lastIndex);
-}
-
-function handleModelSearchKeydown(event: KeyboardEvent) {
-  switch (event.key) {
-    case 'ArrowDown':
-      event.preventDefault();
-      moveModelSelection(1);
-      break;
-    case 'ArrowUp':
-      event.preventDefault();
-      moveModelSelection(-1);
-      break;
-    case 'Enter':
-      if (activeModelIndex.value < 0) return;
-      event.preventDefault();
-      void selectModel(filteredModels.value[activeModelIndex.value]);
-      break;
-    case 'Escape':
-      closeModelSelector();
-      break;
-  }
-}
 
 function formatTokens(count: number) {
   if (count < 1000) return String(count);
@@ -1461,24 +1406,6 @@ function runWhenIdle(callback: () => void): void {
     return;
   }
   globalThis.setTimeout(callback, 0);
-}
-
-async function refreshSessionStatus() {
-  if (!props.sessionId || !props.clientId) {
-    sessionStatus.value = null;
-    return;
-  }
-
-  try {
-    const statusUrl = new URL(`/api/sessions/${props.sessionId}/status`, window.location.origin);
-    statusUrl.searchParams.set('clientId', props.clientId);
-    const response = await fetch(statusUrl.toString());
-    if (!response.ok) throw new Error(t('components.chatPanel.failedToLoadSessionStatus'));
-    sessionStatus.value = await response.json();
-  } catch (error) {
-    console.error(t('components.chatPanel.failedToLoadSessionStatus2'), error);
-    sessionStatus.value = null;
-  }
 }
 
 onMounted(async () => {
@@ -1565,89 +1492,6 @@ watch(visibleMessages, async () => {
   }
 }, { deep: true });
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function readImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('read failed'));
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      const comma = result.indexOf(',');
-      if (comma < 0 || !result.slice(comma + 1)) reject(new Error('read failed'));
-      else resolve(result.slice(comma + 1));
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-async function addImageFiles(files: Iterable<File>): Promise<void> {
-  const errors: string[] = [];
-  attachmentError.value = '';
-
-  for (const file of files) {
-    if (!IMAGE_MIME_TYPES.has(file.type)) {
-      errors.push(t('components.chatPanel.unsupportedImage', { name: file.name }));
-      continue;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      errors.push(t('components.chatPanel.imageTooLarge', { name: file.name }));
-      continue;
-    }
-    if (attachments.value.length >= MAX_IMAGE_COUNT) {
-      errors.push(t('components.chatPanel.youCanAttachUpTo4Images'));
-      continue;
-    }
-
-    try {
-      const data = await readImage(file);
-      attachments.value.push({
-        id: `${Date.now()}-${Math.random()}`,
-        type: 'image',
-        data,
-        mimeType: file.type,
-        name: file.name,
-        size: file.size,
-        previewUrl: `data:${file.type};base64,${data}`,
-      });
-    } catch {
-      errors.push(t('components.chatPanel.theImageCouldNotBeReadTry'));
-    }
-  }
-
-  attachmentError.value = Array.from(new Set(errors)).join(' ');
-}
-
-function handleImageInput(event: Event): void {
-  const input = event.target as HTMLInputElement;
-  void addImageFiles(Array.from(input.files || [])).finally(() => { input.value = ''; });
-}
-
-function handleImagePaste(event: ClipboardEvent): void {
-  const files = Array.from(event.clipboardData?.files || []);
-  if (!files.length) return;
-  event.preventDefault();
-  void addImageFiles(files);
-}
-
-function handleImageDrag(event: DragEvent): void {
-  const items = Array.from(event.dataTransfer?.items || []);
-  isDraggingImages.value = items.some((item) => item.kind === 'file' && IMAGE_MIME_TYPES.has(item.type));
-}
-
-function handleDragLeave(event: DragEvent): void {
-  if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) isDraggingImages.value = false;
-}
-
-function handleImageDrop(event: DragEvent): void {
-  isDraggingImages.value = false;
-  void addImageFiles(Array.from(event.dataTransfer?.files || []));
-}
-
 async function polishPrompt(): Promise<void> {
   if (!canPolishPrompt.value) return;
   isPolishingPrompt.value = true;
@@ -1669,30 +1513,6 @@ async function polishPrompt(): Promise<void> {
     isPolishingPrompt.value = false;
   }
 }
-
-function removeAttachment(id: string): void {
-  attachments.value = attachments.value.filter((attachment) => attachment.id !== id);
-  attachmentError.value = '';
-  if (attachmentPreview.value?.id === id) closeAttachmentPreview();
-}
-
-function openAttachmentPreview(attachment: PendingAttachment): void {
-  attachmentPreview.value = attachment;
-}
-
-function closeAttachmentPreview(): void {
-  attachmentPreview.value = null;
-}
-
-function handleAttachmentPreviewKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') closeAttachmentPreview();
-}
-
-watch(attachmentPreview, (preview, _previous, onCleanup) => {
-  if (!preview) return;
-  window.addEventListener('keydown', handleAttachmentPreviewKeydown);
-  onCleanup(() => window.removeEventListener('keydown', handleAttachmentPreviewKeydown));
-});
 
 function addFileReference(path: string) {
   const separator = inputText.value && !/\s$/.test(inputText.value) ? ' ' : '';
@@ -1745,11 +1565,7 @@ function handleAnnotateImage(image: ChatImage): void {
 
 function clearAcceptedDraft(imageDraft: PendingAttachment[]): void {
   inputText.value = '';
-  if (imageDraft.length) {
-    const acceptedIds = new Set(imageDraft.map((image) => image.id));
-    attachments.value = attachments.value.filter((attachment) => !acceptedIds.has(attachment.id));
-  }
-  attachmentError.value = '';
+  clearAcceptedAttachments(imageDraft);
   resizeInputAfterDomUpdate();
 }
 
@@ -1943,10 +1759,6 @@ function isSummaryCommand(text: string) {
 
 function isChangelogCommand(text: string) {
   return /^\/changelog(?:\s|$)/i.test(text.trim());
-}
-
-function parsePrTarget(text: string) {
-  return text.trim().replace(/^\/pr(?:\s+|$)/i, '').trim().split(/\s+/)[0] || 'main';
 }
 
 function parseBranchArgs(text: string) {
@@ -2278,10 +2090,7 @@ async function handleTreeNavigated(result: { editorText?: string }) {
 
 async function handleOpenGitCommit(commit: string) {
   try {
-    const params = new URLSearchParams({ cwd: props.projectPath || '~', commit });
-    const response = await fetch(`/api/git/diff?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.getDiff({ cwd: props.projectPath || '~', commit });
     if (data.oversized) throw new Error(data.message || t('components.chatPanel.thisDiffIsTooLargeToShow'));
     if (typeof data.diff !== 'string' || !data.diff.trim()) return;
 
@@ -2318,12 +2127,11 @@ async function handleDiffCommand(text: string) {
   resizeInputAfterDomUpdate();
 
   try {
-    const params = new URLSearchParams({ cwd: props.projectPath || '~' });
     const scope = parseDiffScope(text);
-    if (scope !== 'all') params.set('scope', scope);
-    const response = await fetch(`/api/git/diff?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.getDiff({
+      cwd: props.projectPath || '~',
+      scope: scope === 'all' ? undefined : scope,
+    });
 
     if (!data.oversized && typeof data.diff === 'string' && data.diff.trim()) {
       window.dispatchEvent(new CustomEvent('open-virtual-diff-in-editor', {
@@ -2366,10 +2174,7 @@ async function handleStatusCommand(text: string) {
   resizeInputAfterDomUpdate();
 
   try {
-    const params = new URLSearchParams({ cwd: props.projectPath || '~' });
-    const response = await fetch(`/api/git/status?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.getStatus({ cwd: props.projectPath || '~' });
 
     responseMessage.kind = 'text';
     responseMessage.status = undefined;
@@ -2413,13 +2218,7 @@ async function handleGitSyncCommand(text: string, command: GitSyncCommand) {
   resizeInputAfterDomUpdate();
 
   try {
-    const response = await fetch(`/api/git/${command}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cwd: props.projectPath || '~' }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.sync(command, props.projectPath || '~');
 
     responseMessage.kind = 'text';
     responseMessage.status = undefined;
@@ -2446,15 +2245,10 @@ async function loadBranchOptions() {
   branchDialogError.value = '';
   branchHasChanges.value = false;
   try {
-    const params = new URLSearchParams({ cwd: props.projectPath || '~' });
-    const [branchesResponse, statusResponse] = await Promise.all([
-      fetch(`/api/git/branches?${params}`),
-      fetch(`/api/git/status?${params}`),
+    const [branchesData, statusData] = await Promise.all([
+      gitOperations.getBranches(props.projectPath || '~'),
+      gitOperations.getStatus({ cwd: props.projectPath || '~' }),
     ]);
-    const branchesData = await branchesResponse.json();
-    const statusData = await statusResponse.json();
-    if (!branchesResponse.ok) throw new Error(branchesData.error || `HTTP ${branchesResponse.status}`);
-    if (!statusResponse.ok) throw new Error(statusData.error || `HTTP ${statusResponse.status}`);
     branchOptions.value = Array.isArray(branchesData.branches) ? branchesData.branches : [];
     branchHasChanges.value = Array.isArray(statusData.files) && statusData.files.length > 0;
     const savedBranch = localStorage.getItem(branchSelectionStorageKey()) || '';
@@ -2494,10 +2288,7 @@ async function generateBranchDialogName() {
   branchGeneratingName.value = true;
   branchDialogError.value = '';
   try {
-    const params = new URLSearchParams({ cwd: props.projectPath || '~', clientId: props.clientId });
-    const response = await fetch(`/api/git/branch-name?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.generateBranchName({ cwd: props.projectPath || '~', clientId: props.clientId });
     branchNewName.value = data.name || '';
   } catch (error) {
     branchDialogError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToGenerateBranchName');
@@ -2534,13 +2325,7 @@ async function runBranchCreate(name: string, baseBranch: string | undefined, use
   const responseMessage = addLocalMessage({ role: 'assistant', content: t('components.chatPanel.creatingGitBranch'), kind: 'status', status: 'pending', title: t('components.chatPanel.gitBranch') }, props.sessionId);
 
   try {
-    const response = await fetch('/api/git/branch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cwd: props.projectPath || '~', name, baseBranch }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.createBranch({ cwd: props.projectPath || '~', name, baseBranch });
     responseMessage.kind = 'text';
     responseMessage.status = undefined;
     responseMessage.title = undefined;
@@ -2560,13 +2345,9 @@ async function runBranchSwitch(name: string, pull: boolean, deleteOriginal: bool
   const responseMessage = addLocalMessage({ role: 'assistant', content: t('components.chatPanel.switchingGitBranch'), kind: 'status', status: 'pending', title: t('components.chatPanel.gitBranch') }, props.sessionId);
 
   try {
-    const response = await fetch('/api/git/switch-branch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cwd: props.projectPath || '~', name, pull, deleteOriginal, sessionId: props.sessionId }),
+    const data = await gitOperations.switchBranch({
+      cwd: props.projectPath || '~', name, pull, deleteOriginal, sessionId: props.sessionId,
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
     responseMessage.kind = 'text';
     responseMessage.status = undefined;
     responseMessage.title = undefined;
@@ -2625,12 +2406,8 @@ async function handleCommitCommand(text: string) {
   resizeInputAfterDomUpdate();
 
   try {
-    const params = new URLSearchParams({ cwd: props.projectPath || '~' });
     const commitMessage = getCommitMessage(text);
-    params.set('message', commitMessage);
-    const response = await fetch(`/api/git/status?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.getStatus({ cwd: props.projectPath || '~', message: commitMessage });
     if (!Array.isArray(data.files) || data.files.length === 0) {
       responseMessage.kind = 'text';
       responseMessage.status = undefined;
@@ -2675,12 +2452,11 @@ async function handleAmendCommand(text: string) {
   resizeInputAfterDomUpdate();
 
   try {
-    const params = new URLSearchParams({ cwd: props.projectPath || '~' });
     const amendMessage = parseAmendMessageOverride(text);
-    if (amendMessage) params.set('message', amendMessage);
-    const response = await fetch(`/api/git/amend-status?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.getAmendStatus({
+      cwd: props.projectPath || '~',
+      message: amendMessage || undefined,
+    });
 
     const preview: CommitPreview = {
       cwd: data.cwd || props.projectPath || '~',
@@ -2708,11 +2484,7 @@ async function refreshCommitFiles() {
 
   commitGenerationError.value = '';
   try {
-    const params = new URLSearchParams({ cwd: preview.cwd });
-    if (commitStagedOnly.value) params.set('stagedOnly', 'true');
-    const response = await fetch(`/api/git/status?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.getStatus({ cwd: preview.cwd, stagedOnly: commitStagedOnly.value });
     preview.files = Array.isArray(data.files) ? data.files : [];
   } catch (error) {
     commitGenerationError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToPrepareGitCommit');
@@ -2734,11 +2506,11 @@ async function generateCommitMessage() {
   commitGeneratingMessage.value = true;
   commitGenerationError.value = '';
   try {
-    const params = new URLSearchParams({ cwd: preview.cwd, clientId: props.clientId });
-    if (preview.mode === 'commit' && commitStagedOnly.value) params.set('stagedOnly', 'true');
-    const response = await fetch(`/api/git/commit-message?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const data = await gitOperations.generateCommitMessage({
+      cwd: preview.cwd,
+      clientId: props.clientId,
+      stagedOnly: preview.mode === 'commit' && commitStagedOnly.value,
+    });
     preview.message = data.message || preview.message;
   } catch (error) {
     commitGenerationError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToGenerateCommitMessage');
@@ -2769,19 +2541,12 @@ async function confirmCommit() {
   responseMessage.content = preview.mode === 'amend' ? t('components.chatPanel.amendingGitCommit') : t('components.chatPanel.creatingGitCommit');
 
   try {
-    const endpoint = preview.mode === 'amend' ? '/api/git/amend' : '/api/git/commit';
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cwd: preview.cwd,
-        message: preview.message,
-        sessionId: props.sessionId,
-        ...(preview.mode === 'commit' && commitStagedOnly.value ? { stagedOnly: true } : {}),
-      }),
+    const data = await gitOperations.saveCommit(preview.mode, {
+      cwd: preview.cwd,
+      message: preview.message,
+      sessionId: props.sessionId,
+      stagedOnly: preview.mode === 'commit' && commitStagedOnly.value,
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
 
     responseMessage.kind = 'text';
     responseMessage.status = undefined;
@@ -2794,134 +2559,6 @@ async function confirmCommit() {
     responseMessage.content = error instanceof Error ? error.message : preview.mode === 'amend' ? t('components.chatPanel.failedToAmendGitCommit') : t('components.chatPanel.failedToCreateGitCommit');
   } finally {
     commitStatusMessage.value = null;
-  }
-}
-
-function formatPrPreview(preview: GitHostingPrPreview) {
-  const files = preview.files.length ? preview.files.map((file) => `- ${file.status.padEnd(2, ' ')} ${file.path}`).join('\n') : t('components.chatPanel.noUncommittedFiles');
-  const provider = preview.provider === 'github' ? 'GitHub' : 'Gitea';
-  return `### Proposed ${provider} PR\n\nRepository: \`${preview.owner}/${preview.repo}\`\n\nSource: \`${preview.sourceBranch}\`\nTarget: \`${preview.targetBranch}\`\n\nTitle: \`${preview.title}\`\n\nFiles:\n\n\`\`\`text\n${files}\n\`\`\`\n\nConfirm in the dialog to commit if needed, push, and create the PR.`;
-}
-
-async function loadPrBranchOptions() {
-  try {
-    const params = new URLSearchParams({ cwd: props.projectPath || '~' });
-    const response = await fetch(`/api/git/branches?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-    branchOptions.value = Array.isArray(data.branches) ? data.branches : [];
-  } catch {
-    branchOptions.value = [];
-  }
-}
-
-async function handlePrCommand(text: string) {
-  slashCommands.close();
-  addLocalMessage({ role: 'user', content: text, kind: 'text' }, props.sessionId);
-  const responseMessage = addLocalMessage({ role: 'assistant', content: t('components.chatPanel.preparingPrPreview'), kind: 'status', status: 'pending', title: t('components.chatPanel.pullRequest') }, props.sessionId);
-  inputText.value = '';
-  resizeInputAfterDomUpdate();
-
-  try {
-    await loadPrBranchOptions();
-    const preview = await gitHosting.previewPr(props.projectPath || '~', parsePrTarget(text));
-    prPreview.value = preview;
-    prGenerationError.value = '';
-    prStatusMessage.value = responseMessage;
-    responseMessage.kind = 'text';
-    responseMessage.status = undefined;
-    responseMessage.title = undefined;
-    responseMessage.content = formatPrPreview(preview);
-  } catch (error) {
-    responseMessage.status = 'failure';
-    responseMessage.title = t('components.chatPanel.pullRequestFailed');
-    responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToPreparePullRequest');
-  }
-}
-
-function cancelPr() {
-  if (prStatusMessage.value) prStatusMessage.value.content += '\n\nPR creation cancelled.';
-  prPreview.value = null;
-  prStatusMessage.value = null;
-  prGenerationError.value = '';
-}
-
-async function updatePrTargetBranch(targetBranch: string) {
-  const preview = prPreview.value;
-  if (!preview || !targetBranch) return;
-
-  const previousTitle = preview.title;
-  const previousBody = preview.body;
-  prUpdatingTargetBranch.value = true;
-  prGenerationError.value = '';
-  try {
-    const updatedPreview = await gitHosting.previewPr(props.projectPath || '~', targetBranch);
-    updatedPreview.title = previousTitle;
-    updatedPreview.body = previousBody;
-    prPreview.value = updatedPreview;
-    if (prStatusMessage.value) prStatusMessage.value.content = formatPrPreview(updatedPreview);
-  } catch (error) {
-    prGenerationError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToUpdatePrTargetBranch');
-  } finally {
-    prUpdatingTargetBranch.value = false;
-  }
-}
-
-async function generatePrContent() {
-  const preview = prPreview.value;
-  if (!preview) return;
-  if (prUpdatingTargetBranch.value) {
-    prGenerationError.value = t('components.chatPanel.waitForTheTargetBranchPreviewTo');
-    return;
-  }
-  if (!props.clientId) {
-    prGenerationError.value = 'clientId is required to generate PR content with AI';
-    return;
-  }
-
-  prGeneratingContent.value = true;
-  prGenerationError.value = '';
-  try {
-    const content = await gitHosting.generatePrContent(props.clientId, preview, props.sessionId);
-    preview.title = content.title;
-    preview.body = content.body;
-  } catch (error) {
-    prGenerationError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToGeneratePrContent');
-  } finally {
-    prGeneratingContent.value = false;
-  }
-}
-
-async function confirmPr() {
-  const preview = prPreview.value;
-  const responseMessage = prStatusMessage.value;
-  if (!preview || !responseMessage) return;
-  if (prUpdatingTargetBranch.value) {
-    prGenerationError.value = t('components.chatPanel.waitForTheTargetBranchPreviewTo');
-    return;
-  }
-
-  prPreview.value = null;
-  prGenerationError.value = '';
-  responseMessage.kind = 'status';
-  responseMessage.status = 'pending';
-  responseMessage.title = t('components.chatPanel.pullRequest');
-  responseMessage.content = t('components.chatPanel.creatingPullRequest');
-
-  try {
-    const result = await gitHosting.createPr({ preview, title: preview.title, body: preview.body, commitMessage: preview.commitMessage, sessionId: props.sessionId });
-    responseMessage.kind = 'text';
-    responseMessage.status = undefined;
-    responseMessage.title = undefined;
-    const provider = preview.provider === 'github' ? 'GitHub' : 'Gitea';
-    responseMessage.content = `### ${provider} PR created\n\n#${result.pullRequest.number}: ${result.pullRequest.url}`;
-    window.dispatchEvent(new CustomEvent('refresh-file-tree'));
-  } catch (error) {
-    responseMessage.status = 'failure';
-    responseMessage.title = t('components.chatPanel.pullRequestFailed');
-    responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToCreatePullRequest');
-  } finally {
-    prStatusMessage.value = null;
   }
 }
 
@@ -2943,47 +2580,6 @@ async function handleModelCommand(text: string) {
   }
 
   await openModelSelector(text.trim().replace(/^\/model(?:\s+|$)/i, '').trim());
-}
-
-function handleModelSelectorClick(): void {
-  if (!props.sessionId || !props.clientId) {
-    props.configureNewSession?.();
-    return;
-  }
-  void openModelSelector();
-}
-
-async function openModelSelector(initialSearch = '') {
-  if (!props.sessionId || !props.clientId) return;
-
-  modelSelectorOpen.value = true;
-  modelSelectorLoading.value = true;
-  modelSelectorError.value = '';
-  modelSearch.value = initialSearch;
-  activeModelIndex.value = -1;
-
-  await nextTick();
-  modelSearchRef.value?.focus();
-
-  try {
-    const params = new URLSearchParams({ clientId: props.clientId });
-    const response = await fetch(`/api/sessions/${props.sessionId}/models?${params}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-    modelOptions.value = Array.isArray(data.models) ? data.models.filter(isModelOption) : [];
-    const currentModelIndex = filteredModels.value.findIndex((model) => model.current);
-    activeModelIndex.value = filteredModels.value.length ? Math.max(0, currentModelIndex) : -1;
-  } catch (error) {
-    modelOptions.value = [];
-    modelSelectorError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToLoadModels');
-  } finally {
-    modelSelectorLoading.value = false;
-  }
-}
-
-function closeModelSelector() {
-  modelSelectorOpen.value = false;
-  activeModelIndex.value = -1;
 }
 
 async function handleSkillsCommand(text: string) {
@@ -3097,85 +2693,6 @@ function formatSkillConfigurationSaved(mode: SkillMode, skills: string[]) {
   return mode === 'enabled'
     ? t('components.chatPanel.onlySelectedSkillsAvailable', { list })
     : t('components.chatPanel.selectedSkillsDisabled', { list });
-}
-
-function isModelOption(value: unknown): value is ModelOption {
-  const model = value as Partial<ModelOption>;
-  return Boolean(model && typeof model.provider === 'string' && typeof model.id === 'string');
-}
-
-function openThinkingSelector(): void {
-  if (!props.sessionId || !props.clientId || isStreaming.value || !thinkingLevels.value.length) return;
-  thinkingSelectorOpen.value = true;
-}
-
-function closeThinkingSelector(): void {
-  thinkingSelectorOpen.value = false;
-}
-
-async function selectThinkingLevel(level: string): Promise<void> {
-  if (!props.sessionId || !props.clientId || !level) return;
-
-  thinkingLevelChanging.value = true;
-  try {
-    const response = await fetch(`/api/sessions/${props.sessionId}/thinking-level`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId: props.clientId, level }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-    sessionStatus.value = data;
-    closeThinkingSelector();
-    addLocalMessage({
-      role: 'assistant',
-      content: t('components.chatPanel.thinkingLevelChangedTo', { level }),
-      kind: 'status',
-      status: 'success',
-      title: t('components.chatPanel.thinkingLevelChanged'),
-    }, props.sessionId);
-  } catch (error) {
-    addLocalMessage({
-      role: 'assistant',
-      content: error instanceof Error ? error.message : t('components.chatPanel.failedToChangeThinkingLevel'),
-      kind: 'status',
-      status: 'failure',
-      title: t('components.chatPanel.thinkingLevelChangeFailed'),
-    }, props.sessionId);
-  } finally {
-    thinkingLevelChanging.value = false;
-  }
-}
-
-async function selectModel(model: ModelOption) {
-  if (!props.sessionId || !props.clientId) return;
-
-  try {
-    const response = await fetch(`/api/sessions/${props.sessionId}/model`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId: props.clientId, provider: model.provider, modelId: model.id }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-    sessionStatus.value = data;
-    modelOptions.value = modelOptions.value.map((item) => ({
-      ...item,
-      current: item.provider === model.provider && item.id === model.id,
-    }));
-    closeModelSelector();
-    addLocalMessage({
-      role: 'assistant',
-      content: t('components.chatPanel.modelChangedTo', { model: model.name || model.id, provider: model.provider }),
-      kind: 'status',
-      status: 'success',
-      title: t('components.chatPanel.modelChanged'),
-    }, props.sessionId);
-  } catch (error) {
-    modelSelectorError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToChangeModel');
-  }
 }
 
 function insertTrigger(char: string) {

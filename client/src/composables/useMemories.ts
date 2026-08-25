@@ -1,4 +1,5 @@
 import { onUnmounted, ref } from 'vue';
+import { apiRequest, type ApiRequestOptions } from '../services/apiClient';
 import type {
   CreateMemoryPayload,
   MemoryCounts,
@@ -38,21 +39,15 @@ function emptyCounts(): MemoryCounts {
   };
 }
 
-async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(typeof data?.error === 'string' ? data.error : `Memory request failed (${response.status})`);
-  }
-  return data as T;
+function requestJson<T>(url: string, options?: ApiRequestOptions<unknown>): Promise<T> {
+  return apiRequest<T, unknown>(url, {
+    ...options,
+    fallbackMessage: 'Memory request failed',
+  });
 }
 
-function jsonOptions(method: string, body: unknown): RequestInit {
-  return {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  };
+function jsonOptions(method: string, body: unknown): ApiRequestOptions<unknown> {
+  return { method, body };
 }
 
 function failedExtractionWarning(count: number): string {

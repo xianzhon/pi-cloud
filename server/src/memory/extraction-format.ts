@@ -213,7 +213,7 @@ function validateCandidate(
   if (supportingEvidence.length === 0 || !supportingEvidence.some((item) => item.role !== 'tool')) return null;
   if (category === 'rule' || category === 'preference') {
     const userEvidence = supportingEvidence.filter((item) => item.role === 'user');
-    if (userEvidence.length === 0 || userEvidence.every((item) => isTransientTaskInstruction(item.text))) return null;
+    if (userEvidence.every((item) => isTransientTaskInstruction(item.text))) return null;
   }
 
   try {

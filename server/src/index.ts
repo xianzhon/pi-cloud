@@ -35,13 +35,15 @@ import { isAllowedCorsOrigin, isAllowedRequestOrigin } from './auth/origin.js';
 import { getRequestContext, renewSessionFromRequest } from './auth/request.js';
 import { SessionStore } from './auth/sessions.js';
 import { TotpService } from './auth/totp.js';
-import { initializeSessionService, sessionService } from './services/session-manager.js';
+import { PiSessionService } from './services/session-manager.js';
 import { SessionActivityStore, type SessionActivityRecord } from './services/session-activity-store.js';
 import { SessionPinStore } from './services/session-pin-store.js';
 import { SkillPolicyStore } from './services/skill-policy-store.js';
-import { initializeWorktreeMetadataStore } from './services/worktree-metadata-store.js';
+import { WorktreeMetadataStore } from './services/worktree-metadata-store.js';
 import { createMemoryRuntime, type MemoryRuntime } from './memory/runtime.js';
-import { worktreeManager } from './services/worktree-manager.js';
+import { WorktreeManager } from './services/worktree-manager.js';
+import { TerminalManager } from './services/terminal-manager.js';
+import type { AppServices } from './app-services.js';
 import { GiteaClient } from './services/gitea-client.js';
 import { GitHostingService } from './services/git-hosting.js';
 import { GiteaSettingsStore } from './services/gitea-settings-store.js';
@@ -157,6 +159,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     authServices: AuthServices;
     memoryRuntime: MemoryRuntime;
+    services: AppServices;
   }
 }
 
@@ -215,12 +218,14 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   const authConfig = loadAuthConfig();
   const db = openPiuiDatabase(authConfig.dbPath);
-  const worktreeMetadataStore = initializeWorktreeMetadataStore(db);
+  const worktreeMetadataStore = new WorktreeMetadataStore(db);
+  // The memory runtime resolves profiles lazily, after the paired session service is constructed.
+  let piSessionService: PiSessionService;
   const memoryRuntime = createMemoryRuntime({
     db,
     worktrees: worktreeMetadataStore,
     resolveProfile: async (profileId) => (
-      (await sessionService.listAgentProfiles()).find((profile) => profile.id === profileId)
+      (await piSessionService.listAgentProfiles()).find((profile) => profile.id === profileId)
     ),
     resolveProxyEnv: (agentDir) => {
       const profileId = path.basename(agentDir) === 'agent' ? 'default' : path.basename(agentDir);
@@ -228,11 +233,12 @@ export async function buildApp(): Promise<FastifyInstance> {
       try { return row?.proxy_json ? JSON.parse(row.proxy_json) as Record<string, string> : {}; } catch { return {}; }
     },
   });
-  const piSessionService = initializeSessionService({
+  piSessionService = new PiSessionService({
     skillPolicyStore: new SkillPolicyStore(db),
     username: authConfig.username,
     db,
     memoryRuntime,
+    worktreeMetadataStore,
   });
   memoryRuntime.start();
   const projectTaskStore = new ProjectTaskStore(db);
@@ -245,8 +251,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   const giteaSettings = new GiteaSettingsStore(db);
   const gatewaySettings = new GatewaySettingsStore(db);
   const githubSettings = new GithubSettingsStore(db);
-  const feishuGateway = new FeishuGatewayService(db, gatewaySettings);
-  const weixinGateway = new WeixinGatewayService(db, gatewaySettings);
+  const feishuGateway = new FeishuGatewayService(db, gatewaySettings, piSessionService);
+  const weixinGateway = new WeixinGatewayService(db, gatewaySettings, piSessionService);
   weixinGateway.start();
   const repositoryCloner = new RepositoryCloner({
     spawnGit: (args, options) => spawn('git', args, options),
@@ -259,6 +265,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     gitCloneParentPath: () => getSecuritySetting(db, 'ui.gitCloneParentPath') || path.join(os.homedir(), 'git', 'github'),
   });
   const gitHosting = new GitHostingService();
+  const worktreeManager = new WorktreeManager();
+  const terminalManager = new TerminalManager();
   const projectTaskStarter = new ProjectTaskStarter({
     store: projectTaskStore,
     sessionService: piSessionService,
@@ -272,8 +280,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   const rateLimiter = new IpRateLimiter({ maxFailures: 5, windowMs: 15 * 60 * 1000 });
   app.decorate('authServices', { authConfig, db, audit, sessions, totp, rateLimiter });
   app.decorate('memoryRuntime', memoryRuntime);
+  app.decorate('services', {
+    sessions: piSessionService,
+    terminals: terminalManager,
+    worktrees: worktreeManager,
+    worktreeMetadata: worktreeMetadataStore,
+  });
   app.addHook('onClose', async () => {
     await weixinGateway.stop();
+    terminalManager.disposeAll();
+    piSessionService.disposeAll();
     await memoryRuntime.stop();
     db.close();
   });

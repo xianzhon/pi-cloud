@@ -89,7 +89,7 @@ export class GithubClient {
       'X-GitHub-Api-Version': '2022-11-28',
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       Authorization: `Bearer ${this.settings.token}`,
-      ...(init.headers || {}),
+      ...init.headers,
     };
   }
 }

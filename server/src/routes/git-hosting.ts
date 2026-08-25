@@ -12,7 +12,7 @@ import type { GithubClient } from '../services/github-client';
 import { githubProxyEnvFromUrl, type GithubSettingsStore } from '../services/github-settings-store';
 import type { ProjectTaskStore } from '../services/project-task-store';
 import type { SessionActivityStore } from '../services/session-activity-store';
-import { sessionService } from '../services/session-manager.js';
+import type { PiSessionService } from '../services/session-manager.js';
 
 export interface GitHostingRouteOptions {
   settings: GiteaSettingsStore;
@@ -158,7 +158,7 @@ function clientForProvider(options: GitHostingRouteOptions, provider?: string) {
     : options.createClient(options.settings.get());
 }
 
-async function generateContentWithAi(input: {
+async function generateContentWithAi(sessionService: PiSessionService, input: {
   clientId: string;
   prompt: string;
   systemPrompt: string;
@@ -209,9 +209,9 @@ async function generateContentWithAi(input: {
   });
 }
 
-async function generateIssueContentWithAi(clientId: string, preview: any) {
+async function generateIssueContentWithAi(sessionService: PiSessionService, clientId: string, preview: any) {
   const key = `${preview.owner || ''}/${preview.repo || ''}:${preview.title || ''}:${preview.body || ''}`;
-  const text = await generateContentWithAi({
+  const text = await generateContentWithAi(sessionService, {
     clientId,
     prompt: issuePrompt(preview),
     systemPrompt: 'You polish Git issue titles and Markdown descriptions while preserving the user provided facts.',
@@ -222,9 +222,9 @@ async function generateIssueContentWithAi(clientId: string, preview: any) {
   return parseGeneratedContent(text, 'issue');
 }
 
-async function generatePrContentWithAi(clientId: string, preview: any) {
+async function generatePrContentWithAi(sessionService: PiSessionService, clientId: string, preview: any) {
   const diff = await getPrDiff(preview.cwd || '.', preview.targetBranch || 'main');
-  const text = await generateContentWithAi({
+  const text = await generateContentWithAi(sessionService, {
     clientId,
     prompt: prPrompt(preview, diff),
     systemPrompt: 'You write accurate, concise pull request titles and Markdown descriptions from git changes.',
@@ -327,7 +327,7 @@ export async function gitHostingRoutes(app: FastifyInstance, options: GitHosting
       const body = req.body as { clientId?: string; preview?: any };
       if (!body.clientId) return reply.status(400).send({ error: 'clientId is required to generate issue content with AI' });
       if (!body.preview) return reply.status(400).send({ error: 'Issue preview is required' });
-      return { content: await generateIssueContentWithAi(body.clientId, body.preview) };
+      return { content: await generateIssueContentWithAi(app.services.sessions, body.clientId, body.preview) };
     } catch (error) {
       return sendError(reply, error, 400);
     }
@@ -361,7 +361,7 @@ export async function gitHostingRoutes(app: FastifyInstance, options: GitHosting
       const body = req.body as { clientId?: string; sessionId?: string; preview?: any };
       if (!body.clientId) return reply.status(400).send({ error: 'clientId is required to generate PR content with AI' });
       if (!body.preview) return reply.status(400).send({ error: 'PR preview is required' });
-      const content = await generatePrContentWithAi(body.clientId, body.preview);
+      const content = await generatePrContentWithAi(app.services.sessions, body.clientId, body.preview);
       return { content: { ...content, body: appendClosingIssue(content.body, getConnectedIssueNumber(options.tasks, body.sessionId)) } };
     } catch (error) {
       return sendError(reply, error, 400);

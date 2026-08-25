@@ -10,7 +10,9 @@ const projectRoot = path.resolve(__dirname, '..');
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, projectRoot, '');
-  const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf-8'));
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf-8'),
+  );
   const backendPort = process.env.PORT || env.PORT || '3000';
   const devHost = process.env.HOST || env.HOST || 'localhost';
   const backendHttp = `http://localhost:${backendPort}`;
@@ -20,6 +22,11 @@ export default defineConfig(({ mode }) => {
     plugins: [vue()],
     define: {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(pkg.version),
+    },
+    build: {
+      manifest: true,
+      // Monaco is an opt-in feature chunk with its own gzip budget in CI.
+      chunkSizeWarningLimit: 3500,
     },
     server: {
       host: devHost,

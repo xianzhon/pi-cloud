@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import FileTreeNode, { type TreeNodeData } from './FileTreeNode.vue';
-import { PhFolder, PhFile, PhCaretRight, PhCaretDown } from '@phosphor-icons/vue';
+import { PhFolder, PhCaretRight, PhCaretDown } from '@phosphor-icons/vue';
 
 const tree: TreeNodeData = {
   name: 'src',

@@ -48,6 +48,7 @@ vi.mock('./composables/useSkillPresets', () => ({
 
 vi.mock('./components/LoginView.vue', () => ({ default: { template: '<div class="login-stub">login</div>' } }));
 vi.mock('./components/SettingsDialog.vue', () => ({
+  __esModule: true,
   default: {
     props: ['visible', 'totpEnabled'],
     template: '<div v-if="visible" class="settings-stub">settings {{ totpEnabled ? "enabled" : "disabled" }}</div>',

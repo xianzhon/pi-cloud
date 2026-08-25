@@ -26,10 +26,6 @@ interface RenameConfig {
   language: RenameLanguage;
 }
 
-function formatRef(ref: ModelRef): string {
-  return `${ref.provider}/${ref.id}`;
-}
-
 function getSystemPrompt(language: RenameLanguage): string {
   if (language === 'chinese') {
     return 'You create short, descriptive session names for chat sessions with AI. Use a natural verb-led Chinese phrase, 4-16 Chinese characters. Respond with only the name, no quotes or punctuation.';

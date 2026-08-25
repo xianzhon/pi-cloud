@@ -4,7 +4,7 @@ import { isAbsolute } from 'node:path';
 import type { PiuiDatabase } from '../db/database.js';
 import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
-import { sessionService } from './session-manager.js';
+import type { PiSessionService } from './session-manager.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
 
 interface FeishuGatewayConfig {
@@ -48,27 +48,6 @@ const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000;
 const NO_GATEWAY_FOLDERS_MESSAGE = 'No gateway folders configured.';
 const GATEWAY_FOLDERS_REQUIRED_MESSAGE = `${NO_GATEWAY_FOLDERS_MESSAGE} Add at least one allowed folder in Web UI Settings > Gateway.`;
 
-const FEISHU_SESSION_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS feishu_gateway_sessions (
-    session_key TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL,
-    pi_session_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`;
-const FEISHU_CONFIG_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS feishu_gateway_configs (
-    client_id TEXT PRIMARY KEY,
-    agent_profile TEXT,
-    default_cwd TEXT,
-    skill_mode TEXT,
-    skill_preset_id TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`;
-
 export class FeishuGatewayService {
   private readonly presetStore: SkillPresetStore;
   private readonly gatewaySettings: GatewaySettingsStore;
@@ -76,12 +55,13 @@ export class FeishuGatewayService {
   private readonly queues = new Map<string, Promise<void>>();
   private tokenCache?: FeishuTokenCache;
 
-  constructor(private readonly db: PiuiDatabase, gatewaySettings?: GatewaySettingsStore) {
+  constructor(
+    private readonly db: PiuiDatabase,
+    gatewaySettings: GatewaySettingsStore | undefined,
+    private readonly sessionService: PiSessionService,
+  ) {
     this.presetStore = new SkillPresetStore(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
-    this.db.exec(FEISHU_SESSION_TABLE_SQL);
-    this.db.exec(FEISHU_CONFIG_TABLE_SQL);
-    this.ensureConfigColumns();
   }
 
   async handleCallback(body: unknown): Promise<Record<string, unknown>> {
@@ -128,16 +108,6 @@ export class FeishuGatewayService {
       modelId: gatewaySettings.defaultModelId,
       ...this.resolveSkillsetConfig(gatewaySettings.defaultSkillset),
     };
-  }
-
-  private ensureConfigColumns(): void {
-    for (const column of ['skill_mode TEXT', 'skill_preset_id TEXT']) {
-      try {
-        this.db.exec(`ALTER TABLE feishu_gateway_configs ADD COLUMN ${column}`);
-      } catch {
-        // Existing installations may already have the column.
-      }
-    }
   }
 
   private isConfigured(config: FeishuGatewayConfig): boolean {
@@ -267,7 +237,7 @@ export class FeishuGatewayService {
     });
 
     try {
-      await sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
+      await this.sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
         await session.prompt(message.text);
       });
     } finally {
@@ -279,18 +249,18 @@ export class FeishuGatewayService {
   }
 
   private async ensureSession(clientId: string, config: FeishuGatewayConfig) {
-    await sessionService.setClientAgentProfile(clientId, config.agentProfile || 'default');
+    await this.sessionService.setClientAgentProfile(clientId, config.agentProfile || 'default');
 
-    const active = sessionService.getSession(clientId);
+    const active = this.sessionService.getSession(clientId);
     if (active) return active;
 
     const mappedSessionId = this.getMappedSessionId(clientId);
     if (mappedSessionId) {
-      const persisted = await sessionService.findPersistedSession(clientId, mappedSessionId);
-      if (persisted) return sessionService.resumeSession(clientId, persisted.path);
+      const persisted = await this.sessionService.findPersistedSession(clientId, mappedSessionId);
+      if (persisted) return this.sessionService.resumeSession(clientId, persisted.path);
     }
 
-    const result = await sessionService.createSession(clientId, await this.createSessionOptions(config));
+    const result = await this.sessionService.createSession(clientId, await this.createSessionOptions(config));
     this.saveSessionMapping(clientId, result.session.sessionId);
     return result.session;
   }
@@ -433,14 +403,14 @@ export class FeishuGatewayService {
   }
 
   private resetSession(clientId: string): void {
-    sessionService.disposeSession(clientId);
+    this.sessionService.disposeSession(clientId);
     this.deleteSessionMapping(clientId);
   }
 
   private async setChatProfile(clientId: string, profileId?: string): Promise<void> {
     const profile = profileId?.trim();
     if (!profile) throw new Error('Usage: /profile <profile-id>');
-    const profiles = await sessionService.listAgentProfiles();
+    const profiles = await this.sessionService.listAgentProfiles();
     if (!profiles.some((item) => item.id === profile)) throw new Error(`Unknown profile: ${profile}`);
     this.saveChatConfig(clientId, { agentProfile: profile });
   }
@@ -463,9 +433,9 @@ export class FeishuGatewayService {
   }
 
   private async formatStatus(clientId: string, config: FeishuGatewayConfig, prefix?: string): Promise<string> {
-    const profiles = await sessionService.listAgentProfiles();
+    const profiles = await this.sessionService.listAgentProfiles();
     const profile = profiles.find((item) => item.id === (config.agentProfile || 'default')) || profiles[0];
-    const active = sessionService.getSession(clientId);
+    const active = this.sessionService.getSession(clientId);
     return [
       prefix,
       'Pi session status',
@@ -480,7 +450,7 @@ export class FeishuGatewayService {
   }
 
   private async formatProfiles(currentProfile: string): Promise<string> {
-    const profiles = await sessionService.listAgentProfiles();
+    const profiles = await this.sessionService.listAgentProfiles();
     return ['Available profiles:', ...profiles.map((profile) => `${profile.id === currentProfile ? '*' : ' '} ${profile.id}`)].join('\n');
   }
 

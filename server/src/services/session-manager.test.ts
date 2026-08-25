@@ -154,8 +154,7 @@ vi.mock('./profile-proxy.js', async () => {
   };
 });
 
-const sessionManagerModule = await import('./session-manager.js');
-const { PiSessionService, initializeSessionService } = sessionManagerModule;
+const { PiSessionService } = await import('./session-manager.js');
 
 describe('PiSessionService', () => {
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -479,8 +478,8 @@ describe('PiSessionService', () => {
     expect(memoryRuntime.deleteProfile).toHaveBeenCalledWith('work');
   });
 
-  it('initializes the shared session service with skill policy persistence', async () => {
-    const service = initializeSessionService({
+  it('creates an isolated session service with skill policy persistence', async () => {
+    const service = new PiSessionService({
       skillPolicyStore: new SkillPolicyStore(db),
       username: 'me',
     });
@@ -490,7 +489,7 @@ describe('PiSessionService', () => {
       enabledSkills: ['systematic-debugging'],
     });
 
-    expect(sessionManagerModule.sessionService.getSkillPolicy('session-1')).toMatchObject({
+    expect(service.getSkillPolicy('session-1')).toMatchObject({
       sessionId: 'session-1',
       mode: 'enabled',
       skills: ['systematic-debugging'],

@@ -13,18 +13,8 @@ const DEFAULT_PROFILE_KEY = 'gateway.defaultProfile';
 const DEFAULT_SKILLSET_KEY = 'gateway.defaultSkillset';
 const DEFAULT_MODEL_PROVIDER_KEY = 'gateway.defaultModelProvider';
 const DEFAULT_MODEL_ID_KEY = 'gateway.defaultModelId';
-const SECURITY_SETTINGS_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS security_settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`;
-
 export class GatewaySettingsStore {
-  constructor(private readonly db: PiuiDatabase) {
-    this.db.exec(SECURITY_SETTINGS_TABLE_SQL);
-  }
+  constructor(private readonly db: PiuiDatabase) {}
 
   get(): GatewaySettings {
     return {
