@@ -1,7 +1,7 @@
 import { complete } from '@earendil-works/pi-ai/compat';
 import {
-  AuthStorage,
   ModelRegistry,
+  ModelRuntime,
   SessionManager,
   type SessionEntry,
 } from '@earendil-works/pi-coding-agent';
@@ -43,7 +43,7 @@ interface MemoryExtractorDependencies {
   runWithProxy<T>(agentDir: string, work: () => Promise<T>): Promise<T>;
   completeModel?: typeof complete;
   loadBranch?: (run: MemoryExtractionRun) => SessionEntry[];
-  createModelRegistry?: (profile: AgentProfile) => ModelRegistryLike;
+  createModelRegistry?: (profile: AgentProfile) => ModelRegistryLike | Promise<ModelRegistryLike>;
   evaluateGate?: (source: ExtractionSource) => ExtractionGateResult;
   policy?: MemoryEfficiencyPolicy;
 }
@@ -87,7 +87,7 @@ interface PreparedExtraction {
 export class MemoryExtractor {
   private readonly completeModel: typeof complete;
   private readonly loadBranch: (run: MemoryExtractionRun) => SessionEntry[];
-  private readonly createModelRegistry: (profile: AgentProfile) => ModelRegistryLike;
+  private readonly createModelRegistry: (profile: AgentProfile) => ModelRegistryLike | Promise<ModelRegistryLike>;
   private readonly evaluateGate: (source: ExtractionSource) => ExtractionGateResult;
   private readonly policy: MemoryEfficiencyPolicy;
   private readonly preparedRuns = new Map<string, Promise<PreparedExtraction | { source: ExtractionSource; gate: ExtractionGateResult }>>();
@@ -97,9 +97,12 @@ export class MemoryExtractor {
     this.loadBranch = dependencies.loadBranch ?? ((run) => (
       SessionManager.open(run.sourceSessionPath, dirname(run.sourceSessionPath)).getBranch(run.endingLeafId)
     ));
-    this.createModelRegistry = dependencies.createModelRegistry ?? ((profile) => {
-      const authStorage = AuthStorage.create(join(profile.path, 'auth.json'));
-      return ModelRegistry.create(authStorage, join(profile.path, 'models.json'));
+    this.createModelRegistry = dependencies.createModelRegistry ?? (async (profile) => {
+      const runtime = await ModelRuntime.create({
+        authPath: join(profile.path, 'auth.json'),
+        modelsPath: join(profile.path, 'models.json'),
+      });
+      return new ModelRegistry(runtime);
     });
     this.evaluateGate = dependencies.evaluateGate ?? evaluateDurableSignal;
     this.policy = dependencies.policy ?? ADAPTIVE_MEMORY_POLICY;
@@ -257,7 +260,7 @@ export class MemoryExtractor {
         })
       : [];
     const prompt = buildLegacyExtractionPrompt(source, existingMemories);
-    const registry = this.createModelRegistry(profile);
+    const registry = await this.createModelRegistry(profile);
     const model = this.selectModel(profile, registry);
     this.dependencies.store.updateExtractionRunTelemetry(run.id, {
       modelProvider: model.provider,
@@ -356,7 +359,7 @@ export class MemoryExtractor {
     if (!profile) throw new Error(`Memory extraction profile is unavailable: ${run.profileId}`);
     const existingMemories = this.collectExistingMemories(run, source);
     const prompt = buildExtractionPrompt(source, existingMemories);
-    const registry = this.createModelRegistry(profile);
+    const registry = await this.createModelRegistry(profile);
     const model = this.selectModel(profile, registry);
     this.dependencies.store.updateExtractionRunTelemetry(run.id, {
       modelProvider: model.provider,

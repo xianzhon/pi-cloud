@@ -17,15 +17,13 @@ vi.mock('@earendil-works/pi-ai/compat', () => ({
 }));
 
 vi.mock('@earendil-works/pi-coding-agent', () => ({
-  AuthStorage: { create: vi.fn(() => ({})) },
-  ModelRegistry: {
-    create: vi.fn(() => ({
-      refresh: vi.fn(),
-      find: modelRegistryFindMock,
-      getAvailable: modelRegistryGetAvailableMock,
-      getApiKeyAndHeaders: vi.fn(async () => ({ ok: true, apiKey: 'key' })),
-    })),
-  },
+  ModelRuntime: { create: vi.fn(async () => ({})) },
+  ModelRegistry: vi.fn(function (this: any) {
+    this.refresh = vi.fn(async () => {});
+    this.find = modelRegistryFindMock;
+    this.getAvailable = modelRegistryGetAvailableMock;
+    this.getApiKeyAndHeaders = vi.fn(async () => ({ ok: true, apiKey: 'key' }));
+  }),
 }));
 
 const sessionService = {

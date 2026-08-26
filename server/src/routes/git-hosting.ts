@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { completeSimple, type AssistantMessage, type TextContent } from '@earendil-works/pi-ai/compat';
-import { AuthStorage, ModelRegistry } from '@earendil-works/pi-coding-agent';
+import { ModelRegistry, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { GiteaClient } from '../services/gitea-client';
 import type { GitHostingService } from '../services/git-hosting';
@@ -169,11 +169,11 @@ async function generateContentWithAi(sessionService: PiSessionService, input: {
   const agentDir = await sessionService.getClientAgentDirForRoutes(input.clientId);
   return sessionService.runForegroundWithClientProfileProxy(input.clientId, async () => {
     const profile = await sessionService.getClientAgentProfile(input.clientId);
-    const registry = ModelRegistry.create(
-      AuthStorage.create(join(agentDir, 'auth.json')),
-      join(agentDir, 'models.json'),
-    );
-    registry.refresh();
+    const registry = new ModelRegistry(await ModelRuntime.create({
+      authPath: join(agentDir, 'auth.json'),
+      modelsPath: join(agentDir, 'models.json'),
+    }));
+    await registry.refresh();
     const configuredModel = profile.automationProvider && profile.automationModel
       ? registry.find(profile.automationProvider, profile.automationModel)
       : undefined;
