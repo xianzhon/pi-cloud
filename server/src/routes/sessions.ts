@@ -626,6 +626,45 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     return { projectPaths };
   });
 
+  app.post('/project-history-summary', async (req, reply) => {
+    const { clientId, projectPaths } = req.body as { clientId?: string; projectPaths?: unknown[] };
+    if (!clientId || !Array.isArray(projectPaths)) {
+      return reply.status(400).send({ error: 'clientId and projectPaths are required' });
+    }
+
+    const paths = Array.from(new Set(projectPaths
+      .filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
+      .map((path) => path.trim())))
+      .slice(0, 100);
+    const projects = await Promise.all(paths.map(async (path) => ({
+      path,
+      sessionCount: (await listSessionsForRoute(sessionService, worktreeMetadata, clientId, 'project', expandHomePath(path))).length,
+    })));
+    return { projects };
+  });
+
+  app.delete('/project-history', async (req, reply) => {
+    const { clientId, projectPath } = req.body as { clientId?: string; projectPath?: string };
+    if (!clientId || !projectPath?.trim()) {
+      return reply.status(400).send({ error: 'clientId and projectPath are required' });
+    }
+
+    const cwd = expandHomePath(projectPath.trim());
+    const sessions = await sessionService.listSessions(clientId, cwd);
+    if (sessions.some((session) => sessionService.isSessionStreaming(session.id))) {
+      return reply.status(409).send({ error: 'Cannot remove history with a streaming session' });
+    }
+
+    const agentDir = await sessionService.getClientAgentDirForRoutes(clientId);
+    sessionService.forceDisposeByCwd(cwd);
+    await sessionService.deleteSessionFiles(sessionService.getProjectSessionDirForPath(cwd, agentDir));
+    for (const session of sessions) {
+      sessionService.deleteSkillPolicy(session.id);
+      sessionService.deleteSessionMetadata(session.id);
+    }
+    return { success: true, removedSessions: sessions.length };
+  });
+
   app.get('/', async (req) => {
     const { clientId, projectPath, scope, offset: rawOffset, limit: rawLimit } = req.query as {
       clientId?: string;

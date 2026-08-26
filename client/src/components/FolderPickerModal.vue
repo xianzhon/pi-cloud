@@ -26,6 +26,15 @@
           >
             {{ t('components.folderPickerModal.cloneRepository') }}
           </button>
+          <button
+            type="button"
+            :class="{ active: activeTab === 'history' }"
+            role="tab"
+            :aria-selected="activeTab === 'history'"
+            @click="openHistory"
+          >
+            {{ t('components.folderPickerModal.history') }}
+          </button>
         </div>
 
         <template v-if="activeTab === 'browse'">
@@ -152,13 +161,48 @@
         </template>
 
         <CloneRepositoryModal
-          v-else
+          v-else-if="activeTab === 'clone'"
           :visible="visible"
           :client-id="clientId"
           embedded
           @close="$emit('close')"
           @cloned="selectClonedProject"
         />
+
+        <div v-else class="project-history-list">
+          <div v-if="historyError" class="error-message">{{ historyError }}</div>
+          <div v-if="historyLoading" class="empty-state">{{ t('components.folderPickerModal.loading') }}</div>
+          <div v-else-if="projectHistory.length === 0" class="empty-state">
+            {{ t('components.folderPickerModal.noProjectHistory') }}
+          </div>
+          <div v-for="entry in projectHistory" v-else :key="entry.path" class="project-history-row">
+            <button class="project-history-project" type="button" @click="selectHistoryProject(entry.path)">
+              <PhFolder :size="18" weight="fill" />
+              <span class="project-history-details">
+                <span class="project-history-heading">
+                  <strong>{{ basenamePath(entry.path) }}</strong>
+                  <span v-if="historyCounts[entry.path] !== undefined" class="project-history-session-count">
+                    {{ t('components.folderPickerModal.sessionCount', { count: historyCounts[entry.path] }) }}
+                  </span>
+                </span>
+                <span class="project-history-meta">
+                  <span class="project-history-path" :title="entry.path">{{ entry.path }}</span>
+                  <span :title="formatAbsoluteDate(entry.lastAccessed)">{{ formatLastAccessed(entry.lastAccessed) }}</span>
+                </span>
+              </span>
+            </button>
+            <button
+              class="history-remove-btn"
+              type="button"
+              :disabled="removingHistoryPath === entry.path"
+              :title="t('components.folderPickerModal.removeHistory')"
+              :aria-label="t('components.folderPickerModal.removeHistoryFor', { path: entry.path })"
+              @click="historyPathToRemove = entry.path"
+            >
+              <PhTrash :size="16" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -174,13 +218,26 @@
   >
     <template #icon><PhFolderPlus :size="20" weight="duotone" /></template>
   </InputPromptModal>
+
+  <ConfirmModal
+    :visible="Boolean(historyPathToRemove)"
+    variant="danger"
+    :confirm-text="t('components.folderPickerModal.removeHistory')"
+    @confirm="removeHistory"
+    @cancel="historyPathToRemove = ''"
+  >
+    <template #icon><PhTrash :size="22" weight="duotone" /></template>
+    <template #title>{{ t('components.folderPickerModal.removeHistory') }}</template>
+    <template #message>{{ t('components.folderPickerModal.removeHistoryConfirm', { path: historyPathToRemove }) }}</template>
+  </ConfirmModal>
 </template>
 
 <script setup lang="ts">
 import { i18n } from '../i18n';
 import { computed, ref, watch } from 'vue';
-import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhFolderPlus, PhMagnifyingGlass, PhTextAa } from '@phosphor-icons/vue';
+import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhFolderPlus, PhMagnifyingGlass, PhTextAa, PhTrash } from '@phosphor-icons/vue';
 import CloneRepositoryModal from './CloneRepositoryModal.vue';
+import ConfirmModal from './ConfirmModal.vue';
 import DialogCloseButton from './DialogCloseButton.vue';
 import InputPromptModal from './InputPromptModal.vue';
 
@@ -192,6 +249,11 @@ interface DirectoryNode {
   type: 'directory';
 }
 
+interface ProjectHistoryEntry {
+  path: string;
+  lastAccessed: number;
+}
+
 const props = withDefaults(defineProps<{
   visible: boolean;
   initialPath: string;
@@ -199,10 +261,12 @@ const props = withDefaults(defineProps<{
   clientId?: string;
   title?: string;
   showClone?: boolean;
+  projectHistory?: ProjectHistoryEntry[];
 }>(), {
   clientId: '',
   title: undefined,
   showClone: true,
+  projectHistory: () => [],
 });
 
 type MoveMode = 'rename' | 'move-project' | 'move-sessions';
@@ -210,6 +274,7 @@ type MoveMode = 'rename' | 'move-project' | 'move-sessions';
 const emit = defineEmits<{
   close: [];
   select: [payload: { path: string; moveMode?: MoveMode; projectName?: string; refreshProjectPaths?: boolean }];
+  historyRemoved: [path: string];
 }>();
 
 const currentPath = ref('~');
@@ -223,8 +288,13 @@ const projectName = ref('');
 const showHiddenFolders = ref(false);
 const directorySort = ref<'name' | 'modified'>('modified');
 const searchQuery = ref('');
-const activeTab = ref<'browse' | 'clone'>('browse');
+const activeTab = ref<'browse' | 'history' | 'clone'>('browse');
 const newFolderDialogVisible = ref(false);
+const historyCounts = ref<Record<string, number>>({});
+const historyLoading = ref(false);
+const historyError = ref('');
+const removingHistoryPath = ref('');
+const historyPathToRemove = ref('');
 
 const currentProjectName = computed(() => basenamePath(props.currentProjectPath || ''));
 const isCurrentProjectPath = computed(() => Boolean(props.currentProjectPath) && currentPath.value === props.currentProjectPath);
@@ -259,6 +329,7 @@ watch(
       searchQuery.value = '';
       activeTab.value = 'browse';
       newFolderDialogVisible.value = false;
+      historyPathToRemove.value = '';
       browse(props.initialPath || '~');
     }
   },
@@ -323,6 +394,86 @@ function createTreeParams(path: string, depth: string) {
 
 function selectClonedProject(payload: { projectPath: string }) {
   emit('select', { path: payload.projectPath, refreshProjectPaths: true });
+}
+
+async function openHistory() {
+  activeTab.value = 'history';
+  historyError.value = '';
+  if (!props.clientId || props.projectHistory.length === 0) return;
+
+  historyLoading.value = true;
+  try {
+    const response = await fetch('/api/sessions/project-history-summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: props.clientId, projectPaths: props.projectHistory.map((entry) => entry.path) }),
+    });
+    if (!response.ok) throw new Error(t('components.folderPickerModal.failedToLoadHistory'));
+    const data = await response.json() as { projects?: Array<{ path: string; sessionCount: number }> };
+    historyCounts.value = Object.fromEntries((data.projects || []).map((project) => [project.path, project.sessionCount]));
+  } catch (err) {
+    historyError.value = err instanceof Error ? err.message : t('components.folderPickerModal.failedToLoadHistory');
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+function selectHistoryProject(path: string) {
+  emit('select', { path });
+}
+
+async function removeHistory() {
+  const path = historyPathToRemove.value;
+  if (!path) return;
+  historyPathToRemove.value = '';
+  removingHistoryPath.value = path;
+  historyError.value = '';
+  try {
+    const response = await fetch('/api/sessions/project-history', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: props.clientId, projectPath: path }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || t('components.folderPickerModal.failedToRemoveHistory'));
+    emit('historyRemoved', path);
+  } catch (err) {
+    historyError.value = err instanceof Error ? err.message : t('components.folderPickerModal.failedToRemoveHistory');
+  } finally {
+    removingHistoryPath.value = '';
+  }
+}
+
+function formatLastAccessed(timestamp: number): string {
+  if (!timestamp) return t('components.folderPickerModal.lastAccessedUnknown');
+
+  const date = new Date(timestamp);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.max(0, Math.floor(diffMs / 60000));
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  let relativeDate: string;
+
+  if (diffMins < 1) relativeDate = t('components.folderPickerModal.justNow');
+  else if (diffMins < 60) relativeDate = formatRelativeUnit(diffMins, 'minute');
+  else if (diffHours < 24) relativeDate = formatRelativeUnit(diffHours, 'hour');
+  else if (diffDays < 7) relativeDate = formatRelativeUnit(diffDays, 'day');
+  else relativeDate = date.toLocaleDateString();
+
+  return t('components.folderPickerModal.lastAccessed', { date: relativeDate });
+}
+
+function formatRelativeUnit(value: number, unit: Intl.RelativeTimeFormatUnit): string {
+  if (i18n.global.locale.value !== 'en') {
+    return new Intl.RelativeTimeFormat(i18n.global.locale.value, { numeric: 'always', style: 'long' }).format(-value, unit);
+  }
+  if (unit === 'minute') return `${value}m ago`;
+  if (unit === 'hour') return `${value}h ago`;
+  return `${value}d ago`;
+}
+
+function formatAbsoluteDate(timestamp: number): string {
+  return timestamp ? new Date(timestamp).toLocaleString() : '';
 }
 
 async function createFolder(value: string) {
@@ -542,6 +693,92 @@ function dirnamePath(path: string): string {
 .directory-list {
   overflow: auto;
   padding: 0.5rem;
+}
+
+.project-history-list {
+  min-height: 240px;
+  overflow: auto;
+  padding: 0.5rem;
+}
+
+.project-history-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.project-history-row:hover {
+  background: var(--bg-surface);
+}
+
+.project-history-project {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.6rem;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.project-history-details {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.project-history-heading,
+.project-history-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.project-history-heading strong,
+.project-history-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-history-meta {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.project-history-path {
+  flex: 1;
+}
+
+.project-history-session-count {
+  flex: 0 0 auto;
+  padding: 0.08rem 0.4rem;
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.history-remove-btn {
+  margin-right: 0.4rem;
+  padding: 0.45rem;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.history-remove-btn:hover:not(:disabled) {
+  color: var(--error);
+  background: var(--error-muted);
+}
+
+.history-remove-btn:disabled {
+  opacity: 0.45;
 }
 
 .history-option {

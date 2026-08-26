@@ -1,20 +1,20 @@
 import { execFile } from 'node:child_process';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithProxy } from '../utils/fetch-proxy.js';
 import { GithubClient } from './github-client';
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn((_file: string, _args: readonly string[] | null | undefined, _options: unknown, callback: Function) => callback(null, '', '')),
 }));
+vi.mock('../utils/fetch-proxy.js', () => ({ fetchWithProxy: vi.fn() }));
 
-const fetchMock = vi.fn();
+const fetchMock = vi.mocked(fetchWithProxy);
 const execFileMock = vi.mocked(execFile);
 
 beforeEach(() => {
   fetchMock.mockReset();
   execFileMock.mockReset();
   execFileMock.mockImplementation(((_file: string, _args: readonly string[] | null | undefined, _options: unknown, callback: Function) => callback(null, '', '')) as any);
-  vi.stubEnv('NO_PROXY', 'api.github.com');
-  vi.stubGlobal('fetch', fetchMock);
 });
 
 describe('GithubClient', () => {
@@ -24,7 +24,7 @@ describe('GithubClient', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('https://api.github.com/user', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer abc' }),
-    }));
+    }), expect.any(Object));
   });
 
   it('creates issues and returns number/url', async () => {

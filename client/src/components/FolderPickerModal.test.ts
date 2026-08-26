@@ -193,6 +193,52 @@ describe('FolderPickerModal', () => {
     expect(wrapper.emitted('select')?.[0]).toEqual([{ path: '/workspace/cloned', refreshProjectPaths: true }]);
   });
 
+  it('shows recent projects with access time and session count, and removes their session history', async () => {
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      if (input === '/api/sessions/project-history-summary') {
+        return { ok: true, json: async () => ({ projects: [{ path: '/workspace/cloned', sessionCount: 0 }] }) };
+      }
+      if (input === '/api/sessions/project-history') {
+        expect(init).toMatchObject({
+          method: 'DELETE',
+          body: JSON.stringify({ clientId: 'client-1', projectPath: '/workspace/cloned' }),
+        });
+        return { ok: true, json: async () => ({ success: true, removedSessions: 0 }) };
+      }
+      return { ok: true, json: async () => ({ path: '/workspace', tree: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = mount(FolderPickerModal, {
+      props: {
+        visible: true,
+        initialPath: '/workspace',
+        currentProjectPath: '/workspace',
+        clientId: 'client-1',
+        projectHistory: [{ path: '/workspace/cloned', lastAccessed: Date.now() - 4 * 60_000 }],
+      },
+      global: { stubs: { Teleport: true } },
+    });
+
+    await wrapper.findAll('.project-dialog-tabs button')[2].trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.project-history-session-count').text()).toBe('0 sessions'));
+    expect(wrapper.find('.project-history-heading').text()).toContain('cloned');
+    expect(wrapper.find('.project-history-meta').text()).toContain('/workspace/cloned');
+    expect(wrapper.find('.project-history-meta').text()).toContain('Last accessed 4m ago');
+
+    await wrapper.find('.history-remove-btn').trigger('click');
+    expect(wrapper.text()).toContain('This removes /workspace/cloned from project history and deletes its session history files. The project folder and its contents will remain on disk.');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/sessions/project-history', expect.anything());
+
+    await wrapper.find('.btn-cancel').trigger('click');
+    expect(wrapper.text()).not.toContain('This removes /workspace/cloned from project history and deletes its session history files. The project folder and its contents will remain on disk.');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/sessions/project-history', expect.anything());
+
+    await wrapper.find('.history-remove-btn').trigger('click');
+    await wrapper.find('.btn-confirm').trigger('click');
+    await vi.waitFor(() => expect(wrapper.emitted('historyRemoved')?.[0]).toEqual(['/workspace/cloned']));
+  });
+
   it('offers move options without a rename field for a different folder', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,

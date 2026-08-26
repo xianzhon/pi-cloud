@@ -374,8 +374,10 @@
       :initialPath="projectPath"
       :currentProjectPath="projectPath"
       :client-id="clientId"
+      :project-history="readProjectPathHistory()"
       @close="showFolderPicker = false"
       @select="setProjectPath"
+      @history-removed="removeProjectPathHistory"
     />
 
     <FolderPickerModal
@@ -471,6 +473,11 @@ interface AgentProfile {
   isDefault: boolean;
   defaultProvider?: string;
   defaultModel?: string;
+}
+
+interface ProjectPathHistoryEntry {
+  path: string;
+  lastAccessed: number;
 }
 
 const DEFAULT_SESSION_TITLE = t('components.sessionSidebar.newSession');
@@ -674,26 +681,40 @@ function projectPathMruStorageKey(profileId = selectedAgentProfile.value): strin
   return `${projectPathMruStoragePrefix}:${profileId || 'default'}`;
 }
 
-function readProjectPathMru(profileId = selectedAgentProfile.value): string[] {
+function readProjectPathHistory(profileId = selectedAgentProfile.value): ProjectPathHistoryEntry[] {
   try {
     const data = JSON.parse(localStorage.getItem(projectPathMruStorageKey(profileId)) || 'null') as {
       updatedAt?: number;
       paths?: unknown[];
+      entries?: Array<{ path?: unknown; lastAccessed?: unknown }>;
     } | null;
-    if (!data?.updatedAt || Date.now() - data.updatedAt > projectPathMruTtlMs || !Array.isArray(data.paths)) return [];
-    return data.paths
-      .filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
+    if (!data?.updatedAt || Date.now() - data.updatedAt > projectPathMruTtlMs) return [];
+    const entries = Array.isArray(data.entries)
+      ? data.entries
+      : (Array.isArray(data.paths) ? data.paths.map((path) => ({ path, lastAccessed: data.updatedAt })) : []);
+    return entries
+      .filter((entry): entry is { path: string; lastAccessed: number } => (
+        typeof entry.path === 'string' && entry.path.trim().length > 0 && typeof entry.lastAccessed === 'number'
+      ))
       .slice(0, projectPathMruLimit);
   } catch {
     return [];
   }
 }
 
-function writeProjectPathMru(paths: string[], profileId = selectedAgentProfile.value): void {
+function readProjectPathMru(profileId = selectedAgentProfile.value): string[] {
+  return readProjectPathHistory(profileId).map((entry) => entry.path);
+}
+
+function writeProjectPathMru(paths: string[], profileId = selectedAgentProfile.value, accessedPath: string | null = paths[0] || null): void {
   try {
+    const now = Date.now();
+    const previousAccess = new Map(readProjectPathHistory(profileId).map((entry) => [entry.path, entry.lastAccessed]));
+    const uniquePaths = Array.from(new Set(paths.filter((path) => path.trim()))).slice(0, projectPathMruLimit);
     localStorage.setItem(projectPathMruStorageKey(profileId), JSON.stringify({
-      updatedAt: Date.now(),
-      paths: Array.from(new Set(paths.filter((path) => path.trim()))).slice(0, projectPathMruLimit),
+      updatedAt: now,
+      paths: uniquePaths,
+      entries: uniquePaths.map((path) => ({ path, lastAccessed: path === accessedPath ? now : previousAccess.get(path) || now })),
     }));
   } catch {
     // MRU ordering is a convenience; project switching should still work if storage is unavailable.
@@ -716,8 +737,17 @@ function sortProjectPathsByMru(paths: string[], profileId = selectedAgentProfile
 function rememberProjectPath(path: string, profileId = selectedAgentProfile.value): void {
   const trimmed = path.trim();
   if (!trimmed) return;
-  writeProjectPathMru([trimmed, ...readProjectPathMru(profileId).filter((entry) => entry !== trimmed)], profileId);
+  writeProjectPathMru([trimmed, ...readProjectPathMru(profileId).filter((entry) => entry !== trimmed)], profileId, trimmed);
   projectPathOptions.value = sortProjectPathsByMru(projectPathOptions.value, profileId);
+}
+
+async function removeProjectPathHistory(path: string): Promise<void> {
+  writeProjectPathMru(readProjectPathMru().filter((entry) => entry !== path), selectedAgentProfile.value, null);
+  projectPathOptions.value = projectPathOptions.value.filter((entry) => entry !== path);
+  if (projectPath.value === path) {
+    if (props.activeSessionId) emit('sessionDeleted', props.activeSessionId);
+    await loadSessions();
+  }
 }
 
 async function refreshProjectPath(options: { preferSaved: boolean; initial?: boolean } = { preferSaved: true }) {

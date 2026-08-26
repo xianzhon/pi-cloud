@@ -516,6 +516,42 @@ describe('session routes', () => {
     expect(result).toEqual({ projectPaths: ['/workspace/app', '/workspace/api', '/session/storage/4'] });
   });
 
+  it('summarizes session counts for recent projects, including projects without sessions', async () => {
+    vi.mocked(sessionService.listSessions).mockImplementation(async (_clientId: string, path?: string) => (
+      path === '/repo/with-sessions' ? [{ id: 'session-1' }] as any : []
+    ));
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+
+    const result = await handlers['POST /project-history-summary']({
+      body: { clientId: 'client-1', projectPaths: ['/repo/with-sessions', '/repo/cloned'] },
+    }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
+
+    expect(result).toEqual({ projects: [
+      { path: '/repo/with-sessions', sessionCount: 1 },
+      { path: '/repo/cloned', sessionCount: 0 },
+    ] });
+  });
+
+  it('removes all session history files for a recent project without deleting the project', async () => {
+    vi.mocked(sessionService.listSessions).mockResolvedValue([{ id: 'session-1' }, { id: 'session-2' }] as any);
+    vi.mocked(sessionService.getClientAgentDirForRoutes).mockResolvedValue('/profiles/default');
+    vi.mocked(sessionService.getProjectSessionDirForPath).mockReturnValue('/profiles/default/sessions/project');
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+
+    const result = await handlers['DELETE /project-history']({
+      body: { clientId: 'client-1', projectPath: '/repo/cloned' },
+    }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
+
+    expect(sessionService.forceDisposeByCwd).toHaveBeenCalledWith('/repo/cloned');
+    expect(sessionService.deleteSessionFiles).toHaveBeenCalledWith('/profiles/default/sessions/project');
+    expect(sessionService.deleteSessionMetadata).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ success: true, removedSessions: 2 });
+  });
+
   it('uses the base repo path for managed worktree sessions in project path options', async () => {
     vi.mocked(sessionService.listProjectPaths).mockResolvedValue(['/repo/app']);
 
