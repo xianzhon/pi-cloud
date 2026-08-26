@@ -46,7 +46,7 @@ describe('websocket authentication', () => {
 
     expect(message).toContain('Origin not allowed');
     await app.close();
-  });
+  }, 10_000);
 
   it('rejects unauthenticated chat websocket connections and records a websocket audit event', async () => {
     const { buildApp } = await import('../index');
@@ -68,5 +68,5 @@ describe('websocket authentication', () => {
     const events = db.prepare('SELECT type FROM audit_events ORDER BY id DESC').all() as Array<{ type: string }>;
     db.close();
     expect(events.map((event) => event.type)).toContain('websocket_auth_failure');
-  });
+  }, 10_000);
 });

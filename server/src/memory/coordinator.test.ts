@@ -3,7 +3,7 @@ import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
 import { MemoryExtractionCoordinator } from './coordinator.js';
 import { RetryableExtractionError } from './extractor.js';
 import { MemoryStore } from './store.js';
-import type { EnqueueExtractionRunInput } from './types.js';
+import type { EnqueueExtractionRunInput, MemoryUpdatedEvent } from './types.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -20,14 +20,14 @@ describe('MemoryExtractionCoordinator', () => {
   let store: MemoryStore;
   let projectId: string;
   let sequence: number;
-  let emit: ReturnType<typeof vi.fn>;
+  let emit: ReturnType<typeof vi.fn<(event: MemoryUpdatedEvent) => void>>;
 
   beforeEach(() => {
     db = openPiuiDatabase(':memory:');
     store = new MemoryStore(db);
     projectId = store.getOrCreateProject('default', '/repo/app').id;
     sequence = 0;
-    emit = vi.fn();
+    emit = vi.fn<(event: MemoryUpdatedEvent) => void>();
   });
 
   afterEach(() => {

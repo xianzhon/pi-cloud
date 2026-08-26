@@ -61,13 +61,13 @@ vi.mock('monaco-editor', () => ({
     getLanguages: vi.fn(() => []),
     register: vi.fn(),
     setMonarchTokensProvider: vi.fn(),
-    typescript: {
-      typescriptDefaults: { setDiagnosticsOptions: vi.fn() },
-      javascriptDefaults: { setDiagnosticsOptions: vi.fn() },
-    },
-    json: {
-      jsonDefaults: { setDiagnosticsOptions: vi.fn() },
-    },
+  },
+  typescript: {
+    typescriptDefaults: { setDiagnosticsOptions: vi.fn() },
+    javascriptDefaults: { setDiagnosticsOptions: vi.fn() },
+  },
+  json: {
+    jsonDefaults: { setDiagnosticsOptions: vi.fn() },
   },
   KeyMod: { CtrlCmd: 2048 },
   KeyCode: { KeyS: 49 },
@@ -80,12 +80,12 @@ vi.mock('monaco-editor', () => ({
   },
 }));
 
-vi.mock('monaco-editor/esm/vs/basic-languages/monaco.contribution', () => ({}));
-vi.mock('monaco-editor/esm/vs/editor/editor.worker?worker', () => ({ default: class {} }));
-vi.mock('monaco-editor/esm/vs/language/json/json.worker?worker', () => ({ default: class {} }));
-vi.mock('monaco-editor/esm/vs/language/css/css.worker?worker', () => ({ default: class {} }));
-vi.mock('monaco-editor/esm/vs/language/html/html.worker?worker', () => ({ default: class {} }));
-vi.mock('monaco-editor/esm/vs/language/typescript/ts.worker?worker', () => ({ default: class {} }));
+vi.mock('monaco-editor/basic-languages/monaco.contribution', () => ({}));
+vi.mock('monaco-editor/editor/editor.worker?worker', () => ({ default: class {} }));
+vi.mock('monaco-editor/language/json/json.worker?worker', () => ({ default: class {} }));
+vi.mock('monaco-editor/language/css/css.worker?worker', () => ({ default: class {} }));
+vi.mock('monaco-editor/language/html/html.worker?worker', () => ({ default: class {} }));
+vi.mock('monaco-editor/language/typescript/ts.worker?worker', () => ({ default: class {} }));
 
 function mockFileTreeFetch() {
   vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -100,6 +100,7 @@ describe('EditorPanel', () => {
     await flushPromises();
     mermaidMock.initialize.mockReset();
     mermaidMock.render.mockReset();
+    vi.clearAllMocks();
     vi.unstubAllGlobals();
   });
 

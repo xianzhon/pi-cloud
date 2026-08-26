@@ -751,7 +751,7 @@ export class PiSessionService {
 
           const stream = createReadStream(path, { encoding: 'utf8' });
           let buffer = '';
-          for await (const chunk of stream) {
+          for await (const chunk of stream as unknown as AsyncIterable<string>) {
             buffer += chunk;
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';

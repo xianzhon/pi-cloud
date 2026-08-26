@@ -222,6 +222,7 @@ describe('PiSessionService', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     db.close();
     rmSync(dbPath, { force: true });
     if (originalAgentDir === undefined) {
@@ -932,7 +933,7 @@ describe('PiSessionService', () => {
       { name: 'work', isDirectory: () => true },
     ]);
     loadProxyEnvForAgentDir.mockResolvedValue({});
-    const service = new PiSessionService();
+    const service = new PiSessionService({ db });
     await service.setClientAgentProfile('client-1', 'work');
 
     await service.runWithClientProfileProxy('client-1', async () => 'ok');

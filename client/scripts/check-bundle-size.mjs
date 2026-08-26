@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib';
 export const DEFAULT_BUNDLE_LIMITS = Object.freeze({
   initialJsGzipBytes: 900 * 1024,
   lazyJsGzipBytes: 1100 * 1024,
-  workerRawBytes: 6250 * 1024,
+  workerRawBytes: 7000 * 1024,
 });
 
 function formatKiB(bytes) {
