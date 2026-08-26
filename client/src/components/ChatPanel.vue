@@ -2553,6 +2553,7 @@ async function confirmCommit() {
     responseMessage.title = undefined;
     responseMessage.content = formatCommitSuccess(data, preview.mode);
     window.dispatchEvent(new CustomEvent('refresh-file-tree'));
+    window.dispatchEvent(new CustomEvent('refresh-git-status'));
   } catch (error) {
     responseMessage.status = 'failure';
     responseMessage.title = preview.mode === 'amend' ? t('components.chatPanel.gitAmendFailed') : t('components.chatPanel.gitCommitFailed');

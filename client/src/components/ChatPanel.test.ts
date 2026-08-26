@@ -671,6 +671,37 @@ describe('ChatPanel', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/git/commit-message?cwd=%2Frepo&clientId=client-1&stagedOnly=true');
   });
 
+  it('refreshes Git status after a commit completes', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/api/git/status')) {
+        return new Response(JSON.stringify({
+          cwd: '/repo',
+          message: 'Update changes',
+          files: [{ status: 'M', path: 'changed.ts' }],
+        }), { status: 200 });
+      }
+      if (url.includes('/api/git/commit')) {
+        return new Response(JSON.stringify({ hash: 'abc1234' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ commands: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const refreshGitStatus = vi.fn();
+    window.addEventListener('refresh-git-status', refreshGitStatus);
+    const wrapper = mount(ChatPanel, { props: { clientId: 'client-1', projectPath: '/repo' } });
+
+    await wrapper.find('textarea').setValue('/commit');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+    document.querySelector<HTMLButtonElement>('.btn-confirm')?.click();
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/git/commit', expect.objectContaining({ method: 'POST' }));
+    expect(refreshGitStatus).toHaveBeenCalledOnce();
+    window.removeEventListener('refresh-git-status', refreshGitStatus);
+  });
+
   it('defaults to deleting the original branch when switching', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
       const url = String(input);
