@@ -41,6 +41,18 @@ describe('GitToolPanel', () => {
     expect(commit.attributes('disabled')).toBeDefined();
   });
 
+  it('refreshes when an agent turn completes', async () => {
+    const wrapper = mount(GitToolPanel, { props: { cwd: '/workspace' } });
+    await flushPromises();
+
+    vi.mocked(fetch).mockResolvedValue(response({ files: [{ status: 'M', path: 'src/changed.ts' }] }));
+    window.dispatchEvent(new CustomEvent('refresh-git-status'));
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('src/changed.ts');
+    wrapper.unmount();
+  });
+
   it('opens files and file diffs in the editor', async () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);

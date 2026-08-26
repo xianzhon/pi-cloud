@@ -176,9 +176,19 @@ function startResize(event: PointerEvent): void {
   window.addEventListener('pointercancel', stopResize);
 }
 
+function handleGitStatusRefresh(): void {
+  void refresh();
+}
+
 watch(() => props.cwd, () => void refresh());
-onMounted(() => void refresh());
-onBeforeUnmount(stopResize);
+onMounted(() => {
+  window.addEventListener('refresh-git-status', handleGitStatusRefresh);
+  void refresh();
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('refresh-git-status', handleGitStatusRefresh);
+  stopResize();
+});
 
 defineExpose({ refresh });
 </script>

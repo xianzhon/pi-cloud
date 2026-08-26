@@ -705,6 +705,8 @@ export function useChat() {
       case 'agent_end':
         finishStreaming(targetSessionId, true);
         emitSummaryGenerated(targetSessionId);
+        // One completion refresh covers edits from any tool without continuous Git polling.
+        window.dispatchEvent(new CustomEvent('refresh-git-status'));
         break;
 
       case 'compaction_end':
