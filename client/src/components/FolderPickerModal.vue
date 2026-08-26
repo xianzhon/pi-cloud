@@ -26,6 +26,15 @@
           >
             {{ t('components.folderPickerModal.cloneRepository') }}
           </button>
+          <button
+            type="button"
+            :class="{ active: activeTab === 'history' }"
+            role="tab"
+            :aria-selected="activeTab === 'history'"
+            @click="openHistory"
+          >
+            {{ t('components.folderPickerModal.history') }}
+          </button>
         </div>
 
         <template v-if="activeTab === 'browse'">
@@ -152,13 +161,46 @@
         </template>
 
         <CloneRepositoryModal
-          v-else
+          v-else-if="activeTab === 'clone'"
           :visible="visible"
           :client-id="clientId"
           embedded
           @close="$emit('close')"
           @cloned="selectClonedProject"
         />
+
+        <div v-else class="project-history-list">
+          <div v-if="historyError" class="error-message">{{ historyError }}</div>
+          <div v-if="historyLoading" class="empty-state">{{ t('components.folderPickerModal.loading') }}</div>
+          <div v-else-if="projectHistory.length === 0" class="empty-state">
+            {{ t('components.folderPickerModal.noProjectHistory') }}
+          </div>
+          <div v-for="entry in projectHistory" v-else :key="entry.path" class="project-history-row">
+            <button class="project-history-project" type="button" @click="selectHistoryProject(entry.path)">
+              <PhFolder :size="18" weight="fill" />
+              <span class="project-history-details">
+                <strong>{{ basenamePath(entry.path) }}</strong>
+                <span :title="entry.path">{{ entry.path }}</span>
+                <span>
+                  {{ formatLastAccessed(entry.lastAccessed) }}
+                  <template v-if="historyCounts[entry.path] !== undefined">
+                    · {{ t('components.folderPickerModal.sessionCount', { count: historyCounts[entry.path] }) }}
+                  </template>
+                </span>
+              </span>
+            </button>
+            <button
+              class="history-remove-btn"
+              type="button"
+              :disabled="removingHistoryPath === entry.path"
+              :title="t('components.folderPickerModal.removeHistory')"
+              :aria-label="t('components.folderPickerModal.removeHistoryFor', { path: entry.path })"
+              @click="removeHistory(entry.path)"
+            >
+              <PhTrash :size="16" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -179,7 +221,7 @@
 <script setup lang="ts">
 import { i18n } from '../i18n';
 import { computed, ref, watch } from 'vue';
-import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhFolderPlus, PhMagnifyingGlass, PhTextAa } from '@phosphor-icons/vue';
+import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhFolderPlus, PhMagnifyingGlass, PhTextAa, PhTrash } from '@phosphor-icons/vue';
 import CloneRepositoryModal from './CloneRepositoryModal.vue';
 import DialogCloseButton from './DialogCloseButton.vue';
 import InputPromptModal from './InputPromptModal.vue';
@@ -192,6 +234,11 @@ interface DirectoryNode {
   type: 'directory';
 }
 
+interface ProjectHistoryEntry {
+  path: string;
+  lastAccessed: number;
+}
+
 const props = withDefaults(defineProps<{
   visible: boolean;
   initialPath: string;
@@ -199,10 +246,12 @@ const props = withDefaults(defineProps<{
   clientId?: string;
   title?: string;
   showClone?: boolean;
+  projectHistory?: ProjectHistoryEntry[];
 }>(), {
   clientId: '',
   title: undefined,
   showClone: true,
+  projectHistory: () => [],
 });
 
 type MoveMode = 'rename' | 'move-project' | 'move-sessions';
@@ -210,6 +259,7 @@ type MoveMode = 'rename' | 'move-project' | 'move-sessions';
 const emit = defineEmits<{
   close: [];
   select: [payload: { path: string; moveMode?: MoveMode; projectName?: string; refreshProjectPaths?: boolean }];
+  historyRemoved: [path: string];
 }>();
 
 const currentPath = ref('~');
@@ -223,8 +273,12 @@ const projectName = ref('');
 const showHiddenFolders = ref(false);
 const directorySort = ref<'name' | 'modified'>('modified');
 const searchQuery = ref('');
-const activeTab = ref<'browse' | 'clone'>('browse');
+const activeTab = ref<'browse' | 'history' | 'clone'>('browse');
 const newFolderDialogVisible = ref(false);
+const historyCounts = ref<Record<string, number>>({});
+const historyLoading = ref(false);
+const historyError = ref('');
+const removingHistoryPath = ref('');
 
 const currentProjectName = computed(() => basenamePath(props.currentProjectPath || ''));
 const isCurrentProjectPath = computed(() => Boolean(props.currentProjectPath) && currentPath.value === props.currentProjectPath);
@@ -323,6 +377,57 @@ function createTreeParams(path: string, depth: string) {
 
 function selectClonedProject(payload: { projectPath: string }) {
   emit('select', { path: payload.projectPath, refreshProjectPaths: true });
+}
+
+async function openHistory() {
+  activeTab.value = 'history';
+  historyError.value = '';
+  if (!props.clientId || props.projectHistory.length === 0) return;
+
+  historyLoading.value = true;
+  try {
+    const response = await fetch('/api/sessions/project-history-summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: props.clientId, projectPaths: props.projectHistory.map((entry) => entry.path) }),
+    });
+    if (!response.ok) throw new Error(t('components.folderPickerModal.failedToLoadHistory'));
+    const data = await response.json() as { projects?: Array<{ path: string; sessionCount: number }> };
+    historyCounts.value = Object.fromEntries((data.projects || []).map((project) => [project.path, project.sessionCount]));
+  } catch (err) {
+    historyError.value = err instanceof Error ? err.message : t('components.folderPickerModal.failedToLoadHistory');
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+function selectHistoryProject(path: string) {
+  emit('select', { path });
+}
+
+async function removeHistory(path: string) {
+  if (!window.confirm(t('components.folderPickerModal.removeHistoryConfirm', { path }))) return;
+  removingHistoryPath.value = path;
+  historyError.value = '';
+  try {
+    const response = await fetch('/api/sessions/project-history', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: props.clientId, projectPath: path }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || t('components.folderPickerModal.failedToRemoveHistory'));
+    emit('historyRemoved', path);
+  } catch (err) {
+    historyError.value = err instanceof Error ? err.message : t('components.folderPickerModal.failedToRemoveHistory');
+  } finally {
+    removingHistoryPath.value = '';
+  }
+}
+
+function formatLastAccessed(timestamp: number): string {
+  if (!timestamp) return t('components.folderPickerModal.lastAccessedUnknown');
+  return t('components.folderPickerModal.lastAccessed', { date: new Date(timestamp).toLocaleString() });
 }
 
 async function createFolder(value: string) {
@@ -542,6 +647,64 @@ function dirnamePath(path: string): string {
 .directory-list {
   overflow: auto;
   padding: 0.5rem;
+}
+
+.project-history-list {
+  min-height: 240px;
+  overflow: auto;
+  padding: 0.5rem;
+}
+
+.project-history-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.project-history-row:hover {
+  background: var(--bg-surface);
+}
+
+.project-history-project {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.project-history-details {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.project-history-details span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-remove-btn {
+  margin-right: 0.4rem;
+  padding: 0.45rem;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.history-remove-btn:hover:not(:disabled) {
+  color: var(--error);
+  background: var(--error-muted);
+}
+
+.history-remove-btn:disabled {
+  opacity: 0.45;
 }
 
 .history-option {

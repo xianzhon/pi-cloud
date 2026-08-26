@@ -193,6 +193,43 @@ describe('FolderPickerModal', () => {
     expect(wrapper.emitted('select')?.[0]).toEqual([{ path: '/workspace/cloned', refreshProjectPaths: true }]);
   });
 
+  it('shows recent projects with access time and session count, and removes their session history', async () => {
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      if (input === '/api/sessions/project-history-summary') {
+        return { ok: true, json: async () => ({ projects: [{ path: '/workspace/cloned', sessionCount: 0 }] }) };
+      }
+      if (input === '/api/sessions/project-history') {
+        expect(init).toMatchObject({
+          method: 'DELETE',
+          body: JSON.stringify({ clientId: 'client-1', projectPath: '/workspace/cloned' }),
+        });
+        return { ok: true, json: async () => ({ success: true, removedSessions: 0 }) };
+      }
+      return { ok: true, json: async () => ({ path: '/workspace', tree: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('confirm', vi.fn(() => true));
+
+    const wrapper = mount(FolderPickerModal, {
+      props: {
+        visible: true,
+        initialPath: '/workspace',
+        currentProjectPath: '/workspace',
+        clientId: 'client-1',
+        projectHistory: [{ path: '/workspace/cloned', lastAccessed: Date.parse('2026-01-02T03:04:00Z') }],
+      },
+      global: { stubs: { Teleport: true } },
+    });
+
+    await wrapper.findAll('.project-dialog-tabs button')[2].trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('0 sessions'));
+    expect(wrapper.text()).toContain('/workspace/cloned');
+    expect(wrapper.text()).toContain('Last accessed');
+
+    await wrapper.find('.history-remove-btn').trigger('click');
+    await vi.waitFor(() => expect(wrapper.emitted('historyRemoved')?.[0]).toEqual(['/workspace/cloned']));
+  });
+
   it('offers move options without a rename field for a different folder', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,

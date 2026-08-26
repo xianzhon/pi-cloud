@@ -446,6 +446,7 @@ export default {
     },
     folderPickerModal: {
       browse: 'Browse',
+      history: 'History',
       cloneRepository: 'Clone repository',
       selectedPath: 'Selected path',
       enterPathHint: 'Enter a folder path and press Enter to browse',
@@ -480,6 +481,15 @@ export default {
       sortByModifiedDate: 'Sort by modified date (newest first)',
       sortByName: 'Sort by name',
       browseFailedStatus: 'Failed to browse folder ({status})',
+      noProjectHistory: 'No recently opened projects',
+      sessionCount: '{count} sessions',
+      lastAccessed: 'Last accessed {date}',
+      lastAccessedUnknown: 'Last accessed time unknown',
+      removeHistory: 'Remove history',
+      removeHistoryFor: 'Remove history for {path}',
+      removeHistoryConfirm: 'Remove {path} and delete its session history files?',
+      failedToLoadHistory: 'Failed to load project history',
+      failedToRemoveHistory: 'Failed to remove project history',
     },
     inputPromptModal: {
       closeDialog: 'Close dialog',
