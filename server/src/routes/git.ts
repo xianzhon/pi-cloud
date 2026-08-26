@@ -668,7 +668,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
   });
 
   app.get('/diff', async (req, reply) => {
-    const { cwd, scope: rawScope, commit: rawCommit } = req.query as { cwd?: string; scope?: string; commit?: string };
+    const { cwd, scope: rawScope, commit: rawCommit, path } = req.query as { cwd?: string; scope?: string; commit?: string; path?: string };
     const resolvedCwd = await resolveGitCwd(cwd);
 
     try {
@@ -685,10 +685,11 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
       }
 
       const scope = parseDiffScope(rawScope);
-      const diff = await getDiff(resolvedCwd, [], scope);
+      const pathArgs = path ? ['--', path] : [];
+      const diff = await getDiff(resolvedCwd, pathArgs, scope);
       const remainingBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES - Buffer.byteLength(diff);
-      const stat = remainingBytes > 0 ? await getDiff(resolvedCwd, ['--stat'], scope, remainingBytes) : '';
-      return { cwd: resolvedCwd, scope, stat, diff };
+      const stat = remainingBytes > 0 ? await getDiff(resolvedCwd, ['--stat', ...pathArgs], scope, remainingBytes) : '';
+      return { cwd: resolvedCwd, scope, path, stat, diff };
     } catch (error) {
       if (error instanceof OversizedGitOutputError) {
         return {

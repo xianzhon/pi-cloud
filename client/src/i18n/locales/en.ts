@@ -68,6 +68,9 @@ export default {
       loading: 'Loading changes…',
       noChanges: 'No changed files',
       loadFailed: 'Failed to load Git changes',
+      resize: 'Resize Git panel',
+      showDiff: 'Show diff',
+      showDiffFor: 'Show diff for {path}',
     },
     chatPanel: {
       details: 'Details',

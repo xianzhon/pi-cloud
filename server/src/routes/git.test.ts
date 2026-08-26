@@ -299,6 +299,27 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('filters diff output to a requested file', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'README change\n');
+      await writeFile(join(cwd, 'SECOND.md'), 'second change\n');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/git/diff?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent('README.md')}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().diff).toContain('README change');
+      expect(response.json().diff).not.toContain('second change');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('includes staged-only content in editor changed ranges', async () => {
     const cwd = await createRepo();
     const app = await buildApp();

@@ -1,5 +1,18 @@
 <template>
-  <section class="git-tool-panel" :aria-label="t('components.gitToolPanel.title')">
+  <section
+    class="git-tool-panel"
+    :class="{ 'is-resizing': resizing }"
+    :style="{ height: `${panelHeight}px` }"
+    :aria-label="t('components.gitToolPanel.title')"
+  >
+    <div
+      class="git-tool-resize-handle"
+      role="separator"
+      aria-orientation="horizontal"
+      :aria-label="t('components.gitToolPanel.resize')"
+      :aria-valuenow="panelHeight"
+      @pointerdown.prevent="startResize"
+    />
     <div class="git-tool-toolbar" role="toolbar" :aria-label="t('components.gitToolPanel.actions')">
       <button
         v-for="action in actions"
@@ -8,10 +21,10 @@
         class="git-tool-action"
         :disabled="action.command === '/commit' && files.length === 0"
         :title="action.label"
+        :aria-label="action.label"
         @click="runAction(action.command)"
       >
-        <component :is="action.icon" :size="15" weight="bold" aria-hidden="true" />
-        <span>{{ action.label }}</span>
+        <component :is="action.icon" :size="17" weight="bold" aria-hidden="true" />
       </button>
     </div>
 
@@ -20,9 +33,21 @@
       <p v-else-if="error" class="git-tool-state git-tool-error">{{ error }}</p>
       <p v-else-if="files.length === 0" class="git-tool-state">{{ t('components.gitToolPanel.noChanges') }}</p>
       <ul v-else>
-        <li v-for="file in files" :key="`${file.status}:${file.path}`" :title="file.path">
-          <span class="git-file-status">{{ file.status }}</span>
-          <span class="git-file-path">{{ file.path }}</span>
+        <li v-for="file in files" :key="`${file.status}:${file.path}`">
+          <button class="git-file-open" type="button" :title="file.path" @click="openFile(file.path)">
+            <span class="git-file-status">{{ file.status }}</span>
+            <span class="git-file-path">{{ file.path }}</span>
+          </button>
+          <button
+            class="git-file-diff"
+            type="button"
+            :disabled="diffLoadingPath === file.path"
+            :title="t('components.gitToolPanel.showDiff')"
+            :aria-label="t('components.gitToolPanel.showDiffFor', { path: file.path })"
+            @click="openDiff(file.path)"
+          >
+            <PhGitDiff :size="16" weight="bold" aria-hidden="true" />
+          </button>
         </li>
       </ul>
     </div>
@@ -30,11 +55,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   PhArrowsClockwise,
   PhGitBranch,
   PhGitCommit,
+  PhGitDiff,
   PhGitPullRequest,
   PhUploadSimple,
   PhDownloadSimple,
@@ -47,6 +73,9 @@ interface GitStatusFile {
   status: string;
 }
 
+const MIN_PANEL_HEIGHT = 120;
+const MAX_PANEL_HEIGHT_RATIO = 0.75;
+
 const props = defineProps<{ cwd: string }>();
 const emit = defineEmits<{ command: [command: string] }>();
 const t = i18n.global.t;
@@ -54,7 +83,12 @@ const gitOperations = createGitOperations();
 const files = ref<GitStatusFile[]>([]);
 const loading = ref(false);
 const error = ref('');
+const diffLoadingPath = ref('');
+const panelHeight = ref(240);
+const resizing = ref(false);
 let requestId = 0;
+let resizeStartY = 0;
+let resizeStartHeight = 0;
 
 const actions = computed(() => [
   { command: '/status', label: t('components.gitToolPanel.refresh'), icon: PhArrowsClockwise },
@@ -93,38 +127,117 @@ function runAction(command: string): void {
   if (command === '/status') void refresh();
 }
 
+function openFile(path: string): void {
+  window.dispatchEvent(new CustomEvent('open-file-in-editor', {
+    detail: { path, kind: 'path' },
+  }));
+}
+
+async function openDiff(path: string): Promise<void> {
+  diffLoadingPath.value = path;
+  try {
+    const result = await gitOperations.getDiff({ cwd: props.cwd, path });
+    if (typeof result.diff !== 'string' || !result.diff.trim()) return;
+    window.dispatchEvent(new CustomEvent('open-virtual-diff-in-editor', {
+      detail: {
+        cwd: result.cwd || props.cwd,
+        scope: path,
+        content: result.diff,
+      },
+    }));
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('components.gitToolPanel.loadFailed');
+  } finally {
+    diffLoadingPath.value = '';
+  }
+}
+
+function resize(event: PointerEvent): void {
+  const nextHeight = resizeStartHeight + resizeStartY - event.clientY;
+  panelHeight.value = Math.min(
+    window.innerHeight * MAX_PANEL_HEIGHT_RATIO,
+    Math.max(MIN_PANEL_HEIGHT, nextHeight),
+  );
+}
+
+function stopResize(): void {
+  resizing.value = false;
+  window.removeEventListener('pointermove', resize);
+  window.removeEventListener('pointerup', stopResize);
+  window.removeEventListener('pointercancel', stopResize);
+}
+
+function startResize(event: PointerEvent): void {
+  resizing.value = true;
+  resizeStartY = event.clientY;
+  resizeStartHeight = panelHeight.value;
+  window.addEventListener('pointermove', resize);
+  window.addEventListener('pointerup', stopResize);
+  window.addEventListener('pointercancel', stopResize);
+}
+
 watch(() => props.cwd, () => void refresh());
 onMounted(() => void refresh());
+onBeforeUnmount(stopResize);
 
 defineExpose({ refresh });
 </script>
 
 <style scoped>
 .git-tool-panel {
+  position: relative;
+  display: flex;
   flex: 0 0 auto;
-  max-height: 240px;
+  flex-direction: column;
+  min-height: 120px;
+  max-height: 75vh;
   border-top: 1px solid var(--border);
   background: var(--bg-secondary);
 }
 
+.git-tool-resize-handle {
+  position: absolute;
+  top: -5px;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 10px;
+  cursor: row-resize;
+}
+
+.git-tool-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.git-tool-resize-handle:hover::after,
+.is-resizing .git-tool-resize-handle::after {
+  background: var(--accent);
+}
+
 .git-tool-toolbar {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  justify-content: space-around;
   gap: 4px;
   padding: 8px;
   border-bottom: 1px solid var(--border);
 }
 
 .git-tool-action {
-  min-width: 0;
-  padding: 5px 3px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: 0.6875rem;
 }
 
 .git-tool-action:hover:not(:disabled) {
@@ -138,7 +251,8 @@ defineExpose({ refresh });
 }
 
 .git-tool-files {
-  max-height: 150px;
+  min-height: 0;
+  flex: 1;
   overflow: auto;
   padding: 6px 8px 8px;
 }
@@ -152,11 +266,27 @@ defineExpose({ refresh });
 .git-tool-files li {
   display: flex;
   min-width: 0;
-  gap: 7px;
-  padding: 4px;
+  align-items: center;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 0.75rem;
+}
+
+.git-tool-files li:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.git-file-open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 4px;
+  color: inherit;
+  text-align: left;
 }
 
 .git-file-status {
@@ -169,6 +299,28 @@ defineExpose({ refresh });
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.git-file-diff {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  opacity: 0.65;
+}
+
+.git-tool-files li:hover .git-file-diff,
+.git-file-diff:focus-visible {
+  opacity: 1;
+}
+
+.git-file-diff:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--bg-hover);
 }
 
 .git-tool-state {
