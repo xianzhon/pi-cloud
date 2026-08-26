@@ -351,17 +351,17 @@
 import { i18n } from '../i18n';
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue';
 import * as monaco from 'monaco-editor';
-import 'monaco-editor/esm/vs/basic-languages/monaco.contribution';
+import 'monaco-editor/basic-languages/monaco.contribution';
 import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhMinus, PhPlus } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
 import { normalizePathSeparators } from '../utils/paths';
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
-import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
+import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
+import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
+import CssWorker from 'monaco-editor/language/css/css.worker?worker';
+import HtmlWorker from 'monaco-editor/language/html/html.worker?worker';
+import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
 import TreeNode, { type TreeNodeData } from './FileTreeNode.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import InputPromptModal from './InputPromptModal.vue';
@@ -393,13 +393,13 @@ self.MonacoEnvironment = {
   }
 };
 
-monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+monaco.typescript.typescriptDefaults.setDiagnosticsOptions({
   noSemanticValidation: true,
 });
-monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+monaco.typescript.javascriptDefaults.setDiagnosticsOptions({
   noSemanticValidation: true,
 });
-monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+monaco.json.jsonDefaults.setDiagnosticsOptions({
   allowComments: true,
   comments: 'ignore',
 });

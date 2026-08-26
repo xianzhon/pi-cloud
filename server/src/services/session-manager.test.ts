@@ -39,11 +39,11 @@ const createAgentSession = vi.fn<(options: any) => Promise<any>>(async (options)
     model: undefined,
     isStreaming: false,
     dispose: vi.fn(),
-    modelRegistry: {
-      refresh: vi.fn(),
-      find: vi.fn(() => undefined),
-      getAvailable: vi.fn(() => []),
-      isUsingOAuth: vi.fn(() => false),
+    modelRuntime: {
+      refresh: vi.fn(async () => {}),
+      getModel: vi.fn(() => undefined),
+      getAvailable: vi.fn(async () => []),
+      isUsingSubscription: vi.fn(() => false),
     },
     getAvailableThinkingLevels: vi.fn(() => []),
     getSessionStats: vi.fn(() => ({ tokens: {}, cost: 0 })),
@@ -110,10 +110,13 @@ function createMemoryRuntimeMock() {
 
 const sessionManagerList = vi.fn<(...args: any[]) => Promise<any[]>>(async () => []);
 const sessionManagerListAll = vi.fn<(...args: any[]) => Promise<any[]>>(async () => []);
-const authStorageSet = vi.fn();
-const authStorageRemove = vi.fn();
-const authStorageGetAuthStatus = vi.fn<(providerId: string) => { configured: boolean; source?: string }>(() => ({ configured: false }));
-const authStorageDrainErrors = vi.fn(() => []);
+const modelRuntimeLogin = vi.fn<(
+  providerId: string,
+  method: string,
+  callbacks: { prompt: () => Promise<string>; notify: () => void },
+) => Promise<Record<string, never>>>(async () => ({}));
+const modelRuntimeLogout = vi.fn(async () => {});
+const modelRuntimeGetAuthStatus = vi.fn<(providerId: string) => { configured: boolean; source?: string }>(() => ({ configured: false }));
 vi.mock('@earendil-works/pi-coding-agent', () => ({
   SessionManager: {
     create: sessionManagerCreate,
@@ -125,19 +128,12 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
   DefaultResourceLoader: defaultResourceLoaderCtor,
   createAgentSession,
   defineTool: vi.fn((tool) => tool),
-  AuthStorage: {
-    create: vi.fn(() => ({
-      kind: 'auth-storage',
-      set: authStorageSet,
-      remove: authStorageRemove,
-      getAuthStatus: authStorageGetAuthStatus,
-      drainErrors: authStorageDrainErrors,
-    })),
-  },
-  ModelRegistry: {
-    create: vi.fn(() => ({
-      kind: 'model-registry',
-      getAvailable: () => [
+  ModelRuntime: {
+    create: vi.fn(async () => ({
+      login: modelRuntimeLogin,
+      logout: modelRuntimeLogout,
+      getProviderAuthStatus: modelRuntimeGetAuthStatus,
+      getAvailable: async () => [
         { provider: 'anthropic', id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', input: ['text', 'image'] },
         { provider: 'openai', id: 'gpt-5', name: 'GPT-5', input: ['text'] },
       ],
@@ -178,12 +174,12 @@ describe('PiSessionService', () => {
     sessionManagerOpen.mockClear();
     sessionManagerList.mockClear();
     sessionManagerListAll.mockClear();
-    authStorageSet.mockReset();
-    authStorageRemove.mockReset();
-    authStorageGetAuthStatus.mockReset();
-    authStorageGetAuthStatus.mockReturnValue({ configured: false });
-    authStorageDrainErrors.mockReset();
-    authStorageDrainErrors.mockReturnValue([]);
+    modelRuntimeLogin.mockReset();
+    modelRuntimeLogin.mockResolvedValue({});
+    modelRuntimeLogout.mockReset();
+    modelRuntimeLogout.mockResolvedValue(undefined);
+    modelRuntimeGetAuthStatus.mockReset();
+    modelRuntimeGetAuthStatus.mockReturnValue({ configured: false });
     readdir.mockReset();
     readdir.mockResolvedValue([]);
     readFile.mockReset();
@@ -222,6 +218,7 @@ describe('PiSessionService', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     db.close();
     rmSync(dbPath, { force: true });
     if (originalAgentDir === undefined) {
@@ -295,13 +292,14 @@ describe('PiSessionService', () => {
 
     const providers = await service.saveAgentProfileApiKey('default', 'OPENCODE_API_KEY', '  secret-key  ');
 
-    expect(authStorageSet).toHaveBeenCalledWith('opencode', { type: 'api_key', key: 'secret-key' });
-    expect(authStorageSet).toHaveBeenCalledWith('opencode-go', { type: 'api_key', key: 'secret-key' });
+    expect(modelRuntimeLogin).toHaveBeenCalledWith('opencode', 'api_key', expect.any(Object));
+    expect(modelRuntimeLogin).toHaveBeenCalledWith('opencode-go', 'api_key', expect.any(Object));
+    await expect(modelRuntimeLogin.mock.calls[0][2].prompt()).resolves.toBe('secret-key');
     expect(providers).not.toContainEqual(expect.objectContaining({ apiKey: expect.anything() }));
   });
 
   it('reports configured profile API keys without exposing credential values', async () => {
-    authStorageGetAuthStatus.mockImplementation((providerId: string) => ({
+    modelRuntimeGetAuthStatus.mockImplementation((providerId: string) => ({
       configured: providerId === 'anthropic',
       source: providerId === 'anthropic' ? 'stored' : undefined,
     }));
@@ -322,7 +320,7 @@ describe('PiSessionService', () => {
 
     await service.removeAgentProfileApiKey('default', 'ANTHROPIC_API_KEY');
 
-    expect(authStorageRemove).toHaveBeenCalledWith('anthropic');
+    expect(modelRuntimeLogout).toHaveBeenCalledWith('anthropic');
   });
 
   it('includes declared input capabilities in agent-profile model summaries', async () => {
@@ -932,7 +930,7 @@ describe('PiSessionService', () => {
       { name: 'work', isDirectory: () => true },
     ]);
     loadProxyEnvForAgentDir.mockResolvedValue({});
-    const service = new PiSessionService();
+    const service = new PiSessionService({ db });
     await service.setClientAgentProfile('client-1', 'work');
 
     await service.runWithClientProfileProxy('client-1', async () => 'ok');

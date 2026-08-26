@@ -1,5 +1,5 @@
 // server/src/services/session-manager.ts
-import { AuthStorage, DefaultResourceLoader, ModelRegistry, SessionManager, createAgentSession } from '@earendil-works/pi-coding-agent';
+import { DefaultResourceLoader, ModelRuntime, SessionManager, createAgentSession } from '@earendil-works/pi-coding-agent';
 import type { AgentSession, InlineExtension, Skill } from '@earendil-works/pi-coding-agent';
 import { execFile } from 'child_process';
 import { createReadStream, type Dirent } from 'fs';
@@ -267,9 +267,9 @@ export class PiSessionService {
 
   async listAgentProfileApiKeyProviders(profileId: string) {
     const profile = await this.requireAgentProfile(profileId);
-    const authStorage = AuthStorage.create(join(profile.path, 'auth.json'));
+    const modelRuntime = await this.createProfileModelRuntime(profile.path);
     return API_KEY_PROVIDERS.map(({ envVar, label, providerIds }) => {
-      const statuses = providerIds.map((providerId) => authStorage.getAuthStatus(providerId));
+      const statuses = providerIds.map((providerId) => modelRuntime.getProviderAuthStatus(providerId));
       const configuredStatus = statuses.find((status) => status.configured);
       return { envVar, label, configured: Boolean(configuredStatus), source: configuredStatus?.source };
     });
@@ -281,12 +281,13 @@ export class PiSessionService {
     if (!provider) throw new Error('Unknown API key provider');
     if (!apiKey.trim()) throw new Error('API key is required');
 
-    const authStorage = AuthStorage.create(join(profile.path, 'auth.json'));
+    const modelRuntime = await this.createProfileModelRuntime(profile.path);
     for (const providerId of provider.providerIds) {
-      authStorage.set(providerId, { type: 'api_key', key: apiKey.trim() });
+      await modelRuntime.login(providerId, 'api_key', {
+        prompt: async () => apiKey.trim(),
+        notify: () => {},
+      });
     }
-    const persistenceError = authStorage.drainErrors()[0];
-    if (persistenceError) throw persistenceError;
     return this.listAgentProfileApiKeyProviders(profileId);
   }
 
@@ -295,20 +296,15 @@ export class PiSessionService {
     const provider = API_KEY_PROVIDERS.find((item) => item.envVar === envVar);
     if (!provider) throw new Error('Unknown API key provider');
 
-    const authStorage = AuthStorage.create(join(profile.path, 'auth.json'));
-    for (const providerId of provider.providerIds) authStorage.remove(providerId);
-    const persistenceError = authStorage.drainErrors()[0];
-    if (persistenceError) throw persistenceError;
+    const modelRuntime = await this.createProfileModelRuntime(profile.path);
+    for (const providerId of provider.providerIds) await modelRuntime.logout(providerId);
     return this.listAgentProfileApiKeyProviders(profileId);
   }
 
   async listAgentProfileModels(profileId: string) {
     const profile = await this.requireAgentProfile(profileId);
-    const registry = ModelRegistry.create(
-      AuthStorage.create(join(profile.path, 'auth.json')),
-      join(profile.path, 'models.json'),
-    );
-    return registry.getAvailable().map((model) => ({
+    const modelRuntime = await this.createProfileModelRuntime(profile.path);
+    return (await modelRuntime.getAvailable()).map((model) => ({
       provider: model.provider,
       id: model.id,
       name: model.name,
@@ -751,7 +747,7 @@ export class PiSessionService {
 
           const stream = createReadStream(path, { encoding: 'utf8' });
           let buffer = '';
-          for await (const chunk of stream) {
+          for await (const chunk of stream as unknown as AsyncIterable<string>) {
             buffer += chunk;
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
@@ -939,9 +935,9 @@ export class PiSessionService {
     return this.withTemporarySession(clientId, sessionInfo.path, (session) => this.setThinkingLevelForSession(session, level));
   }
 
-  private getAvailableModelSummaries(session: AgentSession) {
-    session.modelRegistry.refresh();
-    return session.modelRegistry.getAvailable().map((model) => ({
+  private async getAvailableModelSummaries(session: AgentSession) {
+    await session.modelRuntime.refresh();
+    return (await session.modelRuntime.getAvailable()).map((model) => ({
       provider: model.provider,
       id: model.id,
       name: model.name,
@@ -957,8 +953,8 @@ export class PiSessionService {
       throw new Error('Cannot change model while session is streaming');
     }
 
-    session.modelRegistry.refresh();
-    const model = session.modelRegistry.find(provider, modelId);
+    await session.modelRuntime.refresh();
+    const model = session.modelRuntime.getModel(provider, modelId);
     if (!model) {
       throw new Error(`Unknown model: ${provider}/${modelId}`);
     }
@@ -994,7 +990,7 @@ export class PiSessionService {
       } : undefined,
       thinkingLevel: session.thinkingLevel,
       thinkingLevels: session.getAvailableThinkingLevels(),
-      usingSubscription: model ? session.modelRegistry.isUsingOAuth(model) : false,
+      usingSubscription: model ? session.modelRuntime.isUsingSubscription(model.provider) : false,
       autoCompactionEnabled: session.autoCompactionEnabled,
       stats: {
         tokens: stats.tokens,
@@ -1281,6 +1277,13 @@ export class PiSessionService {
     for (const sessionId of sessionIds) {
       this.forceDisposeBySessionId(sessionId);
     }
+  }
+
+  private createProfileModelRuntime(profilePath: string): Promise<ModelRuntime> {
+    return ModelRuntime.create({
+      authPath: join(profilePath, 'auth.json'),
+      modelsPath: join(profilePath, 'models.json'),
+    });
   }
 
   private async loadSkills(cwd: string, agentDir: string): Promise<Skill[]> {

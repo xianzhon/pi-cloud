@@ -22,6 +22,11 @@ if (typeof window !== 'undefined') {
     writable: true,
     value: rejectUnstubbedRequest,
   });
+  Object.defineProperty(window, 'confirm', {
+    configurable: true,
+    writable: true,
+    value: () => true,
+  });
 }
 
 beforeEach(() => {

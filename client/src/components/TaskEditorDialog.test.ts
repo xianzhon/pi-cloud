@@ -138,6 +138,7 @@ describe('TaskEditorDialog', () => {
   it('restores a task preset when editing', async () => {
     const wrapper = mountEditor({ task: { ...existingTask, presetId: 'preset-1' } });
     await vi.waitFor(() => expect((wrapper.get('input[name="task-session-mode"][value="preset"]').element as HTMLInputElement).checked).toBe(true));
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/agent-profiles/claude/models')));
     expect(wrapper.get('#task-preset').text()).toContain('Focused');
   });
 

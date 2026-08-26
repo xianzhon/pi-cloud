@@ -11,17 +11,21 @@ const mockGetSkills = vi.fn();
 const mockRpcStart = vi.fn();
 const mockRpcStop = vi.fn();
 const mockRpcGetCommands = vi.fn();
-const mockRpcClient = vi.fn().mockImplementation(() => ({
-  start: mockRpcStart,
-  stop: mockRpcStop,
-  getCommands: mockRpcGetCommands,
-}));
+const mockRpcClient = vi.fn().mockImplementation(function () {
+  return {
+    start: mockRpcStart,
+    stop: mockRpcStop,
+    getCommands: mockRpcGetCommands,
+  };
+});
 
 vi.mock('@earendil-works/pi-coding-agent', () => ({ 
-  DefaultResourceLoader: vi.fn().mockImplementation(() => ({
-    reload: mockReload,
-    getSkills: mockGetSkills,
-  })),
+  DefaultResourceLoader: vi.fn().mockImplementation(function () {
+    return {
+      reload: mockReload,
+      getSkills: mockGetSkills,
+    };
+  }),
   RpcClient: mockRpcClient,
   getAgentDir: vi.fn(() => '/home/test/.pi/agent'),
   getPackageDir: vi.fn(() => '/opt/pi-coding-agent'),

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { completeSimple, type AssistantMessage, type TextContent } from '@earendil-works/pi-ai/compat';
-import { AuthStorage, ModelRegistry } from '@earendil-works/pi-coding-agent';
+import { ModelRegistry, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import type { FastifyInstance } from 'fastify';
 import type { SessionActivityStore } from '../services/session-activity-store.js';
 import { CommitMessagePromptStore, DEFAULT_COMMIT_MESSAGE_PROMPTS, type CommitMessagePrompts } from '../services/commit-message-prompt-store.js';
@@ -227,11 +227,11 @@ async function completeWithClientModel(sessionService: PiSessionService, clientI
   const agentDir = await sessionService.getClientAgentDirForRoutes(clientId);
   return sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
     const profile = await sessionService.getClientAgentProfile(clientId);
-    const registry = ModelRegistry.create(
-      AuthStorage.create(join(agentDir, 'auth.json')),
-      join(agentDir, 'models.json'),
-    );
-    registry.refresh();
+    const registry = new ModelRegistry(await ModelRuntime.create({
+      authPath: join(agentDir, 'auth.json'),
+      modelsPath: join(agentDir, 'models.json'),
+    }));
+    await registry.refresh();
     const configuredModel = profile.automationProvider && profile.automationModel
       ? registry.find(profile.automationProvider, profile.automationModel)
       : undefined;
