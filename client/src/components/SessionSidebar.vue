@@ -744,7 +744,10 @@ function rememberProjectPath(path: string, profileId = selectedAgentProfile.valu
 async function removeProjectPathHistory(path: string): Promise<void> {
   writeProjectPathMru(readProjectPathMru().filter((entry) => entry !== path), selectedAgentProfile.value, null);
   projectPathOptions.value = projectPathOptions.value.filter((entry) => entry !== path);
-  if (projectPath.value === path) await loadSessions();
+  if (projectPath.value === path) {
+    if (props.activeSessionId) emit('sessionDeleted', props.activeSessionId);
+    await loadSessions();
+  }
 }
 
 async function refreshProjectPath(options: { preferSaved: boolean; initial?: boolean } = { preferSaved: true }) {

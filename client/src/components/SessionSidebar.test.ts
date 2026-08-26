@@ -101,6 +101,23 @@ describe('SessionSidebar', () => {
     expect(projectPicker.find('label').exists()).toBe(false);
   });
 
+  it('clears the active session when removing history for the current project', async () => {
+    mockFetchWithNoSessions(['/project']);
+    const wrapper = mount(SessionSidebar, {
+      props: { clientId: 'client-1', activeSessionId: 'session-1' },
+    });
+
+    await vi.waitFor(() => {
+      expect(wrapper.emitted('projectPathChanged')?.at(-1)).toEqual(['/project', { initial: true }]);
+    });
+
+    wrapper.findComponent({ name: 'FolderPickerModal' }).vm.$emit('historyRemoved', '/project');
+
+    await vi.waitFor(() => {
+      expect(wrapper.emitted('sessionDeleted')?.at(-1)).toEqual(['session-1']);
+    });
+  });
+
   it('loads the current agent profile from the server when the tab has no saved profile', async () => {
     mockFetchWithNoSessions();
     const wrapper = mountSidebar();
