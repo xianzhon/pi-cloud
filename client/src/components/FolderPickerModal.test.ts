@@ -215,22 +215,23 @@ describe('FolderPickerModal', () => {
         initialPath: '/workspace',
         currentProjectPath: '/workspace',
         clientId: 'client-1',
-        projectHistory: [{ path: '/workspace/cloned', lastAccessed: Date.parse('2026-01-02T03:04:00Z') }],
+        projectHistory: [{ path: '/workspace/cloned', lastAccessed: Date.now() - 4 * 60_000 }],
       },
       global: { stubs: { Teleport: true } },
     });
 
     await wrapper.findAll('.project-dialog-tabs button')[2].trigger('click');
-    await vi.waitFor(() => expect(wrapper.text()).toContain('0 sessions'));
-    expect(wrapper.text()).toContain('/workspace/cloned');
-    expect(wrapper.text()).toContain('Last accessed');
+    await vi.waitFor(() => expect(wrapper.find('.project-history-session-count').text()).toBe('0 sessions'));
+    expect(wrapper.find('.project-history-heading').text()).toContain('cloned');
+    expect(wrapper.find('.project-history-meta').text()).toContain('/workspace/cloned');
+    expect(wrapper.find('.project-history-meta').text()).toContain('Last accessed 4m ago');
 
     await wrapper.find('.history-remove-btn').trigger('click');
-    expect(wrapper.text()).toContain('Remove /workspace/cloned and delete its session history files?');
+    expect(wrapper.text()).toContain('This removes /workspace/cloned from project history and deletes its session history files. The project folder and its contents will remain on disk.');
     expect(fetchMock).not.toHaveBeenCalledWith('/api/sessions/project-history', expect.anything());
 
     await wrapper.find('.btn-cancel').trigger('click');
-    expect(wrapper.text()).not.toContain('Remove /workspace/cloned and delete its session history files?');
+    expect(wrapper.text()).not.toContain('This removes /workspace/cloned from project history and deletes its session history files. The project folder and its contents will remain on disk.');
     expect(fetchMock).not.toHaveBeenCalledWith('/api/sessions/project-history', expect.anything());
 
     await wrapper.find('.history-remove-btn').trigger('click');

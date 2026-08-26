@@ -179,13 +179,15 @@
             <button class="project-history-project" type="button" @click="selectHistoryProject(entry.path)">
               <PhFolder :size="18" weight="fill" />
               <span class="project-history-details">
-                <strong>{{ basenamePath(entry.path) }}</strong>
-                <span :title="entry.path">{{ entry.path }}</span>
-                <span>
-                  {{ formatLastAccessed(entry.lastAccessed) }}
-                  <template v-if="historyCounts[entry.path] !== undefined">
-                    · {{ t('components.folderPickerModal.sessionCount', { count: historyCounts[entry.path] }) }}
-                  </template>
+                <span class="project-history-heading">
+                  <strong>{{ basenamePath(entry.path) }}</strong>
+                  <span v-if="historyCounts[entry.path] !== undefined" class="project-history-session-count">
+                    {{ t('components.folderPickerModal.sessionCount', { count: historyCounts[entry.path] }) }}
+                  </span>
+                </span>
+                <span class="project-history-meta">
+                  <span class="project-history-path" :title="entry.path">{{ entry.path }}</span>
+                  <span :title="formatAbsoluteDate(entry.lastAccessed)">{{ formatLastAccessed(entry.lastAccessed) }}</span>
                 </span>
               </span>
             </button>
@@ -444,7 +446,34 @@ async function removeHistory() {
 
 function formatLastAccessed(timestamp: number): string {
   if (!timestamp) return t('components.folderPickerModal.lastAccessedUnknown');
-  return t('components.folderPickerModal.lastAccessed', { date: new Date(timestamp).toLocaleString() });
+
+  const date = new Date(timestamp);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.max(0, Math.floor(diffMs / 60000));
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  let relativeDate: string;
+
+  if (diffMins < 1) relativeDate = t('components.folderPickerModal.justNow');
+  else if (diffMins < 60) relativeDate = formatRelativeUnit(diffMins, 'minute');
+  else if (diffHours < 24) relativeDate = formatRelativeUnit(diffHours, 'hour');
+  else if (diffDays < 7) relativeDate = formatRelativeUnit(diffDays, 'day');
+  else relativeDate = date.toLocaleDateString();
+
+  return t('components.folderPickerModal.lastAccessed', { date: relativeDate });
+}
+
+function formatRelativeUnit(value: number, unit: Intl.RelativeTimeFormatUnit): string {
+  if (i18n.global.locale.value !== 'en') {
+    return new Intl.RelativeTimeFormat(i18n.global.locale.value, { numeric: 'always', style: 'long' }).format(-value, unit);
+  }
+  if (unit === 'minute') return `${value}m ago`;
+  if (unit === 'hour') return `${value}h ago`;
+  return `${value}d ago`;
+}
+
+function formatAbsoluteDate(timestamp: number): string {
+  return timestamp ? new Date(timestamp).toLocaleString() : '';
 }
 
 async function createFolder(value: string) {
@@ -687,24 +716,52 @@ function dirnamePath(path: string): string {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.6rem;
+  gap: 0.55rem;
+  padding: 0.45rem 0.6rem;
   color: var(--text-primary);
   text-align: left;
 }
 
 .project-history-details {
   min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.1rem;
 }
 
-.project-history-details span {
+.project-history-heading,
+.project-history-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.project-history-heading strong,
+.project-history-path {
   overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 0.78rem;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-history-meta {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.project-history-path {
+  flex: 1;
+}
+
+.project-history-session-count {
+  flex: 0 0 auto;
+  padding: 0.08rem 0.4rem;
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
   white-space: nowrap;
 }
 
