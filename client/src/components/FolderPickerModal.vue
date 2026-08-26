@@ -195,7 +195,7 @@
               :disabled="removingHistoryPath === entry.path"
               :title="t('components.folderPickerModal.removeHistory')"
               :aria-label="t('components.folderPickerModal.removeHistoryFor', { path: entry.path })"
-              @click="removeHistory(entry.path)"
+              @click="historyPathToRemove = entry.path"
             >
               <PhTrash :size="16" />
             </button>
@@ -216,6 +216,18 @@
   >
     <template #icon><PhFolderPlus :size="20" weight="duotone" /></template>
   </InputPromptModal>
+
+  <ConfirmModal
+    :visible="Boolean(historyPathToRemove)"
+    variant="danger"
+    :confirm-text="t('components.folderPickerModal.removeHistory')"
+    @confirm="removeHistory"
+    @cancel="historyPathToRemove = ''"
+  >
+    <template #icon><PhTrash :size="22" weight="duotone" /></template>
+    <template #title>{{ t('components.folderPickerModal.removeHistory') }}</template>
+    <template #message>{{ t('components.folderPickerModal.removeHistoryConfirm', { path: historyPathToRemove }) }}</template>
+  </ConfirmModal>
 </template>
 
 <script setup lang="ts">
@@ -223,6 +235,7 @@ import { i18n } from '../i18n';
 import { computed, ref, watch } from 'vue';
 import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhFolderPlus, PhMagnifyingGlass, PhTextAa, PhTrash } from '@phosphor-icons/vue';
 import CloneRepositoryModal from './CloneRepositoryModal.vue';
+import ConfirmModal from './ConfirmModal.vue';
 import DialogCloseButton from './DialogCloseButton.vue';
 import InputPromptModal from './InputPromptModal.vue';
 
@@ -279,6 +292,7 @@ const historyCounts = ref<Record<string, number>>({});
 const historyLoading = ref(false);
 const historyError = ref('');
 const removingHistoryPath = ref('');
+const historyPathToRemove = ref('');
 
 const currentProjectName = computed(() => basenamePath(props.currentProjectPath || ''));
 const isCurrentProjectPath = computed(() => Boolean(props.currentProjectPath) && currentPath.value === props.currentProjectPath);
@@ -313,6 +327,7 @@ watch(
       searchQuery.value = '';
       activeTab.value = 'browse';
       newFolderDialogVisible.value = false;
+      historyPathToRemove.value = '';
       browse(props.initialPath || '~');
     }
   },
@@ -405,8 +420,10 @@ function selectHistoryProject(path: string) {
   emit('select', { path });
 }
 
-async function removeHistory(path: string) {
-  if (!window.confirm(t('components.folderPickerModal.removeHistoryConfirm', { path }))) return;
+async function removeHistory() {
+  const path = historyPathToRemove.value;
+  if (!path) return;
+  historyPathToRemove.value = '';
   removingHistoryPath.value = path;
   historyError.value = '';
   try {

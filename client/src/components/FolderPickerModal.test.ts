@@ -208,7 +208,6 @@ describe('FolderPickerModal', () => {
       return { ok: true, json: async () => ({ path: '/workspace', tree: [] }) };
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('confirm', vi.fn(() => true));
 
     const wrapper = mount(FolderPickerModal, {
       props: {
@@ -227,6 +226,15 @@ describe('FolderPickerModal', () => {
     expect(wrapper.text()).toContain('Last accessed');
 
     await wrapper.find('.history-remove-btn').trigger('click');
+    expect(wrapper.text()).toContain('Remove /workspace/cloned and delete its session history files?');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/sessions/project-history', expect.anything());
+
+    await wrapper.find('.btn-cancel').trigger('click');
+    expect(wrapper.text()).not.toContain('Remove /workspace/cloned and delete its session history files?');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/sessions/project-history', expect.anything());
+
+    await wrapper.find('.history-remove-btn').trigger('click');
+    await wrapper.find('.btn-confirm').trigger('click');
     await vi.waitFor(() => expect(wrapper.emitted('historyRemoved')?.[0]).toEqual(['/workspace/cloned']));
   });
 
