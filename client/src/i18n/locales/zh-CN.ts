@@ -17,6 +17,7 @@ export default {
     finishWorktreeSession: '结束工作树会话',
     deleteSession: '删除会话',
     terminal: '终端',
+    git: 'Git',
     editor: '编辑器',
     fullscreen: '全屏',
     exitFullscreen: '退出全屏',
@@ -55,6 +56,19 @@ export default {
     taskStartFailed: '任务启动失败（{status}）',
   },
   components: {
+    gitToolPanel: {
+      title: 'Git 更改',
+      actions: 'Git 操作',
+      refresh: '刷新',
+      commit: '提交',
+      push: '推送',
+      pull: '拉取',
+      branch: '分支',
+      pr: 'PR',
+      loading: '正在加载更改…',
+      noChanges: '没有已更改文件',
+      loadFailed: '无法加载 Git 更改',
+    },
     chatPanel: {
       details: '详情',
       thinking: '思考过程',

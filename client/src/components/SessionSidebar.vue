@@ -228,6 +228,8 @@
       </div>
     </div>
 
+    <slot name="tool-panel" />
+
     <!-- Context menu -->
     <Teleport to="body">
       <div

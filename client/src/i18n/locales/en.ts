@@ -17,6 +17,7 @@ export default {
     finishWorktreeSession: 'Finish worktree session',
     deleteSession: 'Delete session',
     terminal: 'Terminal',
+    git: 'Git',
     editor: 'Editor',
     fullscreen: 'Fullscreen',
     exitFullscreen: 'Exit fullscreen',
@@ -55,6 +56,19 @@ export default {
     taskStartFailed: 'Task start failed ({status})',
   },
   components: {
+    gitToolPanel: {
+      title: 'Git changes',
+      actions: 'Git actions',
+      refresh: 'Refresh',
+      commit: 'Commit',
+      push: 'Push',
+      pull: 'Pull',
+      branch: 'Branch',
+      pr: 'PR',
+      loading: 'Loading changes…',
+      noChanges: 'No changed files',
+      loadFailed: 'Failed to load Git changes',
+    },
     chatPanel: {
       details: 'Details',
       thinking: 'Thinking',
