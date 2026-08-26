@@ -110,7 +110,11 @@ function createMemoryRuntimeMock() {
 
 const sessionManagerList = vi.fn<(...args: any[]) => Promise<any[]>>(async () => []);
 const sessionManagerListAll = vi.fn<(...args: any[]) => Promise<any[]>>(async () => []);
-const modelRuntimeLogin = vi.fn(async () => ({}));
+const modelRuntimeLogin = vi.fn<(
+  providerId: string,
+  method: string,
+  callbacks: { prompt: () => Promise<string>; notify: () => void },
+) => Promise<Record<string, never>>>(async () => ({}));
 const modelRuntimeLogout = vi.fn(async () => {});
 const modelRuntimeGetAuthStatus = vi.fn<(providerId: string) => { configured: boolean; source?: string }>(() => ({ configured: false }));
 vi.mock('@earendil-works/pi-coding-agent', () => ({
