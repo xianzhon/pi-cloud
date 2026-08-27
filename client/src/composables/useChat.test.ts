@@ -207,7 +207,7 @@ describe('useChat', () => {
     });
   });
 
-  it('asks the app to mark a session ready when the agent finishes', () => {
+  it('marks the session ready and requests a Git refresh when the agent finishes', () => {
     const { chat } = mountChat();
     chat.sessionId.value = 'session-1';
     const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
@@ -217,6 +217,9 @@ describe('useChat', () => {
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({
       type: 'session-streaming-state',
       detail: { id: 'session-1', isStreaming: false, completed: true },
+    }));
+    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'refresh-git-status',
     }));
   });
 

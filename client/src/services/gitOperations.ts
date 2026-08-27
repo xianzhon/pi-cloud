@@ -23,7 +23,7 @@ function postJson<TRequest extends Record<string, unknown>>(url: string, body: T
 
 export function createGitOperations() {
   return {
-    getDiff(options: { cwd: string; commit?: string; scope?: string }) {
+    getDiff(options: { cwd: string; commit?: string; scope?: string; path?: string }) {
       return requestJson(`/api/git/diff?${queryString(options)}`);
     },
     getStatus(options: { cwd: string; message?: string; stagedOnly?: boolean }) {

@@ -61,6 +61,9 @@
         <button v-if="!isReviewMode" class="utility-rail-btn tooltip" :class="{ active: showTerminal }" type="button" data-rail-action="terminal" :data-tooltip="terminalTooltip" :aria-label="t('app.terminal')" @click="toggleTerminalPanel">
           <PhTerminal :size="19" weight="bold" />
         </button>
+        <button v-if="!isReviewMode" class="utility-rail-btn tooltip" :class="{ active: showGitTool }" type="button" data-rail-action="git" :data-tooltip="t('app.git')" :aria-label="t('app.git')" @click="toggleGitTool">
+          <PhGitBranch :size="19" weight="bold" />
+        </button>
         <button
           class="utility-rail-btn sidebar-memory-btn tooltip"
           :class="{ 'has-error': memoryHasError }"
@@ -101,7 +104,15 @@
       @extract-memories="extractSessionMemories"
       @logout="logout"
       @close="showMobileSidebar = false"
-    />
+    >
+      <template #tool-panel>
+        <GitToolPanel
+          v-if="showGitTool && !isReviewMode"
+          :cwd="activeProjectPath"
+          @command="submitGitCommand"
+        />
+      </template>
+    </SessionSidebar>
     
     <main class="main">
       <header class="header">
@@ -535,6 +546,7 @@ import { i18n, setLocale } from './i18n';
 import { PhBrain, PhGear, PhMagnifyingGlass, PhPlus, PhTrash, PhTerminal, PhNotePencil, PhTray, PhGitBranch, PhGitMerge, PhGitPullRequest, PhSidebarSimple, PhRobot, PhFolderSimple, PhDotsThreeVertical, PhCornersOut, PhCornersIn, PhX } from '@phosphor-icons/vue';
 import LoginView from './components/LoginView.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
+import GitToolPanel from './components/GitToolPanel.vue';
 import NewSessionDialog from './components/NewSessionDialog.vue';
 import ChatPanel from './components/ChatPanel.vue';
 import type { ProjectTaskStartResult } from './types/projectTask';
@@ -775,6 +787,7 @@ const isReviewProfileSelected = computed(() => Boolean(selectedReviewSourceLabel
 const selectedAgentModelSummary = ref('');
 const showEditor = ref(false);
 const editorFeatureLoaded = ref(false);
+const showGitTool = ref(true);
 const isFullscreen = ref(false);
 const fullscreenLabel = computed(() => t(isFullscreen.value ? 'app.exitFullscreen' : 'app.fullscreen'));
 const fullscreenTooltip = computed(() => `${fullscreenLabel.value} (${formatFullscreenShortcut(fullscreenShortcut.value)})`);
@@ -1334,6 +1347,15 @@ function isDesktopViewport(): boolean {
 
 function toggleSidebarCollapsed() {
   sidebarCollapsed.value = !sidebarCollapsed.value;
+}
+
+function toggleGitTool(): void {
+  showGitTool.value = !showGitTool.value;
+  if (showGitTool.value) sidebarCollapsed.value = false;
+}
+
+function submitGitCommand(command: string): void {
+  void chatPanelRef.value?.submitExternalPrompt(command, { hideCommandMessage: true });
 }
 
 async function toggleFullscreen(): Promise<void> {

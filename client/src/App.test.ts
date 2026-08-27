@@ -475,13 +475,14 @@ describe('App routing', () => {
     expect(wrapper.find('.header-actions > .search-btn').exists()).toBe(false);
     expect(wrapper.get('.header-actions > .title-new-btn').classes()).toContain('mobile-title-new-btn');
     expect(wrapper.find('.utility-rail-bottom [data-rail-action="terminal"]').exists()).toBe(true);
+    expect(wrapper.find('.utility-rail-bottom [data-rail-action="git"]').exists()).toBe(true);
     expect(wrapper.find('.app-utility-rail [data-rail-action="tasks"]').exists()).toBe(false);
     expect(wrapper.find('.app-utility-rail [data-rail-action="editor"]').exists()).toBe(false);
     expect(wrapper.find('.header-actions > [data-header-action="tasks"]').exists()).toBe(true);
     expect(wrapper.find('.header-actions > [data-header-action="editor"]').exists()).toBe(true);
 
     const railActions = wrapper.findAll('.app-utility-rail [data-rail-action]');
-    expect(railActions).toHaveLength(6);
+    expect(railActions).toHaveLength(7);
     railActions.forEach((action) => {
       expect(action.classes()).toContain('tooltip');
       expect(action.attributes('data-tooltip')).toBeTruthy();
@@ -506,6 +507,29 @@ describe('App routing', () => {
       path: '/sessions/session-chinese',
       query: { project: '/workspace' },
     });
+  });
+
+  it('shows the Git tool by default and dispatches toolbar actions through the chat composer', async () => {
+    localStorage.setItem('pi-webui-sidebar-collapsed', 'false');
+    vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => {
+      if (String(url).startsWith('/api/git/status')) {
+        return { ok: true, status: 200, json: async () => ({ files: [{ status: 'M', path: 'src/app.ts' }] }) } as Response;
+      }
+      if (url === '/api/sessions/project-path') return { json: async () => ({ projectPath: '/workspace' }) } as Response;
+      if (String(url).startsWith('/api/sessions')) return { json: async () => ({ sessions: [{ id: 'session-1', cwd: '/workspace' }] }) } as Response;
+      return { json: async () => ({}) } as Response;
+    });
+    const wrapper = mount(App, {
+      global: { stubs: { TerminalPanel: true, EditorPanel: true, FolderPickerModal: true, Teleport: true } },
+    });
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'SessionSidebar' }).props('collapsed')).toBe(false);
+    expect(wrapper.find('.git-tool-panel').exists()).toBe(true);
+    expect(wrapper.get('[data-rail-action="git"]').classes()).toContain('active');
+
+    await wrapper.get('.git-tool-action[aria-label="Show diff"]').trigger('click');
+    expect(submitExternalPrompt).toHaveBeenCalledWith('/diff', { hideCommandMessage: true });
   });
 
   it('opens the session context menu from the collapsed utility rail', async () => {
