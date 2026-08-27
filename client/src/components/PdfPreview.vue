@@ -34,6 +34,15 @@
         <button
           type="button"
           class="tooltip"
+          :class="{ active: tool === 'move' }"
+          :aria-pressed="tool === 'move'"
+          :aria-label="t('components.editorPanel.pdfMoveAnnotation')"
+          :data-tooltip="t('components.editorPanel.pdfMoveAnnotation')"
+          @click="toggleTool('move')"
+        ><PhArrowsOutCardinal :size="19" /></button>
+        <button
+          type="button"
+          class="tooltip"
           :class="{ active: tool === 'eraser' }"
           :aria-pressed="tool === 'eraser'"
           :aria-label="t('components.editorPanel.pdfEraser')"
@@ -156,7 +165,7 @@
         <canvas
           ref="annotationCanvasEl"
           class="pdf-annotation-canvas"
-          :class="{ enabled: tool !== 'pan', erasing: tool === 'eraser' }"
+          :class="{ enabled: tool !== 'pan', erasing: tool === 'eraser', moving: tool === 'move' }"
           @pointerdown="startAnnotation"
           @pointermove="continueAnnotation"
           @pointerup="finishAnnotation"
@@ -185,6 +194,7 @@ import {
   PhArrowClockwise,
   PhArrowCounterClockwise,
   PhArrowUpRight,
+  PhArrowsOutCardinal,
   PhCaretLeft,
   PhCaretRight,
   PhCircle,
@@ -213,7 +223,7 @@ interface AnnotationStroke {
 }
 interface AnnotationDocument { version: 1; pages: Record<string, AnnotationStroke[]> }
 interface TextEditorState { page: string; point: AnnotationPoint; index?: number; text: string; color: string }
-type AnnotationTool = 'pan' | DrawingTool | 'eraser';
+type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
 
 const props = defineProps<{ src: string; filePath: string }>();
 const t = i18n.global.t;
@@ -277,6 +287,7 @@ let loadingTask: PDFDocumentLoadingTask | undefined;
 let renderTask: RenderTask | undefined;
 let activePointer: number | undefined;
 let panStart: { pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined;
+let moveStart: { index: number; point: AnnotationPoint; points: AnnotationPoint[] } | undefined;
 let annotationChanged = false;
 let loadVersion = 0;
 let saveVersion = 0;
@@ -567,7 +578,7 @@ function distanceToSegment(point: AnnotationPoint, start: AnnotationPoint, end: 
 }
 
 function startAnnotation(event: PointerEvent): void {
-  if (tool.value === 'pan' || activePointer !== undefined) return;
+  if (tool.value === 'pan' || activePointer !== undefined || event.button !== 0) return;
   const point = pointFromEvent(event);
   if (!point) return;
 
@@ -575,10 +586,30 @@ function startAnnotation(event: PointerEvent): void {
   // complete the canvas pointer sequence before focus moves to the editor.
   if (tool.value === 'text') return;
 
+  if (tool.value === 'move') {
+    const canvas = annotationCanvasEl.value;
+    if (!canvas) return;
+    const strokes = currentPageStrokes.value;
+    let index = -1;
+    for (let candidate = strokes.length - 1; candidate >= 0; candidate--) {
+      if (annotationContainsPoint(strokes[candidate], point, canvas)) {
+        index = candidate;
+        break;
+      }
+    }
+    if (index < 0) return;
+    moveStart = {
+      index,
+      point,
+      points: strokes[index].points.map(item => ({ ...item })),
+    };
+  }
+
   activePointer = event.pointerId;
   annotationChanged = false;
   annotationCanvasEl.value?.setPointerCapture(event.pointerId);
   checkpoint();
+  if (tool.value === 'move') return;
   if (tool.value === 'eraser') {
     eraseAt(point);
     return;
@@ -673,16 +704,28 @@ function continueAnnotation(event: PointerEvent): void {
   if (event.pointerId !== activePointer) return;
   const point = pointFromEvent(event);
   if (!point) return;
-  if (tool.value === 'pen' || tool.value === 'highlighter') {
+  if (tool.value === 'move' && moveStart) {
+    const stroke = currentPageStrokes.value[moveStart.index];
+    if (!stroke) return;
+    const minX = Math.min(...moveStart.points.map(item => item.x));
+    const maxX = Math.max(...moveStart.points.map(item => item.x));
+    const minY = Math.min(...moveStart.points.map(item => item.y));
+    const maxY = Math.max(...moveStart.points.map(item => item.y));
+    const deltaX = Math.max(-minX, Math.min(1 - maxX, point.x - moveStart.point.x));
+    const deltaY = Math.max(-minY, Math.min(1 - maxY, point.y - moveStart.point.y));
+    stroke.points = moveStart.points.map(item => ({ x: item.x + deltaX, y: item.y + deltaY }));
+    annotationChanged = deltaX !== 0 || deltaY !== 0;
+  } else if (tool.value === 'pen' || tool.value === 'highlighter') {
     currentPageStrokes.value.at(-1)?.points.push(point);
+    annotationChanged = true;
   } else if (tool.value === 'eraser') {
     eraseAt(point);
     return;
   } else {
     const points = currentPageStrokes.value.at(-1)?.points;
     if (points) points[1] = point;
+    annotationChanged = true;
   }
-  annotationChanged = true;
   drawAnnotations();
 }
 
@@ -696,9 +739,10 @@ function finishAnnotation(event: PointerEvent, cancelled = false): void {
   }
   if (event.pointerId !== activePointer) return;
   activePointer = undefined;
+  moveStart = undefined;
   if (!annotationChanged) {
     undoStack.value.pop();
-    if (tool.value !== 'eraser') currentPageStrokes.value.pop();
+    if (tool.value !== 'eraser' && tool.value !== 'move') currentPageStrokes.value.pop();
     drawAnnotations();
   } else {
     void saveAnnotations();
@@ -994,6 +1038,8 @@ onUnmounted(() => {
 .pdf-annotation-canvas.erasing {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='m4 17 10-10 6 6-8 8H8z' fill='%23fff' stroke='%231f2937' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='m11 10 6 6' stroke='%231f2937' stroke-width='1.5'/%3E%3C/svg%3E") 4 20, cell;
 }
+
+.pdf-annotation-canvas.moving { cursor: move; }
 
 .pdf-text-editor {
   position: absolute;

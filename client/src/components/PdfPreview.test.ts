@@ -110,7 +110,7 @@ describe('PdfPreview', () => {
     expect(wrapper.findAll('.pdf-toolbar')).toHaveLength(1);
     expect(wrapper.find('.pdf-annotation-toolbar').exists()).toBe(false);
     expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
-    for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text']) {
+    for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text', 'Move annotation']) {
       expect(wrapper.get(`[aria-label="${label}"]`).attributes('data-tooltip')).toBe(label);
     }
     expect(wrapper.get('[aria-label="Undo annotation"]').attributes('data-tooltip')).toBe('Undo annotation');
@@ -254,6 +254,51 @@ describe('PdfPreview', () => {
     expect(JSON.parse(body.content).pages['1'][0]).toMatchObject({
       type: 'text', text: 'Updated review', points: [{ x: 0.4, y: 0.4 }],
     });
+  });
+
+  it('moves the topmost annotation and saves its new position', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).startsWith('/api/files/read')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            content: JSON.stringify({
+              version: 1,
+              pages: {
+                '1': [{
+                  type: 'rectangle', color: '#ef4444', width: 1,
+                  points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 }],
+                }],
+              },
+            }),
+          }),
+        } as Response;
+      }
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    await wrapper.get('[aria-label="Move annotation"]').trigger('click');
+
+    const canvas = wrapper.get('.pdf-annotation-canvas');
+    expect(canvas.classes()).toContain('moving');
+    await canvas.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 120, clientY: 160 });
+    await canvas.trigger('pointermove', { pointerId: 1, clientX: 240, clientY: 320 });
+    await canvas.trigger('pointerup', { pointerId: 1, clientX: 240, clientY: 320 });
+    await flushPromises();
+
+    const writeCall = fetchMock.mock.calls.find(([url]) => url === '/api/files/write');
+    const body = JSON.parse(String(writeCall?.[1]?.body));
+    const points = JSON.parse(body.content).pages['1'][0].points;
+    expect(points[0].x).toBeCloseTo(0.3);
+    expect(points[0].y).toBeCloseTo(0.3);
+    expect(points[1].x).toBeCloseTo(0.5);
+    expect(points[1].y).toBeCloseTo(0.5);
   });
 
   it('draws and saves annotations in a hidden sidecar file', async () => {

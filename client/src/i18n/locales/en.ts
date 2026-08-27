@@ -402,6 +402,7 @@ export default {
       pdfEllipse: 'Draw ellipse',
       pdfText: 'Add text',
       pdfTextPrompt: 'Enter annotation text',
+      pdfMoveAnnotation: 'Move annotation',
       pdfEraser: 'Erase PDF annotations',
       pdfPenColor: 'Annotation color',
       pdfPenWidth: 'Annotation width',

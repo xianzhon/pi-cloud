@@ -402,6 +402,7 @@ export default {
       pdfEllipse: '绘制椭圆',
       pdfText: '添加文字',
       pdfTextPrompt: '输入标注文字',
+      pdfMoveAnnotation: '移动标注',
       pdfEraser: '擦除 PDF 标注',
       pdfPenColor: '标注颜色',
       pdfPenWidth: '标注粗细',
