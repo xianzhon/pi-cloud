@@ -30,7 +30,11 @@
           :aria-label="t(shapeTool.label)"
           :data-tooltip="t(shapeTool.label)"
           @click="toggleTool(shapeTool.name)"
-        ><component :is="shapeTool.icon" :size="19" /></button>
+        ><component
+          :is="shapeTool.icon"
+          :size="19"
+          :class="{ 'pdf-line-icon': shapeTool.name === 'line' }"
+        /></button>
         <button
           type="button"
           class="tooltip"
@@ -200,7 +204,6 @@ import {
   PhCircle,
   PhEraser,
   PhHighlighter,
-  PhLineSegment,
   PhMinus,
   PhPencilSimple,
   PhPlus,
@@ -231,7 +234,7 @@ const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.25;
 const shapeTools: Array<{ name: DrawingTool; label: string; icon: object }> = [
-  { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhLineSegment },
+  { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus },
   { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight },
   { name: 'rectangle', label: 'components.editorPanel.pdfRectangle', icon: PhRectangle },
   { name: 'ellipse', label: 'components.editorPanel.pdfEllipse', icon: PhCircle },
@@ -866,6 +869,8 @@ onUnmounted(() => {
 .pdf-toolbar button.active { background: var(--bg-hover); }
 
 .pdf-toolbar button:disabled { opacity: 0.45; }
+
+.pdf-line-icon { transform: rotate(-45deg); }
 
 .pdf-page-status {
   min-width: 3.5rem;
