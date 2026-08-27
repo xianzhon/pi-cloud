@@ -2,6 +2,31 @@
 
 All notable changes to Pi WebUI are documented here.
 
+## [1.0.5] - 2026-08-27
+
+### Added
+
+- Added a Git changes panel, shown by default, with changed-file navigation, per-file diffs, and shortcuts for common Git actions.
+- Added collapsible pin groups for organizing, moving, and unpinning agent-profile and review-source sessions.
+- Added a project history tab with last-accessed details, session counts, and confirmed removal of saved session history without deleting project files.
+- Added an option to generate commit messages from and commit only staged changes.
+- Added `PI_WEBUI_ENABLE_SYSTEM_OPEN` for enabling **Open with system tool** through trusted non-localhost URLs.
+
+### Changed
+
+- Reduced the initial session page from 30 sessions to 10 and limited pull request status refreshes to the visible page for faster session loading.
+- Lazy-load heavy interface features such as the editor, terminal, settings, memory center, and task queue.
+- Local LLM endpoints outside the loopback interface must now be explicitly allowed with `PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS`; endpoint credentials and redirects are rejected.
+- Database schema updates now use tracked, transactional versioned migrations.
+
+### Fixed
+
+- Ensured newly created sessions use the explicitly selected agent profile.
+- Improved virtual diff formatting with clearer file headers and correct multi-file navigation and line tracking.
+- Hardened path validation for session relocation and project moves, and stopped the file tree from traversing symlinked directories.
+- Hardened URL and rendered HTML handling, including host validation, heading sanitization, and attribute escaping.
+- Open files safely on Windows without invoking a shell.
+
 ## [1.0.4] - 2026-08-23
 
 ### Added
