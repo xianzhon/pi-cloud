@@ -128,15 +128,6 @@
         <button
           type="button"
           class="tooltip"
-          :class="{ active: viewMode === 'continuous' }"
-          :aria-pressed="viewMode === 'continuous'"
-          :aria-label="viewMode === 'continuous' ? t('components.editorPanel.pdfSinglePage') : t('components.editorPanel.pdfContinuous')"
-          :data-tooltip="viewMode === 'continuous' ? t('components.editorPanel.pdfSinglePage') : t('components.editorPanel.pdfContinuous')"
-          @click="toggleViewMode"
-        ><PhRows :size="18" /></button>
-        <button
-          type="button"
-          class="tooltip"
           :disabled="loading || scale <= MIN_SCALE"
           :aria-label="t('components.editorPanel.zoomOut')"
           :data-tooltip="t('components.editorPanel.zoomOut')"
@@ -174,7 +165,7 @@
     >
       <div v-if="loading" class="pdf-message" role="status">{{ t('components.editorPanel.loadingPdf') }}</div>
       <div v-else-if="error" class="pdf-message pdf-error" role="alert">{{ error }}</div>
-      <div v-show="!loading && !error" class="pdf-pages" :class="{ continuous: viewMode === 'continuous' }">
+      <div v-show="!loading && !error" class="pdf-pages continuous">
         <div
           v-for="page in pagesToDisplay"
           :key="page"
@@ -226,7 +217,6 @@ import {
   PhPencilSimple,
   PhPlus,
   PhRectangle,
-  PhRows,
   PhTextT,
   PhTrash,
 } from '@phosphor-icons/vue';
@@ -268,7 +258,6 @@ const textEditorEl = ref<HTMLTextAreaElement>();
 const pageNumber = ref(1);
 const pageCount = ref(0);
 const scale = ref(1);
-const viewMode = ref<'single' | 'continuous'>('single');
 const loading = ref(true);
 const error = ref('');
 const tool = ref<AnnotationTool>('pan');
@@ -306,9 +295,7 @@ const saveStateLabel = computed(() => {
 const canUndo = computed(() => undoStack.value.length > 0);
 const canRedo = computed(() => redoStack.value.length > 0);
 const currentPageStrokes = computed(() => annotations.value.pages[String(pageNumber.value)] || []);
-const pagesToDisplay = computed(() => viewMode.value === 'continuous'
-  ? Array.from({ length: pageCount.value }, (_, index) => index + 1)
-  : [pageNumber.value]);
+const pagesToDisplay = computed(() => Array.from({ length: pageCount.value }, (_, index) => index + 1));
 let document: PDFDocumentProxy | undefined;
 let loadingTask: PDFDocumentLoadingTask | undefined;
 const renderTasks = new Map<number, RenderTask>();
@@ -356,18 +343,12 @@ function setScale(value: number): void {
 
 async function goToPage(page: number): Promise<void> {
   pageNumber.value = Math.min(pageCount.value, Math.max(1, page));
-  if (viewMode.value === 'continuous') {
-    await nextTick();
-    pageElements.get(pageNumber.value)?.scrollIntoView({ block: 'start' });
-  }
-}
-
-function toggleViewMode(): void {
-  viewMode.value = viewMode.value === 'single' ? 'continuous' : 'single';
+  await nextTick();
+  pageElements.get(pageNumber.value)?.scrollIntoView({ block: 'start' });
 }
 
 function handleViewportScroll(): void {
-  if (viewMode.value !== 'continuous' || isPanning.value) return;
+  if (isPanning.value) return;
   const viewportTop = viewportEl.value?.getBoundingClientRect().top || 0;
   let closestPage = pageNumber.value;
   let closestDistance = Number.POSITIVE_INFINITY;
@@ -891,10 +872,7 @@ function rerenderVisiblePages(): void {
   });
 }
 
-watch(pageNumber, () => {
-  if (viewMode.value === 'single') rerenderVisiblePages();
-});
-watch([scale, viewMode], rerenderVisiblePages);
+watch(scale, rerenderVisiblePages);
 
 onUnmounted(() => {
   loadVersion++;
