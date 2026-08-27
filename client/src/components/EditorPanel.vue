@@ -201,7 +201,7 @@
         :srcdoc="activeHtmlDocument"
         :title="t('components.editorPanel.htmlPreview')"
       ></iframe>
-      <PdfPreview v-else-if="activePdfSrc" :src="activePdfSrc" />
+      <PdfPreview v-else-if="activePdfSrc && activeTab" :src="activePdfSrc" :file-path="activeTab" />
       <div v-else-if="activeImageSrc" class="image-preview">
         <div class="image-preview-toolbar" role="group" :aria-label="t('components.editorPanel.imageZoomControls')">
           <button

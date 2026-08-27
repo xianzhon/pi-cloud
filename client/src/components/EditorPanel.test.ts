@@ -12,8 +12,8 @@ const mermaidMock = vi.hoisted(() => ({
 vi.mock('mermaid', () => ({ default: mermaidMock }));
 vi.mock('./PdfPreview.vue', () => ({
   default: {
-    props: ['src'],
-    template: '<div class="pdf-preview-test" :data-src="src" />',
+    props: ['src', 'filePath'],
+    template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" />',
   },
 }));
 
@@ -403,6 +403,8 @@ describe('EditorPanel', () => {
 
     expect(wrapper.find('.pdf-preview-test').attributes('data-src'))
       .toBe('/api/files/raw?path=%2Fproject%2Fdocument.pdf');
+    expect(wrapper.find('.pdf-preview-test').attributes('data-file-path'))
+      .toBe('/project/document.pdf');
     expect(wrapper.find('.editor-container').classes()).toContain('hidden');
   });
 
