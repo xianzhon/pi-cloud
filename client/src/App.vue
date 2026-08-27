@@ -1831,6 +1831,7 @@ function handleEditorToggleKeydown(event: KeyboardEvent): void {
   }
 
   event.preventDefault();
+  event.stopPropagation();
   if (!event.repeat) showEditor.value = !showEditor.value;
 }
 

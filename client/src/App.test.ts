@@ -1442,13 +1442,16 @@ describe('App routing', () => {
     wrapper.unmount();
   });
 
-  function dispatchCtrlE(target: HTMLElement): void {
-    target.dispatchEvent(new KeyboardEvent('keydown', {
+  function dispatchCtrlE(target: HTMLElement): KeyboardEvent {
+    const event = new KeyboardEvent('keydown', {
       key: 'e',
       code: 'KeyE',
       ctrlKey: true,
       bubbles: true,
-    }));
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+    return event;
   }
 
   it('toggles the editor with Ctrl+E while focus is in a text input', async () => {
@@ -1470,7 +1473,7 @@ describe('App routing', () => {
     wrapper.unmount();
   });
 
-  it('toggles the editor with Ctrl+E before selected message elements stop propagation', async () => {
+  it('uses Ctrl+E only to toggle the editor from a selected message', async () => {
     const wrapper = mount(App, {
       attachTo: document.body,
       global: { stubs: { TerminalPanel: true, FolderPickerModal: true, Teleport: true } },
@@ -1478,16 +1481,17 @@ describe('App routing', () => {
     await flushPromises();
 
     const messageBlock = document.createElement('div');
+    const messageKeydown = vi.fn();
     messageBlock.className = 'message-block is-selected';
     messageBlock.tabIndex = -1;
-    messageBlock.addEventListener('keydown', function stopKeydown(event) {
-      event.stopPropagation();
-    });
+    messageBlock.addEventListener('keydown', messageKeydown);
     document.body.appendChild(messageBlock);
     messageBlock.focus();
-    dispatchCtrlE(messageBlock);
+    const event = dispatchCtrlE(messageBlock);
     await flushPromises();
 
+    expect(event.defaultPrevented).toBe(true);
+    expect(messageKeydown).not.toHaveBeenCalled();
     expect(wrapper.get('[data-header-action="editor"]').classes()).toContain('active');
 
     messageBlock.remove();
