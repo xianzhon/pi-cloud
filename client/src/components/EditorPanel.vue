@@ -23,7 +23,7 @@
           @blur="hideTabTooltip"
         >
           <PhPushPinSimple v-if="tab.pinned" class="tab-pin" :size="13" weight="fill" :aria-label="t('components.editorPanel.pinnedTab')" />
-          <span>{{ tab.name }}{{ dirtyPaths.has(tab.path) ? ' •' : '' }}</span>
+          <span class="tab-label">{{ tab.name }}{{ dirtyPaths.has(tab.path) ? ' •' : '' }}</span>
           <button @click.stop="closeTab(tab.path)"><PhX :size="14" /></button>
         </div>
       </div>
@@ -3040,6 +3040,7 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 .tab {
   flex: 0 0 auto;
+  max-width: 15rem;
   padding: 0.5rem 1rem;
   display: flex;
   align-items: center;
@@ -3058,6 +3059,13 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 .tab-pin {
   flex: 0 0 auto;
   color: var(--accent);
+}
+
+.tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab button {
