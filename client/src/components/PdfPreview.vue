@@ -140,7 +140,15 @@
         ><PhPlus :size="18" /></button>
       </div>
     </div>
-    <div class="pdf-viewport">
+    <div
+      ref="viewportEl"
+      class="pdf-viewport"
+      :class="{ pannable: tool === 'pan', panning: isPanning }"
+      @pointerdown="startPan"
+      @pointermove="continuePan"
+      @pointerup="finishPan"
+      @pointercancel="finishPan"
+    >
       <div v-if="loading" class="pdf-message" role="status">{{ t('components.editorPanel.loadingPdf') }}</div>
       <div v-else-if="error" class="pdf-message pdf-error" role="alert">{{ error }}</div>
       <div v-show="!loading && !error" class="pdf-page">
@@ -156,6 +164,17 @@
         />
       </div>
     </div>
+    <InputPromptModal
+      :visible="Boolean(textAnnotationPoint)"
+      :title="t('components.editorPanel.pdfText')"
+      :label="t('components.editorPanel.pdfTextPrompt')"
+      :placeholder="t('components.editorPanel.pdfTextPrompt')"
+      :confirm-text="t('components.editorPanel.pdfText')"
+      @confirm="confirmTextAnnotation"
+      @cancel="cancelTextAnnotation"
+    >
+      <template #icon><PhTextT :size="20" weight="duotone" /></template>
+    </InputPromptModal>
   </div>
 </template>
 
@@ -181,6 +200,7 @@ import {
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { i18n } from '../i18n';
+import InputPromptModal from './InputPromptModal.vue';
 
 interface AnnotationPoint { x: number; y: number }
 type DrawingTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text';
@@ -209,6 +229,7 @@ const shapeTools: Array<{ name: DrawingTool; label: string; icon: object }> = [
 
 const canvasEl = ref<HTMLCanvasElement>();
 const annotationCanvasEl = ref<HTMLCanvasElement>();
+const viewportEl = ref<HTMLDivElement>();
 const pageNumber = ref(1);
 const pageCount = ref(0);
 const scale = ref(1);
@@ -221,6 +242,8 @@ const annotations = ref<AnnotationDocument>({ version: 1, pages: {} });
 const undoStack = ref<AnnotationDocument[]>([]);
 const redoStack = ref<AnnotationDocument[]>([]);
 const saveState = ref<'saving' | 'saved' | 'error' | ''>('');
+const isPanning = ref(false);
+const textAnnotationPoint = ref<AnnotationPoint>();
 const saveStateLabel = computed(() => {
   switch (saveState.value) {
     case 'saving': return t('components.editorPanel.savingPdfAnnotations');
@@ -236,6 +259,7 @@ let document: PDFDocumentProxy | undefined;
 let loadingTask: PDFDocumentLoadingTask | undefined;
 let renderTask: RenderTask | undefined;
 let activePointer: number | undefined;
+let panStart: { pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined;
 let annotationChanged = false;
 let loadVersion = 0;
 let saveVersion = 0;
@@ -428,6 +452,35 @@ async function loadPdf(): Promise<void> {
   }
 }
 
+function startPan(event: PointerEvent): void {
+  const viewport = viewportEl.value;
+  if (tool.value !== 'pan' || event.button !== 0 || !viewport) return;
+  panStart = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    scrollLeft: viewport.scrollLeft,
+    scrollTop: viewport.scrollTop,
+  };
+  isPanning.value = true;
+  viewport.setPointerCapture?.(event.pointerId);
+}
+
+function continuePan(event: PointerEvent): void {
+  const viewport = viewportEl.value;
+  if (!viewport || panStart?.pointerId !== event.pointerId) return;
+  viewport.scrollLeft = panStart.scrollLeft - (event.clientX - panStart.x);
+  viewport.scrollTop = panStart.scrollTop - (event.clientY - panStart.y);
+}
+
+function finishPan(event: PointerEvent): void {
+  const viewport = viewportEl.value;
+  if (panStart?.pointerId !== event.pointerId) return;
+  viewport?.releasePointerCapture?.(event.pointerId);
+  panStart = undefined;
+  isPanning.value = false;
+}
+
 function pointFromEvent(event: PointerEvent): AnnotationPoint | undefined {
   const canvas = annotationCanvasEl.value;
   if (!canvas) return undefined;
@@ -494,12 +547,7 @@ function startAnnotation(event: PointerEvent): void {
   if (!point) return;
 
   if (tool.value === 'text') {
-    const text = window.prompt(t('components.editorPanel.pdfTextPrompt'))?.trim();
-    if (!text) return;
-    checkpoint();
-    addAnnotation({ type: 'text', color: penColor.value, width: penWidth.value, points: [point], text });
-    drawAnnotations();
-    void saveAnnotations();
+    textAnnotationPoint.value = point;
     return;
   }
 
@@ -515,6 +563,21 @@ function startAnnotation(event: PointerEvent): void {
   addAnnotation({ type: tool.value, color: penColor.value, width: penWidth.value, points: [point] });
   if (tool.value === 'pen' || tool.value === 'highlighter') annotationChanged = true;
   drawAnnotations();
+}
+
+function confirmTextAnnotation(value: string): void {
+  const point = textAnnotationPoint.value;
+  const text = value.trim();
+  if (!point || !text) return;
+  checkpoint();
+  addAnnotation({ type: 'text', color: penColor.value, width: penWidth.value, points: [point], text });
+  textAnnotationPoint.value = undefined;
+  drawAnnotations();
+  void saveAnnotations();
+}
+
+function cancelTextAnnotation(): void {
+  textAnnotationPoint.value = undefined;
 }
 
 function addAnnotation(annotation: AnnotationStroke): void {
@@ -804,6 +867,16 @@ onUnmounted(() => {
   overflow: auto;
   padding: 4rem 1rem 1rem;
   text-align: center;
+}
+
+.pdf-viewport.pannable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.pdf-viewport.panning {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .pdf-page {

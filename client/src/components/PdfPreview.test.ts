@@ -1,6 +1,7 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PdfPreview from './PdfPreview.vue';
+import InputPromptModal from './InputPromptModal.vue';
 
 const pdfjsMock = vi.hoisted(() => {
   const render = vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() }));
@@ -79,6 +80,26 @@ describe('PdfPreview', () => {
     await wrapper.find('[aria-label="Zoom in"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('125%');
+  });
+
+  it('pans the PDF viewport by dragging when annotation tools are inactive', async () => {
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    viewport.element.scrollLeft = 120;
+    viewport.element.scrollTop = 200;
+
+    await viewport.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 100, clientY: 100 });
+    expect(viewport.classes()).toContain('panning');
+    await viewport.trigger('pointermove', { pointerId: 1, clientX: 60, clientY: 50 });
+    expect(viewport.element.scrollLeft).toBe(160);
+    expect(viewport.element.scrollTop).toBe(250);
+
+    await viewport.trigger('pointerup', { pointerId: 1 });
+    expect(viewport.classes()).not.toContain('panning');
   });
 
   it('combines PDF controls in one toolbar with icon tooltips', async () => {
@@ -163,10 +184,15 @@ describe('PdfPreview', () => {
     });
     expect(context.rect).toHaveBeenCalled();
 
-    vi.spyOn(window, 'prompt').mockReturnValue('Review this');
     await wrapper.get('[aria-label="Add text"]').trigger('click');
     await canvas.trigger('pointerdown', { pointerId: 2, clientX: 240, clientY: 320 });
+
+    const textPrompt = wrapper.getComponent(InputPromptModal);
+    expect(textPrompt.props('visible')).toBe(true);
+    expect(textPrompt.props('label')).toBe('Enter annotation text');
+    textPrompt.vm.$emit('confirm', '  Review this  ');
     await flushPromises();
+    expect(textPrompt.props('visible')).toBe(false);
 
     const latestWrite = fetchMock.mock.calls.filter(([url]) => url === '/api/files/write').at(-1);
     const latestBody = JSON.parse(String(latestWrite?.[1]?.body));
