@@ -50,6 +50,15 @@ async function runGit(cwd: string, args: string[], maxBuffer = MAX_SLASH_COMMAND
   }
 }
 
+async function isGitRepository(cwd: string) {
+  try {
+    return (await runGit(cwd, ['rev-parse', '--is-inside-work-tree'])).trim() === 'true';
+  } catch (error) {
+    if ((error as { code?: number | string })?.code === 128) return false;
+    throw error;
+  }
+}
+
 async function runGitWithOutput(cwd: string, args: string[]) {
   try {
     const { stdout, stderr } = await execFileAsync('git', args, {
@@ -425,6 +434,10 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     const resolvedCwd = await resolveGitCwd(cwd);
 
     try {
+      if (!await isGitRepository(resolvedCwd)) {
+        return { cwd: resolvedCwd, isRepository: false, files: [], message: '', output: '' };
+      }
+
       const [workingTreeStatus, output] = await Promise.all([
         runGit(resolvedCwd, ['status', '--porcelain']),
         runGit(resolvedCwd, ['status', '--short', '--branch']),
@@ -432,6 +445,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
       const files = parseStatusFiles(stagedOnly === 'true' ? getStagedStatus(workingTreeStatus) : workingTreeStatus);
       return {
         cwd: resolvedCwd,
+        isRepository: true,
         files,
         message: message?.trim() || (files.length ? proposeCommitMessage(files) : ''),
         output,

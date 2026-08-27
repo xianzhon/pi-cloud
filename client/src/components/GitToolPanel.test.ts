@@ -38,6 +38,28 @@ describe('GitToolPanel', () => {
     expect(wrapper.emitted('command')?.map(([command]) => command)).toEqual(commands);
   });
 
+  it('shows a friendly state and disables Git actions outside a repository', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ isRepository: false, files: [] }));
+    const wrapper = mount(GitToolPanel, { props: { cwd: '/workspace' } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('This folder is not a Git repository.');
+    const actions = wrapper.findAll('.git-tool-action');
+    expect(actions[0].attributes('disabled')).toBeDefined();
+    expect(actions[1].attributes('disabled')).toBeUndefined();
+    expect(actions.slice(2).every(action => action.attributes('disabled') !== undefined)).toBe(true);
+
+    vi.mocked(fetch).mockResolvedValue(response({
+      isRepository: true,
+      files: [{ status: 'M', path: 'src/changed.ts' }],
+    }));
+    await actions[1].trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('src/changed.ts');
+    expect(wrapper.findAll('.git-tool-action').every(action => action.attributes('disabled') === undefined)).toBe(true);
+  });
+
   it('disables commit when the working tree has no changed files', async () => {
     const wrapper = mount(GitToolPanel, { props: { cwd: '/workspace' } });
     await flushPromises();

@@ -67,6 +67,7 @@ export default {
       pr: 'PR',
       loading: 'Loading changes…',
       noChanges: 'No changed files',
+      notRepository: 'This folder is not a Git repository.',
       loadFailed: 'Failed to load Git changes',
       resize: 'Resize Git panel',
       showDiff: 'Show diff',

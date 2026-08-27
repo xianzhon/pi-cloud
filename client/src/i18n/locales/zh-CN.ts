@@ -67,6 +67,7 @@ export default {
       pr: 'PR',
       loading: '正在加载更改…',
       noChanges: '没有已更改文件',
+      notRepository: '此文件夹不是 Git 仓库。',
       loadFailed: '无法加载 Git 更改',
       resize: '调整 Git 面板大小',
       showDiff: '显示差异',

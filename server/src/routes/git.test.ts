@@ -94,6 +94,30 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('reports a non-Git directory as an expected empty state', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'piui-non-git-route-'));
+    const app = await buildApp();
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/git/status?cwd=${encodeURIComponent(cwd)}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        cwd,
+        isRepository: false,
+        files: [],
+        message: '',
+        output: '',
+      });
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('reports staged-only files in git status for commit previews', async () => {
     const cwd = await createRepo();
     const app = await buildApp();

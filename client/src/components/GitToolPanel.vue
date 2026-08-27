@@ -19,6 +19,7 @@
         class="git-tool-action tooltip"
         :data-tooltip="t('components.gitToolPanel.history')"
         :aria-label="t('components.gitToolPanel.history')"
+        :disabled="!isRepository"
         @click="emit('history')"
       >
         <PhClockCounterClockwise :size="17" weight="bold" aria-hidden="true" />
@@ -28,7 +29,7 @@
         :key="action.command"
         type="button"
         class="git-tool-action tooltip"
-        :disabled="action.command === '/commit' && files.length === 0"
+        :disabled="(!isRepository && action.command !== '/status') || (action.command === '/commit' && files.length === 0)"
         :data-tooltip="action.label"
         :aria-label="action.label"
         @click="runAction(action.command)"
@@ -40,6 +41,7 @@
     <div class="git-tool-files" aria-live="polite">
       <p v-if="loading" class="git-tool-state">{{ t('components.gitToolPanel.loading') }}</p>
       <p v-else-if="error" class="git-tool-state git-tool-error">{{ error }}</p>
+      <p v-else-if="!isRepository" class="git-tool-state">{{ t('components.gitToolPanel.notRepository') }}</p>
       <p v-else-if="files.length === 0" class="git-tool-state">{{ t('components.gitToolPanel.noChanges') }}</p>
       <ul v-else>
         <li v-for="file in files" :key="`${file.status}:${file.path}`">
@@ -90,6 +92,7 @@ const emit = defineEmits<{ command: [command: string]; history: [] }>();
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
 const files = ref<GitStatusFile[]>([]);
+const isRepository = ref(true);
 const loading = ref(false);
 const error = ref('');
 const diffLoadingPath = ref('');
@@ -113,6 +116,7 @@ async function refresh(): Promise<void> {
   const currentRequestId = ++requestId;
   if (!props.cwd) {
     files.value = [];
+    isRepository.value = true;
     loading.value = false;
     error.value = '';
     return;
@@ -121,8 +125,11 @@ async function refresh(): Promise<void> {
   loading.value = true;
   error.value = '';
   try {
-    const result = await gitOperations.getStatus({ cwd: props.cwd }) as { files?: GitStatusFile[] };
-    if (currentRequestId === requestId) files.value = result.files || [];
+    const result = await gitOperations.getStatus({ cwd: props.cwd }) as { files?: GitStatusFile[]; isRepository?: boolean };
+    if (currentRequestId === requestId) {
+      files.value = result.files || [];
+      isRepository.value = result.isRepository !== false;
+    }
   } catch (cause) {
     if (currentRequestId !== requestId) return;
     files.value = [];
