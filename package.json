@@ -1,6 +1,6 @@
 {
   "name": "@xianzhon/pi-webui",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A self-hosted, mobile-friendly web workspace for the Pi coding agent, with persistent sessions, task queues, memory, file editing, terminals, and Git workflows.",
   "license": "Apache-2.0",
   "author": "xianzhon",
