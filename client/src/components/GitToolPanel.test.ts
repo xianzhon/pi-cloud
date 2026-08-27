@@ -23,12 +23,16 @@ describe('GitToolPanel', () => {
 
     expect(wrapper.findAll('.git-tool-files li')).toHaveLength(2);
     expect(wrapper.text()).toContain('client/src/App.vue');
-    expect(wrapper.findAll('.git-tool-action').every(button => button.text() === '')).toBe(true);
-    expect(wrapper.find('.git-tool-action').attributes('title')).toBe('Refresh');
+    const actions = wrapper.findAll('.git-tool-action');
+    expect(actions.every(button => button.text() === '')).toBe(true);
+    expect(actions.every(button => button.classes().includes('tooltip'))).toBe(true);
+    expect(actions.map(button => button.attributes('data-tooltip'))).toEqual([
+      'Refresh', 'Commit', 'PR', 'Push', 'Pull', 'Branch', 'Show diff',
+    ]);
+    expect(actions.every(button => button.attributes('title') === undefined)).toBe(true);
 
-    const commands = ['/status', '/commit', '/push', '/pull', '/branch', '/pr'];
-    const buttons = wrapper.findAll('.git-tool-action');
-    for (const button of buttons) await button.trigger('click');
+    const commands = ['/status', '/commit', '/pr', '/push', '/pull', '/branch', '/diff'];
+    for (const button of actions) await button.trigger('click');
 
     expect(wrapper.emitted('command')?.map(([command]) => command)).toEqual(commands);
   });
@@ -68,8 +72,13 @@ describe('GitToolPanel', () => {
     const wrapper = mount(GitToolPanel, { props: { cwd: '/workspace' } });
     await flushPromises();
 
+    const fileDiff = wrapper.find('.git-file-diff');
+    expect(fileDiff.attributes('aria-label')).toBe('Show diff for src/app.ts');
+    expect(fileDiff.attributes('data-tooltip')).toBeUndefined();
+    expect(fileDiff.attributes('title')).toBeUndefined();
+
     await wrapper.find('.git-file-open').trigger('click');
-    await wrapper.find('.git-file-diff').trigger('click');
+    await fileDiff.trigger('click');
     await flushPromises();
 
     expect((openFile.mock.calls[0][0] as CustomEvent).detail).toEqual({ path: 'src/app.ts', kind: 'path' });

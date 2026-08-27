@@ -305,6 +305,21 @@ describe('ChatPanel', () => {
     wrapper.unmount();
   });
 
+  it('hides Git command messages submitted from the Git panel', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      cwd: '/repo',
+      output: 'On branch main',
+      diff: 'diff --git a/file.ts b/file.ts',
+    }), { status: 200 })));
+    const wrapper = mount(ChatPanel, { props: { projectPath: '/repo' } });
+
+    await wrapper.vm.submitExternalPrompt('/status', { hideCommandMessage: true });
+    await wrapper.vm.submitExternalPrompt('/diff', { hideCommandMessage: true });
+
+    expect(chatMessages.value.some(message => message.role === 'user' && ['/status', '/diff'].includes(message.content))).toBe(false);
+    expect(chatMessages.value.some(message => message.role === 'assistant' && message.content.includes('On branch main'))).toBe(true);
+  });
+
   it('preserves an external prompt when the socket cannot send', async () => {
     sendMessage.mockReturnValueOnce(false);
     const wrapper = mount(ChatPanel, { props: { sessionId: 'session-1' } });

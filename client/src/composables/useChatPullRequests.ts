@@ -59,10 +59,10 @@ export function useChatPullRequests(options: PullRequestOptions) {
     }
   }
 
-  async function handlePrCommand(text: string) {
+  async function handlePrCommand(text: string, showUserMessage = true) {
     options.closeCommands();
     const sessionId = options.sessionId();
-    options.addLocalMessage({ role: 'user', content: text, kind: 'text' }, sessionId);
+    if (showUserMessage) options.addLocalMessage({ role: 'user', content: text, kind: 'text' }, sessionId);
     const responseMessage = options.addLocalMessage({
       role: 'assistant',
       content: options.t('components.chatPanel.preparingPrPreview'),

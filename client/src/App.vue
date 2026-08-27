@@ -787,7 +787,7 @@ const isReviewProfileSelected = computed(() => Boolean(selectedReviewSourceLabel
 const selectedAgentModelSummary = ref('');
 const showEditor = ref(false);
 const editorFeatureLoaded = ref(false);
-const showGitTool = ref(false);
+const showGitTool = ref(true);
 const isFullscreen = ref(false);
 const fullscreenLabel = computed(() => t(isFullscreen.value ? 'app.exitFullscreen' : 'app.fullscreen'));
 const fullscreenTooltip = computed(() => `${fullscreenLabel.value} (${formatFullscreenShortcut(fullscreenShortcut.value)})`);
@@ -1355,7 +1355,7 @@ function toggleGitTool(): void {
 }
 
 function submitGitCommand(command: string): void {
-  void chatPanelRef.value?.submitExternalPrompt(command);
+  void chatPanelRef.value?.submitExternalPrompt(command, { hideCommandMessage: true });
 }
 
 async function toggleFullscreen(): Promise<void> {

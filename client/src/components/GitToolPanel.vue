@@ -18,9 +18,9 @@
         v-for="action in actions"
         :key="action.command"
         type="button"
-        class="git-tool-action"
+        class="git-tool-action tooltip"
         :disabled="action.command === '/commit' && files.length === 0"
-        :title="action.label"
+        :data-tooltip="action.label"
         :aria-label="action.label"
         @click="runAction(action.command)"
       >
@@ -42,7 +42,6 @@
             class="git-file-diff"
             type="button"
             :disabled="diffLoadingPath === file.path"
-            :title="t('components.gitToolPanel.showDiff')"
             :aria-label="t('components.gitToolPanel.showDiffFor', { path: file.path })"
             @click="openDiff(file.path)"
           >
@@ -93,10 +92,11 @@ let resizeStartHeight = 0;
 const actions = computed(() => [
   { command: '/status', label: t('components.gitToolPanel.refresh'), icon: PhArrowsClockwise },
   { command: '/commit', label: t('components.gitToolPanel.commit'), icon: PhGitCommit },
+  { command: '/pr', label: t('components.gitToolPanel.pr'), icon: PhGitPullRequest },
   { command: '/push', label: t('components.gitToolPanel.push'), icon: PhUploadSimple },
   { command: '/pull', label: t('components.gitToolPanel.pull'), icon: PhDownloadSimple },
   { command: '/branch', label: t('components.gitToolPanel.branch'), icon: PhGitBranch },
-  { command: '/pr', label: t('components.gitToolPanel.pr'), icon: PhGitPullRequest },
+  { command: '/diff', label: t('components.gitToolPanel.showDiff'), icon: PhGitDiff },
 ] as const);
 
 async function refresh(): Promise<void> {
@@ -258,6 +258,46 @@ defineExpose({ refresh });
 .git-tool-action:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+.tooltip {
+  position: relative;
+}
+
+.tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 100;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+}
+
+.tooltip:hover::after,
+.tooltip:focus-visible::after {
+  opacity: 1;
+}
+
+.git-tool-action:first-child::after {
+  left: 0;
+  transform: none;
+}
+
+.git-tool-action:last-child::after {
+  right: 0;
+  left: auto;
+  transform: none;
 }
 
 .git-tool-files {

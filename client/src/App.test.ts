@@ -509,8 +509,8 @@ describe('App routing', () => {
     });
   });
 
-  it('opens the Git tool and dispatches toolbar actions through the chat composer', async () => {
-    localStorage.setItem('pi-webui-sidebar-collapsed', 'true');
+  it('shows the Git tool by default and dispatches toolbar actions through the chat composer', async () => {
+    localStorage.setItem('pi-webui-sidebar-collapsed', 'false');
     vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => {
       if (String(url).startsWith('/api/git/status')) {
         return { ok: true, status: 200, json: async () => ({ files: [{ status: 'M', path: 'src/app.ts' }] }) } as Response;
@@ -524,13 +524,12 @@ describe('App routing', () => {
     });
     await flushPromises();
 
-    await wrapper.get('[data-rail-action="git"]').trigger('click');
-    await flushPromises();
-
     expect(wrapper.findComponent({ name: 'SessionSidebar' }).props('collapsed')).toBe(false);
     expect(wrapper.find('.git-tool-panel').exists()).toBe(true);
-    await wrapper.findAll('.git-tool-action').find((button) => button.text() === 'Push')!.trigger('click');
-    expect(submitExternalPrompt).toHaveBeenCalledWith('/push');
+    expect(wrapper.get('[data-rail-action="git"]').classes()).toContain('active');
+
+    await wrapper.get('.git-tool-action[aria-label="Show diff"]').trigger('click');
+    expect(submitExternalPrompt).toHaveBeenCalledWith('/diff', { hideCommandMessage: true });
   });
 
   it('opens the session context menu from the collapsed utility rail', async () => {
