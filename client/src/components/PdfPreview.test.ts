@@ -24,11 +24,20 @@ const context = {
   beginPath: vi.fn(),
   moveTo: vi.fn(),
   lineTo: vi.fn(),
+  rect: vi.fn(),
+  ellipse: vi.fn(),
   stroke: vi.fn(),
+  fillText: vi.fn(),
+  save: vi.fn(),
+  restore: vi.fn(),
   lineCap: '',
   lineJoin: '',
   strokeStyle: '',
+  fillStyle: '',
   lineWidth: 0,
+  globalAlpha: 1,
+  font: '',
+  textBaseline: '',
 } as unknown as CanvasRenderingContext2D;
 
 describe('PdfPreview', () => {
@@ -60,12 +69,12 @@ describe('PdfPreview', () => {
     expect(pdfjsMock.getDocument).toHaveBeenCalledWith({ url: '/api/files/raw?path=document.pdf' });
     expect(fetch).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.document.pdf.annotations.json');
     expect(pdfjsMock.getPage).toHaveBeenCalledWith(1);
-    expect(wrapper.find('.pdf-page-status').text()).toBe('Page 1 of 2');
+    expect(wrapper.find('.pdf-page-status').text()).toBe('1/2');
 
     await wrapper.find('[aria-label="Next page"]').trigger('click');
     await flushPromises();
     expect(pdfjsMock.getPage).toHaveBeenLastCalledWith(2);
-    expect(wrapper.find('.pdf-page-status').text()).toBe('Page 2 of 2');
+    expect(wrapper.find('.pdf-page-status').text()).toBe('2/2');
 
     await wrapper.find('[aria-label="Zoom in"]').trigger('click');
     await flushPromises();
@@ -81,10 +90,13 @@ describe('PdfPreview', () => {
     expect(wrapper.findAll('.pdf-toolbar')).toHaveLength(1);
     expect(wrapper.find('.pdf-annotation-toolbar').exists()).toBe(false);
     expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
+    for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text']) {
+      expect(wrapper.get(`[aria-label="${label}"]`).attributes('data-tooltip')).toBe(label);
+    }
     expect(wrapper.get('[aria-label="Undo annotation"]').attributes('data-tooltip')).toBe('Undo annotation');
     expect(wrapper.get('[aria-label="Next page"]').attributes('data-tooltip')).toBe('Next page');
 
-    const penWidth = wrapper.get<HTMLInputElement>('[aria-label="Pen width"]');
+    const penWidth = wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]');
     expect(wrapper.get('.pdf-width-value').text()).toBe('1');
     await penWidth.setValue(7);
     expect(wrapper.get('.pdf-width-value').text()).toBe('7');
@@ -122,6 +134,48 @@ describe('PdfPreview', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2Fdocument.pdf.annotations.json');
     expect(wrapper.find('[aria-label="Clear annotations on this page"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('draws and saves shape annotations', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).startsWith('/api/files/read')) return { ok: false, status: 404 } as Response;
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    await wrapper.get('[aria-label="Draw rectangle"]').trigger('click');
+
+    const canvas = wrapper.find('.pdf-annotation-canvas');
+    await canvas.trigger('pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
+    await canvas.trigger('pointermove', { pointerId: 1, clientX: 180, clientY: 240 });
+    await canvas.trigger('pointerup', { pointerId: 1, clientX: 180, clientY: 240 });
+    await flushPromises();
+
+    const writeCall = fetchMock.mock.calls.find(([url]) => url === '/api/files/write');
+    const body = JSON.parse(String(writeCall?.[1]?.body));
+    expect(JSON.parse(body.content).pages['1'][0]).toMatchObject({
+      type: 'rectangle',
+      points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 }],
+    });
+    expect(context.rect).toHaveBeenCalled();
+
+    vi.spyOn(window, 'prompt').mockReturnValue('Review this');
+    await wrapper.get('[aria-label="Add text"]').trigger('click');
+    await canvas.trigger('pointerdown', { pointerId: 2, clientX: 240, clientY: 320 });
+    await flushPromises();
+
+    const latestWrite = fetchMock.mock.calls.filter(([url]) => url === '/api/files/write').at(-1);
+    const latestBody = JSON.parse(String(latestWrite?.[1]?.body));
+    expect(JSON.parse(latestBody.content).pages['1'][1]).toMatchObject({
+      type: 'text',
+      text: 'Review this',
+      points: [{ x: 0.4, y: 0.4 }],
+    });
+    expect(context.fillText).toHaveBeenCalledWith('Review this', 240, 320);
   });
 
   it('draws and saves annotations in a hidden sidecar file', async () => {

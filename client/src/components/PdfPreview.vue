@@ -9,8 +9,28 @@
           :aria-pressed="tool === 'pen'"
           :aria-label="t('components.editorPanel.pdfPen')"
           :data-tooltip="t('components.editorPanel.pdfPen')"
-          @click="tool = tool === 'pen' ? 'pan' : 'pen'"
+          @click="toggleTool('pen')"
         ><PhPencilSimple :size="19" /></button>
+        <button
+          type="button"
+          class="tooltip"
+          :class="{ active: tool === 'highlighter' }"
+          :aria-pressed="tool === 'highlighter'"
+          :aria-label="t('components.editorPanel.pdfHighlighter')"
+          :data-tooltip="t('components.editorPanel.pdfHighlighter')"
+          @click="toggleTool('highlighter')"
+        ><PhHighlighter :size="19" /></button>
+        <button
+          v-for="shapeTool in shapeTools"
+          :key="shapeTool.name"
+          type="button"
+          class="tooltip"
+          :class="{ active: tool === shapeTool.name }"
+          :aria-pressed="tool === shapeTool.name"
+          :aria-label="t(shapeTool.label)"
+          :data-tooltip="t(shapeTool.label)"
+          @click="toggleTool(shapeTool.name)"
+        ><component :is="shapeTool.icon" :size="19" /></button>
         <button
           type="button"
           class="tooltip"
@@ -18,7 +38,7 @@
           :aria-pressed="tool === 'eraser'"
           :aria-label="t('components.editorPanel.pdfEraser')"
           :data-tooltip="t('components.editorPanel.pdfEraser')"
-          @click="tool = tool === 'eraser' ? 'pan' : 'eraser'"
+          @click="toggleTool('eraser')"
         ><PhEraser :size="19" /></button>
         <label class="pdf-control-label tooltip" :data-tooltip="t('components.editorPanel.pdfPenColor')">
           <input v-model="penColor" type="color" :aria-label="t('components.editorPanel.pdfPenColor')">
@@ -144,12 +164,18 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import {
   PhArrowClockwise,
   PhArrowCounterClockwise,
+  PhArrowUpRight,
   PhCaretLeft,
   PhCaretRight,
+  PhCircle,
   PhEraser,
+  PhHighlighter,
+  PhLineSegment,
   PhMinus,
   PhPencilSimple,
   PhPlus,
+  PhRectangle,
+  PhTextT,
   PhTrash,
 } from '@phosphor-icons/vue';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
@@ -157,15 +183,29 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { i18n } from '../i18n';
 
 interface AnnotationPoint { x: number; y: number }
-interface AnnotationStroke { color: string; width: number; points: AnnotationPoint[] }
+type DrawingTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text';
+interface AnnotationStroke {
+  type?: DrawingTool;
+  color: string;
+  width: number;
+  points: AnnotationPoint[];
+  text?: string;
+}
 interface AnnotationDocument { version: 1; pages: Record<string, AnnotationStroke[]> }
-type AnnotationTool = 'pan' | 'pen' | 'eraser';
+type AnnotationTool = 'pan' | DrawingTool | 'eraser';
 
 const props = defineProps<{ src: string; filePath: string }>();
 const t = i18n.global.t;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.25;
+const shapeTools: Array<{ name: DrawingTool; label: string; icon: object }> = [
+  { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhLineSegment },
+  { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight },
+  { name: 'rectangle', label: 'components.editorPanel.pdfRectangle', icon: PhRectangle },
+  { name: 'ellipse', label: 'components.editorPanel.pdfEllipse', icon: PhCircle },
+  { name: 'text', label: 'components.editorPanel.pdfText', icon: PhTextT },
+];
 
 const canvasEl = ref<HTMLCanvasElement>();
 const annotationCanvasEl = ref<HTMLCanvasElement>();
@@ -220,6 +260,10 @@ function setScale(value: number): void {
   scale.value = Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
 }
 
+function toggleTool(nextTool: AnnotationTool): void {
+  tool.value = tool.value === nextTool ? 'pan' : nextTool;
+}
+
 function drawAnnotations(): void {
   const canvas = annotationCanvasEl.value;
   const context = canvas?.getContext('2d');
@@ -227,15 +271,71 @@ function drawAnnotations(): void {
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.lineCap = 'round';
   context.lineJoin = 'round';
-  for (const stroke of currentPageStrokes.value) {
-    if (!stroke.points.length) continue;
-    context.beginPath();
-    context.strokeStyle = stroke.color;
-    context.lineWidth = stroke.width * scale.value * (window.devicePixelRatio || 1);
-    context.moveTo(stroke.points[0].x * canvas.width, stroke.points[0].y * canvas.height);
-    for (const point of stroke.points.slice(1)) context.lineTo(point.x * canvas.width, point.y * canvas.height);
-    context.stroke();
+  for (const stroke of currentPageStrokes.value) drawAnnotation(context, canvas, stroke);
+}
+
+function drawAnnotation(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, stroke: AnnotationStroke): void {
+  if (!stroke.points.length) return;
+  const type = stroke.type || 'pen';
+  const ratio = window.devicePixelRatio || 1;
+  const start = stroke.points[0];
+  const end = stroke.points.at(-1) || start;
+  const startX = start.x * canvas.width;
+  const startY = start.y * canvas.height;
+  const endX = end.x * canvas.width;
+  const endY = end.y * canvas.height;
+
+  context.save();
+  context.beginPath();
+  context.strokeStyle = stroke.color;
+  context.fillStyle = stroke.color;
+  context.lineWidth = stroke.width * scale.value * ratio;
+  if (type === 'highlighter') {
+    context.globalAlpha = 0.35;
+    context.lineWidth = Math.max(12, stroke.width * 4) * scale.value * ratio;
   }
+
+  if (type === 'pen' || type === 'highlighter') {
+    context.moveTo(startX, startY);
+    for (const point of stroke.points.slice(1)) context.lineTo(point.x * canvas.width, point.y * canvas.height);
+  } else if (type === 'line' || type === 'arrow') {
+    context.moveTo(startX, startY);
+    context.lineTo(endX, endY);
+    if (type === 'arrow') drawArrowHead(context, startX, startY, endX, endY);
+  } else if (type === 'rectangle') {
+    context.rect(startX, startY, endX - startX, endY - startY);
+  } else if (type === 'ellipse') {
+    const radiusX = Math.abs(endX - startX) / 2;
+    const radiusY = Math.abs(endY - startY) / 2;
+    if (!radiusX || !radiusY) {
+      context.restore();
+      return;
+    }
+    context.ellipse((startX + endX) / 2, (startY + endY) / 2, radiusX, radiusY, 0, 0, Math.PI * 2);
+  } else if (type === 'text') {
+    context.font = `${16 * scale.value * ratio}px sans-serif`;
+    context.textBaseline = 'top';
+    context.fillText(stroke.text || '', startX, startY);
+    context.restore();
+    return;
+  }
+  context.stroke();
+  context.restore();
+}
+
+function drawArrowHead(
+  context: CanvasRenderingContext2D,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+): void {
+  const angle = Math.atan2(endY - startY, endX - startX);
+  const size = Math.max(10, context.lineWidth * 4);
+  context.moveTo(endX, endY);
+  context.lineTo(endX - size * Math.cos(angle - Math.PI / 6), endY - size * Math.sin(angle - Math.PI / 6));
+  context.moveTo(endX, endY);
+  context.lineTo(endX - size * Math.cos(angle + Math.PI / 6), endY - size * Math.sin(angle + Math.PI / 6));
 }
 
 async function renderPage(): Promise<void> {
@@ -347,11 +447,8 @@ function checkpoint(): void {
 function eraseAt(point: AnnotationPoint): void {
   const canvas = annotationCanvasEl.value;
   if (!canvas) return;
-  const threshold = 12 * (window.devicePixelRatio || 1);
   const strokes = currentPageStrokes.value;
-  const remaining = strokes.filter(stroke => !stroke.points.some(strokePoint => (
-    Math.hypot((strokePoint.x - point.x) * canvas.width, (strokePoint.y - point.y) * canvas.height) <= threshold
-  )));
+  const remaining = strokes.filter(stroke => !annotationContainsPoint(stroke, point, canvas));
   if (remaining.length !== strokes.length) {
     annotations.value.pages[String(pageNumber.value)] = remaining;
     annotationChanged = true;
@@ -359,43 +456,100 @@ function eraseAt(point: AnnotationPoint): void {
   }
 }
 
+function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoint, canvas: HTMLCanvasElement): boolean {
+  if (!stroke.points.length) return false;
+  const threshold = 12 * (window.devicePixelRatio || 1);
+  const target = { x: point.x * canvas.width, y: point.y * canvas.height };
+  const points = stroke.points.map(item => ({ x: item.x * canvas.width, y: item.y * canvas.height }));
+  const type = stroke.type || 'pen';
+
+  if (type === 'rectangle' || type === 'ellipse' || type === 'text') {
+    const start = points[0];
+    const end = points.at(-1) || start;
+    const textScale = scale.value * (window.devicePixelRatio || 1);
+    const textWidth = type === 'text' ? (stroke.text?.length || 1) * 10 * textScale : 0;
+    const textHeight = type === 'text' ? 16 * textScale : 0;
+    return target.x >= Math.min(start.x, end.x) - threshold
+      && target.x <= Math.max(start.x, end.x + textWidth) + threshold
+      && target.y >= Math.min(start.y, end.y) - threshold
+      && target.y <= Math.max(start.y, end.y + textHeight) + threshold;
+  }
+
+  if (points.length === 1) return Math.hypot(target.x - points[0].x, target.y - points[0].y) <= threshold;
+  return points.slice(1).some((end, index) => distanceToSegment(target, points[index], end) <= threshold);
+}
+
+function distanceToSegment(point: AnnotationPoint, start: AnnotationPoint, end: AnnotationPoint): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (!dx && !dy) return Math.hypot(point.x - start.x, point.y - start.y);
+  const dotProduct = (point.x - start.x) * dx + (point.y - start.y) * dy;
+  const position = Math.max(0, Math.min(1, dotProduct / (dx * dx + dy * dy)));
+  return Math.hypot(point.x - (start.x + position * dx), point.y - (start.y + position * dy));
+}
+
 function startAnnotation(event: PointerEvent): void {
   if (tool.value === 'pan' || activePointer !== undefined) return;
   const point = pointFromEvent(event);
   if (!point) return;
+
+  if (tool.value === 'text') {
+    const text = window.prompt(t('components.editorPanel.pdfTextPrompt'))?.trim();
+    if (!text) return;
+    checkpoint();
+    addAnnotation({ type: 'text', color: penColor.value, width: penWidth.value, points: [point], text });
+    drawAnnotations();
+    void saveAnnotations();
+    return;
+  }
+
   activePointer = event.pointerId;
   annotationChanged = false;
   annotationCanvasEl.value?.setPointerCapture(event.pointerId);
   checkpoint();
-  if (tool.value === 'pen') {
-    const page = String(pageNumber.value);
-    annotations.value.pages[page] ||= [];
-    annotations.value.pages[page].push({ color: penColor.value, width: penWidth.value, points: [point] });
-    annotationChanged = true;
-    drawAnnotations();
-  } else {
+  if (tool.value === 'eraser') {
     eraseAt(point);
+    return;
   }
+
+  addAnnotation({ type: tool.value, color: penColor.value, width: penWidth.value, points: [point] });
+  if (tool.value === 'pen' || tool.value === 'highlighter') annotationChanged = true;
+  drawAnnotations();
+}
+
+function addAnnotation(annotation: AnnotationStroke): void {
+  const page = String(pageNumber.value);
+  annotations.value.pages[page] ||= [];
+  annotations.value.pages[page].push(annotation);
 }
 
 function continueAnnotation(event: PointerEvent): void {
   if (event.pointerId !== activePointer) return;
   const point = pointFromEvent(event);
   if (!point) return;
-  if (tool.value === 'pen') {
+  if (tool.value === 'pen' || tool.value === 'highlighter') {
     currentPageStrokes.value.at(-1)?.points.push(point);
-    annotationChanged = true;
-    drawAnnotations();
   } else if (tool.value === 'eraser') {
     eraseAt(point);
+    return;
+  } else {
+    const points = currentPageStrokes.value.at(-1)?.points;
+    if (points) points[1] = point;
   }
+  annotationChanged = true;
+  drawAnnotations();
 }
 
 function finishAnnotation(event: PointerEvent): void {
   if (event.pointerId !== activePointer) return;
   activePointer = undefined;
-  if (!annotationChanged) undoStack.value.pop();
-  else void saveAnnotations();
+  if (!annotationChanged) {
+    undoStack.value.pop();
+    if (tool.value !== 'eraser') currentPageStrokes.value.pop();
+    drawAnnotations();
+  } else {
+    void saveAnnotations();
+  }
 }
 
 async function saveAnnotations(): Promise<void> {
@@ -484,11 +638,15 @@ onUnmounted(() => {
   border-radius: 8px;
   background: var(--bg-secondary);
   box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+
+.pdf-toolbar::-webkit-scrollbar { display: none; }
 
 .pdf-toolbar-group {
   display: flex;
-  min-width: 0;
+  flex: 0 0 auto;
   align-items: center;
 }
 
@@ -513,7 +671,7 @@ onUnmounted(() => {
 .pdf-toolbar button:disabled { opacity: 0.45; }
 
 .pdf-page-status {
-  min-width: 6rem;
+  min-width: 3.5rem;
   padding: 0 0.65rem;
   text-align: center;
   font-size: 0.8rem;
