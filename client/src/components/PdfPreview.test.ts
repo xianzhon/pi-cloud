@@ -1,7 +1,6 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PdfPreview from './PdfPreview.vue';
-import InputPromptModal from './InputPromptModal.vue';
 
 const pdfjsMock = vi.hoisted(() => {
   const render = vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() }));
@@ -186,22 +185,75 @@ describe('PdfPreview', () => {
 
     await wrapper.get('[aria-label="Add text"]').trigger('click');
     await canvas.trigger('pointerdown', { pointerId: 2, clientX: 240, clientY: 320 });
+    await canvas.trigger('pointerup', { pointerId: 2, clientX: 240, clientY: 320 });
 
-    const textPrompt = wrapper.getComponent(InputPromptModal);
-    expect(textPrompt.props('visible')).toBe(true);
-    expect(textPrompt.props('label')).toBe('Enter annotation text');
-    textPrompt.vm.$emit('confirm', '  Review this  ');
+    const textEditor = wrapper.get<HTMLTextAreaElement>('.pdf-text-editor');
+    expect(textEditor.attributes('aria-label')).toBe('Enter annotation text');
+    await textEditor.setValue('Review this');
+    await textEditor.trigger('keydown', { key: 'Enter', shiftKey: true });
+    expect(wrapper.find('.pdf-text-editor').exists()).toBe(true);
+    await textEditor.setValue('Review this\non two lines');
+    expect(textEditor.attributes('style')).toContain('width: 14ch');
+    expect(textEditor.attributes('style')).toContain('height: 2.75em');
+    await textEditor.trigger('keydown', { key: 'Enter', ctrlKey: true });
     await flushPromises();
-    expect(textPrompt.props('visible')).toBe(false);
+    expect(wrapper.find('.pdf-text-editor').exists()).toBe(false);
 
     const latestWrite = fetchMock.mock.calls.filter(([url]) => url === '/api/files/write').at(-1);
     const latestBody = JSON.parse(String(latestWrite?.[1]?.body));
     expect(JSON.parse(latestBody.content).pages['1'][1]).toMatchObject({
       type: 'text',
-      text: 'Review this',
+      text: 'Review this\non two lines',
       points: [{ x: 0.4, y: 0.4 }],
     });
     expect(context.fillText).toHaveBeenCalledWith('Review this', 240, 320);
+    expect(context.fillText).toHaveBeenCalledWith('on two lines', 240, 340);
+  });
+
+  it('edits an existing text annotation directly on the PDF', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).startsWith('/api/files/read')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            content: JSON.stringify({
+              version: 1,
+              pages: {
+                '1': [{
+                  type: 'text', color: '#ef4444', width: 1,
+                  points: [{ x: 0.4, y: 0.4 }], text: 'Review this',
+                }],
+              },
+            }),
+          }),
+        } as Response;
+      }
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    await wrapper.get('[aria-label="Add text"]').trigger('click');
+    const canvas = wrapper.get('.pdf-annotation-canvas');
+    await canvas.trigger('pointerdown', { pointerId: 2, clientX: 245, clientY: 325 });
+    await canvas.trigger('pointerup', { pointerId: 2, clientX: 245, clientY: 325 });
+    await flushPromises();
+
+    const textEditor = wrapper.get<HTMLTextAreaElement>('.pdf-text-editor');
+    expect(textEditor.element.value).toBe('Review this');
+    await textEditor.setValue('Updated review');
+    await textEditor.trigger('keydown', { key: 'Enter', metaKey: true });
+    await flushPromises();
+
+    const latestWrite = fetchMock.mock.calls.filter(([url]) => url === '/api/files/write').at(-1);
+    const body = JSON.parse(String(latestWrite?.[1]?.body));
+    expect(JSON.parse(body.content).pages['1'][0]).toMatchObject({
+      type: 'text', text: 'Updated review', points: [{ x: 0.4, y: 0.4 }],
+    });
   });
 
   it('draws and saves annotations in a hidden sidecar file', async () => {

@@ -160,21 +160,22 @@
           @pointerdown="startAnnotation"
           @pointermove="continueAnnotation"
           @pointerup="finishAnnotation"
-          @pointercancel="finishAnnotation"
+          @pointercancel="finishAnnotation($event, true)"
+        />
+        <textarea
+          v-if="textEditor"
+          ref="textEditorEl"
+          v-model="textEditor.text"
+          class="pdf-text-editor"
+          :aria-label="t('components.editorPanel.pdfTextPrompt')"
+          :placeholder="t('components.editorPanel.pdfTextPrompt')"
+          :style="textEditorStyle"
+          @pointerdown.stop
+          @keydown="handleTextEditorKeydown"
+          @blur="commitTextAnnotation"
         />
       </div>
     </div>
-    <InputPromptModal
-      :visible="Boolean(textAnnotationPoint)"
-      :title="t('components.editorPanel.pdfText')"
-      :label="t('components.editorPanel.pdfTextPrompt')"
-      :placeholder="t('components.editorPanel.pdfTextPrompt')"
-      :confirm-text="t('components.editorPanel.pdfText')"
-      @confirm="confirmTextAnnotation"
-      @cancel="cancelTextAnnotation"
-    >
-      <template #icon><PhTextT :size="20" weight="duotone" /></template>
-    </InputPromptModal>
   </div>
 </template>
 
@@ -200,7 +201,6 @@ import {
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { i18n } from '../i18n';
-import InputPromptModal from './InputPromptModal.vue';
 
 interface AnnotationPoint { x: number; y: number }
 type DrawingTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text';
@@ -212,6 +212,7 @@ interface AnnotationStroke {
   text?: string;
 }
 interface AnnotationDocument { version: 1; pages: Record<string, AnnotationStroke[]> }
+interface TextEditorState { page: string; point: AnnotationPoint; index?: number; text: string; color: string }
 type AnnotationTool = 'pan' | DrawingTool | 'eraser';
 
 const props = defineProps<{ src: string; filePath: string }>();
@@ -230,6 +231,7 @@ const shapeTools: Array<{ name: DrawingTool; label: string; icon: object }> = [
 const canvasEl = ref<HTMLCanvasElement>();
 const annotationCanvasEl = ref<HTMLCanvasElement>();
 const viewportEl = ref<HTMLDivElement>();
+const textEditorEl = ref<HTMLTextAreaElement>();
 const pageNumber = ref(1);
 const pageCount = ref(0);
 const scale = ref(1);
@@ -243,7 +245,22 @@ const undoStack = ref<AnnotationDocument[]>([]);
 const redoStack = ref<AnnotationDocument[]>([]);
 const saveState = ref<'saving' | 'saved' | 'error' | ''>('');
 const isPanning = ref(false);
-const textAnnotationPoint = ref<AnnotationPoint>();
+const textEditor = ref<TextEditorState>();
+const textEditorStyle = computed(() => {
+  const editor = textEditor.value;
+  if (!editor) return undefined;
+  const lines = editor.text.split('\n');
+  const longestLine = Math.max(...lines.map(line => line.length));
+  return {
+    left: `${editor.point.x * 100}%`,
+    top: `${editor.point.y * 100}%`,
+    width: `${Math.max(12, longestLine + 2)}ch`,
+    maxWidth: `${(1 - editor.point.x) * 100}%`,
+    height: `${lines.length * 1.25 + 0.25}em`,
+    color: editor.color,
+    fontSize: `${16 * scale.value}px`,
+  };
+});
 const saveStateLabel = computed(() => {
   switch (saveState.value) {
     case 'saving': return t('components.editorPanel.savingPdfAnnotations');
@@ -295,7 +312,10 @@ function drawAnnotations(): void {
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.lineCap = 'round';
   context.lineJoin = 'round';
-  for (const stroke of currentPageStrokes.value) drawAnnotation(context, canvas, stroke);
+  currentPageStrokes.value.forEach((stroke, index) => {
+    if (textEditor.value?.page === String(pageNumber.value) && textEditor.value.index === index) return;
+    drawAnnotation(context, canvas, stroke);
+  });
 }
 
 function drawAnnotation(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, stroke: AnnotationStroke): void {
@@ -337,9 +357,12 @@ function drawAnnotation(context: CanvasRenderingContext2D, canvas: HTMLCanvasEle
     }
     context.ellipse((startX + endX) / 2, (startY + endY) / 2, radiusX, radiusY, 0, 0, Math.PI * 2);
   } else if (type === 'text') {
-    context.font = `${16 * scale.value * ratio}px sans-serif`;
+    const fontSize = 16 * scale.value * ratio;
+    context.font = `${fontSize}px sans-serif`;
     context.textBaseline = 'top';
-    context.fillText(stroke.text || '', startX, startY);
+    for (const [index, line] of (stroke.text || '').split('\n').entries()) {
+      context.fillText(line, startX, startY + index * fontSize * 1.25);
+    }
     context.restore();
     return;
   }
@@ -520,8 +543,10 @@ function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoin
     const start = points[0];
     const end = points.at(-1) || start;
     const textScale = scale.value * (window.devicePixelRatio || 1);
-    const textWidth = type === 'text' ? (stroke.text?.length || 1) * 10 * textScale : 0;
-    const textHeight = type === 'text' ? 16 * textScale : 0;
+    const textLines = (stroke.text || '').split('\n');
+    const longestLine = Math.max(...textLines.map(line => line.length), 1);
+    const textWidth = type === 'text' ? longestLine * 10 * textScale : 0;
+    const textHeight = type === 'text' ? textLines.length * 20 * textScale : 0;
     return target.x >= Math.min(start.x, end.x) - threshold
       && target.x <= Math.max(start.x, end.x + textWidth) + threshold
       && target.y >= Math.min(start.y, end.y) - threshold
@@ -546,10 +571,9 @@ function startAnnotation(event: PointerEvent): void {
   const point = pointFromEvent(event);
   if (!point) return;
 
-  if (tool.value === 'text') {
-    textAnnotationPoint.value = point;
-    return;
-  }
+  // Wait for pointerup before inserting the text field so the browser can
+  // complete the canvas pointer sequence before focus moves to the editor.
+  if (tool.value === 'text') return;
 
   activePointer = event.pointerId;
   annotationChanged = false;
@@ -565,19 +589,78 @@ function startAnnotation(event: PointerEvent): void {
   drawAnnotations();
 }
 
-function confirmTextAnnotation(value: string): void {
-  const point = textAnnotationPoint.value;
-  const text = value.trim();
-  if (!point || !text) return;
-  checkpoint();
-  addAnnotation({ type: 'text', color: penColor.value, width: penWidth.value, points: [point], text });
-  textAnnotationPoint.value = undefined;
+function startTextAnnotation(point: AnnotationPoint): void {
+  commitTextAnnotation();
+  const page = String(pageNumber.value);
+  const strokes = currentPageStrokes.value;
+  const canvas = annotationCanvasEl.value;
+  let index = -1;
+  if (canvas) {
+    for (let candidate = strokes.length - 1; candidate >= 0; candidate--) {
+      const stroke = strokes[candidate];
+      if (stroke.type === 'text' && annotationContainsPoint(stroke, point, canvas)) {
+        index = candidate;
+        break;
+      }
+    }
+  }
+  const existing = index >= 0 ? strokes[index] : undefined;
+  textEditor.value = {
+    page,
+    point: existing?.points[0] || point,
+    index: existing ? index : undefined,
+    text: existing?.text || '',
+    color: existing?.color || penColor.value,
+  };
+  drawAnnotations();
+  void nextTick(() => {
+    textEditorEl.value?.focus();
+    textEditorEl.value?.select();
+  });
+}
+
+function commitTextAnnotation(): void {
+  const editor = textEditor.value;
+  if (!editor) return;
+  const text = editor.text.trim();
+  const strokes = annotations.value.pages[editor.page] || [];
+  textEditor.value = undefined;
+
+  if (editor.index === undefined) {
+    if (!text) return;
+    checkpoint();
+    annotations.value.pages[editor.page] ||= [];
+    annotations.value.pages[editor.page].push({
+      type: 'text', color: editor.color, width: penWidth.value, points: [editor.point], text,
+    });
+  } else {
+    const annotation = strokes[editor.index];
+    if (!annotation || annotation.text === text) {
+      drawAnnotations();
+      return;
+    }
+    checkpoint();
+    if (text) annotation.text = text;
+    else strokes.splice(editor.index, 1);
+  }
   drawAnnotations();
   void saveAnnotations();
 }
 
 function cancelTextAnnotation(): void {
-  textAnnotationPoint.value = undefined;
+  if (!textEditor.value) return;
+  textEditor.value = undefined;
+  drawAnnotations();
+}
+
+function handleTextEditorKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.isComposing) {
+    event.preventDefault();
+    commitTextAnnotation();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    cancelTextAnnotation();
+  }
 }
 
 function addAnnotation(annotation: AnnotationStroke): void {
@@ -603,7 +686,14 @@ function continueAnnotation(event: PointerEvent): void {
   drawAnnotations();
 }
 
-function finishAnnotation(event: PointerEvent): void {
+function finishAnnotation(event: PointerEvent, cancelled = false): void {
+  if (tool.value === 'text' && activePointer === undefined) {
+    if (!cancelled) {
+      const point = pointFromEvent(event);
+      if (point) startTextAnnotation(point);
+    }
+    return;
+  }
   if (event.pointerId !== activePointer) return;
   activePointer = undefined;
   if (!annotationChanged) {
@@ -903,6 +993,22 @@ onUnmounted(() => {
 
 .pdf-annotation-canvas.erasing {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='m4 17 10-10 6 6-8 8H8z' fill='%23fff' stroke='%231f2937' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='m11 10 6 6' stroke='%231f2937' stroke-width='1.5'/%3E%3C/svg%3E") 4 20, cell;
+}
+
+.pdf-text-editor {
+  position: absolute;
+  z-index: 1;
+  min-width: 12rem;
+  padding: 0 2px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  outline: none;
+  background: rgb(255 255 255 / 90%);
+  overflow: hidden;
+  resize: none;
+  font-family: sans-serif;
+  line-height: 1.25;
+  transform: translateY(-1px);
 }
 
 .pdf-message { margin-top: 2rem; color: var(--text-secondary); }
