@@ -72,6 +72,19 @@ describe('PdfPreview', () => {
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('125%');
   });
 
+  it('combines PDF controls in one toolbar with icon tooltips', async () => {
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll('.pdf-toolbar')).toHaveLength(1);
+    expect(wrapper.find('.pdf-annotation-toolbar').exists()).toBe(false);
+    expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
+    expect(wrapper.get('[aria-label="Undo annotation"]').attributes('data-tooltip')).toBe('Undo annotation');
+    expect(wrapper.get('[aria-label="Next page"]').attributes('data-tooltip')).toBe('Next page');
+  });
+
   it('loads annotations from the legacy visible sidecar name', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (url) => {

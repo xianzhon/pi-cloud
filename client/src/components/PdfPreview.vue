@@ -1,92 +1,119 @@
 <template>
   <div class="pdf-preview">
     <div class="pdf-toolbar" role="toolbar" :aria-label="t('components.editorPanel.pdfControls')">
-      <button
-        type="button"
-        :disabled="loading || pageNumber <= 1"
-        :aria-label="t('components.editorPanel.previousPage')"
-        @click="pageNumber--"
-      >
-        ‹
-      </button>
-      <span class="pdf-page-status">
-        {{ t('components.editorPanel.pdfPageStatus', { page: pageNumber, pages: pageCount || 1 }) }}
-      </span>
-      <button
-        type="button"
-        :disabled="loading || pageNumber >= pageCount"
-        :aria-label="t('components.editorPanel.nextPage')"
-        @click="pageNumber++"
-      >
-        ›
-      </button>
-      <button
-        type="button"
-        :disabled="loading || scale <= MIN_SCALE"
-        :aria-label="t('components.editorPanel.zoomOut')"
-        @click="setScale(scale - SCALE_STEP)"
-      >
-        −
-      </button>
-      <button
-        type="button"
-        class="pdf-zoom-level"
-        :disabled="loading"
-        :aria-label="t('components.editorPanel.resetPdfZoom')"
-        @click="setScale(1)"
-      >
-        {{ Math.round(scale * 100) }}%
-      </button>
-      <button
-        type="button"
-        :disabled="loading || scale >= MAX_SCALE"
-        :aria-label="t('components.editorPanel.zoomIn')"
-        @click="setScale(scale + SCALE_STEP)"
-      >
-        +
-      </button>
-    </div>
-    <div class="pdf-annotation-toolbar" role="toolbar" :aria-label="t('components.editorPanel.pdfAnnotationControls')">
-      <button
-        type="button"
-        :class="{ active: tool === 'pen' }"
-        :aria-pressed="tool === 'pen'"
-        :aria-label="t('components.editorPanel.pdfPen')"
-        @click="tool = tool === 'pen' ? 'pan' : 'pen'"
-      >✎</button>
-      <button
-        type="button"
-        :class="{ active: tool === 'eraser' }"
-        :aria-pressed="tool === 'eraser'"
-        :aria-label="t('components.editorPanel.pdfEraser')"
-        @click="tool = tool === 'eraser' ? 'pan' : 'eraser'"
-      >⌫</button>
-      <input v-model="penColor" type="color" :aria-label="t('components.editorPanel.pdfPenColor')">
-      <input
-        v-model.number="penWidth"
-        type="range"
-        min="1"
-        max="12"
-        :aria-label="t('components.editorPanel.pdfPenWidth')"
-      >
-      <button type="button" :disabled="!canUndo" :aria-label="t('components.editorPanel.undoPdfAnnotation')" @click="undo">↶</button>
-      <button type="button" :disabled="!canRedo" :aria-label="t('components.editorPanel.redoPdfAnnotation')" @click="redo">↷</button>
-      <button
-        type="button"
-        :disabled="!currentPageStrokes.length"
-        :aria-label="t('components.editorPanel.clearPdfPageAnnotations')"
-        @click="clearPage"
-      >×</button>
-      <span
-        class="pdf-annotation-status"
-        :class="`is-${saveState || 'idle'}`"
-        role="status"
-        :aria-label="saveStateLabel"
-      >
-        <span v-if="saveState === 'saving'" class="pdf-save-spinner" aria-hidden="true" />
-        <span v-else-if="saveState === 'saved'" aria-hidden="true">✓</span>
-        <span v-else-if="saveState === 'error'" aria-hidden="true">!</span>
-      </span>
+      <div class="pdf-toolbar-group" role="group" :aria-label="t('components.editorPanel.pdfAnnotationControls')">
+        <button
+          type="button"
+          class="tooltip"
+          :class="{ active: tool === 'pen' }"
+          :aria-pressed="tool === 'pen'"
+          :aria-label="t('components.editorPanel.pdfPen')"
+          :data-tooltip="t('components.editorPanel.pdfPen')"
+          @click="tool = tool === 'pen' ? 'pan' : 'pen'"
+        ><PhPencilSimple :size="19" /></button>
+        <button
+          type="button"
+          class="tooltip"
+          :class="{ active: tool === 'eraser' }"
+          :aria-pressed="tool === 'eraser'"
+          :aria-label="t('components.editorPanel.pdfEraser')"
+          :data-tooltip="t('components.editorPanel.pdfEraser')"
+          @click="tool = tool === 'eraser' ? 'pan' : 'eraser'"
+        ><PhEraser :size="19" /></button>
+        <label class="pdf-control-label tooltip" :data-tooltip="t('components.editorPanel.pdfPenColor')">
+          <input v-model="penColor" type="color" :aria-label="t('components.editorPanel.pdfPenColor')">
+        </label>
+        <label class="pdf-width-control tooltip" :data-tooltip="t('components.editorPanel.pdfPenWidth')">
+          <input
+            v-model.number="penWidth"
+            type="range"
+            min="1"
+            max="12"
+            :aria-label="t('components.editorPanel.pdfPenWidth')"
+          >
+        </label>
+        <button
+          type="button"
+          class="tooltip"
+          :disabled="!canUndo"
+          :aria-label="t('components.editorPanel.undoPdfAnnotation')"
+          :data-tooltip="t('components.editorPanel.undoPdfAnnotation')"
+          @click="undo"
+        ><PhArrowCounterClockwise :size="19" /></button>
+        <button
+          type="button"
+          class="tooltip"
+          :disabled="!canRedo"
+          :aria-label="t('components.editorPanel.redoPdfAnnotation')"
+          :data-tooltip="t('components.editorPanel.redoPdfAnnotation')"
+          @click="redo"
+        ><PhArrowClockwise :size="19" /></button>
+        <button
+          type="button"
+          class="tooltip"
+          :disabled="!currentPageStrokes.length"
+          :aria-label="t('components.editorPanel.clearPdfPageAnnotations')"
+          :data-tooltip="t('components.editorPanel.clearPdfPageAnnotations')"
+          @click="clearPage"
+        ><PhTrash :size="19" /></button>
+        <span
+          class="pdf-annotation-status"
+          :class="`is-${saveState || 'idle'}`"
+          role="status"
+          :aria-label="saveStateLabel"
+        >
+          <span v-if="saveState === 'saving'" class="pdf-save-spinner" aria-hidden="true" />
+          <span v-else-if="saveState === 'saved'" aria-hidden="true">✓</span>
+          <span v-else-if="saveState === 'error'" aria-hidden="true">!</span>
+        </span>
+      </div>
+      <div class="pdf-toolbar-group" role="group">
+        <button
+          type="button"
+          class="tooltip"
+          :disabled="loading || pageNumber <= 1"
+          :aria-label="t('components.editorPanel.previousPage')"
+          :data-tooltip="t('components.editorPanel.previousPage')"
+          @click="pageNumber--"
+        ><PhCaretLeft :size="18" weight="bold" /></button>
+        <span class="pdf-page-status">
+          {{ t('components.editorPanel.pdfPageStatus', { page: pageNumber, pages: pageCount || 1 }) }}
+        </span>
+        <button
+          type="button"
+          class="tooltip"
+          :disabled="loading || pageNumber >= pageCount"
+          :aria-label="t('components.editorPanel.nextPage')"
+          :data-tooltip="t('components.editorPanel.nextPage')"
+          @click="pageNumber++"
+        ><PhCaretRight :size="18" weight="bold" /></button>
+        <button
+          type="button"
+          class="tooltip"
+          :disabled="loading || scale <= MIN_SCALE"
+          :aria-label="t('components.editorPanel.zoomOut')"
+          :data-tooltip="t('components.editorPanel.zoomOut')"
+          @click="setScale(scale - SCALE_STEP)"
+        ><PhMinus :size="18" /></button>
+        <button
+          type="button"
+          class="pdf-zoom-level tooltip"
+          :disabled="loading"
+          :aria-label="t('components.editorPanel.resetPdfZoom')"
+          :data-tooltip="t('components.editorPanel.resetPdfZoom')"
+          @click="setScale(1)"
+        >
+          {{ Math.round(scale * 100) }}%
+        </button>
+        <button
+          type="button"
+          class="tooltip"
+          :disabled="loading || scale >= MAX_SCALE"
+          :aria-label="t('components.editorPanel.zoomIn')"
+          :data-tooltip="t('components.editorPanel.zoomIn')"
+          @click="setScale(scale + SCALE_STEP)"
+        ><PhPlus :size="18" /></button>
+      </div>
     </div>
     <div class="pdf-viewport">
       <div v-if="loading" class="pdf-message" role="status">{{ t('components.editorPanel.loadingPdf') }}</div>
@@ -109,6 +136,17 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import {
+  PhArrowClockwise,
+  PhArrowCounterClockwise,
+  PhCaretLeft,
+  PhCaretRight,
+  PhEraser,
+  PhMinus,
+  PhPencilSimple,
+  PhPlus,
+  PhTrash,
+} from '@phosphor-icons/vue';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { i18n } from '../i18n';
@@ -428,44 +466,46 @@ onUnmounted(() => {
   background: var(--bg-primary);
 }
 
-.pdf-toolbar,
-.pdf-annotation-toolbar {
+.pdf-toolbar {
   position: absolute;
   z-index: 2;
+  top: 0.75rem;
   left: 50%;
   display: flex;
+  max-width: calc(100% - 1.5rem);
   align-items: center;
   transform: translateX(-50%);
-  overflow: hidden;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg-secondary);
   box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
 }
 
-.pdf-toolbar { top: 0.75rem; }
-.pdf-annotation-toolbar { top: 3.25rem; }
+.pdf-toolbar-group {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
 
-.pdf-toolbar button,
-.pdf-annotation-toolbar button {
-  height: 30px;
-  min-width: 34px;
+.pdf-toolbar-group + .pdf-toolbar-group { border-left: 1px solid var(--border-color); }
+
+.pdf-toolbar button {
+  display: inline-flex;
+  height: 34px;
+  min-width: 36px;
   padding: 0 0.55rem;
+  align-items: center;
+  justify-content: center;
   border: 0;
-  border-right: 1px solid var(--border-color);
   border-radius: 0;
   background: transparent;
   color: var(--text-primary);
 }
 
 .pdf-toolbar button:hover:not(:disabled),
-.pdf-annotation-toolbar button:hover:not(:disabled),
-.pdf-annotation-toolbar button.active {
-  background: var(--bg-hover);
-}
+.pdf-toolbar button.active { background: var(--bg-hover); }
 
-.pdf-toolbar button:disabled,
-.pdf-annotation-toolbar button:disabled { opacity: 0.45; }
+.pdf-toolbar button:disabled { opacity: 0.45; }
 
 .pdf-page-status {
   min-width: 6rem;
@@ -477,16 +517,48 @@ onUnmounted(() => {
 
 .pdf-zoom-level { min-width: 58px !important; }
 
-.pdf-annotation-toolbar input[type='color'] {
-  width: 34px;
-  height: 30px;
-  padding: 4px;
+.pdf-control-label,
+.pdf-width-control {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+}
+
+.pdf-control-label input[type='color'] {
+  width: 36px;
+  height: 34px;
+  padding: 5px;
   border: 0;
-  border-right: 1px solid var(--border-color);
   background: transparent;
 }
 
-.pdf-annotation-toolbar input[type='range'] { width: 72px; margin: 0 0.5rem; }
+.pdf-width-control input[type='range'] { width: 72px; margin: 0 0.5rem; }
+
+.tooltip { position: relative; }
+
+.tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 100;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-elevated, var(--bg-secondary));
+  box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity 0.15s ease-out;
+  white-space: nowrap;
+}
+
+.tooltip:hover::after,
+.tooltip:focus-visible::after,
+.tooltip:focus-within::after { opacity: 1; }
 
 .pdf-annotation-status {
   display: inline-flex;
@@ -518,7 +590,7 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   overflow: auto;
-  padding: 6.25rem 1rem 1rem;
+  padding: 4rem 1rem 1rem;
   text-align: center;
 }
 
