@@ -2,6 +2,22 @@
 
 All notable changes to Pi WebUI are documented here.
 
+## [1.0.6] - 2026-08-27
+
+### Added
+
+- Added a paginated Git history viewer with commit metadata, change statistics, and per-file diffs.
+- Added PDF previews in the editor with page navigation and zoom controls.
+
+### Changed
+
+- The Git changes panel now identifies non-repository folders and disables unavailable Git actions instead of showing a Git command error.
+
+### Fixed
+
+- Fixed published npm package dependency metadata to use resolvable versions instead of pnpm catalog references.
+- Prevented the `Ctrl+E` editor shortcut from also triggering keyboard handlers on selected messages.
+
 ## [1.0.5] - 2026-08-27
 
 ### Added
