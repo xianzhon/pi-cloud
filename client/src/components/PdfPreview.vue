@@ -162,6 +162,7 @@
       @pointerup="finishPan"
       @pointercancel="finishPan"
       @scroll="handleViewportScroll"
+      @wheel="handleZoomWheel"
     >
       <div v-if="loading" class="pdf-message" role="status">{{ t('components.editorPanel.loadingPdf') }}</div>
       <div v-else-if="error" class="pdf-message pdf-error" role="alert">{{ error }}</div>
@@ -241,7 +242,7 @@ const props = defineProps<{ src: string; filePath: string }>();
 const t = i18n.global.t;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
-const SCALE_STEP = 0.25;
+const SCALE_STEP = 0.1;
 const shapeTools: Array<{ name: DrawingTool; label: string; icon: object }> = [
   { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus },
   { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight },
@@ -339,6 +340,16 @@ function setTextEditorElement(element: unknown): void {
 
 function setScale(value: number): void {
   scale.value = Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
+}
+
+function handleZoomWheel(event: WheelEvent): void {
+  if (!event.ctrlKey && !event.metaKey) return;
+
+  // Keep modifier-wheel zoom scoped to the PDF instead of letting the browser
+  // zoom the entire application. Regular wheel scrolling remains unchanged.
+  event.preventDefault();
+  if (loading.value || event.deltaY === 0) return;
+  setScale(scale.value + (event.deltaY < 0 ? SCALE_STEP : -SCALE_STEP));
 }
 
 async function goToPage(page: number): Promise<void> {

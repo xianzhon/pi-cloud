@@ -78,7 +78,44 @@ describe('PdfPreview', () => {
 
     await wrapper.find('[aria-label="Zoom in"]').trigger('click');
     await flushPromises();
-    expect(wrapper.find('.pdf-zoom-level').text()).toBe('125%');
+    expect(wrapper.find('.pdf-zoom-level').text()).toBe('110%');
+  });
+
+  it('zooms the PDF with modifier-wheel without triggering browser zoom', async () => {
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    const viewport = wrapper.get('.pdf-viewport');
+    const createWheelEvent = (deltaY: number, modifier?: 'ctrlKey' | 'metaKey'): WheelEvent => {
+      const event = new Event('wheel', { cancelable: true }) as WheelEvent;
+      Object.defineProperties(event, {
+        deltaY: { value: deltaY },
+        ctrlKey: { value: modifier === 'ctrlKey' },
+        metaKey: { value: modifier === 'metaKey' },
+      });
+      return event;
+    };
+    const zoomIn = createWheelEvent(-100, 'ctrlKey');
+    const preventZoomIn = vi.spyOn(zoomIn, 'preventDefault');
+    viewport.element.dispatchEvent(zoomIn);
+    await flushPromises();
+    expect(preventZoomIn).toHaveBeenCalled();
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('110%');
+
+    const zoomOut = createWheelEvent(100, 'metaKey');
+    const preventZoomOut = vi.spyOn(zoomOut, 'preventDefault');
+    viewport.element.dispatchEvent(zoomOut);
+    await flushPromises();
+    expect(preventZoomOut).toHaveBeenCalled();
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('100%');
+
+    const regularScroll = createWheelEvent(100);
+    const preventRegularScroll = vi.spyOn(regularScroll, 'preventDefault');
+    viewport.element.dispatchEvent(regularScroll);
+    expect(preventRegularScroll).not.toHaveBeenCalled();
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('100%');
   });
 
   it('uses continuous scrolling without a view mode control', async () => {
