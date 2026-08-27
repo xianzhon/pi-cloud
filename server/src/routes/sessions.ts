@@ -682,24 +682,24 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     const requestedLimit = rawLimit === undefined ? undefined : Number.parseInt(rawLimit, 10);
     const limit = requestedLimit === undefined ? undefined : Math.min(100, Math.max(1, requestedLimit || 1));
     const sessions = await listSessionsForRoute(sessionService, worktreeMetadata, clientId, scope, projectPath);
-    const latestPrs = await refreshPrActivities(
-      options.activityStore?.listLatestPrForSessions?.(sessions.map((session) => session.id)) || new Map(),
-      options,
-    );
-    const decoratedSessions = sessions.map((session) => withWorktree({
-      ...session,
-      isStreaming: sessionService.isSessionStreaming(session.id),
-      pullRequest: pullRequestFromActivity(latestPrs.get(session.id)),
-    }, worktreeMetadata));
-    const filteredSessions = decoratedSessions
+    const filteredSessions = sessions
+      .map((session) => withWorktree(session, worktreeMetadata))
       .filter((session) => scope === 'all' || belongsToProject(session, projectPath));
     const page = limit === undefined
       ? filteredSessions.slice(offset)
       : filteredSessions.slice(offset, offset + limit);
+    const latestPrs = await refreshPrActivities(
+      options.activityStore?.listLatestPrForSessions?.(page.map((session) => session.id)) || new Map(),
+      options,
+    );
     const nextOffset = offset + page.length;
 
     return {
-      sessions: page.map(toSessionListItem),
+      sessions: page.map((session) => toSessionListItem({
+        ...session,
+        isStreaming: sessionService.isSessionStreaming(session.id),
+        pullRequest: pullRequestFromActivity(latestPrs.get(session.id)),
+      })),
       hasMore: nextOffset < filteredSessions.length,
       nextOffset,
     };

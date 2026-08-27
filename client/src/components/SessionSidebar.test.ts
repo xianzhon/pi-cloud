@@ -355,13 +355,13 @@ describe('SessionSidebar', () => {
       const requestUrl = new URL(String(url), 'http://localhost');
       const offset = Number(requestUrl.searchParams.get('offset'));
       return offset === 0
-        ? { json: async () => ({ sessions: Array.from({ length: 30 }, (_, index) => makeSession(30 - index)), hasMore: true, nextOffset: 30 }) }
-        : { json: async () => ({ sessions: [makeSession(0)], hasMore: false, nextOffset: 31 }) };
+        ? { json: async () => ({ sessions: Array.from({ length: 10 }, (_, index) => makeSession(10 - index)), hasMore: true, nextOffset: 10 }) }
+        : { json: async () => ({ sessions: [makeSession(0)], hasMore: false, nextOffset: 11 }) };
     });
     vi.stubGlobal('fetch', fetchMock);
     const wrapper = mountSidebar();
 
-    await vi.waitFor(() => expect(wrapper.findAll('.session-item')).toHaveLength(30));
+    await vi.waitFor(() => expect(wrapper.findAll('.session-item')).toHaveLength(10));
     const list = wrapper.find('.session-list');
     Object.defineProperties(list.element, {
       scrollHeight: { configurable: true, value: 1000 },
@@ -370,10 +370,10 @@ describe('SessionSidebar', () => {
     });
     await list.trigger('scroll');
 
-    await vi.waitFor(() => expect(wrapper.findAll('.session-item')).toHaveLength(31));
+    await vi.waitFor(() => expect(wrapper.findAll('.session-item')).toHaveLength(11));
     expect(fetchMock.mock.calls.some(([url]) => {
       const requestUrl = new URL(String(url), 'http://localhost');
-      return requestUrl.pathname === '/api/sessions' && requestUrl.searchParams.get('offset') === '30';
+      return requestUrl.pathname === '/api/sessions' && requestUrl.searchParams.get('offset') === '10';
     })).toBe(true);
   });
 
@@ -817,7 +817,7 @@ describe('SessionSidebar', () => {
 
     await vi.waitFor(() => {
       expect(wrapper.emitted('projectPathChanged')?.at(-1)).toEqual(['/other/project']);
-      expect(fetchMock).toHaveBeenCalledWith('/api/sessions?scope=project&clientId=client-1&offset=0&limit=30&projectPath=%2Fother%2Fproject');
+      expect(fetchMock).toHaveBeenCalledWith('/api/sessions?scope=project&clientId=client-1&offset=0&limit=10&projectPath=%2Fother%2Fproject');
     });
   });
 

@@ -511,7 +511,7 @@ const emit = defineEmits<{
   logout: [];
 }>();
 
-const SESSION_PAGE_SIZE = 30;
+const SESSION_PAGE_SIZE = 10;
 
 const sessions = ref<Session[]>([]);
 const optimisticSessions = ref<Map<string, Session>>(new Map());

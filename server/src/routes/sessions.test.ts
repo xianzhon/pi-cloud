@@ -843,12 +843,18 @@ describe('session routes', () => {
     const firstPage = await handlers['GET /']({
       query: { clientId: 'client-1', projectPath: '/repo/app', scope: 'project', offset: '0', limit: '1' },
     });
+    expect(sessionService.isSessionStreaming).toHaveBeenCalledTimes(1);
+    expect(sessionService.isSessionStreaming).toHaveBeenCalledWith('session-3');
+
+    vi.mocked(sessionService.isSessionStreaming).mockClear();
     const secondPage = await handlers['GET /']({
       query: { clientId: 'client-1', projectPath: '/repo/app', scope: 'project', offset: '1', limit: '1' },
     });
 
     expect(firstPage).toMatchObject({ sessions: [{ id: 'session-3' }], hasMore: true, nextOffset: 1 });
     expect(secondPage).toMatchObject({ sessions: [{ id: 'session-1' }], hasMore: false, nextOffset: 2 });
+    expect(sessionService.isSessionStreaming).toHaveBeenCalledTimes(1);
+    expect(sessionService.isSessionStreaming).toHaveBeenCalledWith('session-1');
   });
 
   it('decorates session list items with worktree metadata', async () => {
