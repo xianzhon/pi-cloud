@@ -12,6 +12,12 @@ describe('gitOperations', () => {
     expect(fetch).toHaveBeenCalledWith('/api/git/status?cwd=%2Fwork+tree&message=fix+it&stagedOnly=true');
   });
 
+  it('encodes history pagination options', async () => {
+    await createGitOperations().getHistory({ cwd: '/work tree', page: 2 });
+
+    expect(fetch).toHaveBeenCalledWith('/api/git/history?cwd=%2Fwork+tree&page=2');
+  });
+
   it('sends branch switching options as JSON', async () => {
     await createGitOperations().switchBranch({
       cwd: '/workspace', name: 'feature/test', pull: true, deleteOriginal: false, sessionId: 'session-1',

@@ -640,3 +640,85 @@ describe('gitRoutes branch', () => {
     }
   });
 });
+
+describe('gitRoutes history', () => {
+  it('returns commits in fixed pages of 10 with metadata', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      for (let index = 1; index <= 12; index += 1) {
+        await writeFile(join(cwd, 'README.md'), `change ${index}\n`);
+        await git(cwd, 'add', 'README.md');
+        await git(cwd, 'commit', '-m', `Change ${index}`, '-m', `Details for change ${index}`);
+      }
+
+      const first = await app.inject({
+        method: 'GET',
+        url: `/api/git/history?cwd=${encodeURIComponent(cwd)}&page=0`,
+      });
+      const second = await app.inject({
+        method: 'GET',
+        url: `/api/git/history?cwd=${encodeURIComponent(cwd)}&page=1`,
+      });
+
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ page: 0, hasPrevious: false, hasNext: true });
+      expect(first.json().commits).toHaveLength(10);
+      expect(first.json().commits[0]).toMatchObject({
+        subject: 'Change 12',
+        body: 'Details for change 12\n',
+        authorName: 'Test User',
+        authorEmail: 'test@example.com',
+      });
+      expect(first.json().commits[0].hash).toMatch(/^[0-9a-f]{40}$/);
+      expect(first.json().commits[0].shortHash).toMatch(/^[0-9a-f]{7,}$/);
+      expect(first.json().commits[0].authoredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+      expect(second.json()).toMatchObject({ page: 1, hasPrevious: true, hasNext: false });
+      expect(second.json().commits.map((commit: { subject: string }) => commit.subject)).toEqual([
+        'Change 2', 'Change 1', 'Initial commit',
+      ]);
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('uses HEAD as the branch label when detached and handles an empty repository', async () => {
+    const cwd = await createRepo();
+    const emptyCwd = await mkdtemp(join(tmpdir(), 'piui-git-empty-'));
+    const app = await buildApp();
+    try {
+      await git(cwd, 'checkout', '--detach');
+      await git(emptyCwd, 'init');
+
+      const detached = await app.inject({ method: 'GET', url: `/api/git/history?cwd=${encodeURIComponent(cwd)}&page=0` });
+      const empty = await app.inject({ method: 'GET', url: `/api/git/history?cwd=${encodeURIComponent(emptyCwd)}&page=0` });
+
+      expect(detached.json().branch).toBe('HEAD');
+      expect(empty.statusCode).toBe(200);
+      expect(empty.json()).toMatchObject({ commits: [], hasPrevious: false, hasNext: false });
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+      await rm(emptyCwd, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['-1', '1.5', 'abc'])('rejects invalid page %s', async (page) => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/git/history?cwd=${encodeURIComponent(cwd)}&page=${page}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('page');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

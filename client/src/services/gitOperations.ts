@@ -2,7 +2,7 @@ import { apiRequest } from './apiClient';
 
 type JsonRecord = Record<string, any>;
 
-function queryString(values: Record<string, string | boolean | undefined>): string {
+function queryString(values: Record<string, string | number | boolean | undefined>): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) {
     if (value !== undefined && value !== false && value !== '') params.set(key, String(value));
@@ -23,6 +23,9 @@ function postJson<TRequest extends Record<string, unknown>>(url: string, body: T
 
 export function createGitOperations() {
   return {
+    getHistory(options: { cwd: string; page: number }) {
+      return requestJson(`/api/git/history?${queryString(options)}`);
+    },
     getDiff(options: { cwd: string; commit?: string; scope?: string; path?: string }) {
       return requestJson(`/api/git/diff?${queryString(options)}`);
     },

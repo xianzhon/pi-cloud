@@ -27,13 +27,14 @@ describe('GitToolPanel', () => {
     expect(actions.every(button => button.text() === '')).toBe(true);
     expect(actions.every(button => button.classes().includes('tooltip'))).toBe(true);
     expect(actions.map(button => button.attributes('data-tooltip'))).toEqual([
-      'Refresh', 'Commit', 'PR', 'Push', 'Pull', 'Branch', 'Show diff',
+      'History', 'Refresh', 'Commit', 'PR', 'Push', 'Pull', 'Branch', 'Show diff',
     ]);
     expect(actions.every(button => button.attributes('title') === undefined)).toBe(true);
 
     const commands = ['/status', '/commit', '/pr', '/push', '/pull', '/branch', '/diff'];
     for (const button of actions) await button.trigger('click');
 
+    expect(wrapper.emitted('history')).toHaveLength(1);
     expect(wrapper.emitted('command')?.map(([command]) => command)).toEqual(commands);
   });
 

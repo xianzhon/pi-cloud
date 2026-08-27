@@ -15,6 +15,15 @@
     />
     <div class="git-tool-toolbar" role="toolbar" :aria-label="t('components.gitToolPanel.actions')">
       <button
+        type="button"
+        class="git-tool-action tooltip"
+        :data-tooltip="t('components.gitToolPanel.history')"
+        :aria-label="t('components.gitToolPanel.history')"
+        @click="emit('history')"
+      >
+        <PhClockCounterClockwise :size="17" weight="bold" aria-hidden="true" />
+      </button>
+      <button
         v-for="action in actions"
         :key="action.command"
         type="button"
@@ -57,6 +66,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   PhArrowsClockwise,
+  PhClockCounterClockwise,
   PhGitBranch,
   PhGitCommit,
   PhGitDiff,
@@ -76,7 +86,7 @@ const MIN_PANEL_HEIGHT = 120;
 const MAX_PANEL_HEIGHT_RATIO = 0.75;
 
 const props = defineProps<{ cwd: string }>();
-const emit = defineEmits<{ command: [command: string] }>();
+const emit = defineEmits<{ command: [command: string]; history: [] }>();
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
 const files = ref<GitStatusFile[]>([]);

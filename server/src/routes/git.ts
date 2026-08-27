@@ -14,6 +14,8 @@ import { resolveAllowedPath } from '../utils/path-security.js';
 const execFileAsync = promisify(execFile);
 export const MAX_SLASH_COMMAND_OUTPUT_BYTES = 256 * 1024;
 const MAX_STATUS_FILES = 1_000;
+const GIT_HISTORY_PAGE_SIZE = 10;
+const GIT_HISTORY_FIELDS = 8;
 
 class OversizedGitOutputError extends Error {
   constructor() {
@@ -181,6 +183,34 @@ function parseDiffScope(scope: string | undefined): GitDiffScope {
 function parseCommit(commit: string) {
   if (!/^[0-9a-f]{7,40}$/i.test(commit)) throw new Error('Invalid commit ID.');
   return commit;
+}
+
+function parseHistoryPage(rawPage: string | undefined) {
+  const page = Number(rawPage ?? 0);
+  if (!Number.isInteger(page) || page < 0) throw new Error('Invalid page. Use a non-negative integer.');
+  return page;
+}
+
+function parseGitHistory(output: string) {
+  const fields = output.split('\0');
+  if (fields.at(-1) === '') fields.pop();
+  if (fields.length % GIT_HISTORY_FIELDS !== 0) throw new Error('Failed to parse git history');
+
+  const commits = [];
+  for (let index = 0; index < fields.length; index += GIT_HISTORY_FIELDS) {
+    const [hash, shortHash, parents, subject, body, authorName, authorEmail, authoredAt] = fields.slice(index, index + GIT_HISTORY_FIELDS);
+    commits.push({
+      hash,
+      shortHash,
+      parentHashes: parents ? parents.split(' ') : [],
+      subject,
+      body,
+      authorName,
+      authorEmail,
+      authoredAt,
+    });
+  }
+  return commits;
 }
 
 function getDiff(cwd: string, args: string[], scope: GitDiffScope, maxBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES) {
@@ -409,6 +439,43 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to run git status';
       return reply.status(400).send({ error: errorMessage });
+    }
+  });
+
+  app.get('/history', async (req, reply) => {
+    const { cwd, page: rawPage } = req.query as { cwd?: string; page?: string };
+    const resolvedCwd = await resolveGitCwd(cwd);
+
+    try {
+      const page = parseHistoryPage(rawPage);
+      const branch = (await runGit(resolvedCwd, ['branch', '--show-current'])).trim() || 'HEAD';
+      const hasHead = await runGit(resolvedCwd, ['rev-parse', '--verify', 'HEAD']).then(() => true, () => false);
+      if (!hasHead) {
+        return { cwd: resolvedCwd, branch, page, hasPrevious: false, hasNext: false, commits: [] };
+      }
+
+      const output = await runGit(resolvedCwd, [
+        'log',
+        '-z',
+        `--max-count=${GIT_HISTORY_PAGE_SIZE + 1}`,
+        `--skip=${page * GIT_HISTORY_PAGE_SIZE}`,
+        '--format=%H%x00%h%x00%P%x00%s%x00%b%x00%an%x00%ae%x00%aI',
+        'HEAD',
+      ]);
+      const commits = parseGitHistory(output);
+      const hasNext = commits.length > GIT_HISTORY_PAGE_SIZE;
+
+      return {
+        cwd: resolvedCwd,
+        branch,
+        page,
+        hasPrevious: page > 0,
+        hasNext,
+        commits: commits.slice(0, GIT_HISTORY_PAGE_SIZE),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load git history';
+      return reply.status(400).send({ error: message });
     }
   });
 

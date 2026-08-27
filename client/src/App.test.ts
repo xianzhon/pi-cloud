@@ -72,6 +72,7 @@ const {
   submitExternalPrompt: vi.fn(async () => true),
   heavyModuleLoads: {
     editor: 0,
+    gitHistory: 0,
     memory: 0,
     settings: 0,
     tasks: 0,
@@ -209,6 +210,19 @@ vi.mock('./components/NewSessionDialog.vue', () => ({
   },
 }));
 
+vi.mock('./components/GitHistoryView.vue', () => ({
+  __esModule: true,
+  default: (() => {
+    heavyModuleLoads.gitHistory += 1;
+    return {
+      name: 'GitHistoryView',
+      props: ['visible', 'cwd'],
+      emits: ['close'],
+      template: '<section v-if="visible" class="git-history-dialog" />',
+    };
+  })(),
+}));
+
 vi.mock('./components/MemoryCenter.vue', () => ({
   __esModule: true,
   default: (() => {
@@ -324,6 +338,7 @@ describe('App routing', () => {
   it('does not load opt-in feature modules during application startup', async () => {
     expect(heavyModuleLoads).toEqual({
       editor: 0,
+      gitHistory: 0,
       memory: 0,
       settings: 0,
       tasks: 0,
@@ -336,6 +351,7 @@ describe('App routing', () => {
 
     expect(heavyModuleLoads).toEqual({
       editor: 0,
+      gitHistory: 0,
       memory: 0,
       settings: 0,
       tasks: 0,
@@ -530,6 +546,10 @@ describe('App routing', () => {
 
     await wrapper.get('.git-tool-action[aria-label="Show diff"]').trigger('click');
     expect(submitExternalPrompt).toHaveBeenCalledWith('/diff', { hideCommandMessage: true });
+
+    await wrapper.get('.git-tool-action[aria-label="History"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.git-history-dialog').exists()).toBe(true);
   });
 
   it('opens the session context menu from the collapsed utility rail', async () => {

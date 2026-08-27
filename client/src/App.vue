@@ -110,6 +110,7 @@
           v-if="showGitTool && !isReviewMode"
           :cwd="activeProjectPath"
           @command="submitGitCommand"
+          @history="openGitHistory"
         />
       </template>
     </SessionSidebar>
@@ -369,6 +370,13 @@
       @add-reference="addEditorReference"
     />
 
+    <LazyGitHistoryView
+      v-if="showGitHistory"
+      :visible="showGitHistory"
+      :cwd="activeProjectPath"
+      @close="showGitHistory = false"
+    />
+
     <ConfirmModal
       :visible="showFinishWorktreeConfirm"
       :confirm-text="t('app.finish')"
@@ -569,6 +577,7 @@ function importEditorPanel() {
 }
 const loadEditorPanel = () => (editorPanelPromise ??= importEditorPanel());
 const LazyEditorPanel = defineAsyncComponent(loadEditorPanel);
+const LazyGitHistoryView = defineAsyncComponent(() => import('./components/GitHistoryView.vue').then((module) => module.default));
 const LazySettingsDialog = defineAsyncComponent(() => import('./components/SettingsDialog.vue').then((module) => module.default));
 const LazyMemoryCenter = defineAsyncComponent(() => import('./components/MemoryCenter.vue').then((module) => module.default));
 const LazyTaskQueuePanel = defineAsyncComponent(() => import('./components/TaskQueuePanel.vue').then((module) => module.default));
@@ -788,6 +797,7 @@ const selectedAgentModelSummary = ref('');
 const showEditor = ref(false);
 const editorFeatureLoaded = ref(false);
 const showGitTool = ref(true);
+const showGitHistory = ref(false);
 const isFullscreen = ref(false);
 const fullscreenLabel = computed(() => t(isFullscreen.value ? 'app.exitFullscreen' : 'app.fullscreen'));
 const fullscreenTooltip = computed(() => `${fullscreenLabel.value} (${formatFullscreenShortcut(fullscreenShortcut.value)})`);
@@ -948,6 +958,10 @@ watch([isAuthenticated, activeProjectPath], async ([authenticated, projectPath])
   if (!authenticated) return;
   await loadGitStatus(projectPath);
 }, { immediate: true });
+
+watch(activeProjectPath, (projectPath, previousProjectPath) => {
+  if (previousProjectPath && projectPath !== previousProjectPath) showGitHistory.value = false;
+});
 
 // Auto-create a terminal when the panel opens with no sessions
 watch(showTerminal, (visible) => {
@@ -1609,6 +1623,11 @@ function handleReviewSessionSelected(event: { sourceId: string; sessionId: strin
   void router.push({ path: `/sessions/${event.sessionId}`, query });
 }
 
+function openGitHistory(): void {
+  showMobileSidebar.value = false;
+  showGitHistory.value = true;
+}
+
 function showMemoryCenterForRun(runId?: string): void {
   showMobileSidebar.value = false;
   showMobileActions.value = false;
@@ -1789,6 +1808,7 @@ function hasBlockingOverlayOpen() {
   return showSearch.value
     || showSettings.value
     || showMemoryCenter.value
+    || showGitHistory.value
     || showNewSessionDialog.value
     || showDeleteConfirm.value
     || showFinishWorktreeConfirm.value;
