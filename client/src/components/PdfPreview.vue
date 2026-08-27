@@ -112,7 +112,7 @@
           :disabled="loading || pageNumber <= 1"
           :aria-label="t('components.editorPanel.previousPage')"
           :data-tooltip="t('components.editorPanel.previousPage')"
-          @click="pageNumber--"
+          @click="goToPage(pageNumber - 1)"
         ><PhCaretLeft :size="18" weight="bold" /></button>
         <span class="pdf-page-status">
           {{ t('components.editorPanel.pdfPageStatus', { page: pageNumber, pages: pageCount || 1 }) }}
@@ -123,8 +123,17 @@
           :disabled="loading || pageNumber >= pageCount"
           :aria-label="t('components.editorPanel.nextPage')"
           :data-tooltip="t('components.editorPanel.nextPage')"
-          @click="pageNumber++"
+          @click="goToPage(pageNumber + 1)"
         ><PhCaretRight :size="18" weight="bold" /></button>
+        <button
+          type="button"
+          class="tooltip"
+          :class="{ active: viewMode === 'continuous' }"
+          :aria-pressed="viewMode === 'continuous'"
+          :aria-label="viewMode === 'continuous' ? t('components.editorPanel.pdfSinglePage') : t('components.editorPanel.pdfContinuous')"
+          :data-tooltip="viewMode === 'continuous' ? t('components.editorPanel.pdfSinglePage') : t('components.editorPanel.pdfContinuous')"
+          @click="toggleViewMode"
+        ><PhRows :size="18" /></button>
         <button
           type="button"
           class="tooltip"
@@ -161,32 +170,41 @@
       @pointermove="continuePan"
       @pointerup="finishPan"
       @pointercancel="finishPan"
+      @scroll="handleViewportScroll"
     >
       <div v-if="loading" class="pdf-message" role="status">{{ t('components.editorPanel.loadingPdf') }}</div>
       <div v-else-if="error" class="pdf-message pdf-error" role="alert">{{ error }}</div>
-      <div v-show="!loading && !error" class="pdf-page">
-        <canvas ref="canvasEl" />
-        <canvas
-          ref="annotationCanvasEl"
-          class="pdf-annotation-canvas"
-          :class="{ enabled: tool !== 'pan', erasing: tool === 'eraser', moving: tool === 'move' }"
-          @pointerdown="startAnnotation"
-          @pointermove="continueAnnotation"
-          @pointerup="finishAnnotation"
-          @pointercancel="finishAnnotation($event, true)"
-        />
-        <textarea
-          v-if="textEditor"
-          ref="textEditorEl"
-          v-model="textEditor.text"
-          class="pdf-text-editor"
-          :aria-label="t('components.editorPanel.pdfTextPrompt')"
-          :placeholder="t('components.editorPanel.pdfTextPrompt')"
-          :style="textEditorStyle"
-          @pointerdown.stop
-          @keydown="handleTextEditorKeydown"
-          @blur="commitTextAnnotation"
-        />
+      <div v-show="!loading && !error" class="pdf-pages" :class="{ continuous: viewMode === 'continuous' }">
+        <div
+          v-for="page in pagesToDisplay"
+          :key="page"
+          :ref="element => setPageElement(page, element)"
+          class="pdf-page"
+          :data-page="page"
+        >
+          <canvas :ref="element => setCanvasElement(page, element, false)" />
+          <canvas
+            :ref="element => setCanvasElement(page, element, true)"
+            class="pdf-annotation-canvas"
+            :class="{ enabled: tool !== 'pan', erasing: tool === 'eraser', moving: tool === 'move' }"
+            @pointerdown="startAnnotation($event, page)"
+            @pointermove="continueAnnotation"
+            @pointerup="finishAnnotation"
+            @pointercancel="finishAnnotation($event, true)"
+          />
+          <textarea
+            v-if="textEditor?.page === String(page)"
+            :ref="setTextEditorElement"
+            v-model="textEditor.text"
+            class="pdf-text-editor"
+            :aria-label="t('components.editorPanel.pdfTextPrompt')"
+            :placeholder="t('components.editorPanel.pdfTextPrompt')"
+            :style="textEditorStyle"
+            @pointerdown.stop
+            @keydown="handleTextEditorKeydown"
+            @blur="commitTextAnnotation"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -208,6 +226,7 @@ import {
   PhPencilSimple,
   PhPlus,
   PhRectangle,
+  PhRows,
   PhTextT,
   PhTrash,
 } from '@phosphor-icons/vue';
@@ -241,13 +260,15 @@ const shapeTools: Array<{ name: DrawingTool; label: string; icon: object }> = [
   { name: 'text', label: 'components.editorPanel.pdfText', icon: PhTextT },
 ];
 
-const canvasEl = ref<HTMLCanvasElement>();
-const annotationCanvasEl = ref<HTMLCanvasElement>();
 const viewportEl = ref<HTMLDivElement>();
+const pageElements = new Map<number, HTMLElement>();
+const canvasElements = new Map<number, HTMLCanvasElement>();
+const annotationCanvasElements = new Map<number, HTMLCanvasElement>();
 const textEditorEl = ref<HTMLTextAreaElement>();
 const pageNumber = ref(1);
 const pageCount = ref(0);
 const scale = ref(1);
+const viewMode = ref<'single' | 'continuous'>('single');
 const loading = ref(true);
 const error = ref('');
 const tool = ref<AnnotationTool>('pan');
@@ -285,9 +306,12 @@ const saveStateLabel = computed(() => {
 const canUndo = computed(() => undoStack.value.length > 0);
 const canRedo = computed(() => redoStack.value.length > 0);
 const currentPageStrokes = computed(() => annotations.value.pages[String(pageNumber.value)] || []);
+const pagesToDisplay = computed(() => viewMode.value === 'continuous'
+  ? Array.from({ length: pageCount.value }, (_, index) => index + 1)
+  : [pageNumber.value]);
 let document: PDFDocumentProxy | undefined;
 let loadingTask: PDFDocumentLoadingTask | undefined;
-let renderTask: RenderTask | undefined;
+const renderTasks = new Map<number, RenderTask>();
 let activePointer: number | undefined;
 let panStart: { pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined;
 let moveStart: { index: number; point: AnnotationPoint; points: AnnotationPoint[] } | undefined;
@@ -311,25 +335,72 @@ function legacyAnnotationFilePath(): string {
   return `${props.filePath}.annotations.json`;
 }
 
+function setPageElement(page: number, element: unknown): void {
+  if (element instanceof HTMLElement) pageElements.set(page, element);
+  else pageElements.delete(page);
+}
+
+function setCanvasElement(page: number, element: unknown, annotation: boolean): void {
+  const elements = annotation ? annotationCanvasElements : canvasElements;
+  if (element instanceof HTMLCanvasElement) elements.set(page, element);
+  else elements.delete(page);
+}
+
+function setTextEditorElement(element: unknown): void {
+  textEditorEl.value = element instanceof HTMLTextAreaElement ? element : undefined;
+}
+
 function setScale(value: number): void {
   scale.value = Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
+}
+
+async function goToPage(page: number): Promise<void> {
+  pageNumber.value = Math.min(pageCount.value, Math.max(1, page));
+  if (viewMode.value === 'continuous') {
+    await nextTick();
+    pageElements.get(pageNumber.value)?.scrollIntoView({ block: 'start' });
+  }
+}
+
+function toggleViewMode(): void {
+  viewMode.value = viewMode.value === 'single' ? 'continuous' : 'single';
+}
+
+function handleViewportScroll(): void {
+  if (viewMode.value !== 'continuous' || isPanning.value) return;
+  const viewportTop = viewportEl.value?.getBoundingClientRect().top || 0;
+  let closestPage = pageNumber.value;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  for (const [page, element] of pageElements) {
+    const distance = Math.abs(element.getBoundingClientRect().top - viewportTop - 64);
+    if (distance < closestDistance) {
+      closestPage = page;
+      closestDistance = distance;
+    }
+  }
+  pageNumber.value = closestPage;
 }
 
 function toggleTool(nextTool: AnnotationTool): void {
   tool.value = tool.value === nextTool ? 'pan' : nextTool;
 }
 
-function drawAnnotations(): void {
-  const canvas = annotationCanvasEl.value;
+function drawAnnotations(pageNumberToDraw = pageNumber.value): void {
+  const canvas = annotationCanvasElements.get(pageNumberToDraw);
   const context = canvas?.getContext('2d');
   if (!canvas || !context) return;
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.lineCap = 'round';
   context.lineJoin = 'round';
-  currentPageStrokes.value.forEach((stroke, index) => {
-    if (textEditor.value?.page === String(pageNumber.value) && textEditor.value.index === index) return;
+  const strokes = annotations.value.pages[String(pageNumberToDraw)] || [];
+  strokes.forEach((stroke, index) => {
+    if (textEditor.value?.page === String(pageNumberToDraw) && textEditor.value.index === index) return;
     drawAnnotation(context, canvas, stroke);
   });
+}
+
+function drawVisibleAnnotations(): void {
+  pagesToDisplay.value.forEach(page => drawAnnotations(page));
 }
 
 function drawAnnotation(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, stroke: AnnotationStroke): void {
@@ -399,14 +470,14 @@ function drawArrowHead(
   context.lineTo(endX - size * Math.cos(angle + Math.PI / 6), endY - size * Math.sin(angle + Math.PI / 6));
 }
 
-async function renderPage(): Promise<void> {
+async function renderPage(pageNumberToRender: number): Promise<void> {
   const pdf = document;
-  const canvas = canvasEl.value;
-  const annotationCanvas = annotationCanvasEl.value;
+  const canvas = canvasElements.get(pageNumberToRender);
+  const annotationCanvas = annotationCanvasElements.get(pageNumberToRender);
   if (!pdf || !canvas || !annotationCanvas) return;
 
-  renderTask?.cancel();
-  const page = await pdf.getPage(pageNumber.value);
+  renderTasks.get(pageNumberToRender)?.cancel();
+  const page = await pdf.getPage(pageNumberToRender);
   const viewport = page.getViewport({ scale: scale.value });
   const pixelRatio = window.devicePixelRatio || 1;
   const context = canvas.getContext('2d');
@@ -417,18 +488,26 @@ async function renderPage(): Promise<void> {
   canvas.style.width = annotationCanvas.style.width = `${Math.floor(viewport.width)}px`;
   canvas.style.height = annotationCanvas.style.height = `${Math.floor(viewport.height)}px`;
 
-  renderTask = page.render({
+  const renderTask = page.render({
     canvas,
     canvasContext: context,
     viewport,
     transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
   });
+  renderTasks.set(pageNumberToRender, renderTask);
   try {
     await renderTask.promise;
-    drawAnnotations();
+    drawAnnotations(pageNumberToRender);
   } catch (renderError) {
     if ((renderError as Error).name !== 'RenderingCancelledException') throw renderError;
+  } finally {
+    if (renderTasks.get(pageNumberToRender) === renderTask) renderTasks.delete(pageNumberToRender);
   }
+}
+
+async function renderVisiblePages(): Promise<void> {
+  await nextTick();
+  await Promise.all(pagesToDisplay.value.map(page => renderPage(page)));
 }
 
 async function loadAnnotations(version: number): Promise<void> {
@@ -455,7 +534,8 @@ async function loadPdf(): Promise<void> {
   const version = ++loadVersion;
   loading.value = true;
   error.value = '';
-  renderTask?.cancel();
+  renderTasks.forEach(task => task.cancel());
+  renderTasks.clear();
   const previousLoadingTask = loadingTask;
   loadingTask = undefined;
   await previousLoadingTask?.destroy();
@@ -479,8 +559,7 @@ async function loadPdf(): Promise<void> {
     pageNumber.value = 1;
     scale.value = 1;
     loading.value = false;
-    await nextTick();
-    await renderPage();
+    await renderVisiblePages();
   } catch (loadError) {
     if (version !== loadVersion) return;
     console.error('Failed to load PDF:', loadError);
@@ -519,7 +598,9 @@ function finishPan(event: PointerEvent): void {
 }
 
 function pointFromEvent(event: PointerEvent): AnnotationPoint | undefined {
-  const canvas = annotationCanvasEl.value;
+  const canvas = event.currentTarget instanceof HTMLCanvasElement
+    ? event.currentTarget
+    : annotationCanvasElements.get(pageNumber.value);
   if (!canvas) return undefined;
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return undefined;
@@ -535,7 +616,7 @@ function checkpoint(): void {
 }
 
 function eraseAt(point: AnnotationPoint): void {
-  const canvas = annotationCanvasEl.value;
+  const canvas = annotationCanvasElements.get(pageNumber.value);
   if (!canvas) return;
   const strokes = currentPageStrokes.value;
   const remaining = strokes.filter(stroke => !annotationContainsPoint(stroke, point, canvas));
@@ -580,8 +661,9 @@ function distanceToSegment(point: AnnotationPoint, start: AnnotationPoint, end: 
   return Math.hypot(point.x - (start.x + position * dx), point.y - (start.y + position * dy));
 }
 
-function startAnnotation(event: PointerEvent): void {
+function startAnnotation(event: PointerEvent, page: number): void {
   if (tool.value === 'pan' || activePointer !== undefined || event.button !== 0) return;
+  pageNumber.value = page;
   const point = pointFromEvent(event);
   if (!point) return;
 
@@ -590,7 +672,7 @@ function startAnnotation(event: PointerEvent): void {
   if (tool.value === 'text') return;
 
   if (tool.value === 'move') {
-    const canvas = annotationCanvasEl.value;
+    const canvas = annotationCanvasElements.get(pageNumber.value);
     if (!canvas) return;
     const strokes = currentPageStrokes.value;
     let index = -1;
@@ -610,7 +692,7 @@ function startAnnotation(event: PointerEvent): void {
 
   activePointer = event.pointerId;
   annotationChanged = false;
-  annotationCanvasEl.value?.setPointerCapture(event.pointerId);
+  annotationCanvasElements.get(pageNumber.value)?.setPointerCapture(event.pointerId);
   checkpoint();
   if (tool.value === 'move') return;
   if (tool.value === 'eraser') {
@@ -627,7 +709,7 @@ function startTextAnnotation(point: AnnotationPoint): void {
   commitTextAnnotation();
   const page = String(pageNumber.value);
   const strokes = currentPageStrokes.value;
-  const canvas = annotationCanvasEl.value;
+  const canvas = annotationCanvasElements.get(pageNumber.value);
   let index = -1;
   if (canvas) {
     for (let candidate = strokes.length - 1; candidate >= 0; candidate--) {
@@ -670,21 +752,22 @@ function commitTextAnnotation(): void {
   } else {
     const annotation = strokes[editor.index];
     if (!annotation || annotation.text === text) {
-      drawAnnotations();
+      drawAnnotations(Number(editor.page));
       return;
     }
     checkpoint();
     if (text) annotation.text = text;
     else strokes.splice(editor.index, 1);
   }
-  drawAnnotations();
+  drawAnnotations(Number(editor.page));
   void saveAnnotations();
 }
 
 function cancelTextAnnotation(): void {
-  if (!textEditor.value) return;
+  const editor = textEditor.value;
+  if (!editor) return;
   textEditor.value = undefined;
-  drawAnnotations();
+  drawAnnotations(Number(editor.page));
 }
 
 function handleTextEditorKeydown(event: KeyboardEvent): void {
@@ -779,7 +862,7 @@ function undo(): void {
   if (!previous) return;
   redoStack.value.push(cloneAnnotations());
   annotations.value = previous;
-  drawAnnotations();
+  drawVisibleAnnotations();
   void saveAnnotations();
 }
 
@@ -788,7 +871,7 @@ function redo(): void {
   if (!next) return;
   undoStack.value.push(cloneAnnotations());
   annotations.value = next;
-  drawAnnotations();
+  drawVisibleAnnotations();
   void saveAnnotations();
 }
 
@@ -801,17 +884,22 @@ function clearPage(): void {
 }
 
 watch([() => props.src, () => props.filePath], () => void loadPdf(), { immediate: true });
-watch([pageNumber, scale], () => {
-  if (!loading.value && !error.value) void renderPage().catch((renderError) => {
+function rerenderVisiblePages(): void {
+  if (!loading.value && !error.value) void renderVisiblePages().catch((renderError) => {
     console.error('Failed to render PDF:', renderError);
     error.value = t('components.editorPanel.pdfRenderFailed');
   });
+}
+
+watch(pageNumber, () => {
+  if (viewMode.value === 'single') rerenderVisiblePages();
 });
+watch([scale, viewMode], rerenderVisiblePages);
 
 onUnmounted(() => {
   loadVersion++;
   clearTimeout(statusTimer);
-  renderTask?.cancel();
+  renderTasks.forEach(task => task.cancel());
   void loadingTask?.destroy();
 });
 </script>
@@ -1018,9 +1106,17 @@ onUnmounted(() => {
   user-select: none;
 }
 
+.pdf-pages.continuous {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
 .pdf-page {
   position: relative;
   display: inline-block;
+  flex: 0 0 auto;
   line-height: 0;
   background: white;
   box-shadow: 0 2px 12px rgb(0 0 0 / 25%);

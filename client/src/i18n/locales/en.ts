@@ -389,6 +389,8 @@ export default {
       previousPage: 'Previous page',
       nextPage: 'Next page',
       pdfPageStatus: '{page}/{pages}',
+      pdfContinuous: 'Continuous scroll',
+      pdfSinglePage: 'Single page view',
       resetPdfZoom: 'Reset PDF zoom',
       loadingPdf: 'Loading PDF...',
       pdfLoadFailed: 'Failed to load PDF',

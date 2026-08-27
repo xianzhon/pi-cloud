@@ -389,6 +389,8 @@ export default {
       previousPage: '上一页',
       nextPage: '下一页',
       pdfPageStatus: '{page}/{pages}',
+      pdfContinuous: '连续滚动',
+      pdfSinglePage: '单页视图',
       resetPdfZoom: '重置 PDF 缩放',
       loadingPdf: '正在加载 PDF...',
       pdfLoadFailed: 'PDF 加载失败',

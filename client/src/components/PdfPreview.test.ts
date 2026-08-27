@@ -81,6 +81,23 @@ describe('PdfPreview', () => {
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('125%');
   });
 
+  it('supports continuous scrolling through all PDF pages', async () => {
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    const viewToggle = wrapper.get('[aria-label="Continuous scroll"]');
+    expect(viewToggle.attributes('aria-pressed')).toBe('false');
+    await viewToggle.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.findAll('.pdf-page')).toHaveLength(2);
+    expect(wrapper.get('.pdf-pages').classes()).toContain('continuous');
+    expect(pdfjsMock.getPage).toHaveBeenCalledWith(2);
+    expect(wrapper.get('[aria-label="Single page view"]').attributes('aria-pressed')).toBe('true');
+  });
+
   it('pans the PDF viewport by dragging when annotation tools are inactive', async () => {
     const wrapper = mount(PdfPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
