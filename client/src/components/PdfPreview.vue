@@ -23,14 +23,19 @@
         <label class="pdf-control-label tooltip" :data-tooltip="t('components.editorPanel.pdfPenColor')">
           <input v-model="penColor" type="color" :aria-label="t('components.editorPanel.pdfPenColor')">
         </label>
-        <label class="pdf-width-control tooltip" :data-tooltip="t('components.editorPanel.pdfPenWidth')">
+        <label
+          class="pdf-width-control tooltip"
+          :data-tooltip="`${t('components.editorPanel.pdfPenWidth')}: ${penWidth}`"
+        >
           <input
             v-model.number="penWidth"
             type="range"
             min="1"
             max="12"
+            :style="{ '--pdf-pen-width-progress': `${((penWidth - 1) / 11) * 100}%` }"
             :aria-label="t('components.editorPanel.pdfPenWidth')"
           >
+          <output class="pdf-width-value" aria-live="polite">{{ penWidth }}</output>
         </label>
         <button
           type="button"
@@ -123,7 +128,7 @@
         <canvas
           ref="annotationCanvasEl"
           class="pdf-annotation-canvas"
-          :class="{ enabled: tool !== 'pan' }"
+          :class="{ enabled: tool !== 'pan', erasing: tool === 'eraser' }"
           @pointerdown="startAnnotation"
           @pointermove="continueAnnotation"
           @pointerup="finishAnnotation"
@@ -171,7 +176,7 @@ const loading = ref(true);
 const error = ref('');
 const tool = ref<AnnotationTool>('pan');
 const penColor = ref('#ef4444');
-const penWidth = ref(3);
+const penWidth = ref(1);
 const annotations = ref<AnnotationDocument>({ version: 1, pages: {} });
 const undoStack = ref<AnnotationDocument[]>([]);
 const redoStack = ref<AnnotationDocument[]>([]);
@@ -532,7 +537,56 @@ onUnmounted(() => {
   background: transparent;
 }
 
-.pdf-width-control input[type='range'] { width: 72px; margin: 0 0.5rem; }
+.pdf-width-control {
+  gap: 0.3rem;
+  padding: 0 0.5rem;
+}
+
+.pdf-width-control input[type='range'] {
+  width: 76px;
+  height: 4px;
+  margin: 0;
+  appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0 var(--pdf-pen-width-progress),
+    var(--border-color) var(--pdf-pen-width-progress) 100%
+  );
+  cursor: pointer;
+}
+
+.pdf-width-control input[type='range']::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  appearance: none;
+  border: 2px solid var(--bg-secondary);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.pdf-width-control input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--bg-secondary);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.pdf-width-control input[type='range']:focus-visible { outline: 2px solid var(--accent); }
+
+.pdf-width-value {
+  min-width: 20px;
+  padding: 2px 3px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
 
 .tooltip { position: relative; }
 
@@ -614,6 +668,10 @@ onUnmounted(() => {
   cursor: crosshair;
   pointer-events: auto;
   touch-action: none;
+}
+
+.pdf-annotation-canvas.erasing {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='m4 17 10-10 6 6-8 8H8z' fill='%23fff' stroke='%231f2937' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='m11 10 6 6' stroke='%231f2937' stroke-width='1.5'/%3E%3C/svg%3E") 4 20, cell;
 }
 
 .pdf-message { margin-top: 2rem; color: var(--text-secondary); }

@@ -83,6 +83,15 @@ describe('PdfPreview', () => {
     expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
     expect(wrapper.get('[aria-label="Undo annotation"]').attributes('data-tooltip')).toBe('Undo annotation');
     expect(wrapper.get('[aria-label="Next page"]').attributes('data-tooltip')).toBe('Next page');
+
+    const penWidth = wrapper.get<HTMLInputElement>('[aria-label="Pen width"]');
+    expect(wrapper.get('.pdf-width-value').text()).toBe('1');
+    await penWidth.setValue(7);
+    expect(wrapper.get('.pdf-width-value').text()).toBe('7');
+    expect(penWidth.attributes('style')).toContain('--pdf-pen-width-progress: 54.545');
+
+    await wrapper.get('[aria-label="Erase PDF annotations"]').trigger('click');
+    expect(wrapper.get('.pdf-annotation-canvas').classes()).toContain('erasing');
   });
 
   it('loads annotations from the legacy visible sidecar name', async () => {
