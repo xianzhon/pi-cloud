@@ -201,6 +201,7 @@
         :srcdoc="activeHtmlDocument"
         :title="t('components.editorPanel.htmlPreview')"
       ></iframe>
+      <PdfPreview v-else-if="activePdfSrc" :src="activePdfSrc" />
       <div v-else-if="activeImageSrc" class="image-preview">
         <div class="image-preview-toolbar" role="group" :aria-label="t('components.editorPanel.imageZoomControls')">
           <button
@@ -255,7 +256,7 @@
       </div>
       <div
         class="editor-container"
-        :class="{ hidden: (activeIsPreviewable && activePreviewMode === 'preview') || !!activeImageSrc || (activeIsVirtual && diffViewMode === 'split') }"
+        :class="{ hidden: (activeIsPreviewable && activePreviewMode === 'preview') || !!activeImageSrc || !!activePdfSrc || (activeIsVirtual && diffViewMode === 'split') }"
         ref="editorContainer"
       ></div>
       <div
@@ -366,6 +367,7 @@ import TreeNode, { type TreeNodeData } from './FileTreeNode.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import InputPromptModal from './InputPromptModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
+import PdfPreview from './PdfPreview.vue';
 
 const t = i18n.global.t;
 
@@ -507,7 +509,7 @@ const emit = defineEmits<{
 interface Tab {
   name: string;
   path: string;
-  kind: 'text' | 'image';
+  kind: 'text' | 'image' | 'pdf';
   virtual?: boolean;
   pinned?: boolean;
 }
@@ -515,7 +517,7 @@ interface Tab {
 interface FileReadResponse {
   content?: string;
   error?: string;
-  kind?: 'text' | 'image' | 'binary';
+  kind?: 'text' | 'image' | 'pdf' | 'binary';
   message?: string;
   mtime?: number;
 }
@@ -673,6 +675,9 @@ const closeOtherTabPaths = computed(() => tabs.value
 const hasClosableTabs = computed(() => closableTabPaths.value.length > 0);
 const hasCloseOtherTabs = computed(() => closeOtherTabPaths.value.length > 0);
 const activeImageSrc = computed(() => activeTabInfo.value?.kind === 'image' && activeTab.value
+  ? `/api/files/raw?path=${encodeURIComponent(activeTab.value)}`
+  : '');
+const activePdfSrc = computed(() => activeTabInfo.value?.kind === 'pdf' && activeTab.value
   ? `/api/files/raw?path=${encodeURIComponent(activeTab.value)}`
   : '');
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
@@ -1819,11 +1824,11 @@ async function openFile(filePath: string, line?: number, column?: number) {
     const data = await response.json().catch(() => ({})) as FileReadResponse;
 
     if (response.status === 415) {
-      if (data.kind === 'image') {
+      if (data.kind === 'image' || data.kind === 'pdf') {
         tabs.value.push({
           name: basename(filePath),
           path: filePath,
-          kind: 'image',
+          kind: data.kind,
         });
         activeTab.value = filePath;
         collapseFileTreeOnMobile();

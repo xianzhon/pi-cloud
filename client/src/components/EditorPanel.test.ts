@@ -10,6 +10,12 @@ const mermaidMock = vi.hoisted(() => ({
 }));
 
 vi.mock('mermaid', () => ({ default: mermaidMock }));
+vi.mock('./PdfPreview.vue', () => ({
+  default: {
+    props: ['src'],
+    template: '<div class="pdf-preview-test" :data-src="src" />',
+  },
+}));
 
 enableAutoUnmount(afterEach);
 
@@ -378,6 +384,26 @@ describe('EditorPanel', () => {
     await vi.waitFor(() => expect(wrapper.find('.mermaid-error').exists()).toBe(true));
 
     expect(wrapper.find('.mermaid-error').text()).toBe('not a valid diagram');
+  });
+
+  it('opens PDF files in the PDF preview', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) {
+        return { ok: true, json: async () => ({ tree: [] }) };
+      }
+      if (String(url).startsWith('/api/files/read')) {
+        return { ok: false, status: 415, json: async () => ({ kind: 'pdf', mtime: 1 }) };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/document.pdf');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.pdf-preview-test').attributes('data-src'))
+      .toBe('/api/files/raw?path=%2Fproject%2Fdocument.pdf');
+    expect(wrapper.find('.editor-container').classes()).toContain('hidden');
   });
 
   it('zooms and drag-pans an image preview, then resets it', async () => {

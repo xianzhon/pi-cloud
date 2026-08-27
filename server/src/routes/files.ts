@@ -305,14 +305,9 @@ export async function fileRoutes(app: FastifyInstance) {
   app.get('/read', async (req, reply) => {
     const { path: filePath } = req.query as { path: string };
     const resolvedPath = await resolveAllowedPath(filePath);
-    let content: Buffer;
     let stats: Stats;
-
     try {
-      [content, stats] = await Promise.all([
-        fs.readFile(resolvedPath),
-        fs.stat(resolvedPath),
-      ]);
+      stats = await fs.stat(resolvedPath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return reply.code(404).send({ error: 'File not found', path: resolvedPath });
@@ -322,6 +317,16 @@ export async function fileRoutes(app: FastifyInstance) {
 
     const imageMimeType = getImageMimeType(resolvedPath);
 
+    if (path.extname(resolvedPath).toLowerCase() === '.pdf') {
+      return reply.code(415).send({
+        error: 'PDF files can be previewed but not opened as text',
+        kind: 'pdf',
+        mime: 'application/pdf',
+        path: resolvedPath,
+        mtime: stats.mtimeMs,
+      });
+    }
+
     if (imageMimeType) {
       return reply.code(415).send({
         error: 'Image files can be previewed but not opened as text',
@@ -330,6 +335,16 @@ export async function fileRoutes(app: FastifyInstance) {
         path: resolvedPath,
         mtime: stats.mtimeMs,
       });
+    }
+
+    let content: Buffer;
+    try {
+      content = await fs.readFile(resolvedPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return reply.code(404).send({ error: 'File not found', path: resolvedPath });
+      }
+      throw error;
     }
 
     if (isBinaryFile(resolvedPath, content)) {
@@ -382,8 +397,13 @@ export async function fileRoutes(app: FastifyInstance) {
     const { path: filePath } = req.query as { path: string };
     const resolvedPath = await resolveAllowedPath(filePath);
     const imageMimeType = getImageMimeType(resolvedPath);
-    if (!imageMimeType) {
+    const isPdf = path.extname(resolvedPath).toLowerCase() === '.pdf';
+    if (!imageMimeType && !isPdf) {
       return reply.code(415).send({ error: 'Unsupported file type' });
+    }
+
+    if (isPdf) {
+      return reply.type('application/pdf').send(createReadStream(resolvedPath));
     }
 
     const content = await fs.readFile(resolvedPath);
@@ -392,7 +412,7 @@ export async function fileRoutes(app: FastifyInstance) {
       // response preserves image previewing without granting the WebUI origin.
       reply.header('Content-Security-Policy', "sandbox; default-src 'none'");
     }
-    return reply.type(imageMimeType).send(content);
+    return reply.type(imageMimeType!).send(content);
   });
 
   app.post('/write', async (req) => {

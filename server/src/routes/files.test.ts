@@ -232,6 +232,27 @@ describe('fileRoutes', () => {
     expect(response.json()).toMatchObject({ kind: 'binary', error: 'Unsupported file type' });
   });
 
+  it('serves PDF files through the raw endpoint', async () => {
+    const filePath = path.join(tempDir, 'document.pdf');
+    const pdf = Buffer.from('%PDF-1.7\n');
+    await fs.writeFile(filePath, pdf);
+
+    const readResponse = await app.inject({
+      method: 'GET',
+      url: `/api/files/read?path=${encodeURIComponent(filePath)}`,
+    });
+    expect(readResponse.statusCode).toBe(415);
+    expect(readResponse.json()).toMatchObject({ kind: 'pdf', mime: 'application/pdf' });
+
+    const rawResponse = await app.inject({
+      method: 'GET',
+      url: `/api/files/raw?path=${encodeURIComponent(filePath)}`,
+    });
+    expect(rawResponse.statusCode).toBe(200);
+    expect(rawResponse.headers['content-type']).toContain('application/pdf');
+    expect(rawResponse.rawPayload).toEqual(pdf);
+  });
+
   it('serves image files through the raw endpoint', async () => {
     const filePath = path.join(tempDir, 'image.png');
     const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
