@@ -184,9 +184,15 @@ describe('PdfPreview', () => {
 
     const verticalToggle = wrapper.get('[aria-label="Show annotation toolbar vertically"]');
     await verticalToggle.trigger('click');
+    await flushPromises();
     expect(toolbar.classes()).toContain('vertical');
-    expect(wrapper.find('[aria-label="Show annotation toolbar horizontally"]').exists()).toBe(true);
+    expect(toolbar.attributes('style')).toContain('left: 12px');
+    expect(toolbar.attributes('style')).toContain('top: 282px');
     expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]').element.value).toBe('1');
+
+    await wrapper.get('[aria-label="Show annotation toolbar horizontally"]').trigger('click');
+    expect(toolbar.classes()).not.toContain('vertical');
+    expect(toolbar.attributes('style') || '').not.toContain('left:');
   });
 
   it('keeps annotation controls at the top and page controls at the bottom-left', async () => {

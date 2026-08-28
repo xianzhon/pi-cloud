@@ -269,6 +269,7 @@ const t = i18n.global.t;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.1;
+const TOOLBAR_INSET = 12;
 const shapeTools: Array<{ name: DrawingTool; label: string; icon: object }> = [
   { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus },
   { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight },
@@ -421,7 +422,22 @@ function keepToolbarInBounds(): void {
 function toggleToolbarOrientation(): void {
   toolbarVertical.value = !toolbarVertical.value;
   clearTooltip();
-  void nextTick(keepToolbarInBounds);
+
+  if (!toolbarVertical.value) {
+    // Removing the custom position restores the default top-center placement.
+    toolbarPosition.value = undefined;
+    return;
+  }
+
+  void nextTick(() => {
+    const previewRect = previewEl.value?.getBoundingClientRect();
+    const toolbarRect = toolbarEl.value?.getBoundingClientRect();
+    if (!previewRect || !toolbarRect) return;
+    toolbarPosition.value = clampToolbarPosition(
+      TOOLBAR_INSET,
+      (previewRect.height - toolbarRect.height) / 2,
+    );
+  });
 }
 
 function showTooltip(event: Event): void {
