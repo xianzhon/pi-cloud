@@ -734,6 +734,7 @@ export default {
       connectAndDiscover: 'Connect & discover models',
       connecting: 'Connecting…',
       discoveredModels: 'Models',
+      supportsImages: 'Supports images',
       saveLocalLlm: 'Save local LLM',
       removeLocalLlm: 'Remove local LLM',
       localLlmSaved: 'Local LLM saved.',

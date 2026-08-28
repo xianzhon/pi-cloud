@@ -339,10 +339,15 @@ export class PiSessionService {
       const provider = value as Record<string, any>;
       if (typeof provider.baseUrl !== 'string' || !Array.isArray(provider.models)) return [];
       const status = modelRuntime.getProviderAuthStatus(id);
+      const models = provider.models as unknown[];
       return [{
         id,
         baseUrl: provider.baseUrl,
-        modelIds: provider.models.flatMap((model: unknown) => this.localModelId(model) || []),
+        modelIds: models.flatMap((model) => this.localModelId(model) || []),
+        imageModelIds: models.flatMap((model) => {
+          const modelId = this.localModelId(model);
+          return modelId && this.modelSupportsImages(model) ? [modelId] : [];
+        }),
         configured: status.configured || typeof provider.apiKey === 'string',
       }];
     });
@@ -353,11 +358,14 @@ export class PiSessionService {
     return this.discoverOpenAiModels(this.normalizeCustomProviderBaseUrl(baseUrl), apiKey);
   }
 
-  async saveAgentProfileCustomProvider(profileId: string, providerId: string, baseUrl: string, modelIds: string[], apiKey?: string) {
+  async saveAgentProfileCustomProvider(profileId: string, providerId: string, baseUrl: string, modelIds: string[], imageModelIds?: string[], apiKey?: string) {
     const profile = await this.requireAgentProfile(profileId);
     const id = this.normalizeCustomProviderId(providerId);
     const normalizedBaseUrl = this.normalizeCustomProviderBaseUrl(baseUrl);
     const normalizedModelIds = [...new Set(modelIds.map((modelId) => modelId.trim()).filter(Boolean))];
+    const normalizedImageModelIds = imageModelIds === undefined
+      ? undefined
+      : new Set(imageModelIds.map((modelId) => modelId.trim()).filter((modelId) => normalizedModelIds.includes(modelId)));
     if (normalizedModelIds.length === 0) throw new Error('Select at least one model');
 
     const config = await this.readModelsJson(profile.path);
@@ -381,7 +389,11 @@ export class PiSessionService {
       ...(existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {}),
       baseUrl: normalizedBaseUrl,
       api: 'openai-completions',
-      models: normalizedModelIds.map((modelId) => existingModels.get(modelId) || { id: modelId }),
+      models: normalizedModelIds.map((modelId) => {
+        const model = existingModels.get(modelId) || { id: modelId };
+        if (normalizedImageModelIds === undefined) return model;
+        return { ...model, input: normalizedImageModelIds.has(modelId) ? ['text', 'image'] : ['text'] };
+      }),
     };
     if (key) delete providers[id].apiKey;
     config.providers = providers;
@@ -397,7 +409,14 @@ export class PiSessionService {
         throw error;
       }
     }
-    return { id, baseUrl: normalizedBaseUrl, modelIds: normalizedModelIds, configured: true };
+    const savedModels = providers[id].models as Record<string, unknown>[];
+    return {
+      id,
+      baseUrl: normalizedBaseUrl,
+      modelIds: normalizedModelIds,
+      imageModelIds: savedModels.flatMap((model) => this.modelSupportsImages(model) ? [model.id as string] : []),
+      configured: true,
+    };
   }
 
   async removeAgentProfileCustomProvider(profileId: string, providerId: string) {
@@ -585,6 +604,30 @@ export class PiSessionService {
     return parsed.toString().replace(/\/+$/, '');
   }
 
+  private modelSupportsImages(model: unknown): boolean {
+    if (!model || typeof model !== 'object') return false;
+    const value = model as Record<string, any>;
+    const modalityLists = [
+      value.input,
+      value.input_modalities,
+      value.modalities,
+      value.architecture?.input_modalities,
+      value.model_info?.input_modalities,
+    ];
+    const declaredModalities = modalityLists.filter(Array.isArray);
+    if (declaredModalities.length) return declaredModalities.some((modalities) => modalities.includes('image'));
+    const capabilityFlags = [
+      value.supports_vision,
+      value.supportsVision,
+      value.capabilities?.vision,
+      value.capabilities?.image,
+      value.model_info?.supports_vision,
+    ].filter((supported) => typeof supported === 'boolean');
+    if (capabilityFlags.length) return capabilityFlags.some((supported) => supported === true);
+    return [value.id, value.model, value.name]
+      .some((name) => typeof name === 'string' && name.toLowerCase().includes('image'));
+  }
+
   private async discoverOpenAiModels(baseUrl: string, apiKey?: string) {
     const response = await fetch(`${baseUrl}/models`, {
       headers: apiKey?.trim() ? { Authorization: `Bearer ${apiKey.trim()}` } : undefined,
@@ -594,14 +637,19 @@ export class PiSessionService {
     if (!response.ok) throw new Error(`Custom provider returned HTTP ${response.status}`);
     const body = await response.json() as { data?: unknown; models?: unknown };
     const candidates = Array.isArray(body.data) ? body.data : Array.isArray(body.models) ? body.models : [];
-    const ids = candidates.flatMap((model) => {
-      if (!model || typeof model !== 'object') return [];
+    const models = new Map<string, boolean>();
+    for (const model of candidates) {
+      if (!model || typeof model !== 'object') continue;
       const candidate = model as { id?: unknown; name?: unknown; model?: unknown };
       const id = [candidate.id, candidate.model, candidate.name].find((value) => typeof value === 'string' && value.trim());
-      return typeof id === 'string' ? [id.trim()] : [];
-    });
-    if (ids.length === 0) throw new Error('No models were returned by the custom provider');
-    return [...new Set(ids)].sort((a, b) => a.localeCompare(b)).map((id) => ({ id }));
+      if (typeof id !== 'string') continue;
+      const normalizedId = id.trim();
+      models.set(normalizedId, (models.get(normalizedId) || false) || this.modelSupportsImages(model));
+    }
+    if (models.size === 0) throw new Error('No models were returned by the custom provider');
+    return [...models.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([id, supportsImages]) => ({ id, supportsImages }));
   }
 
   private normalizeLocalLlmBaseUrl(baseUrl: string): string {

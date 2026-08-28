@@ -251,9 +251,9 @@ describe('session routes', () => {
   });
 
   it('discovers, saves, and removes a custom API provider', async () => {
-    vi.mocked(sessionService.discoverAgentProfileCustomProvider).mockResolvedValue([{ id: 'agnes-2.5-flash' }]);
+    vi.mocked(sessionService.discoverAgentProfileCustomProvider).mockResolvedValue([{ id: 'agnes-2.5-flash', supportsImages: true }]);
     vi.mocked(sessionService.saveAgentProfileCustomProvider).mockResolvedValue({
-      id: 'agnes', baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], configured: true,
+      id: 'agnes', baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], imageModelIds: ['agnes-2.5-flash'], configured: true,
     });
     vi.mocked(sessionService.removeAgentProfileCustomProvider).mockResolvedValue({ id: 'agnes' });
     const { sessionRoutes } = await import('./sessions.js');
@@ -266,14 +266,16 @@ describe('session routes', () => {
     }, reply);
     await handlers['PUT /agent-profiles/:profileId/custom-providers/:providerId']({
       params: { profileId: 'work', providerId: 'agnes' },
-      body: { baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], apiKey: 'secret' },
+      body: { baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], imageModelIds: ['agnes-2.5-flash'], apiKey: 'secret' },
     }, reply);
     await handlers['DELETE /agent-profiles/:profileId/custom-providers/:providerId']({
       params: { profileId: 'work', providerId: 'agnes' },
     }, reply);
 
     expect(sessionService.discoverAgentProfileCustomProvider).toHaveBeenCalledWith('work', 'https://api.agnes.test/v1', 'secret');
-    expect(sessionService.saveAgentProfileCustomProvider).toHaveBeenCalledWith('work', 'agnes', 'https://api.agnes.test/v1', ['agnes-2.5-flash'], 'secret');
+    expect(sessionService.saveAgentProfileCustomProvider).toHaveBeenCalledWith(
+      'work', 'agnes', 'https://api.agnes.test/v1', ['agnes-2.5-flash'], ['agnes-2.5-flash'], 'secret',
+    );
     expect(sessionService.removeAgentProfileCustomProvider).toHaveBeenCalledWith('work', 'agnes');
   });
 

@@ -734,6 +734,7 @@ export default {
       connectAndDiscover: '连接并发现模型',
       connecting: '正在连接…',
       discoveredModels: '模型',
+      supportsImages: '支持图片',
       saveLocalLlm: '保存本地 LLM',
       removeLocalLlm: '移除本地 LLM',
       localLlmSaved: '本地 LLM 已保存。',

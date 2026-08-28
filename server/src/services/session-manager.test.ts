@@ -335,26 +335,40 @@ describe('PiSessionService', () => {
   it('lists manually configured custom providers without exposing API keys', async () => {
     readFile.mockImplementation(async (path: string) => path.endsWith('/models.json')
       ? JSON.stringify({ providers: {
-        agnes: { baseUrl: 'https://api.agnes.test/v1', api: 'openai-completions', apiKey: 'literal-secret', models: [{ id: 'agnes-2.5-flash' }] },
+        agnes: {
+          baseUrl: 'https://api.agnes.test/v1',
+          api: 'openai-completions',
+          apiKey: 'literal-secret',
+          models: [{ id: 'agnes-2.5-flash' }, { id: 'agnes-image-generator', input: ['text'] }],
+        },
         'pi-webui-local': { baseUrl: 'http://127.0.0.1:11434/v1', models: [{ id: 'local' }] },
       } })
       : '');
     const service = new PiSessionService();
 
     await expect(service.listAgentProfileCustomProviders('default')).resolves.toEqual([{
-      id: 'agnes', baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], configured: true,
+      id: 'agnes',
+      baseUrl: 'https://api.agnes.test/v1',
+      modelIds: ['agnes-2.5-flash', 'agnes-image-generator'],
+      imageModelIds: [],
+      configured: true,
     }]);
   });
 
   it('discovers models from an authenticated custom OpenAI-compatible provider', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
-      data: [{ id: 'agnes-2.5-flash' }, { id: 'agnes-2.0-flash' }],
+      data: [
+        { id: 'agnes-2.5-flash', architecture: { input_modalities: ['text', 'image'] } },
+        { id: 'agnes-2.0-flash' },
+        { id: 'agnes-image-preview' },
+      ],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     const service = new PiSessionService();
 
     await expect(service.discoverAgentProfileCustomProvider('default', 'https://api.agnes.test/v1/', 'secret-key')).resolves.toEqual([
-      { id: 'agnes-2.0-flash' },
-      { id: 'agnes-2.5-flash' },
+      { id: 'agnes-2.0-flash', supportsImages: false },
+      { id: 'agnes-2.5-flash', supportsImages: true },
+      { id: 'agnes-image-preview', supportsImages: true },
     ]);
     expect(fetchMock).toHaveBeenCalledWith('https://api.agnes.test/v1/models', expect.objectContaining({
       headers: { Authorization: 'Bearer secret-key' },
@@ -372,7 +386,9 @@ describe('PiSessionService', () => {
       : '');
     const service = new PiSessionService();
 
-    await service.saveAgentProfileCustomProvider('default', 'agnes', 'https://api.agnes.test/v1', ['agnes-2.0-flash'], 'new-secret');
+    await service.saveAgentProfileCustomProvider(
+      'default', 'agnes', 'https://api.agnes.test/v1', ['agnes-2.0-flash'], ['agnes-2.0-flash'], 'new-secret',
+    );
 
     const writeCalls = writeFile.mock.calls as unknown as Array<[string, string, string]>;
     const saved = JSON.parse(writeCalls.find(([path]) => path.endsWith('/models.json'))![1]);
@@ -380,7 +396,7 @@ describe('PiSessionService', () => {
     expect(saved.providers.agnes).toMatchObject({
       baseUrl: 'https://api.agnes.test/v1',
       api: 'openai-completions',
-      models: [{ id: 'agnes-2.0-flash', reasoning: true }],
+      models: [{ id: 'agnes-2.0-flash', reasoning: true, input: ['text', 'image'] }],
     });
     expect(saved.providers.agnes.apiKey).toBeUndefined();
     expect(modelRuntimeLogin).toHaveBeenCalledWith('agnes', 'api_key', expect.any(Object));

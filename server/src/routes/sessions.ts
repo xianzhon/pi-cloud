@@ -294,9 +294,11 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
   app.put('/agent-profiles/:profileId/custom-providers/:providerId', async (req, reply) => {
     try {
       const { profileId, providerId } = req.params as { profileId: string; providerId: string };
-      const { baseUrl, modelIds, apiKey } = req.body as { baseUrl?: string; modelIds?: string[]; apiKey?: string };
-      if (!baseUrl || !Array.isArray(modelIds)) return reply.status(400).send({ error: 'baseUrl and modelIds are required' });
-      return { provider: await sessionService.saveAgentProfileCustomProvider(profileId, providerId, baseUrl, modelIds, apiKey) };
+      const { baseUrl, modelIds, imageModelIds, apiKey } = req.body as { baseUrl?: string; modelIds?: string[]; imageModelIds?: string[]; apiKey?: string };
+      if (!baseUrl || !Array.isArray(modelIds) || (imageModelIds !== undefined && !Array.isArray(imageModelIds))) {
+        return reply.status(400).send({ error: 'baseUrl, modelIds, and imageModelIds must be valid' });
+      }
+      return { provider: await sessionService.saveAgentProfileCustomProvider(profileId, providerId, baseUrl, modelIds, imageModelIds, apiKey) };
     } catch (error) {
       return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to save custom provider' });
     }

@@ -152,12 +152,18 @@
                   <button class="profile-secondary dialog-action" type="button" :disabled="discoveringCustomModels || !customProviderBaseUrl.trim()" @click="discoverCustomModels">
                     {{ discoveringCustomModels ? t('components.profileManagerDialog.connecting') : t('components.profileManagerDialog.connectAndDiscover') }}
                   </button>
-                  <fieldset v-if="customModels.length" class="local-model-list">
+                  <fieldset v-if="customModels.length" class="local-model-list custom-model-list">
                     <legend>{{ t('components.profileManagerDialog.discoveredModels') }}</legend>
-                    <label v-for="model in customModels" :key="model.id">
-                      <input v-model="selectedCustomModelIds" type="checkbox" :value="model.id" />
-                      <span>{{ model.id }}</span>
-                    </label>
+                    <div v-for="model in customModels" :key="model.id" class="custom-model-row">
+                      <label>
+                        <input v-model="selectedCustomModelIds" type="checkbox" :value="model.id" />
+                        <span>{{ model.id }}</span>
+                      </label>
+                      <label class="custom-model-vision">
+                        <input v-model="imageCustomModelIds" type="checkbox" :value="model.id" :disabled="!selectedCustomModelIds.includes(model.id)" />
+                        <span>{{ t('components.profileManagerDialog.supportsImages') }}</span>
+                      </label>
+                    </div>
                   </fieldset>
                   <div class="profile-remove-actions">
                     <button class="profile-primary dialog-action" type="button" :disabled="savingCustomProvider || !customProviderId.trim() || !customProviderBaseUrl.trim() || selectedCustomModelIds.length === 0" @click="saveCustomProvider">
@@ -259,12 +265,14 @@ interface ApiKeyProvider {
 
 interface LocalModel {
   id: string;
+  supportsImages?: boolean;
 }
 
 interface CustomProvider {
   id: string;
   baseUrl: string;
   modelIds: string[];
+  imageModelIds: string[];
   configured: boolean;
 }
 
@@ -316,6 +324,7 @@ const customProviderBaseUrl = ref('');
 const customProviderApiKey = ref('');
 const customModels = ref<LocalModel[]>([]);
 const selectedCustomModelIds = ref<string[]>([]);
+const imageCustomModelIds = ref<string[]>([]);
 const discoveringCustomModels = ref(false);
 const savingCustomProvider = ref(false);
 const removingCustomProvider = ref(false);
@@ -401,6 +410,7 @@ function resetSaveState(): void {
   customProviderApiKey.value = '';
   customModels.value = [];
   selectedCustomModelIds.value = [];
+  imageCustomModelIds.value = [];
   discoveringCustomModels.value = false;
   savingCustomProvider.value = false;
   removingCustomProvider.value = false;
@@ -585,7 +595,8 @@ function selectCustomProvider(selection: string): void {
   customProviderId.value = provider?.id || '';
   customProviderBaseUrl.value = provider?.baseUrl || '';
   selectedCustomModelIds.value = provider?.modelIds || [];
-  customModels.value = selectedCustomModelIds.value.map((id) => ({ id }));
+  imageCustomModelIds.value = provider?.imageModelIds || [];
+  customModels.value = selectedCustomModelIds.value.map((id) => ({ id, supportsImages: imageCustomModelIds.value.includes(id) }));
 }
 
 async function discoverCustomModels(): Promise<void> {
@@ -603,6 +614,7 @@ async function discoverCustomModels(): Promise<void> {
     const data = await response.json() as { models?: LocalModel[] };
     customModels.value = data.models || [];
     selectedCustomModelIds.value = customModels.value.map((model) => model.id);
+    imageCustomModelIds.value = customModels.value.filter((model) => model.supportsImages).map((model) => model.id);
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToDiscoverCustomModels');
   } finally {
@@ -622,6 +634,7 @@ async function saveCustomProvider(): Promise<void> {
       body: JSON.stringify({
         baseUrl: customProviderBaseUrl.value,
         modelIds: selectedCustomModelIds.value,
+        imageModelIds: imageCustomModelIds.value.filter((id) => selectedCustomModelIds.value.includes(id)),
         apiKey: customProviderApiKey.value || undefined,
       }),
     });
@@ -1073,6 +1086,15 @@ small {
 }
 .local-model-list span {
   overflow-wrap: anywhere;
+}
+.custom-model-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.custom-model-vision {
+  flex-shrink: 0;
+  color: var(--text-secondary);
 }
 .profile-remove-actions {
   display: flex;

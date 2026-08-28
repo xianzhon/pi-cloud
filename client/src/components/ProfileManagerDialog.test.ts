@@ -40,9 +40,9 @@ describe('ProfileManagerDialog', () => {
       }
       if (url.endsWith('/local-llm') && options?.method === 'DELETE') return ok({ config: { baseUrl: '', modelIds: [] } });
       if (url.endsWith('/local-llm')) return ok({ config: { baseUrl: '', modelIds: [] } });
-      if (url.endsWith('/custom-providers/discover')) return ok({ models: [{ id: 'agnes-2.5-flash' }] });
+      if (url.endsWith('/custom-providers/discover')) return ok({ models: [{ id: 'agnes-2.5-flash', supportsImages: true }] });
       if (url.endsWith('/custom-providers/agnes') && options?.method === 'PUT') {
-        return ok({ provider: { id: 'agnes', baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], configured: true } });
+        return ok({ provider: { id: 'agnes', baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], imageModelIds: ['agnes-2.5-flash'], configured: true } });
       }
       if (url.endsWith('/custom-providers/agnes') && options?.method === 'DELETE') return ok({ id: 'agnes' });
       if (url.endsWith('/custom-providers')) return ok({ providers: [] });
@@ -189,7 +189,12 @@ describe('ProfileManagerDialog', () => {
       '/api/sessions/agent-profiles/work/custom-providers/agnes',
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify({ baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], apiKey: 'agnes-secret' }),
+        body: JSON.stringify({
+          baseUrl: 'https://api.agnes.test/v1',
+          modelIds: ['agnes-2.5-flash'],
+          imageModelIds: ['agnes-2.5-flash'],
+          apiKey: 'agnes-secret',
+        }),
       }),
     ));
     expect((wrapper.find('[aria-label="Custom provider API key"]').element as HTMLInputElement).value).toBe('');
