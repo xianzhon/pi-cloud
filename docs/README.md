@@ -13,6 +13,7 @@ User manuals are available in English and Simplified Chinese. Choose the guide f
 | Task queue / 任务队列 | [Task Queue](manuals-en/01-task-queue.md) | [任务队列](manuals-cn/01-task-queue.md) |
 | Managed worktrees / 托管工作树 | [Managed Worktrees](manuals-en/02-worktree.md) | [托管工作树](manuals-cn/02-worktree.md) |
 | Memory system / 记忆系统 | [Memory System](manuals-en/03-memory-system.md) | [记忆系统](manuals-cn/03-memory-system.md) |
+| PDF annotations / PDF 标注 | [PDF Annotations](manuals-en/04-pdf-annotations.md) | [PDF 标注](manuals-cn/04-pdf-annotations.md) |
 | Configuration / 配置 | [Configuration](manuals-en/configuration.md) | [配置](manuals-cn/configuration.md) |
 | Deployment / 部署 | [Deployment](manuals-en/deployment.md) | [部署](manuals-cn/deployment.md) |
 | Feishu/Lark gateway / 飞书网关 | [Feishu/Lark Gateway](manuals-en/feishu-gateway.md) | [飞书网关](manuals-cn/feishu-gateway.md) |

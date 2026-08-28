@@ -23,7 +23,7 @@
           @blur="hideTabTooltip"
         >
           <PhPushPinSimple v-if="tab.pinned" class="tab-pin" :size="13" weight="fill" :aria-label="t('components.editorPanel.pinnedTab')" />
-          <span>{{ tab.name }}{{ dirtyPaths.has(tab.path) ? ' •' : '' }}</span>
+          <span class="tab-label">{{ tab.name }}{{ dirtyPaths.has(tab.path) ? ' •' : '' }}</span>
           <button @click.stop="closeTab(tab.path)"><PhX :size="14" /></button>
         </div>
       </div>
@@ -201,7 +201,13 @@
         :srcdoc="activeHtmlDocument"
         :title="t('components.editorPanel.htmlPreview')"
       ></iframe>
-      <PdfPreview v-else-if="activePdfSrc" :src="activePdfSrc" />
+      <PdfPreview
+        v-else-if="activePdfSrc && activeTab"
+        :src="activePdfSrc"
+        :file-path="activeTab"
+        :initial-scale="activeTabInfo?.pdfScale"
+        @scale-change="setActivePdfScale"
+      />
       <div v-else-if="activeImageSrc" class="image-preview">
         <div class="image-preview-toolbar" role="group" :aria-label="t('components.editorPanel.imageZoomControls')">
           <button
@@ -512,6 +518,7 @@ interface Tab {
   kind: 'text' | 'image' | 'pdf';
   virtual?: boolean;
   pinned?: boolean;
+  pdfScale?: number;
 }
 
 interface FileReadResponse {
@@ -680,6 +687,9 @@ const activeImageSrc = computed(() => activeTabInfo.value?.kind === 'image' && a
 const activePdfSrc = computed(() => activeTabInfo.value?.kind === 'pdf' && activeTab.value
   ? `/api/files/raw?path=${encodeURIComponent(activeTab.value)}`
   : '');
+function setActivePdfScale(scale: number): void {
+  if (activeTabInfo.value?.kind === 'pdf') activeTabInfo.value.pdfScale = scale;
+}
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isHtmlFile(activeTab.value));
 const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value);
@@ -3040,6 +3050,7 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 .tab {
   flex: 0 0 auto;
+  max-width: 15rem;
   padding: 0.5rem 1rem;
   display: flex;
   align-items: center;
@@ -3058,6 +3069,13 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 .tab-pin {
   flex: 0 0 auto;
   color: var(--accent);
+}
+
+.tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab button {

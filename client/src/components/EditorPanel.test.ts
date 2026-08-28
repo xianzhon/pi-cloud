@@ -12,8 +12,10 @@ const mermaidMock = vi.hoisted(() => ({
 vi.mock('mermaid', () => ({ default: mermaidMock }));
 vi.mock('./PdfPreview.vue', () => ({
   default: {
-    props: ['src'],
-    template: '<div class="pdf-preview-test" :data-src="src" />',
+    name: 'PdfPreviewStub',
+    props: ['src', 'filePath', 'initialScale'],
+    emits: ['scale-change'],
+    template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-initial-scale="initialScale" />',
   },
 }));
 
@@ -386,7 +388,7 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.mermaid-error').text()).toBe('not a valid diagram');
   });
 
-  it('opens PDF files in the PDF preview', async () => {
+  it('opens PDF files and preserves each tab zoom level', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).startsWith('/api/files/tree')) {
         return { ok: true, json: async () => ({ tree: [] }) };
@@ -403,7 +405,18 @@ describe('EditorPanel', () => {
 
     expect(wrapper.find('.pdf-preview-test').attributes('data-src'))
       .toBe('/api/files/raw?path=%2Fproject%2Fdocument.pdf');
+    expect(wrapper.find('.pdf-preview-test').attributes('data-file-path'))
+      .toBe('/project/document.pdf');
     expect(wrapper.find('.editor-container').classes()).toContain('hidden');
+
+    wrapper.findComponent({ name: 'PdfPreviewStub' }).vm.$emit('scale-change', 1.5);
+    await wrapper.vm.openFile('/project/other.pdf');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.pdf-preview-test').attributes('data-initial-scale')).toBeUndefined();
+
+    const firstPdfTab = wrapper.findAll('.tab').find(tab => tab.text().includes('document.pdf'));
+    await firstPdfTab?.trigger('click');
+    expect(wrapper.find('.pdf-preview-test').attributes('data-initial-scale')).toBe('1.5');
   });
 
   it('zooms and drag-pans an image preview, then resets it', async () => {
