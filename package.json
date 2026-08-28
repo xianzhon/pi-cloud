@@ -49,7 +49,7 @@
     "format:check": "prettier --check package.json client/package.json server/package.json pnpm-workspace.yaml .oxlintrc.json .prettierrc.json .github client/*.config.ts server/*.config.ts server/build.mjs client/src/test/setup.ts"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-ai": "0.84.3",
     "@earendil-works/pi-coding-agent": "0.84.2",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^10.0.0",
