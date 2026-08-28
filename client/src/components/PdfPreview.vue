@@ -286,6 +286,12 @@ const MAX_SCALE = 3;
 const SCALE_STEP = 0.1;
 const TOOLBAR_INSET = 12;
 const VIEW_SAVE_DELAY = 300;
+const TOOLBAR_KEYBOARD_MOVEMENT: Record<string, ToolbarPosition> = {
+  ArrowLeft: { left: -10, top: 0 },
+  ArrowRight: { left: 10, top: 0 },
+  ArrowUp: { left: 0, top: -10 },
+  ArrowDown: { left: 0, top: 10 },
+};
 const ANNOTATION_TOOLS = new Set<AnnotationTool>([
   'pan', 'pen', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'move', 'eraser',
 ]);
@@ -420,13 +426,7 @@ function continueToolbarDrag(event: PointerEvent): void {
 }
 
 function moveToolbarWithKeyboard(event: KeyboardEvent): void {
-  const movement: Record<string, ToolbarPosition> = {
-    ArrowLeft: { left: -10, top: 0 },
-    ArrowRight: { left: 10, top: 0 },
-    ArrowUp: { left: 0, top: -10 },
-    ArrowDown: { left: 0, top: 10 },
-  };
-  const delta = movement[event.key];
+  const delta = TOOLBAR_KEYBOARD_MOVEMENT[event.key];
   if (!delta || !previewEl.value || !toolbarEl.value) return;
   event.preventDefault();
   const previewRect = previewEl.value.getBoundingClientRect();

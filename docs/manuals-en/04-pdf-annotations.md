@@ -1,19 +1,25 @@
 # PDF Annotations User Manual
 
-Pi WebUI lets you draw freehand annotations on PDF files opened in the workspace editor. Annotations are stored separately, so drawing does not modify the original PDF.
+Pi WebUI lets you annotate PDF files opened in the workspace editor. Annotations are stored separately, so editing does not modify the original PDF.
 
 ## Open and Annotate a PDF
 
 1. Open a `.pdf` file from the workspace file tree.
-2. Select the **pen** button in the annotation toolbar.
-3. Choose a pen color and width, then draw on the displayed page.
-4. Select the pen button again to return to normal PDF navigation.
+2. Select an annotation tool from the toolbar.
+3. Choose a color and width, then draw or place the annotation on the displayed page.
+4. Select the active tool again to return to normal PDF navigation.
 
-The annotation toolbar also provides:
+The annotation toolbar provides:
 
-- **Eraser**: removes strokes touched by the eraser.
-- **Undo and redo**: moves backward or forward through annotation changes made while the PDF is open.
-- **Clear page**: removes every annotation from the current page.
+- **Pen and highlighter**: draw freehand strokes.
+- **Line, arrow, rectangle, and ellipse**: draw shapes.
+- **Text**: place a text note, or select an existing note to edit it.
+- **Move**: reposition an existing annotation.
+- **Eraser**: remove annotations touched by the eraser.
+- **Undo and redo**: move backward or forward through annotation changes made while the PDF is open.
+- **Clear page**: remove every annotation from the current page.
+
+Press `1` through `8` to select the tools in toolbar order, or `0` for the eraser. The toolbar can be dragged, moved with the arrow keys from its drag handle, and switched between horizontal and vertical layouts.
 
 Annotations use page-relative coordinates, so they stay aligned with the page when the PDF zoom changes.
 
@@ -59,4 +65,4 @@ To remove all saved annotations, show hidden files, delete the corresponding `.<
 - Annotations are displayed by Pi WebUI and are not embedded into the PDF.
 - Opening the original PDF in another PDF reader will not show the sidecar annotations.
 - Exporting or flattening annotations into a new PDF is not currently supported.
-- The current tools support freehand drawing rather than text notes, highlights, or shapes.
+- Exporting individual annotations to other annotation formats is not currently supported.
