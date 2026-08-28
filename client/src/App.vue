@@ -77,6 +77,10 @@
           <span v-if="memoryPendingCount > 0" class="memory-pending-badge" aria-hidden="true">{{ memoryPendingCount > 99 ? '99+' : memoryPendingCount }}</span>
           <span v-if="memoryHasError" class="memory-error-indicator" aria-hidden="true"></span>
         </button>
+        <button class="utility-rail-btn tooltip" type="button" data-rail-action="theme" :data-tooltip="themeToggleLabel" :aria-label="themeToggleLabel" @click="toggleTheme">
+          <PhSun v-if="resolvedTheme === 'dark'" :size="19" weight="bold" />
+          <PhMoon v-else :size="19" weight="bold" />
+        </button>
         <button class="utility-rail-btn tooltip" type="button" data-rail-action="settings" :data-tooltip="t('app.settings')" :aria-label="t('app.settings')" @click="openSettings">
           <PhGear :size="19" weight="bold" />
         </button>
@@ -256,6 +260,11 @@
               <button class="mobile-action-item" @click="openMemoryCenter(); showMobileActions = false">
                 <PhBrain :size="18" weight="bold" />
                 <span>{{ t('app.memory') }}</span>
+              </button>
+              <button class="mobile-action-item" @click="toggleTheme(); showMobileActions = false">
+                <PhSun v-if="resolvedTheme === 'dark'" :size="18" weight="bold" />
+                <PhMoon v-else :size="18" weight="bold" />
+                <span>{{ themeToggleLabel }}</span>
               </button>
               <button class="mobile-action-item" @click="openSettings(); showMobileActions = false">
                 <PhGear :size="18" weight="bold" />
@@ -551,7 +560,7 @@ import { useAuth } from './composables/useAuth';
 import { usePreferences } from './composables/usePreferences';
 import { useTheme } from './composables/useTheme';
 import { i18n, setLocale } from './i18n';
-import { PhBrain, PhGear, PhMagnifyingGlass, PhPlus, PhTrash, PhTerminal, PhNotePencil, PhTray, PhGitBranch, PhGitMerge, PhGitPullRequest, PhSidebarSimple, PhRobot, PhFolderSimple, PhDotsThreeVertical, PhCornersOut, PhCornersIn, PhX } from '@phosphor-icons/vue';
+import { PhBrain, PhGear, PhMagnifyingGlass, PhPlus, PhTrash, PhTerminal, PhNotePencil, PhTray, PhGitBranch, PhGitMerge, PhGitPullRequest, PhSidebarSimple, PhRobot, PhFolderSimple, PhDotsThreeVertical, PhCornersOut, PhCornersIn, PhMoon, PhSun, PhX } from '@phosphor-icons/vue';
 import LoginView from './components/LoginView.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
 import GitToolPanel from './components/GitToolPanel.vue';
@@ -679,6 +688,12 @@ const t = i18n.global.t;
 watch(language, setLocale, { immediate: true });
 
 const { resolvedTheme } = useTheme();
+const themeToggleLabel = computed(() => resolvedTheme.value === 'dark' ? t('app.switchToLightTheme') : t('app.switchToDarkTheme'));
+
+function toggleTheme(): void {
+  void setTheme(resolvedTheme.value === 'dark' ? 'light' : 'dark');
+}
+
 const { skills: availableSkills, loadSkills } = useAvailableSkills();
 const {
   presets: skillPresets,

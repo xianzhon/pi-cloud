@@ -12,6 +12,8 @@ export default {
     searchShortcut: 'Search (⌘K)',
     memory: 'Memory',
     settings: 'Settings',
+    switchToLightTheme: 'Switch to light theme',
+    switchToDarkTheme: 'Switch to dark theme',
     taskQueue: 'Task queue',
     finishWorktree: 'Finish worktree',
     finishWorktreeSession: 'Finish worktree session',

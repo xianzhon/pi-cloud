@@ -12,6 +12,8 @@ export default {
     searchShortcut: '搜索 (⌘K)',
     memory: '记忆',
     settings: '设置',
+    switchToLightTheme: '切换到浅色主题',
+    switchToDarkTheme: '切换到深色主题',
     taskQueue: '任务队列',
     finishWorktree: '结束工作树会话',
     finishWorktreeSession: '结束工作树会话',

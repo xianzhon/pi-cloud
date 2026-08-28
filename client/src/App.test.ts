@@ -492,13 +492,14 @@ describe('App routing', () => {
     expect(wrapper.get('.header-actions > .title-new-btn').classes()).toContain('mobile-title-new-btn');
     expect(wrapper.find('.utility-rail-bottom [data-rail-action="terminal"]').exists()).toBe(true);
     expect(wrapper.find('.utility-rail-bottom [data-rail-action="git"]').exists()).toBe(true);
+    expect(wrapper.find('.utility-rail-bottom [data-rail-action="theme"]').exists()).toBe(true);
     expect(wrapper.find('.app-utility-rail [data-rail-action="tasks"]').exists()).toBe(false);
     expect(wrapper.find('.app-utility-rail [data-rail-action="editor"]').exists()).toBe(false);
     expect(wrapper.find('.header-actions > [data-header-action="tasks"]').exists()).toBe(true);
     expect(wrapper.find('.header-actions > [data-header-action="editor"]').exists()).toBe(true);
 
     const railActions = wrapper.findAll('.app-utility-rail [data-rail-action]');
-    expect(railActions).toHaveLength(7);
+    expect(railActions).toHaveLength(8);
     railActions.forEach((action) => {
       expect(action.classes()).toContain('tooltip');
       expect(action.attributes('data-tooltip')).toBeTruthy();
@@ -1042,6 +1043,29 @@ describe('App routing', () => {
     expect(wrapper.find('.settings-dialog-stub').exists()).toBe(true);
     expect(wrapper.find('.totp-enabled').text()).toBe('disabled');
     expect(wrapper.find('.hint-info-state').text()).toBe('hints shown');
+  });
+
+  it('switches directly between dark and light themes from the utility rail', async () => {
+    theme.value = 'dark';
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    const themeButton = wrapper.find('[data-rail-action="theme"]');
+    expect(themeButton.attributes('aria-label')).toBe('Switch to light theme');
+
+    await themeButton.trigger('click');
+    expect(setTheme).toHaveBeenCalledWith('light');
+    expect(themeButton.attributes('aria-label')).toBe('Switch to dark theme');
   });
 
   it('updates the app locale when the language preference changes', async () => {
