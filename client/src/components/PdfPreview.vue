@@ -178,6 +178,15 @@
         :aria-label="t('components.editorPanel.zoomIn')"
         @click="setScale(scale + SCALE_STEP)"
       ><PhPlus :size="18" /></button>
+      <button
+        type="button"
+        :disabled="loading || exporting"
+        :aria-label="t(exporting
+          ? 'components.editorPanel.exportingAnnotatedPdf'
+          : 'components.editorPanel.exportAnnotatedPdf')"
+        @click="exportAnnotatedPdf"
+      ><PhDownloadSimple :size="18" /></button>
+      <span v-if="exportError" class="pdf-export-error" role="alert">{{ exportError }}</span>
     </div>
     <div
       ref="viewportEl"
@@ -241,6 +250,7 @@ import {
   PhCircle,
   PhColumns,
   PhDotsSixVertical,
+  PhDownloadSimple,
   PhEraser,
   PhHighlighter,
   PhMinus,
@@ -337,6 +347,8 @@ const annotations = ref<AnnotationDocument>({ version: 1, pages: {} });
 const undoStack = ref<AnnotationDocument[]>([]);
 const redoStack = ref<AnnotationDocument[]>([]);
 const saveState = ref<'saving' | 'saved' | 'error' | ''>('');
+const exporting = ref(false);
+const exportError = ref('');
 const isPanning = ref(false);
 const activeTooltip = ref<TooltipState>();
 const toolbarVertical = ref(false);
@@ -678,10 +690,14 @@ function drawVisibleAnnotations(): void {
   pagesToDisplay.value.forEach(page => drawAnnotations(page));
 }
 
-function drawAnnotation(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, stroke: AnnotationStroke): void {
+function drawAnnotation(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  stroke: AnnotationStroke,
+  drawingScale = scale.value * (window.devicePixelRatio || 1),
+): void {
   if (!stroke.points.length) return;
   const type = stroke.type || 'pen';
-  const ratio = window.devicePixelRatio || 1;
   const start = stroke.points[0];
   const end = stroke.points.at(-1) || start;
   const startX = start.x * canvas.width;
@@ -693,10 +709,10 @@ function drawAnnotation(context: CanvasRenderingContext2D, canvas: HTMLCanvasEle
   context.beginPath();
   context.strokeStyle = stroke.color;
   context.fillStyle = stroke.color;
-  context.lineWidth = stroke.width * scale.value * ratio;
+  context.lineWidth = stroke.width * drawingScale;
   if (type === 'highlighter') {
     context.globalAlpha = 0.35;
-    context.lineWidth = Math.max(12, stroke.width * 4) * scale.value * ratio;
+    context.lineWidth = Math.max(12, stroke.width * 4) * drawingScale;
   }
 
   if (type === 'pen' || type === 'highlighter') {
@@ -717,7 +733,7 @@ function drawAnnotation(context: CanvasRenderingContext2D, canvas: HTMLCanvasEle
     }
     context.ellipse((startX + endX) / 2, (startY + endY) / 2, radiusX, radiusY, 0, 0, Math.PI * 2);
   } else if (type === 'text') {
-    const fontSize = 16 * scale.value * ratio;
+    const fontSize = 16 * drawingScale;
     context.font = `${fontSize}px sans-serif`;
     context.textBaseline = 'top';
     for (const [index, line] of (stroke.text || '').split('\n').entries()) {
@@ -728,6 +744,53 @@ function drawAnnotation(context: CanvasRenderingContext2D, canvas: HTMLCanvasEle
   }
   context.stroke();
   context.restore();
+}
+
+async function exportAnnotatedPdf(): Promise<void> {
+  if (exporting.value) return;
+  commitTextAnnotation();
+  exporting.value = true;
+  exportError.value = '';
+
+  try {
+    const response = await fetch(props.src);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const { PDFDocument } = await import('pdf-lib');
+    const pdf = await PDFDocument.load(await response.arrayBuffer());
+    const pages = pdf.getPages();
+    const exportScale = 2;
+
+    for (const [index, page] of pages.entries()) {
+      const strokes = annotations.value.pages[String(index + 1)] || [];
+      if (!strokes.length) continue;
+
+      const { width, height } = page.getSize();
+      const canvas = window.document.createElement('canvas');
+      canvas.width = Math.ceil(width * exportScale);
+      canvas.height = Math.ceil(height * exportScale);
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Canvas is unavailable');
+      for (const stroke of strokes) drawAnnotation(context, canvas, stroke, exportScale);
+
+      const overlay = await pdf.embedPng(canvas.toDataURL('image/png'));
+      page.drawImage(overlay, { x: 0, y: 0, width, height });
+    }
+
+    const pdfBytes = await pdf.save();
+    const blob = new Blob([pdfBytes.slice().buffer as ArrayBuffer], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = window.document.createElement('a');
+    const filename = props.filePath.split(/[\\/]/).pop() || 'document.pdf';
+    link.href = url;
+    link.download = `${filename.replace(/\.pdf$/i, '')}-annotated.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    exportError.value = t('components.editorPanel.exportAnnotatedPdfFailed');
+  } finally {
+    exporting.value = false;
+  }
 }
 
 function drawResizeHandles(
@@ -1385,6 +1448,13 @@ onUnmounted(() => {
 .pdf-navigation-toolbar {
   bottom: 0.75rem;
   left: 0.75rem;
+}
+
+.pdf-export-error {
+  max-width: 14rem;
+  padding: 0 0.5rem;
+  color: var(--error-color, #ef4444);
+  font-size: 0.75rem;
 }
 
 .pdf-toolbar-group {

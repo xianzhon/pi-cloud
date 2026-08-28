@@ -14,8 +14,18 @@ const pdfjsMock = vi.hoisted(() => {
   return { GlobalWorkerOptions: { workerSrc: '' }, getDocument, getPage, render, destroy, document };
 });
 
+const pdfLibMock = vi.hoisted(() => {
+  const drawImage = vi.fn();
+  const page = { getSize: vi.fn(() => ({ width: 600, height: 800 })), drawImage };
+  const embedPng = vi.fn(async () => ({}));
+  const save = vi.fn(async () => new Uint8Array([1, 2, 3]));
+  const load = vi.fn(async () => ({ getPages: () => [page, page], embedPng, save }));
+  return { load, embedPng, save, drawImage };
+});
+
 vi.mock('pdfjs-dist', () => pdfjsMock);
 vi.mock('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: '/pdf.worker.mjs' }));
+vi.mock('pdf-lib', () => ({ PDFDocument: { load: pdfLibMock.load } }));
 
 enableAutoUnmount(afterEach);
 
@@ -48,6 +58,7 @@ describe('PdfPreview', () => {
       left: 0, top: 0, width: 600, height: 800, right: 600, bottom: 800, x: 0, y: 0, toJSON: () => ({}),
     });
     HTMLCanvasElement.prototype.setPointerCapture = vi.fn();
+    HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:image/png;base64,overlay');
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404 })));
   });
 
@@ -58,6 +69,10 @@ describe('PdfPreview', () => {
     pdfjsMock.getPage.mockClear();
     pdfjsMock.render.mockClear();
     pdfjsMock.destroy.mockClear();
+    pdfLibMock.load.mockClear();
+    pdfLibMock.embedPng.mockClear();
+    pdfLibMock.save.mockClear();
+    pdfLibMock.drawImage.mockClear();
   });
 
   it('loads a PDF and supports page navigation and zoom', async () => {
@@ -244,6 +259,7 @@ describe('PdfPreview', () => {
       'Zoom out',
       'Reset PDF zoom',
       'Zoom in',
+      'Export annotated PDF',
     ]);
     expect(annotationToolbar.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
     for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text', 'Move annotation']) {
@@ -596,6 +612,56 @@ describe('PdfPreview', () => {
       ]);
     },
   );
+
+  it('exports a PDF with its annotations flattened into the downloaded copy', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (url) => {
+      if (String(url).startsWith('/api/files/read')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            content: JSON.stringify({
+              version: 1,
+              pages: {
+                '1': [{
+                  type: 'rectangle', color: '#ef4444', width: 2,
+                  points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 }],
+                }],
+              },
+            }),
+          }),
+        } as Response;
+      }
+      if (url === '/api/files/raw?path=document.pdf') {
+        return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) } as Response;
+      }
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:annotated-pdf'),
+      revokeObjectURL: vi.fn(),
+    });
+    let downloadedFilename = '';
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloadedFilename = this.download;
+    });
+
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    await wrapper.get('[aria-label="Export annotated PDF"]').trigger('click');
+    await flushPromises();
+
+    expect(pdfLibMock.load).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+    expect(pdfLibMock.embedPng).toHaveBeenCalledWith('data:image/png;base64,overlay');
+    expect(pdfLibMock.drawImage).toHaveBeenCalledWith({}, { x: 0, y: 0, width: 600, height: 800 });
+    expect(pdfLibMock.save).toHaveBeenCalled();
+    expect(click).toHaveBeenCalled();
+    expect(downloadedFilename).toBe('document-annotated.pdf');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:annotated-pdf');
+  });
 
   it('draws and saves annotations in a hidden sidecar file', async () => {
     const fetchMock = vi.mocked(fetch);
