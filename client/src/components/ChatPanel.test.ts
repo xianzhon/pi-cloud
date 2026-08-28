@@ -682,12 +682,11 @@ describe('ChatPanel', () => {
     expect(document.querySelector('.commit-diff-toggle')).toBeNull();
     expect(document.querySelector('.commit-diff-panel')).not.toBeNull();
     expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=all');
-    expect(document.querySelectorAll('.commit-file-list li')).toHaveLength(2);
-    expect(document.querySelector('.commit-file-list')?.textContent).toContain('unstaged.ts');
+    expect(document.querySelector('.commit-file-list')).toBeNull();
     expect(document.querySelector('.commit-file-stats')?.textContent).toContain('+2');
     expect(document.querySelector('.commit-file-stats')?.textContent).toContain('-2');
     expect(document.querySelectorAll('.commit-diff-file')).toHaveLength(1);
-    expect(document.querySelector('.commit-diff-file h4')?.textContent).toBe('staged.ts');
+    expect(document.querySelector('.commit-diff-file h4')?.textContent).toContain('staged.ts');
     expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+all changes');
     expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+staged change');
     const indentedLine = Array.from(document.querySelectorAll('.commit-diff-line'))
@@ -700,23 +699,17 @@ describe('ChatPanel', () => {
     expect(diffHeader?.getAttribute('aria-expanded')).toBe('false');
     expect(document.querySelector<HTMLElement>('.commit-diff-file pre')?.style.display).toBe('none');
 
-    const scrollIntoView = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      configurable: true,
-      value: scrollIntoView,
-    });
-    document.querySelector<HTMLButtonElement>('.commit-file-list button')?.click();
+    diffHeader?.click();
     await nextTick();
     expect(diffHeader?.getAttribute('aria-expanded')).toBe('true');
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
 
     checkbox?.click();
     await flushPromises();
 
     expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=staged');
-    expect(document.querySelectorAll('.commit-file-list li')).toHaveLength(1);
-    expect(document.querySelector('.commit-file-list')?.textContent).not.toContain('unstaged.ts');
+    expect(document.querySelector('.commit-file-list')).toBeNull();
     expect(document.querySelector('.commit-file-stats')?.textContent).toContain('+1');
+    expect(document.querySelector('.commit-file-stats')?.textContent).toContain('-1');
     expect(document.querySelector('.commit-diff-line.is-added')?.textContent).toContain('+staged change');
 
     document.querySelector<HTMLButtonElement>('.pr-ai-generate-btn')?.click();

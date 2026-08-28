@@ -376,18 +376,6 @@
             <input v-model="commitStagedOnly" type="checkbox" @change="refreshCommitFiles" />
             <span>{{ t('components.chatPanel.stagedChangesOnly') }}</span>
           </label>
-          <div class="commit-preview-label">{{ t('components.chatPanel.files') }}</div>
-          <ul v-if="commitFileSummaries.length" class="commit-file-list">
-            <li v-for="file in commitFileSummaries" :key="file.path">
-              <button type="button" @click="jumpToCommitDiffFile(file.path)">
-                <span class="commit-file-path">{{ file.path }}</span>
-                <span v-if="file.additions || file.deletions" class="commit-file-stats">
-                  <span class="is-added">+{{ file.additions }}</span>
-                  <span class="is-removed">-{{ file.deletions }}</span>
-                </span>
-              </button>
-            </li>
-          </ul>
           <div class="commit-diff-panel" :aria-label="t('components.chatPanel.commitDiff')">
             <div v-if="commitDiffLoading" class="commit-diff-state">{{ t('components.gitHistory.loadingDiff') }}</div>
             <div v-else-if="commitDiffError" class="commit-diff-state error" role="alert">{{ commitDiffError }}</div>
@@ -406,8 +394,14 @@
                     :aria-controls="`${commitDiffFileId(fileIndex)}-content`"
                     @click="toggleCommitDiffFile(file.name)"
                   >
-                    <PhCaretDown :size="14" weight="bold" aria-hidden="true" />
-                    <span>{{ file.name }}</span>
+                    <span class="commit-diff-file-title">
+                      <PhCaretDown :size="14" weight="bold" aria-hidden="true" />
+                      <span>{{ file.name }}</span>
+                    </span>
+                    <span class="commit-file-stats">
+                      <span class="is-added">+{{ commitFileStats.get(file.name)?.additions || 0 }}</span>
+                      <span class="is-removed">-{{ commitFileStats.get(file.name)?.deletions || 0 }}</span>
+                    </span>
                   </button>
                 </h4>
                 <pre v-show="!collapsedCommitDiffFiles.has(file.name)" :id="`${commitDiffFileId(fileIndex)}-content`"><span
@@ -1437,19 +1431,10 @@ const activeSkillCount = computed(() => {
 const commitDialogTitle = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amendPreviousCommit') : t('components.chatPanel.commitChanges'));
 const commitDialogConfirmText = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amend') : t('components.chatPanel.commit'));
 const commitDiffFiles = computed(() => parseCommitDiffFiles(commitDiffContent.value));
-const commitFileSummaries = computed(() => {
-  const summaries = new Map<string, { path: string; additions: number; deletions: number }>();
-  for (const file of commitPreview.value?.files || []) {
-    summaries.set(file.path, { path: file.path, additions: 0, deletions: 0 });
-  }
-  for (const file of commitDiffFiles.value) {
-    const summary = summaries.get(file.name) || { path: file.name, additions: 0, deletions: 0 };
-    summary.additions += file.lines.filter((line) => line.startsWith('+') && !line.startsWith('+++')).length;
-    summary.deletions += file.lines.filter((line) => line.startsWith('-') && !line.startsWith('---')).length;
-    summaries.set(file.name, summary);
-  }
-  return Array.from(summaries.values());
-});
+const commitFileStats = computed(() => new Map(commitDiffFiles.value.map((file) => [file.name, {
+  additions: file.lines.filter((line) => line.startsWith('+') && !line.startsWith('+++')).length,
+  deletions: file.lines.filter((line) => line.startsWith('-') && !line.startsWith('---')).length,
+}])));
 const branchDialogActionLabel = computed(() => branchDialogMode.value === 'switch' ? t('components.chatPanel.switchBranch') : t('components.chatPanel.createBranch'));
 const branchSelectOptions = computed<CustomSelectOption[]>(() => branchOptions.value.map((branch) => ({ value: branch, label: branch })));
 
@@ -2585,15 +2570,6 @@ function toggleCommitDiffFile(name: string) {
   if (collapsed.has(name)) collapsed.delete(name);
   else collapsed.add(name);
   collapsedCommitDiffFiles.value = collapsed;
-}
-
-async function jumpToCommitDiffFile(name: string) {
-  const index = commitDiffFiles.value.findIndex((file) => file.name === name);
-  if (index < 0) return;
-
-  if (collapsedCommitDiffFiles.value.has(name)) toggleCommitDiffFile(name);
-  await nextTick();
-  document.getElementById(commitDiffFileId(index))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function resetCommitDiff() {
@@ -3781,48 +3757,6 @@ function handleInputKeydown(event: KeyboardEvent) {
   resize: vertical;
 }
 
-.commit-file-list {
-  max-height: 140px;
-  margin: 0;
-  padding: 0.375rem 0;
-  overflow: auto;
-  list-style: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  font: 12px/1.4 var(--font-mono, monospace);
-}
-
-.commit-file-list li {
-  margin: 0;
-}
-
-.commit-file-list button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.125rem 0.625rem;
-  color: inherit;
-  background: none;
-  border: 0;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.commit-file-list button:hover,
-.commit-file-list button:focus-visible {
-  background: var(--bg-hover);
-  outline: none;
-}
-
-.commit-file-path {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .commit-file-stats {
   flex: 0 0 auto;
   display: flex;
@@ -3868,7 +3802,8 @@ function handleInputKeydown(event: KeyboardEvent) {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  justify-content: space-between;
+  gap: 1rem;
   padding: 0.5rem 0.625rem;
   color: inherit;
   background: none;
@@ -3883,6 +3818,14 @@ function handleInputKeydown(event: KeyboardEvent) {
 .commit-diff-file h4 button:focus-visible {
   background: var(--bg-hover);
   outline: none;
+}
+
+.commit-diff-file-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  overflow-wrap: anywhere;
 }
 
 .commit-diff-file h4 button svg {
