@@ -240,6 +240,42 @@ describe('PdfPreview', () => {
     expect(wrapper.get('.pdf-annotation-canvas').classes()).toContain('erasing');
   });
 
+  it('activates annotation tools with number shortcuts in toolbar order', async () => {
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    const shortcuts = [
+      ['1', 'Draw on PDF'],
+      ['2', 'Highlight PDF'],
+      ['3', 'Draw line'],
+      ['4', 'Draw arrow'],
+      ['5', 'Draw rectangle'],
+      ['6', 'Draw ellipse'],
+      ['7', 'Add text'],
+      ['8', 'Move annotation'],
+      ['0', 'Erase PDF annotations'],
+    ];
+    for (const [key, label] of shortcuts) {
+      const button = wrapper.get(`[aria-label="${label}"]`);
+      expect(button.attributes('aria-keyshortcuts')).toBe(key);
+      expect(button.get('.pdf-tool-shortcut').text()).toBe(key);
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true }));
+      await wrapper.vm.$nextTick();
+      expect(button.classes()).toContain('active');
+    }
+
+    const colorInput = wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]');
+    colorInput.element.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[aria-label="Erase PDF annotations"]').classes()).toContain('active');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', ctrlKey: true }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[aria-label="Erase PDF annotations"]').classes()).toContain('active');
+  });
+
   it('loads annotations from the legacy visible sidecar name', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (url) => {

@@ -29,17 +29,19 @@
           :class="{ active: tool === 'pen' }"
           :aria-pressed="tool === 'pen'"
           :aria-label="t('components.editorPanel.pdfPen')"
+          aria-keyshortcuts="1"
           :data-tooltip="t('components.editorPanel.pdfPen')"
           @click="toggleTool('pen')"
-        ><PhPencilSimple :size="19" /></button>
+        ><PhPencilSimple :size="19" /><span class="pdf-tool-shortcut">1</span></button>
         <button
           type="button"
           :class="{ active: tool === 'highlighter' }"
           :aria-pressed="tool === 'highlighter'"
           :aria-label="t('components.editorPanel.pdfHighlighter')"
+          aria-keyshortcuts="2"
           :data-tooltip="t('components.editorPanel.pdfHighlighter')"
           @click="toggleTool('highlighter')"
-        ><PhHighlighter :size="19" /></button>
+        ><PhHighlighter :size="19" /><span class="pdf-tool-shortcut">2</span></button>
         <button
           v-for="shapeTool in shapeTools"
           :key="shapeTool.name"
@@ -47,29 +49,32 @@
           :class="{ active: tool === shapeTool.name }"
           :aria-pressed="tool === shapeTool.name"
           :aria-label="t(shapeTool.label)"
+          :aria-keyshortcuts="shapeTool.shortcut"
           :data-tooltip="t(shapeTool.label)"
           @click="toggleTool(shapeTool.name)"
         ><component
           :is="shapeTool.icon"
           :size="19"
           :class="{ 'pdf-line-icon': shapeTool.name === 'line' }"
-        /></button>
+        /><span class="pdf-tool-shortcut">{{ shapeTool.shortcut }}</span></button>
         <button
           type="button"
           :class="{ active: tool === 'move' }"
           :aria-pressed="tool === 'move'"
           :aria-label="t('components.editorPanel.pdfMoveAnnotation')"
+          aria-keyshortcuts="8"
           :data-tooltip="t('components.editorPanel.pdfMoveAnnotation')"
           @click="toggleTool('move')"
-        ><PhArrowsOutCardinal :size="19" /></button>
+        ><PhArrowsOutCardinal :size="19" /><span class="pdf-tool-shortcut">8</span></button>
         <button
           type="button"
           :class="{ active: tool === 'eraser' }"
           :aria-pressed="tool === 'eraser'"
           :aria-label="t('components.editorPanel.pdfEraser')"
+          aria-keyshortcuts="0"
           :data-tooltip="t('components.editorPanel.pdfEraser')"
           @click="toggleTool('eraser')"
-        ><PhEraser :size="19" /></button>
+        ><PhEraser :size="19" /><span class="pdf-tool-shortcut">0</span></button>
         <label class="pdf-control-label" :data-tooltip="t('components.editorPanel.pdfPenColor')">
           <input v-model="penColor" type="color" :aria-label="t('components.editorPanel.pdfPenColor')">
         </label>
@@ -270,13 +275,24 @@ const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.1;
 const TOOLBAR_INSET = 12;
-const shapeTools: Array<{ name: DrawingTool; label: string; icon: object }> = [
-  { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus },
-  { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight },
-  { name: 'rectangle', label: 'components.editorPanel.pdfRectangle', icon: PhRectangle },
-  { name: 'ellipse', label: 'components.editorPanel.pdfEllipse', icon: PhCircle },
-  { name: 'text', label: 'components.editorPanel.pdfText', icon: PhTextT },
+const shapeTools: Array<{ name: DrawingTool; label: string; icon: object; shortcut: string }> = [
+  { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus, shortcut: '3' },
+  { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight, shortcut: '4' },
+  { name: 'rectangle', label: 'components.editorPanel.pdfRectangle', icon: PhRectangle, shortcut: '5' },
+  { name: 'ellipse', label: 'components.editorPanel.pdfEllipse', icon: PhCircle, shortcut: '6' },
+  { name: 'text', label: 'components.editorPanel.pdfText', icon: PhTextT, shortcut: '7' },
 ];
+const toolShortcuts: Record<string, AnnotationTool> = {
+  '0': 'eraser',
+  '1': 'pen',
+  '2': 'highlighter',
+  '3': 'line',
+  '4': 'arrow',
+  '5': 'rectangle',
+  '6': 'ellipse',
+  '7': 'text',
+  '8': 'move',
+};
 
 const previewEl = ref<HTMLDivElement>();
 const toolbarEl = ref<HTMLDivElement>();
@@ -536,6 +552,16 @@ function handleViewportScroll(): void {
 
 function toggleTool(nextTool: AnnotationTool): void {
   tool.value = tool.value === nextTool ? 'pan' : nextTool;
+}
+
+function handleToolShortcut(event: KeyboardEvent): void {
+  const target = event.target;
+  const isEditable = target instanceof HTMLElement
+    && (target.isContentEditable || Boolean(target.closest('input, textarea, select, [contenteditable="true"]')));
+  const nextTool = toolShortcuts[event.key];
+  if (!nextTool || isEditable || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  tool.value = nextTool;
 }
 
 function drawAnnotations(pageNumberToDraw = pageNumber.value): void {
@@ -1046,12 +1072,16 @@ function rerenderVisiblePages(): void {
 
 watch(scale, rerenderVisiblePages);
 
-onMounted(() => window.addEventListener('resize', keepToolbarInBounds));
+onMounted(() => {
+  window.addEventListener('resize', keepToolbarInBounds);
+  window.addEventListener('keydown', handleToolShortcut);
+});
 
 onUnmounted(() => {
   loadVersion++;
   finishToolbarDrag();
   window.removeEventListener('resize', keepToolbarInBounds);
+  window.removeEventListener('keydown', handleToolShortcut);
   clearTooltip();
   clearTimeout(statusTimer);
   renderTasks.forEach(task => task.cancel());
@@ -1149,6 +1179,18 @@ onUnmounted(() => {
 .pdf-toolbar button:hover:not(:disabled),
 .pdf-toolbar button.active,
 .pdf-navigation-toolbar button:hover:not(:disabled) { background: var(--bg-hover); }
+
+.pdf-toolbar button:has(.pdf-tool-shortcut) { position: relative; }
+
+.pdf-tool-shortcut {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  color: var(--text-secondary);
+  font-size: 0.55rem;
+  line-height: 1;
+  pointer-events: none;
+}
 
 .pdf-toolbar button:disabled,
 .pdf-navigation-toolbar button:disabled { opacity: 0.45; }
