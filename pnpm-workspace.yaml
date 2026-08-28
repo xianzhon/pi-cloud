@@ -3,7 +3,7 @@ packages:
   - 'client'
 catalog:
   '@earendil-works/pi-ai': 0.84.2
-  '@earendil-works/pi-coding-agent': 0.84.2
+  '@earendil-works/pi-coding-agent': 0.84.3
   '@fastify/cookie': ^11.0.2
   '@fastify/cors': ^10.0.0
   '@fastify/static': ^10.1.3
