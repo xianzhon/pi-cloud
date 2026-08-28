@@ -281,6 +281,8 @@ export default {
       aiGenerate: 'AI 生成',
       stagedChangesOnly: '仅已暂存的变更',
       commitDiff: '待提交的变更',
+      collapseAll: '全部折叠',
+      expandAll: '全部展开',
       noDiff: '这些变更没有可用的差异。',
       fileChanged: '{count} 个文件变更',
       filesChanged: '{count} 个文件变更',

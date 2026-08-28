@@ -281,6 +281,8 @@ export default {
       aiGenerate: 'AI generate',
       stagedChangesOnly: 'Staged changes only',
       commitDiff: 'Changes to commit',
+      collapseAll: 'Collapse all',
+      expandAll: 'Expand all',
       noDiff: 'No diff available for these changes.',
       fileChanged: '{count} file changed',
       filesChanged: '{count} files changed',

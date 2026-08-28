@@ -381,7 +381,22 @@
             <div v-else-if="commitDiffError" class="commit-diff-state error" role="alert">{{ commitDiffError }}</div>
             <div v-else-if="commitDiffFiles.length === 0" class="commit-diff-state">{{ t('components.chatPanel.noDiff') }}</div>
             <template v-else>
-              <p class="commit-diff-summary">{{ commitDiffSummary }}</p>
+              <div class="commit-diff-toolbar">
+                <p class="commit-diff-summary">{{ commitDiffSummary }}</p>
+                <div class="commit-diff-actions">
+                  <div class="commit-diff-view-toggle" role="group" :aria-label="t('components.editorPanel.diffViewMode')">
+                    <button type="button" :class="{ active: commitDiffViewMode === 'unified' }" :aria-pressed="commitDiffViewMode === 'unified'" @click="commitDiffViewMode = 'unified'">
+                      {{ t('components.editorPanel.unified') }}
+                    </button>
+                    <button type="button" :class="{ active: commitDiffViewMode === 'split' }" :aria-pressed="commitDiffViewMode === 'split'" @click="commitDiffViewMode = 'split'">
+                      {{ t('components.editorPanel.split') }}
+                    </button>
+                  </div>
+                  <button type="button" class="commit-diff-collapse-all" @click="toggleAllCommitDiffFiles">
+                    {{ t(allCommitDiffFilesCollapsed ? 'components.chatPanel.expandAll' : 'components.chatPanel.collapseAll') }}
+                  </button>
+                </div>
+              </div>
               <section
                 v-for="(file, fileIndex) in commitDiffFiles"
                 :id="commitDiffFileId(fileIndex)"
@@ -405,12 +420,20 @@
                     </span>
                   </button>
                 </h4>
-                <pre v-show="!collapsedCommitDiffFiles.has(file.name)" :id="`${commitDiffFileId(fileIndex)}-content`"><span
-                  v-for="(line, lineIndex) in file.lines"
-                  :key="lineIndex"
-                  class="commit-diff-line"
-                  :class="diffLineClass(line)"
-                >{{ line }}{{ '\n' }}</span></pre>
+                <div v-show="!collapsedCommitDiffFiles.has(file.name)" :id="`${commitDiffFileId(fileIndex)}-content`" class="commit-diff-content">
+                  <pre v-if="commitDiffViewMode === 'unified'"><span
+                    v-for="(line, lineIndex) in file.lines"
+                    :key="lineIndex"
+                    class="commit-diff-line"
+                    :class="diffLineClass(line)"
+                  >{{ line }}{{ '\n' }}</span></pre>
+                  <div v-else class="commit-split-diff">
+                    <div v-for="(row, rowIndex) in pairCommitDiffLines(file.lines)" :key="rowIndex" class="commit-split-row">
+                      <span class="commit-diff-line" :class="row.left == null ? 'is-empty' : diffLineClass(row.left)">{{ row.left ?? '' }}</span>
+                      <span class="commit-diff-line" :class="row.right == null ? 'is-empty' : diffLineClass(row.right)">{{ row.right ?? '' }}</span>
+                    </div>
+                  </div>
+                </div>
               </section>
             </template>
           </div>
@@ -789,6 +812,11 @@ interface CommitDiffFile {
   lines: string[];
 }
 
+interface CommitSplitDiffRow {
+  left: string | null;
+  right: string | null;
+}
+
 type BranchDialogMode = 'switch' | 'changes' | 'base';
 type GitSyncCommand = 'push' | 'pull';
 
@@ -891,6 +919,7 @@ const commitDiffLoading = ref(false);
 const commitDiffError = ref('');
 const commitDiffContent = ref('');
 const collapsedCommitDiffFiles = ref(new Set<string>());
+const commitDiffViewMode = ref<'unified' | 'split'>('unified');
 let commitDiffRequestId = 0;
 const branchDialogOpen = ref(false);
 const branchDialogMode = ref<BranchDialogMode>('switch');
@@ -1436,6 +1465,8 @@ const commitFileStats = computed(() => new Map(commitDiffFiles.value.map((file) 
   additions: file.lines.filter((line) => line.startsWith('+') && !line.startsWith('+++')).length,
   deletions: file.lines.filter((line) => line.startsWith('-') && !line.startsWith('---')).length,
 }])));
+const allCommitDiffFilesCollapsed = computed(() => commitDiffFiles.value.length > 0
+  && commitDiffFiles.value.every((file) => collapsedCommitDiffFiles.value.has(file.name)));
 const commitDiffSummary = computed(() => {
   const totals = Array.from(commitFileStats.value.values()).reduce((sum, stats) => ({
     additions: sum.additions + stats.additions,
@@ -2574,15 +2605,46 @@ function diffLineClass(line: string): string {
   return '';
 }
 
+// Pair each contiguous removal/addition block so corresponding edits share a split row.
+function pairCommitDiffLines(lines: string[]): CommitSplitDiffRow[] {
+  const rows: CommitSplitDiffRow[] = [];
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+    const isRemoval = line.startsWith('-') && !line.startsWith('---');
+    const isAddition = line.startsWith('+') && !line.startsWith('+++');
+    if (!isRemoval && !isAddition) {
+      rows.push({ left: line, right: line });
+      index += 1;
+      continue;
+    }
+
+    const removals: string[] = [];
+    const additions: string[] = [];
+    while (index < lines.length && lines[index].startsWith('-') && !lines[index].startsWith('---')) removals.push(lines[index++]);
+    while (index < lines.length && lines[index].startsWith('+') && !lines[index].startsWith('+++')) additions.push(lines[index++]);
+    const rowCount = Math.max(removals.length, additions.length);
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      rows.push({ left: removals[rowIndex] ?? null, right: additions[rowIndex] ?? null });
+    }
+  }
+  return rows;
+}
+
 function commitDiffFileId(index: number): string {
   return `commit-diff-file-${index}`;
 }
 
-function toggleCommitDiffFile(name: string) {
+function toggleCommitDiffFile(name: string): void {
   const collapsed = new Set(collapsedCommitDiffFiles.value);
   if (collapsed.has(name)) collapsed.delete(name);
   else collapsed.add(name);
   collapsedCommitDiffFiles.value = collapsed;
+}
+
+function toggleAllCommitDiffFiles(): void {
+  collapsedCommitDiffFiles.value = allCommitDiffFilesCollapsed.value
+    ? new Set()
+    : new Set(commitDiffFiles.value.map((file) => file.name));
 }
 
 function resetCommitDiff() {
@@ -2591,6 +2653,7 @@ function resetCommitDiff() {
   commitDiffError.value = '';
   commitDiffContent.value = '';
   collapsedCommitDiffFiles.value = new Set();
+  commitDiffViewMode.value = 'unified';
 }
 
 async function loadCommitDiff() {
@@ -3791,9 +3854,62 @@ function handleInputKeydown(event: KeyboardEvent) {
   font-size: 12px;
 }
 
+.commit-diff-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
 .commit-diff-summary {
-  margin: 0 0 0.5rem;
+  margin: 0;
   color: var(--text-secondary);
+}
+
+.commit-diff-actions,
+.commit-diff-view-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.commit-diff-actions {
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+
+.commit-diff-view-toggle {
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+.commit-diff-view-toggle button,
+.commit-diff-collapse-all {
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.commit-diff-view-toggle button.active {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.commit-diff-collapse-all {
+  border: 1px solid var(--border);
+}
+
+.commit-diff-view-toggle button:hover,
+.commit-diff-collapse-all:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .commit-diff-file {
@@ -3855,11 +3971,36 @@ function handleInputKeydown(event: KeyboardEvent) {
   transform: rotate(-90deg);
 }
 
-.commit-diff-file pre {
+.commit-diff-content {
   border-top: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.commit-diff-file pre {
   margin: 0;
   padding: 0.5rem 0;
-  overflow-x: auto;
+}
+
+.commit-split-diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  min-width: 48rem;
+  padding: 0.5rem 0;
+}
+
+.commit-split-row {
+  display: contents;
+}
+
+.commit-split-row > .commit-diff-line {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.commit-split-row > :first-child {
+  border-right: 1px solid var(--border);
 }
 
 .commit-diff-line {
@@ -3886,6 +4027,17 @@ function handleInputKeydown(event: KeyboardEvent) {
 
 .commit-diff-line.is-metadata {
   color: var(--text-secondary);
+}
+
+.commit-diff-line.is-empty {
+  background: var(--bg-secondary);
+}
+
+@media (max-width: 700px) {
+  .commit-diff-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .commit-diff-state {
