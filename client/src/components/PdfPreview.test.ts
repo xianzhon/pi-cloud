@@ -81,6 +81,28 @@ describe('PdfPreview', () => {
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('110%');
   });
 
+  it('renders a newly selected PDF once after resetting a changed zoom level', async () => {
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    await wrapper.get('[aria-label="Zoom in"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('110%');
+
+    pdfjsMock.render.mockClear();
+    await wrapper.setProps({
+      src: '/api/files/raw?path=other.pdf',
+      filePath: '/project/other.pdf',
+    });
+    await flushPromises();
+
+    expect(wrapper.find('.pdf-error').exists()).toBe(false);
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('100%');
+    expect(pdfjsMock.render).toHaveBeenCalledTimes(2);
+  });
+
   it('zooms the PDF with modifier-wheel without triggering browser zoom', async () => {
     const wrapper = mount(PdfPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
@@ -273,7 +295,13 @@ describe('PdfPreview', () => {
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', ctrlKey: true }));
     await wrapper.vm.$nextTick();
-    expect(wrapper.get('[aria-label="Erase PDF annotations"]').classes()).toContain('active');
+    const eraserButton = wrapper.get('[aria-label="Erase PDF annotations"]');
+    expect(eraserButton.classes()).toContain('active');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '0' }));
+    await wrapper.vm.$nextTick();
+    expect(eraserButton.classes()).not.toContain('active');
+    expect(wrapper.get('.pdf-annotation-canvas').classes()).not.toContain('enabled');
   });
 
   it('loads annotations from the legacy visible sidecar name', async () => {

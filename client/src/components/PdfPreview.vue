@@ -561,7 +561,7 @@ function handleToolShortcut(event: KeyboardEvent): void {
   const nextTool = toolShortcuts[event.key];
   if (!nextTool || isEditable || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing) return;
   event.preventDefault();
-  tool.value = nextTool;
+  toggleTool(nextTool);
 }
 
 function drawAnnotations(pageNumberToDraw = pageNumber.value): void {
@@ -737,6 +737,8 @@ async function loadPdf(): Promise<void> {
     pageCount.value = loadedDocument.numPages;
     pageNumber.value = 1;
     scale.value = 1;
+    await nextTick();
+    if (version !== loadVersion) return;
     loading.value = false;
     await renderVisiblePages();
   } catch (loadError) {
