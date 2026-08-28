@@ -64,6 +64,10 @@ const sessionService = {
     listAgentProfileApiKeyProviders: vi.fn(),
     saveAgentProfileApiKey: vi.fn(),
     removeAgentProfileApiKey: vi.fn(),
+    listAgentProfileCustomProviders: vi.fn(),
+    discoverAgentProfileCustomProvider: vi.fn(),
+    saveAgentProfileCustomProvider: vi.fn(),
+    removeAgentProfileCustomProvider: vi.fn(),
     getAgentProfileLocalLlm: vi.fn(),
     discoverAgentProfileLocalLlm: vi.fn(),
     saveAgentProfileLocalLlm: vi.fn(),
@@ -244,6 +248,33 @@ describe('session routes', () => {
 
     expect(sessionService.removeAgentProfileApiKey).toHaveBeenCalledWith('work', 'OPENAI_API_KEY');
     expect(result.providers[0].configured).toBe(false);
+  });
+
+  it('discovers, saves, and removes a custom API provider', async () => {
+    vi.mocked(sessionService.discoverAgentProfileCustomProvider).mockResolvedValue([{ id: 'agnes-2.5-flash' }]);
+    vi.mocked(sessionService.saveAgentProfileCustomProvider).mockResolvedValue({
+      id: 'agnes', baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], configured: true,
+    });
+    vi.mocked(sessionService.removeAgentProfileCustomProvider).mockResolvedValue({ id: 'agnes' });
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    await handlers['POST /agent-profiles/:profileId/custom-providers/discover']({
+      params: { profileId: 'work' }, body: { baseUrl: 'https://api.agnes.test/v1', apiKey: 'secret' },
+    }, reply);
+    await handlers['PUT /agent-profiles/:profileId/custom-providers/:providerId']({
+      params: { profileId: 'work', providerId: 'agnes' },
+      body: { baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], apiKey: 'secret' },
+    }, reply);
+    await handlers['DELETE /agent-profiles/:profileId/custom-providers/:providerId']({
+      params: { profileId: 'work', providerId: 'agnes' },
+    }, reply);
+
+    expect(sessionService.discoverAgentProfileCustomProvider).toHaveBeenCalledWith('work', 'https://api.agnes.test/v1', 'secret');
+    expect(sessionService.saveAgentProfileCustomProvider).toHaveBeenCalledWith('work', 'agnes', 'https://api.agnes.test/v1', ['agnes-2.5-flash'], 'secret');
+    expect(sessionService.removeAgentProfileCustomProvider).toHaveBeenCalledWith('work', 'agnes');
   });
 
   it('discovers, saves, and removes local LLM models', async () => {

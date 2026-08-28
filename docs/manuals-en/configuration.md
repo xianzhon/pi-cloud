@@ -68,6 +68,12 @@ Configure the proxy for each agent profile from the WebUI profile settings. The 
 
 Open **Agent profiles → Local LLM**, choose an Ollama, LM Studio, or llama.cpp preset (or enter a custom OpenAI-compatible endpoint), and click **Connect & discover models**. Select the models to expose and save them; no API key is required. The endpoint is reached by the Pi WebUI server, so `127.0.0.1` refers to the machine running the server. Loopback endpoints are allowed by default. To use a LAN or remote endpoint, add its exact origin (scheme, hostname, and port) to the comma-separated `PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS` setting, for example `http://192.168.1.20:11434,https://llm.example.test`. The generated provider is stored in that profile's `models.json` without replacing other providers. Discovered models are configured for text and image input by default; existing explicit model capabilities are preserved.
 
+## Custom API Providers
+
+Open **Agent profiles → Custom API provider** to add an OpenAI-compatible remote service. Enter a lowercase provider ID, an HTTPS base URL ending at the API root (for example, `https://api.example.com/v1`), and its API key. Click **Connect & discover models**, select the models to expose, and save the provider. The provider and selected model IDs are stored in the profile's `models.json`; newly entered keys are stored separately in Pi's protected `auth.json` and are never returned to the browser. Existing custom providers in `models.json`, such as a manually configured Agnes provider, can also be selected and edited here.
+
+Model discovery depends on the provider's `GET /models` response. Most OpenAI-compatible services return model IDs but not context-window, reasoning, or image capabilities, so discovered models use Pi's defaults unless those fields already exist in `models.json`.
+
 ## Provider and Gateway Variables
 
 Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are optional because the server uses the Pi agent's own authentication by default.

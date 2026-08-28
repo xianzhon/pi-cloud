@@ -61,13 +61,28 @@ const USER_MESSAGE_COUNT_CONCURRENCY = 10;
 const DEFAULT_AUTOMATION_PROVIDER = 'anthropic';
 const DEFAULT_AUTOMATION_MODEL_ID = 'claude-haiku-4-5';
 const LOCAL_LLM_PROVIDER_ID = 'pi-webui-local';
-const LOCAL_LLM_DISCOVERY_TIMEOUT_MS = 10_000;
+const MODEL_DISCOVERY_TIMEOUT_MS = 10_000;
 
 function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost'
     || hostname.endsWith('.localhost')
     || hostname === '[::1]'
     || /^127(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
+function isPrivateNetworkHostname(hostname: string): boolean {
+  const match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (match) {
+    const octets = match.slice(1).map(Number);
+    return octets.some((octet) => octet > 255)
+      || octets[0] === 10
+      || octets[0] === 127
+      || (octets[0] === 169 && octets[1] === 254)
+      || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+      || (octets[0] === 192 && octets[1] === 168);
+  }
+  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe8') || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb');
 }
 
 function localLlmAllowedOrigins(): Set<string> {
@@ -315,6 +330,106 @@ export class PiSessionService {
     }));
   }
 
+  async listAgentProfileCustomProviders(profileId: string) {
+    const profile = await this.requireAgentProfile(profileId);
+    const config = await this.readModelsJson(profile.path);
+    const modelRuntime = await this.createProfileModelRuntime(profile.path);
+    return Object.entries(this.modelsJsonProviders(config)).flatMap(([id, value]) => {
+      if (id === LOCAL_LLM_PROVIDER_ID || !value || typeof value !== 'object' || Array.isArray(value)) return [];
+      const provider = value as Record<string, any>;
+      if (typeof provider.baseUrl !== 'string' || !Array.isArray(provider.models)) return [];
+      const status = modelRuntime.getProviderAuthStatus(id);
+      return [{
+        id,
+        baseUrl: provider.baseUrl,
+        modelIds: provider.models.flatMap((model: unknown) => this.localModelId(model) || []),
+        configured: status.configured || typeof provider.apiKey === 'string',
+      }];
+    });
+  }
+
+  async discoverAgentProfileCustomProvider(profileId: string, baseUrl: string, apiKey?: string) {
+    await this.requireAgentProfile(profileId);
+    return this.discoverOpenAiModels(this.normalizeCustomProviderBaseUrl(baseUrl), apiKey);
+  }
+
+  async saveAgentProfileCustomProvider(profileId: string, providerId: string, baseUrl: string, modelIds: string[], apiKey?: string) {
+    const profile = await this.requireAgentProfile(profileId);
+    const id = this.normalizeCustomProviderId(providerId);
+    const normalizedBaseUrl = this.normalizeCustomProviderBaseUrl(baseUrl);
+    const normalizedModelIds = [...new Set(modelIds.map((modelId) => modelId.trim()).filter(Boolean))];
+    if (normalizedModelIds.length === 0) throw new Error('Select at least one model');
+
+    const config = await this.readModelsJson(profile.path);
+    const previousConfig = `${JSON.stringify(config, null, 2)}\n`;
+    const providers = this.modelsJsonProviders(config);
+    const existing = providers[id];
+    const existingModels = new Map<string, Record<string, unknown>>();
+    if (existing && typeof existing === 'object' && !Array.isArray(existing) && Array.isArray(existing.models)) {
+      for (const model of existing.models) {
+        const modelId = this.localModelId(model);
+        if (modelId) existingModels.set(modelId, model as Record<string, unknown>);
+      }
+    }
+    const key = apiKey?.trim();
+    if (!key && !(existing && typeof existing === 'object' && !Array.isArray(existing) && typeof existing.apiKey === 'string')) {
+      const status = (await this.createProfileModelRuntime(profile.path)).getProviderAuthStatus(id);
+      if (!status.configured) throw new Error('API key is required');
+    }
+
+    providers[id] = {
+      ...(existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {}),
+      baseUrl: normalizedBaseUrl,
+      api: 'openai-completions',
+      models: normalizedModelIds.map((modelId) => existingModels.get(modelId) || { id: modelId }),
+    };
+    if (key) delete providers[id].apiKey;
+    config.providers = providers;
+    await fs.mkdir(profile.path, { recursive: true });
+    await fs.writeFile(join(profile.path, 'models.json'), `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+    if (key) {
+      try {
+        const modelRuntime = await this.createProfileModelRuntime(profile.path);
+        await modelRuntime.login(id, 'api_key', { prompt: async () => key, notify: () => {} });
+      } catch (error) {
+        await fs.writeFile(join(profile.path, 'models.json'), previousConfig, 'utf8');
+        throw error;
+      }
+    }
+    return { id, baseUrl: normalizedBaseUrl, modelIds: normalizedModelIds, configured: true };
+  }
+
+  async removeAgentProfileCustomProvider(profileId: string, providerId: string) {
+    const profile = await this.requireAgentProfile(profileId);
+    const id = this.normalizeCustomProviderId(providerId);
+    const config = await this.readModelsJson(profile.path);
+    const providers = this.modelsJsonProviders(config);
+    if (!providers[id] || id === LOCAL_LLM_PROVIDER_ID) throw new Error('Unknown custom provider');
+    delete providers[id];
+    config.providers = providers;
+    await fs.mkdir(profile.path, { recursive: true });
+    await fs.writeFile(join(profile.path, 'models.json'), `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+    const settingsPath = join(profile.path, 'settings.json');
+    const settingsContent = await fs.readFile(settingsPath, 'utf8').catch(() => '');
+    try {
+      const settings = settingsContent.trim() ? JSON.parse(settingsContent) as Record<string, unknown> : {};
+      if (settings.defaultProvider === id) {
+        delete settings.defaultProvider;
+        delete settings.defaultModel;
+        await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+      }
+    } catch { /* Ignore unrelated invalid settings while removing the provider. */ }
+    this.db?.prepare(`
+      UPDATE agent_profile_settings
+      SET automation_provider = NULL, automation_model_id = NULL, updated_at = ?
+      WHERE profile_id = ? AND automation_provider = ?
+    `).run(new Date().toISOString(), profileId, id);
+    await (await this.createProfileModelRuntime(profile.path)).logout(id);
+    return { id };
+  }
+
   async getAgentProfileLocalLlm(profileId: string) {
     const profile = await this.requireAgentProfile(profileId);
     const config = await this.readModelsJson(profile.path);
@@ -335,7 +450,7 @@ export class PiSessionService {
     const endpoint = `${this.normalizeLocalLlmBaseUrl(baseUrl)}/models`;
     const response = await fetch(endpoint, {
       redirect: 'manual',
-      signal: AbortSignal.timeout(LOCAL_LLM_DISCOVERY_TIMEOUT_MS),
+      signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`Local LLM returned HTTP ${response.status}`);
 
@@ -443,6 +558,50 @@ export class PiSessionService {
     if (!model || typeof model !== 'object') return undefined;
     const id = (model as { id?: unknown }).id;
     return typeof id === 'string' && id.trim() ? id.trim() : undefined;
+  }
+
+  private normalizeCustomProviderId(providerId: string): string {
+    const id = providerId.trim();
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(id) || id === LOCAL_LLM_PROVIDER_ID) {
+      throw new Error('Provider ID must use lowercase letters, numbers, dots, hyphens, or underscores');
+    }
+    return id;
+  }
+
+  private normalizeCustomProviderBaseUrl(baseUrl: string): string {
+    let parsed: URL;
+    try {
+      parsed = new URL(baseUrl.trim());
+    } catch {
+      throw new Error('Enter a valid custom provider URL');
+    }
+    if (parsed.protocol !== 'https:') throw new Error('Custom provider URL must use HTTPS');
+    if (parsed.username || parsed.password) throw new Error('Custom provider URL must not include credentials');
+    if (isLoopbackHostname(parsed.hostname) || isPrivateNetworkHostname(parsed.hostname)) {
+      throw new Error('Use Local LLM for loopback or private-network endpoints');
+    }
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString().replace(/\/+$/, '');
+  }
+
+  private async discoverOpenAiModels(baseUrl: string, apiKey?: string) {
+    const response = await fetch(`${baseUrl}/models`, {
+      headers: apiKey?.trim() ? { Authorization: `Bearer ${apiKey.trim()}` } : undefined,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`Custom provider returned HTTP ${response.status}`);
+    const body = await response.json() as { data?: unknown; models?: unknown };
+    const candidates = Array.isArray(body.data) ? body.data : Array.isArray(body.models) ? body.models : [];
+    const ids = candidates.flatMap((model) => {
+      if (!model || typeof model !== 'object') return [];
+      const candidate = model as { id?: unknown; name?: unknown; model?: unknown };
+      const id = [candidate.id, candidate.model, candidate.name].find((value) => typeof value === 'string' && value.trim());
+      return typeof id === 'string' ? [id.trim()] : [];
+    });
+    if (ids.length === 0) throw new Error('No models were returned by the custom provider');
+    return [...new Set(ids)].sort((a, b) => a.localeCompare(b)).map((id) => ({ id }));
   }
 
   private normalizeLocalLlmBaseUrl(baseUrl: string): string {

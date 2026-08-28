@@ -128,6 +128,48 @@
                   </div>
                 </div>
               </details>
+              <details :key="`custom-${managedProfileId}`" class="profile-collapsible">
+                <summary>
+                  <span class="profile-section-heading">
+                    <strong>{{ t('components.profileManagerDialog.customApiProvider') }}</strong>
+                    <small>{{ t('components.profileManagerDialog.customApiProviderHelp') }}</small>
+                  </span>
+                  <span v-if="customProviders.length" class="profile-section-status">
+                    {{ t('components.profileManagerDialog.providersConfigured', { count: customProviders.length }) }}
+                  </span>
+                  <span class="profile-section-chevron" aria-hidden="true">›</span>
+                </summary>
+                <div class="profile-collapsible-content">
+                  <CustomSelect
+                    v-model="customProviderSelection"
+                    :options="customProviderOptions"
+                    :aria-label="t('components.profileManagerDialog.customApiProvider')"
+                    @update:model-value="selectCustomProvider"
+                  />
+                  <input v-model="customProviderId" :disabled="customProviderSelection !== '__new__'" :aria-label="t('components.profileManagerDialog.providerId')" :placeholder="t('components.profileManagerDialog.providerIdPlaceholder')" />
+                  <input v-model="customProviderBaseUrl" type="url" :aria-label="t('components.profileManagerDialog.customProviderUrl')" placeholder="https://api.example.com/v1" />
+                  <input v-model="customProviderApiKey" type="password" autocomplete="new-password" :aria-label="t('components.profileManagerDialog.customProviderApiKey')" :placeholder="selectedCustomProvider?.configured ? t('components.profileManagerDialog.leaveBlankToKeepKey') : t('components.profileManagerDialog.enterApiKey')" />
+                  <button class="profile-secondary dialog-action" type="button" :disabled="discoveringCustomModels || !customProviderBaseUrl.trim()" @click="discoverCustomModels">
+                    {{ discoveringCustomModels ? t('components.profileManagerDialog.connecting') : t('components.profileManagerDialog.connectAndDiscover') }}
+                  </button>
+                  <fieldset v-if="customModels.length" class="local-model-list">
+                    <legend>{{ t('components.profileManagerDialog.discoveredModels') }}</legend>
+                    <label v-for="model in customModels" :key="model.id">
+                      <input v-model="selectedCustomModelIds" type="checkbox" :value="model.id" />
+                      <span>{{ model.id }}</span>
+                    </label>
+                  </fieldset>
+                  <div class="profile-remove-actions">
+                    <button class="profile-primary dialog-action" type="button" :disabled="savingCustomProvider || !customProviderId.trim() || !customProviderBaseUrl.trim() || selectedCustomModelIds.length === 0" @click="saveCustomProvider">
+                      {{ savingCustomProvider ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveCustomProvider') }}
+                    </button>
+                    <button v-if="customProviderSelection !== '__new__'" class="profile-remove-button dialog-action" type="button" :disabled="removingCustomProvider" @click="removeCustomProvider">
+                      {{ removingCustomProvider ? t('components.profileManagerDialog.removing') : t('components.profileManagerDialog.removeCustomProvider') }}
+                    </button>
+                    <span v-if="customProviderSaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.customProviderSaved') }}</span>
+                  </div>
+                </div>
+              </details>
               <h3>{{ t('components.profileManagerDialog.defaultModel') }}</h3>
               <CustomSelect
                 v-model="defaultModel"
@@ -219,6 +261,13 @@ interface LocalModel {
   id: string;
 }
 
+interface CustomProvider {
+  id: string;
+  baseUrl: string;
+  modelIds: string[];
+  configured: boolean;
+}
+
 interface DeleteResult {
   id: string;
   activeProfileChanged: boolean;
@@ -260,6 +309,17 @@ const savingLocalLlm = ref(false);
 const removingLocalLlm = ref(false);
 const localLlmSaved = ref(false);
 const localLlmRemoved = ref(false);
+const customProviders = ref<CustomProvider[]>([]);
+const customProviderSelection = ref('__new__');
+const customProviderId = ref('');
+const customProviderBaseUrl = ref('');
+const customProviderApiKey = ref('');
+const customModels = ref<LocalModel[]>([]);
+const selectedCustomModelIds = ref<string[]>([]);
+const discoveringCustomModels = ref(false);
+const savingCustomProvider = ref(false);
+const removingCustomProvider = ref(false);
+const customProviderSaved = ref(false);
 const proxy = reactive<ProxySettings>({ ALL_PROXY: '', HTTP_PROXY: '', HTTPS_PROXY: '', NO_PROXY: '' });
 
 const authenticationCommand = computed(() => (
@@ -280,6 +340,11 @@ const apiKeyProviderOptions = computed<CustomSelectOption[]>(() => apiKeyProvide
   label: `${provider.label} (${provider.envVar})${provider.configured ? ` — ${t('components.profileManagerDialog.configured')}` : ''}`,
 })));
 const selectedApiKeyProvider = computed(() => apiKeyProviders.value.find((provider) => provider.envVar === apiKeyProvider.value));
+const selectedCustomProvider = computed(() => customProviders.value.find((provider) => provider.id === customProviderSelection.value));
+const customProviderOptions = computed<CustomSelectOption[]>(() => [
+  { value: '__new__', label: t('components.profileManagerDialog.addCustomProvider') },
+  ...customProviders.value.map((provider) => ({ value: provider.id, label: `${provider.id}${provider.configured ? ` — ${t('components.profileManagerDialog.configured')}` : ''}` })),
+]);
 const configuredApiKeyCount = computed(() => apiKeyProviders.value.filter((provider) => provider.configured).length);
 const autoRenameLanguageOptions: CustomSelectOption[] = [
   { value: 'english', label: t('components.profileManagerDialog.english') },
@@ -329,6 +394,17 @@ function resetSaveState(): void {
   removingLocalLlm.value = false;
   localLlmSaved.value = false;
   localLlmRemoved.value = false;
+  customProviders.value = [];
+  customProviderSelection.value = '__new__';
+  customProviderId.value = '';
+  customProviderBaseUrl.value = '';
+  customProviderApiKey.value = '';
+  customModels.value = [];
+  selectedCustomModelIds.value = [];
+  discoveringCustomModels.value = false;
+  savingCustomProvider.value = false;
+  removingCustomProvider.value = false;
+  customProviderSaved.value = false;
   error.value = '';
 }
 
@@ -364,13 +440,14 @@ async function select(id: string): Promise<void> {
   resetSaveState();
   models.value = [];
 
-  const [proxyResponse, modelsResponse, automationResponse, autoRenameResponse, apiKeyProvidersResponse, localLlmResponse] = await Promise.all([
+  const [proxyResponse, modelsResponse, automationResponse, autoRenameResponse, apiKeyProvidersResponse, localLlmResponse, customProvidersResponse] = await Promise.all([
     fetch(profileUrl(id, '/proxy')),
     fetch(profileUrl(id, '/models')),
     fetch(profileUrl(id, '/automation-model')),
     fetch(profileUrl(id, '/auto-rename')),
     fetch(profileUrl(id, '/api-key-providers')),
     fetch(profileUrl(id, '/local-llm')),
+    fetch(profileUrl(id, '/custom-providers')),
   ]);
   if (proxyResponse.ok) {
     const data = await proxyResponse.json() as { proxy?: Record<string, string> };
@@ -407,6 +484,11 @@ async function select(id: string): Promise<void> {
     }
     selectedLocalModelIds.value = data.config?.modelIds || [];
     localModels.value = selectedLocalModelIds.value.map((modelId) => ({ id: modelId }));
+  }
+  if (customProvidersResponse.ok) {
+    const data = await customProvidersResponse.json() as { providers?: CustomProvider[] };
+    customProviders.value = data.providers || [];
+    if (customProviders.value.length) selectCustomProvider(customProviders.value[0].id);
   }
 }
 
@@ -492,6 +574,95 @@ async function removeLocalLlm(): Promise<void> {
     error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToRemoveLocalLlm');
   } finally {
     removingLocalLlm.value = false;
+  }
+}
+
+function selectCustomProvider(selection: string): void {
+  customProviderSelection.value = selection;
+  customProviderApiKey.value = '';
+  customProviderSaved.value = false;
+  const provider = customProviders.value.find((item) => item.id === selection);
+  customProviderId.value = provider?.id || '';
+  customProviderBaseUrl.value = provider?.baseUrl || '';
+  selectedCustomModelIds.value = provider?.modelIds || [];
+  customModels.value = selectedCustomModelIds.value.map((id) => ({ id }));
+}
+
+async function discoverCustomModels(): Promise<void> {
+  if (!customProviderBaseUrl.value.trim()) return;
+  error.value = '';
+  customProviderSaved.value = false;
+  discoveringCustomModels.value = true;
+  try {
+    const response = await fetch(profileUrl(managedProfileId.value, '/custom-providers/discover'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl: customProviderBaseUrl.value, apiKey: customProviderApiKey.value || undefined }),
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToDiscoverCustomModels')));
+    const data = await response.json() as { models?: LocalModel[] };
+    customModels.value = data.models || [];
+    selectedCustomModelIds.value = customModels.value.map((model) => model.id);
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToDiscoverCustomModels');
+  } finally {
+    discoveringCustomModels.value = false;
+  }
+}
+
+async function saveCustomProvider(): Promise<void> {
+  if (!customProviderId.value.trim() || !customProviderBaseUrl.value.trim() || selectedCustomModelIds.value.length === 0) return;
+  error.value = '';
+  customProviderSaved.value = false;
+  savingCustomProvider.value = true;
+  try {
+    const response = await fetch(profileUrl(managedProfileId.value, `/custom-providers/${encodeURIComponent(customProviderId.value)}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: customProviderBaseUrl.value,
+        modelIds: selectedCustomModelIds.value,
+        apiKey: customProviderApiKey.value || undefined,
+      }),
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToSaveCustomProvider')));
+    const data = await response.json() as { provider?: CustomProvider };
+    if (data.provider) {
+      const index = customProviders.value.findIndex((provider) => provider.id === data.provider!.id);
+      if (index >= 0) customProviders.value[index] = data.provider;
+      else customProviders.value.push(data.provider);
+      customProviderSelection.value = data.provider.id;
+    }
+    customProviderApiKey.value = '';
+    customProviderSaved.value = true;
+    const modelsResponse = await fetch(profileUrl(managedProfileId.value, '/models'));
+    if (modelsResponse.ok) models.value = (await modelsResponse.json() as { models?: ModelOption[] }).models || [];
+    emit('updated');
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToSaveCustomProvider');
+  } finally {
+    savingCustomProvider.value = false;
+  }
+}
+
+async function removeCustomProvider(): Promise<void> {
+  if (customProviderSelection.value === '__new__') return;
+  error.value = '';
+  removingCustomProvider.value = true;
+  try {
+    const providerId = customProviderSelection.value;
+    const response = await fetch(profileUrl(managedProfileId.value, `/custom-providers/${encodeURIComponent(providerId)}`), { method: 'DELETE' });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToRemoveCustomProvider')));
+    customProviders.value = customProviders.value.filter((provider) => provider.id !== providerId);
+    models.value = models.value.filter((model) => model.provider !== providerId);
+    if (defaultModel.value.startsWith(`${providerId}\u0000`)) defaultModel.value = '';
+    if (automationModel.value.startsWith(`${providerId}\u0000`)) automationModel.value = '';
+    selectCustomProvider('__new__');
+    emit('updated');
+  } catch (exception) {
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToRemoveCustomProvider');
+  } finally {
+    removingCustomProvider.value = false;
   }
 }
 

@@ -40,6 +40,12 @@ describe('ProfileManagerDialog', () => {
       }
       if (url.endsWith('/local-llm') && options?.method === 'DELETE') return ok({ config: { baseUrl: '', modelIds: [] } });
       if (url.endsWith('/local-llm')) return ok({ config: { baseUrl: '', modelIds: [] } });
+      if (url.endsWith('/custom-providers/discover')) return ok({ models: [{ id: 'agnes-2.5-flash' }] });
+      if (url.endsWith('/custom-providers/agnes') && options?.method === 'PUT') {
+        return ok({ provider: { id: 'agnes', baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], configured: true } });
+      }
+      if (url.endsWith('/custom-providers/agnes') && options?.method === 'DELETE') return ok({ id: 'agnes' });
+      if (url.endsWith('/custom-providers')) return ok({ providers: [] });
       if (url.endsWith('/models')) {
         return ok({ models: [
           { provider: 'anthropic', id: 'claude-haiku-4-5', name: 'Claude Haiku', current: true },
@@ -74,7 +80,7 @@ describe('ProfileManagerDialog', () => {
     });
     await wrapper.setProps({ visible: true });
 
-    await vi.waitFor(() => expect(wrapper.findAll('.profile-collapsible')).toHaveLength(2));
+    await vi.waitFor(() => expect(wrapper.findAll('.profile-collapsible')).toHaveLength(3));
     const sections = wrapper.findAll('details.profile-collapsible');
     expect(sections.every((section) => !(section.element as HTMLDetailsElement).open)).toBe(true);
 
@@ -162,6 +168,32 @@ describe('ProfileManagerDialog', () => {
       { method: 'DELETE' },
     ));
     expect(wrapper.text()).toContain('Local LLM removed.');
+  });
+
+  it('discovers and securely saves a custom API provider', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Provider ID"]').exists()).toBe(true));
+
+    await wrapper.find('[aria-label="Provider ID"]').setValue('agnes');
+    await wrapper.find('[aria-label="Custom provider URL"]').setValue('https://api.agnes.test/v1');
+    await wrapper.find('[aria-label="Custom provider API key"]').setValue('agnes-secret');
+    await wrapper.findAll('button').filter((button) => button.text() === 'Connect & discover models')[1].trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('agnes-2.5-flash'));
+    await wrapper.findAll('button').find((button) => button.text() === 'Save custom provider')!.trigger('click');
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/custom-providers/agnes',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], apiKey: 'agnes-secret' }),
+      }),
+    ));
+    expect((wrapper.find('[aria-label="Custom provider API key"]').element as HTMLInputElement).value).toBe('');
+    expect(wrapper.text()).not.toContain('agnes-secret');
   });
 
   it('loads and saves all profile settings with one action', async () => {

@@ -68,6 +68,12 @@ PI_WEBUI_MEMORY_POLICY=legacy
 
 打开 **Agent 配置 → 本地 LLM**，选择 Ollama、LM Studio 或 llama.cpp 预设（也可以输入自定义 OpenAI 兼容服务地址），然后点击**连接并发现模型**。选择需要使用的模型并保存，无需 API 密钥。该地址由 Pi WebUI 服务器访问，因此 `127.0.0.1` 指运行服务器的设备。默认允许访问回环地址。如需使用局域网或远程服务，请将其精确来源（协议、主机名和端口）加入逗号分隔的 `PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS`，例如 `http://192.168.1.20:11434,https://llm.example.test`。生成的提供商配置会写入当前 Agent 配置的 `models.json`，不会覆盖其他提供商。发现的模型默认配置为支持文本和图像输入；模型已有的显式能力配置会被保留。
 
+## 自定义 API 提供商
+
+打开 **Agent 配置 → 自定义 API 提供商**，可以添加 OpenAI 兼容的远程服务。输入小写提供商 ID、以 API 根路径结尾的 HTTPS 地址（例如 `https://api.example.com/v1`）及其 API 密钥。点击**连接并发现模型**，选择需要使用的模型，然后保存提供商。提供商及所选模型 ID 存储在当前 Agent 配置的 `models.json` 中；新输入的密钥单独存储在 Pi 受保护的 `auth.json` 中，并且不会返回浏览器。也可以在此选择和编辑 `models.json` 中已有的自定义提供商，例如手动配置的 Agnes。
+
+模型发现依赖提供商的 `GET /models` 响应。大多数 OpenAI 兼容服务只返回模型 ID，不提供上下文窗口、推理或图像能力，因此发现的模型会使用 Pi 默认值；如果 `models.json` 中已经存在这些字段，则会予以保留。
+
 ## 提供商和网关变量
 
 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等提供商 API 密钥是可选的，因为服务器默认使用 Pi 智能体自身的身份验证。

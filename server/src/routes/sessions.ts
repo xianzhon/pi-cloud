@@ -271,6 +271,46 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     }
   });
 
+  app.get('/agent-profiles/:profileId/custom-providers', async (req, reply) => {
+    try {
+      const { profileId } = req.params as { profileId: string };
+      return { providers: await sessionService.listAgentProfileCustomProviders(profileId) };
+    } catch (error) {
+      return reply.status(404).send({ error: error instanceof Error ? error.message : 'Profile not found' });
+    }
+  });
+
+  app.post('/agent-profiles/:profileId/custom-providers/discover', async (req, reply) => {
+    try {
+      const { profileId } = req.params as { profileId: string };
+      const { baseUrl, apiKey } = req.body as { baseUrl?: string; apiKey?: string };
+      if (!baseUrl) return reply.status(400).send({ error: 'baseUrl is required' });
+      return { models: await sessionService.discoverAgentProfileCustomProvider(profileId, baseUrl, apiKey) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to discover custom provider models' });
+    }
+  });
+
+  app.put('/agent-profiles/:profileId/custom-providers/:providerId', async (req, reply) => {
+    try {
+      const { profileId, providerId } = req.params as { profileId: string; providerId: string };
+      const { baseUrl, modelIds, apiKey } = req.body as { baseUrl?: string; modelIds?: string[]; apiKey?: string };
+      if (!baseUrl || !Array.isArray(modelIds)) return reply.status(400).send({ error: 'baseUrl and modelIds are required' });
+      return { provider: await sessionService.saveAgentProfileCustomProvider(profileId, providerId, baseUrl, modelIds, apiKey) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to save custom provider' });
+    }
+  });
+
+  app.delete('/agent-profiles/:profileId/custom-providers/:providerId', async (req, reply) => {
+    try {
+      const { profileId, providerId } = req.params as { profileId: string; providerId: string };
+      return await sessionService.removeAgentProfileCustomProvider(profileId, providerId);
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to remove custom provider' });
+    }
+  });
+
   app.get('/agent-profiles/:profileId/local-llm', async (req, reply) => {
     try {
       const { profileId } = req.params as { profileId: string };
