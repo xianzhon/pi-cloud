@@ -1,10 +1,19 @@
 <template>
   <div class="pdf-preview">
-    <div class="pdf-toolbar" role="toolbar" :aria-label="t('components.editorPanel.pdfControls')">
+    <div
+      class="pdf-toolbar"
+      role="toolbar"
+      :aria-label="t('components.editorPanel.pdfAnnotationControls')"
+      @mouseover="showTooltip"
+      @mouseout="clearTooltip"
+      @focusin="showTooltip"
+      @focusout="clearTooltip"
+      @click="clearTooltip"
+      @scroll="clearTooltip"
+    >
       <div class="pdf-toolbar-group" role="group" :aria-label="t('components.editorPanel.pdfAnnotationControls')">
         <button
           type="button"
-          class="tooltip"
           :class="{ active: tool === 'pen' }"
           :aria-pressed="tool === 'pen'"
           :aria-label="t('components.editorPanel.pdfPen')"
@@ -13,7 +22,6 @@
         ><PhPencilSimple :size="19" /></button>
         <button
           type="button"
-          class="tooltip"
           :class="{ active: tool === 'highlighter' }"
           :aria-pressed="tool === 'highlighter'"
           :aria-label="t('components.editorPanel.pdfHighlighter')"
@@ -24,7 +32,6 @@
           v-for="shapeTool in shapeTools"
           :key="shapeTool.name"
           type="button"
-          class="tooltip"
           :class="{ active: tool === shapeTool.name }"
           :aria-pressed="tool === shapeTool.name"
           :aria-label="t(shapeTool.label)"
@@ -37,7 +44,6 @@
         /></button>
         <button
           type="button"
-          class="tooltip"
           :class="{ active: tool === 'move' }"
           :aria-pressed="tool === 'move'"
           :aria-label="t('components.editorPanel.pdfMoveAnnotation')"
@@ -46,18 +52,17 @@
         ><PhArrowsOutCardinal :size="19" /></button>
         <button
           type="button"
-          class="tooltip"
           :class="{ active: tool === 'eraser' }"
           :aria-pressed="tool === 'eraser'"
           :aria-label="t('components.editorPanel.pdfEraser')"
           :data-tooltip="t('components.editorPanel.pdfEraser')"
           @click="toggleTool('eraser')"
         ><PhEraser :size="19" /></button>
-        <label class="pdf-control-label tooltip" :data-tooltip="t('components.editorPanel.pdfPenColor')">
+        <label class="pdf-control-label" :data-tooltip="t('components.editorPanel.pdfPenColor')">
           <input v-model="penColor" type="color" :aria-label="t('components.editorPanel.pdfPenColor')">
         </label>
         <label
-          class="pdf-width-control tooltip"
+          class="pdf-width-control"
           :data-tooltip="`${t('components.editorPanel.pdfPenWidth')}: ${penWidth}`"
         >
           <input
@@ -72,7 +77,6 @@
         </label>
         <button
           type="button"
-          class="tooltip"
           :disabled="!canUndo"
           :aria-label="t('components.editorPanel.undoPdfAnnotation')"
           :data-tooltip="t('components.editorPanel.undoPdfAnnotation')"
@@ -80,7 +84,6 @@
         ><PhArrowCounterClockwise :size="19" /></button>
         <button
           type="button"
-          class="tooltip"
           :disabled="!canRedo"
           :aria-label="t('components.editorPanel.redoPdfAnnotation')"
           :data-tooltip="t('components.editorPanel.redoPdfAnnotation')"
@@ -88,7 +91,6 @@
         ><PhArrowClockwise :size="19" /></button>
         <button
           type="button"
-          class="tooltip"
           :disabled="!currentPageStrokes.length"
           :aria-label="t('components.editorPanel.clearPdfPageAnnotations')"
           :data-tooltip="t('components.editorPanel.clearPdfPageAnnotations')"
@@ -105,53 +107,50 @@
           <span v-else-if="saveState === 'error'" aria-hidden="true">!</span>
         </span>
       </div>
-      <div class="pdf-toolbar-group" role="group">
-        <button
-          type="button"
-          class="tooltip"
-          :disabled="loading || pageNumber <= 1"
-          :aria-label="t('components.editorPanel.previousPage')"
-          :data-tooltip="t('components.editorPanel.previousPage')"
-          @click="goToPage(pageNumber - 1)"
-        ><PhCaretLeft :size="18" weight="bold" /></button>
-        <span class="pdf-page-status">
-          {{ t('components.editorPanel.pdfPageStatus', { page: pageNumber, pages: pageCount || 1 }) }}
-        </span>
-        <button
-          type="button"
-          class="tooltip"
-          :disabled="loading || pageNumber >= pageCount"
-          :aria-label="t('components.editorPanel.nextPage')"
-          :data-tooltip="t('components.editorPanel.nextPage')"
-          @click="goToPage(pageNumber + 1)"
-        ><PhCaretRight :size="18" weight="bold" /></button>
-        <button
-          type="button"
-          class="tooltip"
-          :disabled="loading || scale <= MIN_SCALE"
-          :aria-label="t('components.editorPanel.zoomOut')"
-          :data-tooltip="t('components.editorPanel.zoomOut')"
-          @click="setScale(scale - SCALE_STEP)"
-        ><PhMinus :size="18" /></button>
-        <button
-          type="button"
-          class="pdf-zoom-level tooltip"
-          :disabled="loading"
-          :aria-label="t('components.editorPanel.resetPdfZoom')"
-          :data-tooltip="t('components.editorPanel.resetPdfZoom')"
-          @click="setScale(1)"
-        >
-          {{ Math.round(scale * 100) }}%
-        </button>
-        <button
-          type="button"
-          class="tooltip"
-          :disabled="loading || scale >= MAX_SCALE"
-          :aria-label="t('components.editorPanel.zoomIn')"
-          :data-tooltip="t('components.editorPanel.zoomIn')"
-          @click="setScale(scale + SCALE_STEP)"
-        ><PhPlus :size="18" /></button>
-      </div>
+    </div>
+    <div
+      v-if="activeTooltip"
+      class="pdf-annotation-tooltip"
+      role="tooltip"
+      :style="{ left: `${activeTooltip.left}px`, top: `${activeTooltip.top}px` }"
+    >{{ activeTooltip.text }}</div>
+    <div class="pdf-navigation-toolbar" role="toolbar" :aria-label="t('components.editorPanel.pdfControls')">
+      <button
+        type="button"
+        :disabled="loading || pageNumber <= 1"
+        :aria-label="t('components.editorPanel.previousPage')"
+        @click="goToPage(pageNumber - 1)"
+      ><PhCaretLeft :size="18" weight="bold" /></button>
+      <span class="pdf-page-status">
+        {{ t('components.editorPanel.pdfPageStatus', { page: pageNumber, pages: pageCount || 1 }) }}
+      </span>
+      <button
+        type="button"
+        :disabled="loading || pageNumber >= pageCount"
+        :aria-label="t('components.editorPanel.nextPage')"
+        @click="goToPage(pageNumber + 1)"
+      ><PhCaretRight :size="18" weight="bold" /></button>
+      <button
+        type="button"
+        :disabled="loading || scale <= MIN_SCALE"
+        :aria-label="t('components.editorPanel.zoomOut')"
+        @click="setScale(scale - SCALE_STEP)"
+      ><PhMinus :size="18" /></button>
+      <button
+        type="button"
+        class="pdf-zoom-level"
+        :disabled="loading"
+        :aria-label="t('components.editorPanel.resetPdfZoom')"
+        @click="setScale(1)"
+      >
+        {{ Math.round(scale * 100) }}%
+      </button>
+      <button
+        type="button"
+        :disabled="loading || scale >= MAX_SCALE"
+        :aria-label="t('components.editorPanel.zoomIn')"
+        @click="setScale(scale + SCALE_STEP)"
+      ><PhPlus :size="18" /></button>
     </div>
     <div
       ref="viewportEl"
@@ -236,6 +235,7 @@ interface AnnotationStroke {
 }
 interface AnnotationDocument { version: 1; pages: Record<string, AnnotationStroke[]> }
 interface TextEditorState { page: string; point: AnnotationPoint; index?: number; text: string; color: string }
+interface TooltipState { text: string; left: number; top: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
 
 const props = defineProps<{ src: string; filePath: string }>();
@@ -269,6 +269,7 @@ const undoStack = ref<AnnotationDocument[]>([]);
 const redoStack = ref<AnnotationDocument[]>([]);
 const saveState = ref<'saving' | 'saved' | 'error' | ''>('');
 const isPanning = ref(false);
+const activeTooltip = ref<TooltipState>();
 const textEditor = ref<TextEditorState>();
 const textEditorStyle = computed(() => {
   const editor = textEditor.value;
@@ -307,6 +308,36 @@ let annotationChanged = false;
 let loadVersion = 0;
 let saveVersion = 0;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
+let tooltipAnchor: HTMLElement | undefined;
+
+function showTooltip(event: Event): void {
+  const eventTarget = event.target instanceof Element ? event.target : undefined;
+  const toolbar = event.currentTarget instanceof HTMLElement ? event.currentTarget : undefined;
+  const anchor = eventTarget?.closest<HTMLElement>('[data-tooltip]');
+  const preview = toolbar?.parentElement;
+  if (!anchor || !toolbar?.contains(anchor) || !preview) return;
+
+  const anchorRect = anchor.getBoundingClientRect();
+  const previewRect = preview.getBoundingClientRect();
+  tooltipAnchor = anchor;
+  activeTooltip.value = {
+    text: anchor.dataset.tooltip || '',
+    left: anchorRect.left + anchorRect.width / 2 - previewRect.left,
+    top: anchorRect.bottom - previewRect.top + 6,
+  };
+}
+
+function clearTooltip(event?: Event): void {
+  if ((event?.type === 'mouseout' || event?.type === 'focusout') && tooltipAnchor) {
+    const relatedTarget = (event as MouseEvent | FocusEvent).relatedTarget;
+    const nextAnchor = relatedTarget instanceof Element
+      ? relatedTarget.closest<HTMLElement>('[data-tooltip]')
+      : undefined;
+    if (nextAnchor === tooltipAnchor) return;
+  }
+  tooltipAnchor = undefined;
+  activeTooltip.value = undefined;
+}
 
 function cloneAnnotations(value = annotations.value): AnnotationDocument {
   return JSON.parse(JSON.stringify(value)) as AnnotationDocument;
@@ -887,6 +918,7 @@ watch(scale, rerenderVisiblePages);
 
 onUnmounted(() => {
   loadVersion++;
+  clearTooltip();
   clearTimeout(statusTimer);
   renderTasks.forEach(task => task.cancel());
   void loadingTask?.destroy();
@@ -902,24 +934,33 @@ onUnmounted(() => {
   background: var(--bg-primary);
 }
 
-.pdf-toolbar {
+.pdf-toolbar,
+.pdf-navigation-toolbar {
   position: absolute;
   z-index: 2;
-  top: 0.75rem;
-  left: 50%;
   display: flex;
-  max-width: calc(100% - 1.5rem);
   align-items: center;
-  transform: translateX(-50%);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--bg-secondary);
   box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
+}
+
+.pdf-toolbar {
+  top: 0.75rem;
+  left: 50%;
+  max-width: calc(100% - 1.5rem);
+  transform: translateX(-50%);
   overflow-x: auto;
   scrollbar-width: none;
 }
 
 .pdf-toolbar::-webkit-scrollbar { display: none; }
+
+.pdf-navigation-toolbar {
+  bottom: 0.75rem;
+  left: 0.75rem;
+}
 
 .pdf-toolbar-group {
   display: flex;
@@ -927,9 +968,8 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.pdf-toolbar-group + .pdf-toolbar-group { border-left: 1px solid var(--border-color); }
-
-.pdf-toolbar button {
+.pdf-toolbar button,
+.pdf-navigation-toolbar button {
   display: inline-flex;
   height: 34px;
   min-width: 36px;
@@ -943,9 +983,11 @@ onUnmounted(() => {
 }
 
 .pdf-toolbar button:hover:not(:disabled),
-.pdf-toolbar button.active { background: var(--bg-hover); }
+.pdf-toolbar button.active,
+.pdf-navigation-toolbar button:hover:not(:disabled) { background: var(--bg-hover); }
 
-.pdf-toolbar button:disabled { opacity: 0.45; }
+.pdf-toolbar button:disabled,
+.pdf-navigation-toolbar button:disabled { opacity: 0.45; }
 
 .pdf-line-icon { transform: rotate(-45deg); }
 
@@ -1025,14 +1067,9 @@ onUnmounted(() => {
   text-align: center;
 }
 
-.tooltip { position: relative; }
-
-.tooltip::after {
-  content: attr(data-tooltip);
+.pdf-annotation-tooltip {
   position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  z-index: 100;
+  z-index: 3;
   padding: 4px 10px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -1040,16 +1077,10 @@ onUnmounted(() => {
   box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
   color: var(--text-primary);
   font-size: 0.75rem;
-  opacity: 0;
   pointer-events: none;
   transform: translateX(-50%);
-  transition: opacity 0.15s ease-out;
   white-space: nowrap;
 }
-
-.tooltip:hover::after,
-.tooltip:focus-visible::after,
-.tooltip:focus-within::after { opacity: 1; }
 
 .pdf-annotation-status {
   display: inline-flex;
@@ -1081,7 +1112,7 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   overflow: auto;
-  padding: 4rem 1rem 1rem;
+  padding: 4rem 1rem;
   text-align: center;
 }
 

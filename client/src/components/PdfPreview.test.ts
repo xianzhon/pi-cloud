@@ -151,20 +151,40 @@ describe('PdfPreview', () => {
     expect(viewport.classes()).not.toContain('panning');
   });
 
-  it('combines PDF controls in one toolbar with icon tooltips', async () => {
+  it('keeps annotation controls at the top and page controls at the bottom-left', async () => {
     const wrapper = mount(PdfPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
 
-    expect(wrapper.findAll('.pdf-toolbar')).toHaveLength(1);
-    expect(wrapper.find('.pdf-annotation-toolbar').exists()).toBe(false);
-    expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
+    const annotationToolbar = wrapper.get('.pdf-toolbar');
+    const navigationToolbar = wrapper.get('.pdf-navigation-toolbar');
+    expect(annotationToolbar.find('[aria-label="Previous page"]').exists()).toBe(false);
+    expect(navigationToolbar.findAll('button').map(button => button.attributes('aria-label'))).toEqual([
+      'Previous page',
+      'Next page',
+      'Zoom out',
+      'Reset PDF zoom',
+      'Zoom in',
+    ]);
+    expect(annotationToolbar.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
     for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text', 'Move annotation']) {
       expect(wrapper.get(`[aria-label="${label}"]`).attributes('data-tooltip')).toBe(label);
     }
     expect(wrapper.get('[aria-label="Undo annotation"]').attributes('data-tooltip')).toBe('Undo annotation');
-    expect(wrapper.get('[aria-label="Next page"]').attributes('data-tooltip')).toBe('Next page');
+    for (const button of navigationToolbar.findAll('button')) {
+      expect(button.attributes('data-tooltip')).toBeUndefined();
+      expect(button.classes()).not.toContain('tooltip');
+    }
+
+    const penButton = annotationToolbar.get('[aria-label="Draw on PDF"]');
+    await penButton.trigger('mouseover');
+    expect(wrapper.get('.pdf-annotation-tooltip').text()).toBe('Draw on PDF');
+    await penButton.trigger('mouseout');
+    expect(wrapper.find('.pdf-annotation-tooltip').exists()).toBe(false);
+    await penButton.trigger('mouseover');
+    await penButton.trigger('click');
+    expect(wrapper.find('.pdf-annotation-tooltip').exists()).toBe(false);
 
     const penWidth = wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]');
     expect(wrapper.get('.pdf-width-value').text()).toBe('1');
