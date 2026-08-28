@@ -263,11 +263,20 @@ interface AnnotationStroke {
   points: AnnotationPoint[];
   text?: string;
 }
-interface AnnotationDocument { version: 1; pages: Record<string, AnnotationStroke[]> }
 interface TextEditorState { page: string; point: AnnotationPoint; index?: number; text: string; color: string }
 interface TooltipState { text: string; left: number; top: number }
 interface ToolbarPosition { left: number; top: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
+interface PdfViewState {
+  scale?: number;
+  page?: number;
+  tool?: AnnotationTool;
+  penColor?: string;
+  penWidth?: number;
+  toolbarVertical?: boolean;
+  toolbarPosition?: ToolbarPosition;
+}
+interface AnnotationDocument { version: 1; pages: Record<string, AnnotationStroke[]>; view?: PdfViewState }
 
 const props = defineProps<{ src: string; filePath: string; initialScale?: number }>();
 const emit = defineEmits<{ 'scale-change': [scale: number] }>();
@@ -276,6 +285,10 @@ const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.1;
 const TOOLBAR_INSET = 12;
+const VIEW_SAVE_DELAY = 300;
+const ANNOTATION_TOOLS = new Set<AnnotationTool>([
+  'pan', 'pen', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'move', 'eraser',
+]);
 const shapeTools: Array<{ name: DrawingTool; label: string; icon: object; shortcut: string }> = [
   { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus, shortcut: '3' },
   { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight, shortcut: '4' },
@@ -360,7 +373,10 @@ let moveStart: { index: number; point: AnnotationPoint; points: AnnotationPoint[
 let annotationChanged = false;
 let loadVersion = 0;
 let saveVersion = 0;
+let annotationSidecarExists = false;
+let loadedFilePath: string | undefined;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
+let viewSaveTimer: ReturnType<typeof setTimeout> | undefined;
 let tooltipAnchor: HTMLElement | undefined;
 let toolbarDrag: { pointerId: number; offsetX: number; offsetY: number } | undefined;
 
@@ -490,10 +506,10 @@ function cloneAnnotations(value = annotations.value): AnnotationDocument {
   return JSON.parse(JSON.stringify(value)) as AnnotationDocument;
 }
 
-function annotationFilePath(): string {
-  const separatorIndex = Math.max(props.filePath.lastIndexOf('/'), props.filePath.lastIndexOf('\\'));
-  const directory = props.filePath.slice(0, separatorIndex + 1);
-  const filename = props.filePath.slice(separatorIndex + 1);
+function annotationFilePath(filePath = props.filePath): string {
+  const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  const directory = filePath.slice(0, separatorIndex + 1);
+  const filename = filePath.slice(separatorIndex + 1);
   return `${directory}.${filename}.annotations.json`;
 }
 
@@ -525,6 +541,41 @@ function setScale(value: number): void {
   if (nextScale === scale.value) return;
   scale.value = nextScale;
   emit('scale-change', nextScale);
+}
+
+function currentViewState(): PdfViewState {
+  return {
+    scale: scale.value,
+    page: pageNumber.value,
+    tool: tool.value,
+    penColor: penColor.value,
+    penWidth: penWidth.value,
+    toolbarVertical: toolbarVertical.value,
+    toolbarPosition: toolbarPosition.value ? { ...toolbarPosition.value } : undefined,
+  };
+}
+
+function restoreViewState(view?: PdfViewState): void {
+  const savedPage = typeof view?.page === 'number' && Number.isFinite(view.page) ? Math.round(view.page) : 1;
+  const savedScale = typeof view?.scale === 'number' && Number.isFinite(view.scale) ? view.scale : 1;
+  pageNumber.value = Math.min(pageCount.value, Math.max(1, savedPage));
+  scale.value = clampScale(props.initialScale ?? savedScale);
+  tool.value = view?.tool && ANNOTATION_TOOLS.has(view.tool) ? view.tool : 'pan';
+  penColor.value = typeof view?.penColor === 'string' ? view.penColor : '#ef4444';
+  penWidth.value = typeof view?.penWidth === 'number' && Number.isFinite(view.penWidth)
+    ? Math.min(12, Math.max(1, Math.round(view.penWidth)))
+    : 1;
+  toolbarVertical.value = view?.toolbarVertical === true;
+  const position = view?.toolbarPosition;
+  toolbarPosition.value = position && Number.isFinite(position.left) && Number.isFinite(position.top)
+    ? { left: position.left, top: position.top }
+    : undefined;
+}
+
+function scheduleViewSave(): void {
+  clearTimeout(viewSaveTimer);
+  if (loading.value || !annotationSidecarExists) return;
+  viewSaveTimer = setTimeout(() => void saveAnnotations(), VIEW_SAVE_DELAY);
 }
 
 function handleZoomWheel(event: WheelEvent): void {
@@ -699,6 +750,7 @@ async function renderVisiblePages(): Promise<void> {
 
 async function loadAnnotations(version: number): Promise<void> {
   annotations.value = { version: 1, pages: {} };
+  annotationSidecarExists = false;
   undoStack.value = [];
   redoStack.value = [];
   try {
@@ -709,7 +761,10 @@ async function loadAnnotations(version: number): Promise<void> {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json() as { content?: string };
       const parsed = JSON.parse(data.content || '') as AnnotationDocument;
-      if (parsed.version === 1 && parsed.pages && typeof parsed.pages === 'object') annotations.value = parsed;
+      if (parsed.version === 1 && parsed.pages && typeof parsed.pages === 'object') {
+        annotations.value = parsed;
+        annotationSidecarExists = true;
+      }
       return;
     }
   } catch (loadError) {
@@ -719,6 +774,11 @@ async function loadAnnotations(version: number): Promise<void> {
 
 async function loadPdf(): Promise<void> {
   const version = ++loadVersion;
+  if (viewSaveTimer && annotationSidecarExists && loadedFilePath) void saveAnnotations(loadedFilePath);
+  saveVersion++;
+  clearTimeout(viewSaveTimer);
+  viewSaveTimer = undefined;
+  loadedFilePath = undefined;
   loading.value = true;
   error.value = '';
   renderTasks.forEach(task => task.cancel());
@@ -743,12 +803,14 @@ async function loadPdf(): Promise<void> {
 
     document = loadedDocument;
     pageCount.value = loadedDocument.numPages;
-    pageNumber.value = 1;
-    scale.value = clampScale(props.initialScale ?? 1);
+    restoreViewState(annotations.value.view);
     await nextTick();
     if (version !== loadVersion) return;
+    keepToolbarInBounds();
+    loadedFilePath = props.filePath;
     loading.value = false;
     await renderVisiblePages();
+    if (pageNumber.value > 1) pageElements.get(pageNumber.value)?.scrollIntoView({ block: 'start' });
   } catch (loadError) {
     if (version !== loadVersion) return;
     console.error('Failed to load PDF:', loadError);
@@ -1024,7 +1086,10 @@ function finishAnnotation(event: PointerEvent, cancelled = false): void {
   }
 }
 
-async function saveAnnotations(): Promise<void> {
+async function saveAnnotations(filePath = props.filePath): Promise<void> {
+  clearTimeout(viewSaveTimer);
+  viewSaveTimer = undefined;
+  annotations.value.view = currentViewState();
   const version = ++saveVersion;
   saveState.value = 'saving';
   try {
@@ -1032,12 +1097,15 @@ async function saveAnnotations(): Promise<void> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        path: annotationFilePath(),
+        path: annotationFilePath(filePath),
         content: JSON.stringify(annotations.value, null, 2),
       }),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    if (version === saveVersion) saveState.value = 'saved';
+    if (version === saveVersion) {
+      annotationSidecarExists = true;
+      saveState.value = 'saved';
+    }
   } catch (saveError) {
     console.error('Failed to save PDF annotations:', saveError);
     if (version === saveVersion) saveState.value = 'error';
@@ -1081,6 +1149,7 @@ function rerenderVisiblePages(): void {
 }
 
 watch(scale, rerenderVisiblePages);
+watch([scale, pageNumber, tool, penColor, penWidth, toolbarVertical, toolbarPosition], scheduleViewSave);
 
 onMounted(() => {
   window.addEventListener('resize', keepToolbarInBounds);
@@ -1094,6 +1163,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleToolShortcut);
   clearTooltip();
   clearTimeout(statusTimer);
+  clearTimeout(viewSaveTimer);
   renderTasks.forEach(task => task.cancel());
   void loadingTask?.destroy();
 });

@@ -334,6 +334,64 @@ describe('PdfPreview', () => {
     expect(wrapper.find('[aria-label="Clear annotations on this page"]').attributes('disabled')).toBeUndefined();
   });
 
+  it('restores and saves viewer state in an existing annotation sidecar', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).startsWith('/api/files/read')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            content: JSON.stringify({
+              version: 1,
+              pages: { '1': [{ color: '#ef4444', width: 1, points: [{ x: 0.1, y: 0.1 }] }] },
+              view: {
+                scale: 1.5,
+                page: 2,
+                tool: 'eraser',
+                penColor: '#123456',
+                penWidth: 7,
+                toolbarVertical: true,
+                toolbarPosition: { left: 0, top: 0 },
+              },
+            }),
+          }),
+        } as Response;
+      }
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('150%');
+    expect(wrapper.get('.pdf-page-status').text()).toBe('2/2');
+    expect(wrapper.get('[aria-label="Erase PDF annotations"]').classes()).toContain('active');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#123456');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]').element.value).toBe('7');
+    expect(wrapper.get('.pdf-toolbar').classes()).toContain('vertical');
+    expect(wrapper.get('.pdf-toolbar').attributes('style')).toContain('left: 0px');
+
+    await wrapper.get('[aria-label="Zoom in"]').trigger('click');
+    await new Promise(resolve => setTimeout(resolve, 350));
+    await flushPromises();
+
+    const writeCall = fetchMock.mock.calls.find(([url]) => url === '/api/files/write');
+    const body = JSON.parse(String(writeCall?.[1]?.body));
+    expect(JSON.parse(body.content).view).toEqual({
+      scale: 1.6,
+      page: 2,
+      tool: 'eraser',
+      penColor: '#123456',
+      penWidth: 7,
+      toolbarVertical: true,
+      toolbarPosition: { left: 0, top: 0 },
+    });
+  });
+
   it('draws and saves shape annotations', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (url, init) => {
