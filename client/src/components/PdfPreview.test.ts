@@ -151,6 +151,44 @@ describe('PdfPreview', () => {
     expect(viewport.classes()).not.toContain('panning');
   });
 
+  it('moves the annotation toolbar and switches to a vertical layout', async () => {
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    const preview = wrapper.get<HTMLElement>('.pdf-preview');
+    const toolbar = wrapper.get<HTMLElement>('.pdf-toolbar');
+    vi.spyOn(preview.element, 'getBoundingClientRect').mockReturnValue({
+      left: 20, top: 30, width: 800, height: 600, right: 820, bottom: 630, x: 20, y: 30, toJSON: () => ({}),
+    });
+    vi.spyOn(toolbar.element, 'getBoundingClientRect').mockReturnValue({
+      left: 120, top: 42, width: 500, height: 36, right: 620, bottom: 78, x: 120, y: 42, toJSON: () => ({}),
+    });
+
+    await wrapper.get('.pdf-toolbar-drag-handle').trigger('pointerdown', {
+      button: 0, pointerId: 3, clientX: 130, clientY: 50,
+    });
+    const move = new Event('pointermove') as PointerEvent;
+    Object.defineProperties(move, {
+      pointerId: { value: 3 }, clientX: { value: 1000 }, clientY: { value: 1000 },
+    });
+    window.dispatchEvent(move);
+    await wrapper.vm.$nextTick();
+
+    expect(toolbar.attributes('style')).toContain('left: 300px');
+    expect(toolbar.attributes('style')).toContain('top: 564px');
+
+    await wrapper.get('.pdf-toolbar-drag-handle').trigger('keydown', { key: 'ArrowLeft' });
+    expect(toolbar.attributes('style')).toContain('left: 290px');
+
+    const verticalToggle = wrapper.get('[aria-label="Show annotation toolbar vertically"]');
+    await verticalToggle.trigger('click');
+    expect(toolbar.classes()).toContain('vertical');
+    expect(wrapper.find('[aria-label="Show annotation toolbar horizontally"]').exists()).toBe(true);
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]').element.value).toBe('1');
+  });
+
   it('keeps annotation controls at the top and page controls at the bottom-left', async () => {
     const wrapper = mount(PdfPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },

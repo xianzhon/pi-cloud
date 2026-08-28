@@ -1,7 +1,10 @@
 <template>
-  <div class="pdf-preview">
+  <div ref="previewEl" class="pdf-preview">
     <div
+      ref="toolbarEl"
       class="pdf-toolbar"
+      :class="{ vertical: toolbarVertical }"
+      :style="toolbarStyle"
       role="toolbar"
       :aria-label="t('components.editorPanel.pdfAnnotationControls')"
       @mouseover="showTooltip"
@@ -9,8 +12,17 @@
       @focusin="showTooltip"
       @focusout="clearTooltip"
       @click="clearTooltip"
-      @scroll="clearTooltip"
+      @scroll.capture="clearTooltip"
     >
+      <div
+        class="pdf-toolbar-drag-handle"
+        role="button"
+        tabindex="0"
+        :aria-label="t('components.editorPanel.movePdfToolbar')"
+        :data-tooltip="t('components.editorPanel.movePdfToolbar')"
+        @pointerdown="startToolbarDrag"
+        @keydown="moveToolbarWithKeyboard"
+      ><PhDotsSixVertical :size="19" weight="bold" /></div>
       <div class="pdf-toolbar-group" role="group" :aria-label="t('components.editorPanel.pdfAnnotationControls')">
         <button
           type="button"
@@ -96,6 +108,16 @@
           :data-tooltip="t('components.editorPanel.clearPdfPageAnnotations')"
           @click="clearPage"
         ><PhTrash :size="19" /></button>
+        <button
+          type="button"
+          :aria-label="t(toolbarVertical
+            ? 'components.editorPanel.showPdfToolbarHorizontally'
+            : 'components.editorPanel.showPdfToolbarVertically')"
+          :data-tooltip="t(toolbarVertical
+            ? 'components.editorPanel.showPdfToolbarHorizontally'
+            : 'components.editorPanel.showPdfToolbarVertically')"
+          @click="toggleToolbarOrientation"
+        ><component :is="toolbarVertical ? PhRows : PhColumns" :size="19" /></button>
         <span
           class="pdf-annotation-status"
           :class="`is-${saveState || 'idle'}`"
@@ -202,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   PhArrowClockwise,
   PhArrowCounterClockwise,
@@ -211,12 +233,15 @@ import {
   PhCaretLeft,
   PhCaretRight,
   PhCircle,
+  PhColumns,
+  PhDotsSixVertical,
   PhEraser,
   PhHighlighter,
   PhMinus,
   PhPencilSimple,
   PhPlus,
   PhRectangle,
+  PhRows,
   PhTextT,
   PhTrash,
 } from '@phosphor-icons/vue';
@@ -236,6 +261,7 @@ interface AnnotationStroke {
 interface AnnotationDocument { version: 1; pages: Record<string, AnnotationStroke[]> }
 interface TextEditorState { page: string; point: AnnotationPoint; index?: number; text: string; color: string }
 interface TooltipState { text: string; left: number; top: number }
+interface ToolbarPosition { left: number; top: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
 
 const props = defineProps<{ src: string; filePath: string }>();
@@ -251,6 +277,8 @@ const shapeTools: Array<{ name: DrawingTool; label: string; icon: object }> = [
   { name: 'text', label: 'components.editorPanel.pdfText', icon: PhTextT },
 ];
 
+const previewEl = ref<HTMLDivElement>();
+const toolbarEl = ref<HTMLDivElement>();
 const viewportEl = ref<HTMLDivElement>();
 const pageElements = new Map<number, HTMLElement>();
 const canvasElements = new Map<number, HTMLCanvasElement>();
@@ -270,6 +298,13 @@ const redoStack = ref<AnnotationDocument[]>([]);
 const saveState = ref<'saving' | 'saved' | 'error' | ''>('');
 const isPanning = ref(false);
 const activeTooltip = ref<TooltipState>();
+const toolbarVertical = ref(false);
+const toolbarPosition = ref<ToolbarPosition>();
+const toolbarStyle = computed(() => toolbarPosition.value && ({
+  left: `${toolbarPosition.value.left}px`,
+  top: `${toolbarPosition.value.top}px`,
+  transform: 'none',
+}));
 const textEditor = ref<TextEditorState>();
 const textEditorStyle = computed(() => {
   const editor = textEditor.value;
@@ -309,6 +344,85 @@ let loadVersion = 0;
 let saveVersion = 0;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let tooltipAnchor: HTMLElement | undefined;
+let toolbarDrag: { pointerId: number; offsetX: number; offsetY: number } | undefined;
+
+function clampToolbarPosition(left: number, top: number): ToolbarPosition {
+  const previewRect = previewEl.value?.getBoundingClientRect();
+  const toolbarRect = toolbarEl.value?.getBoundingClientRect();
+  if (!previewRect || !toolbarRect) return { left, top };
+  return {
+    left: Math.max(0, Math.min(previewRect.width - toolbarRect.width, left)),
+    top: Math.max(0, Math.min(previewRect.height - toolbarRect.height, top)),
+  };
+}
+
+function startToolbarDrag(event: PointerEvent): void {
+  if (event.button !== 0 || !previewEl.value || !toolbarEl.value) return;
+  event.preventDefault();
+  clearTooltip();
+  const previewRect = previewEl.value.getBoundingClientRect();
+  const toolbarRect = toolbarEl.value.getBoundingClientRect();
+  toolbarDrag = {
+    pointerId: event.pointerId,
+    offsetX: event.clientX - toolbarRect.left,
+    offsetY: event.clientY - toolbarRect.top,
+  };
+  toolbarPosition.value = {
+    left: toolbarRect.left - previewRect.left,
+    top: toolbarRect.top - previewRect.top,
+  };
+  window.addEventListener('pointermove', continueToolbarDrag);
+  window.addEventListener('pointerup', finishToolbarDrag);
+  window.addEventListener('pointercancel', finishToolbarDrag);
+}
+
+function continueToolbarDrag(event: PointerEvent): void {
+  if (!toolbarDrag || event.pointerId !== toolbarDrag.pointerId || !previewEl.value) return;
+  const previewRect = previewEl.value.getBoundingClientRect();
+  toolbarPosition.value = clampToolbarPosition(
+    event.clientX - previewRect.left - toolbarDrag.offsetX,
+    event.clientY - previewRect.top - toolbarDrag.offsetY,
+  );
+}
+
+function moveToolbarWithKeyboard(event: KeyboardEvent): void {
+  const movement: Record<string, ToolbarPosition> = {
+    ArrowLeft: { left: -10, top: 0 },
+    ArrowRight: { left: 10, top: 0 },
+    ArrowUp: { left: 0, top: -10 },
+    ArrowDown: { left: 0, top: 10 },
+  };
+  const delta = movement[event.key];
+  if (!delta || !previewEl.value || !toolbarEl.value) return;
+  event.preventDefault();
+  const previewRect = previewEl.value.getBoundingClientRect();
+  const toolbarRect = toolbarEl.value.getBoundingClientRect();
+  const current = toolbarPosition.value || {
+    left: toolbarRect.left - previewRect.left,
+    top: toolbarRect.top - previewRect.top,
+  };
+  toolbarPosition.value = clampToolbarPosition(current.left + delta.left, current.top + delta.top);
+}
+
+function finishToolbarDrag(event?: PointerEvent): void {
+  if (event && toolbarDrag && event.pointerId !== toolbarDrag.pointerId) return;
+  toolbarDrag = undefined;
+  window.removeEventListener('pointermove', continueToolbarDrag);
+  window.removeEventListener('pointerup', finishToolbarDrag);
+  window.removeEventListener('pointercancel', finishToolbarDrag);
+}
+
+function keepToolbarInBounds(): void {
+  if (toolbarPosition.value) {
+    toolbarPosition.value = clampToolbarPosition(toolbarPosition.value.left, toolbarPosition.value.top);
+  }
+}
+
+function toggleToolbarOrientation(): void {
+  toolbarVertical.value = !toolbarVertical.value;
+  clearTooltip();
+  void nextTick(keepToolbarInBounds);
+}
 
 function showTooltip(event: Event): void {
   const eventTarget = event.target instanceof Element ? event.target : undefined;
@@ -916,8 +1030,12 @@ function rerenderVisiblePages(): void {
 
 watch(scale, rerenderVisiblePages);
 
+onMounted(() => window.addEventListener('resize', keepToolbarInBounds));
+
 onUnmounted(() => {
   loadVersion++;
+  finishToolbarDrag();
+  window.removeEventListener('resize', keepToolbarInBounds);
   clearTooltip();
   clearTimeout(statusTimer);
   renderTasks.forEach(task => task.cancel());
@@ -951,11 +1069,29 @@ onUnmounted(() => {
   left: 50%;
   max-width: calc(100% - 1.5rem);
   transform: translateX(-50%);
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow: hidden;
 }
 
-.pdf-toolbar::-webkit-scrollbar { display: none; }
+.pdf-toolbar.vertical {
+  max-width: none;
+  max-height: calc(100% - 1.5rem);
+  flex-direction: column;
+}
+
+.pdf-toolbar-drag-handle {
+  display: inline-flex;
+  width: 24px;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.pdf-toolbar-drag-handle:active { cursor: grabbing; }
+.pdf-toolbar-drag-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .pdf-navigation-toolbar {
   bottom: 0.75rem;
@@ -964,8 +1100,20 @@ onUnmounted(() => {
 
 .pdf-toolbar-group {
   display: flex;
-  flex: 0 0 auto;
+  min-width: 0;
+  flex: 1 1 auto;
   align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pdf-toolbar-group::-webkit-scrollbar { display: none; }
+
+.pdf-toolbar.vertical .pdf-toolbar-group {
+  min-height: 0;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .pdf-toolbar button,
@@ -1055,6 +1203,25 @@ onUnmounted(() => {
 }
 
 .pdf-width-control input[type='range']:focus-visible { outline: 2px solid var(--accent); }
+
+.pdf-toolbar.vertical .pdf-width-control {
+  width: 36px;
+  height: 100px;
+  flex-direction: column;
+  padding: 0.4rem 0;
+}
+
+.pdf-toolbar.vertical .pdf-width-control input[type='range'] {
+  width: 4px;
+  height: 64px;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  background: linear-gradient(
+    to top,
+    var(--accent) 0 var(--pdf-pen-width-progress),
+    var(--border-color) var(--pdf-pen-width-progress) 100%
+  );
+}
 
 .pdf-width-value {
   min-width: 20px;
