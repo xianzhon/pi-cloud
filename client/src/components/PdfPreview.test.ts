@@ -11,7 +11,7 @@ const pdfjsMock = vi.hoisted(() => {
   const document = { numPages: 2, getPage };
   const destroy = vi.fn(async () => undefined);
   const getDocument = vi.fn(() => ({ promise: Promise.resolve(document), destroy }));
-  return { GlobalWorkerOptions: { workerSrc: '' }, getDocument, getPage, render, destroy };
+  return { GlobalWorkerOptions: { workerSrc: '' }, getDocument, getPage, render, destroy, document };
 });
 
 vi.mock('pdfjs-dist', () => pdfjsMock);
@@ -42,6 +42,7 @@ const context = {
 
 describe('PdfPreview', () => {
   beforeEach(() => {
+    pdfjsMock.document.numPages = 2;
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
     vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
       left: 0, top: 0, width: 600, height: 800, right: 600, bottom: 800, x: 0, y: 0, toJSON: () => ({}),
@@ -151,6 +152,17 @@ describe('PdfPreview', () => {
     expect(pdfjsMock.getPage).toHaveBeenCalledWith(2);
     expect(wrapper.find('[aria-label="Continuous scroll"]').exists()).toBe(false);
     expect(wrapper.find('[aria-label="Single page view"]').exists()).toBe(false);
+  });
+
+  it('only rasterizes nearby pages when a PDF has many pages', async () => {
+    pdfjsMock.document.numPages = 20;
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=large.pdf', filePath: '/project/large.pdf' },
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll('.pdf-page')).toHaveLength(20);
+    expect(pdfjsMock.render).toHaveBeenCalledTimes(2);
   });
 
   it('pans the PDF viewport by dragging when annotation tools are inactive', async () => {

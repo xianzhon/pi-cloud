@@ -199,6 +199,7 @@
           :ref="element => setPageElement(page, element)"
           class="pdf-page"
           :data-page="page"
+          :style="pageStyle(page)"
         >
           <canvas :ref="element => setCanvasElement(page, element, false)" />
           <canvas
@@ -286,6 +287,9 @@ const MAX_SCALE = 3;
 const SCALE_STEP = 0.1;
 const TOOLBAR_INSET = 12;
 const VIEW_SAVE_DELAY = 300;
+const ZOOM_RENDER_DELAY = 120;
+const MAX_CANVAS_PIXELS = 16_000_000;
+const PAGE_RENDER_MARGIN = '100% 0px';
 const TOOLBAR_KEYBOARD_MOVEMENT: Record<string, ToolbarPosition> = {
   ArrowLeft: { left: -10, top: 0 },
   ArrowRight: { left: 10, top: 0 },
@@ -370,9 +374,14 @@ const canUndo = computed(() => undoStack.value.length > 0);
 const canRedo = computed(() => redoStack.value.length > 0);
 const currentPageStrokes = computed(() => annotations.value.pages[String(pageNumber.value)] || []);
 const pagesToDisplay = computed(() => Array.from({ length: pageCount.value }, (_, index) => index + 1));
+const defaultPageSize = ref({ width: 612, height: 792 });
+const pageSizes = ref<Record<number, { width: number; height: number }>>({});
 let document: PDFDocumentProxy | undefined;
 let loadingTask: PDFDocumentLoadingTask | undefined;
+let pageObserver: IntersectionObserver | undefined;
+const visiblePages = new Set<number>();
 const renderTasks = new Map<number, RenderTask>();
+const renderRequests = new Map<number, number>();
 let activePointer: number | undefined;
 let panStart: { pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined;
 let moveStart: { index: number; point: AnnotationPoint; points: AnnotationPoint[] } | undefined;
@@ -383,6 +392,8 @@ let annotationSidecarExists = false;
 let loadedFilePath: string | undefined;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let viewSaveTimer: ReturnType<typeof setTimeout> | undefined;
+let zoomRenderTimer: ReturnType<typeof setTimeout> | undefined;
+let renderGeneration = 0;
 let tooltipAnchor: HTMLElement | undefined;
 let toolbarDrag: { pointerId: number; offsetX: number; offsetY: number } | undefined;
 
@@ -518,8 +529,23 @@ function legacyAnnotationFilePath(): string {
 }
 
 function setPageElement(page: number, element: unknown): void {
-  if (element instanceof HTMLElement) pageElements.set(page, element);
-  else pageElements.delete(page);
+  const previous = pageElements.get(page);
+  if (previous) pageObserver?.unobserve(previous);
+  if (element instanceof HTMLElement) {
+    pageElements.set(page, element);
+    pageObserver?.observe(element);
+  } else {
+    pageElements.delete(page);
+    visiblePages.delete(page);
+  }
+}
+
+function pageStyle(page: number): Record<string, string> {
+  const size = pageSizes.value[page] || defaultPageSize.value;
+  return {
+    width: `${Math.floor(size.width * scale.value)}px`,
+    height: `${Math.floor(size.height * scale.value)}px`,
+  };
 }
 
 function setCanvasElement(page: number, element: unknown, annotation: boolean): void {
@@ -592,6 +618,7 @@ async function goToPage(page: number): Promise<void> {
   pageNumber.value = Math.min(pageCount.value, Math.max(1, page));
   await nextTick();
   pageElements.get(pageNumber.value)?.scrollIntoView({ block: 'start' });
+  void renderPage(pageNumber.value);
 }
 
 function handleViewportScroll(): void {
@@ -599,7 +626,12 @@ function handleViewportScroll(): void {
   const viewportTop = viewportEl.value?.getBoundingClientRect().top || 0;
   let closestPage = pageNumber.value;
   let closestDistance = Number.POSITIVE_INFINITY;
-  for (const [page, element] of pageElements) {
+  const candidates = visiblePages.size
+    ? [...visiblePages].map(page => [page, pageElements.get(page)] as const)
+    : [pageNumber.value - 1, pageNumber.value, pageNumber.value + 1]
+      .map(page => [page, pageElements.get(page)] as const);
+  for (const [page, element] of candidates) {
+    if (!element) continue;
     const distance = Math.abs(element.getBoundingClientRect().top - viewportTop - 64);
     if (distance < closestDistance) {
       closestPage = page;
@@ -714,17 +746,36 @@ async function renderPage(pageNumberToRender: number): Promise<void> {
   const annotationCanvas = annotationCanvasElements.get(pageNumberToRender);
   if (!pdf || !canvas || !annotationCanvas) return;
 
+  const generation = renderGeneration;
+  const request = (renderRequests.get(pageNumberToRender) || 0) + 1;
+  renderRequests.set(pageNumberToRender, request);
   renderTasks.get(pageNumberToRender)?.cancel();
   const page = await pdf.getPage(pageNumberToRender);
+  if (generation !== renderGeneration || renderRequests.get(pageNumberToRender) !== request) return;
+
+  const unscaledViewport = page.getViewport({ scale: 1 });
+  const previousSize = pageSizes.value[pageNumberToRender];
+  if (!previousSize || previousSize.width !== unscaledViewport.width || previousSize.height !== unscaledViewport.height) {
+    pageSizes.value = {
+      ...pageSizes.value,
+      [pageNumberToRender]: { width: unscaledViewport.width, height: unscaledViewport.height },
+    };
+    await nextTick();
+    if (generation !== renderGeneration || renderRequests.get(pageNumberToRender) !== request) return;
+  }
+
   const viewport = page.getViewport({ scale: scale.value });
-  const pixelRatio = window.devicePixelRatio || 1;
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  // Avoid multi-hundred-megabyte canvas allocations for large pages at high zoom.
+  const pixelRatio = Math.min(
+    devicePixelRatio,
+    Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, viewport.width * viewport.height)),
+  );
   const context = canvas.getContext('2d');
   if (!context) throw new Error(t('components.editorPanel.pdfRenderFailed'));
 
-  canvas.width = annotationCanvas.width = Math.floor(viewport.width * pixelRatio);
-  canvas.height = annotationCanvas.height = Math.floor(viewport.height * pixelRatio);
-  canvas.style.width = annotationCanvas.style.width = `${Math.floor(viewport.width)}px`;
-  canvas.style.height = annotationCanvas.style.height = `${Math.floor(viewport.height)}px`;
+  canvas.width = annotationCanvas.width = Math.max(1, Math.floor(viewport.width * pixelRatio));
+  canvas.height = annotationCanvas.height = Math.max(1, Math.floor(viewport.height * pixelRatio));
 
   const renderTask = page.render({
     canvas,
@@ -735,7 +786,9 @@ async function renderPage(pageNumberToRender: number): Promise<void> {
   renderTasks.set(pageNumberToRender, renderTask);
   try {
     await renderTask.promise;
-    drawAnnotations(pageNumberToRender);
+    if (generation === renderGeneration && renderRequests.get(pageNumberToRender) === request) {
+      drawAnnotations(pageNumberToRender);
+    }
   } catch (renderError) {
     if ((renderError as Error).name !== 'RenderingCancelledException') throw renderError;
   } finally {
@@ -743,9 +796,28 @@ async function renderPage(pageNumberToRender: number): Promise<void> {
   }
 }
 
+function pagesNearCurrent(): number[] {
+  return [pageNumber.value - 1, pageNumber.value, pageNumber.value + 1]
+    .filter(page => page >= 1 && page <= pageCount.value);
+}
+
 async function renderVisiblePages(): Promise<void> {
   await nextTick();
-  await Promise.all(pagesToDisplay.value.map(page => renderPage(page)));
+  const targets = new Set([...visiblePages, ...pagesNearCurrent()]);
+  await Promise.all([...targets].map(page => renderPage(page)));
+}
+
+function handlePageIntersection(entries: IntersectionObserverEntry[]): void {
+  for (const entry of entries) {
+    const page = Number((entry.target as HTMLElement).dataset.page);
+    if (!page) continue;
+    if (entry.isIntersecting) {
+      visiblePages.add(page);
+      void renderPage(page);
+    } else {
+      visiblePages.delete(page);
+    }
+  }
 }
 
 async function loadAnnotations(version: number): Promise<void> {
@@ -781,8 +853,11 @@ async function loadPdf(): Promise<void> {
   loadedFilePath = undefined;
   loading.value = true;
   error.value = '';
+  renderGeneration++;
   renderTasks.forEach(task => task.cancel());
   renderTasks.clear();
+  visiblePages.clear();
+  pageSizes.value = {};
   const previousLoadingTask = loadingTask;
   loadingTask = undefined;
   await previousLoadingTask?.destroy();
@@ -803,6 +878,10 @@ async function loadPdf(): Promise<void> {
 
     document = loadedDocument;
     pageCount.value = loadedDocument.numPages;
+    const firstPage = await loadedDocument.getPage(1);
+    if (version !== loadVersion) return;
+    const firstPageViewport = firstPage.getViewport({ scale: 1 });
+    defaultPageSize.value = { width: firstPageViewport.width, height: firstPageViewport.height };
     restoreViewState(annotations.value.view);
     await nextTick();
     if (version !== loadVersion) return;
@@ -1142,16 +1221,28 @@ function clearPage(): void {
 
 watch([() => props.src, () => props.filePath], () => void loadPdf(), { immediate: true });
 function rerenderVisiblePages(): void {
-  if (!loading.value && !error.value) void renderVisiblePages().catch((renderError) => {
+  renderGeneration++;
+  renderTasks.forEach(task => task.cancel());
+  clearTimeout(zoomRenderTimer);
+  if (loading.value || error.value) return;
+  // CSS resizes existing canvases immediately; defer expensive rasterization until zoom settles.
+  zoomRenderTimer = setTimeout(() => void renderVisiblePages().catch((renderError) => {
     console.error('Failed to render PDF:', renderError);
     error.value = t('components.editorPanel.pdfRenderFailed');
-  });
+  }), ZOOM_RENDER_DELAY);
 }
 
 watch(scale, rerenderVisiblePages);
 watch([scale, pageNumber, tool, penColor, penWidth, toolbarVertical, toolbarPosition], scheduleViewSave);
 
 onMounted(() => {
+  if (typeof IntersectionObserver !== 'undefined' && viewportEl.value) {
+    pageObserver = new IntersectionObserver(handlePageIntersection, {
+      root: viewportEl.value,
+      rootMargin: PAGE_RENDER_MARGIN,
+    });
+    pageElements.forEach(element => pageObserver?.observe(element));
+  }
   window.addEventListener('resize', keepToolbarInBounds);
   window.addEventListener('keydown', handleToolShortcut);
 });
@@ -1164,6 +1255,8 @@ onUnmounted(() => {
   clearTooltip();
   clearTimeout(statusTimer);
   clearTimeout(viewSaveTimer);
+  clearTimeout(zoomRenderTimer);
+  pageObserver?.disconnect();
   renderTasks.forEach(task => task.cancel());
   void loadingTask?.destroy();
 });
@@ -1447,7 +1540,11 @@ onUnmounted(() => {
   box-shadow: 0 2px 12px rgb(0 0 0 / 25%);
 }
 
-.pdf-page canvas { display: block; }
+.pdf-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 
 .pdf-annotation-canvas {
   position: absolute;
