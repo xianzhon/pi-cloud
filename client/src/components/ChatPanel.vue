@@ -379,11 +379,13 @@
           <div class="commit-preview-label">{{ t('components.chatPanel.files') }}</div>
           <ul v-if="commitFileSummaries.length" class="commit-file-list">
             <li v-for="file in commitFileSummaries" :key="file.path">
-              <span class="commit-file-path">{{ file.path }}</span>
-              <span v-if="file.additions || file.deletions" class="commit-file-stats">
-                <span class="is-added">+{{ file.additions }}</span>
-                <span class="is-removed">-{{ file.deletions }}</span>
-              </span>
+              <button type="button" @click="jumpToCommitDiffFile(file.path)">
+                <span class="commit-file-path">{{ file.path }}</span>
+                <span v-if="file.additions || file.deletions" class="commit-file-stats">
+                  <span class="is-added">+{{ file.additions }}</span>
+                  <span class="is-removed">-{{ file.deletions }}</span>
+                </span>
+              </button>
             </li>
           </ul>
           <div class="commit-diff-panel" :aria-label="t('components.chatPanel.commitDiff')">
@@ -391,9 +393,24 @@
             <div v-else-if="commitDiffError" class="commit-diff-state error" role="alert">{{ commitDiffError }}</div>
             <div v-else-if="commitDiffFiles.length === 0" class="commit-diff-state">{{ t('components.chatPanel.noDiff') }}</div>
             <template v-else>
-              <section v-for="(file, fileIndex) in commitDiffFiles" :key="`${file.name}:${fileIndex}`" class="commit-diff-file">
-                <h4>{{ file.name }}</h4>
-                <pre><span
+              <section
+                v-for="(file, fileIndex) in commitDiffFiles"
+                :id="commitDiffFileId(fileIndex)"
+                :key="`${file.name}:${fileIndex}`"
+                class="commit-diff-file"
+              >
+                <h4>
+                  <button
+                    type="button"
+                    :aria-expanded="!collapsedCommitDiffFiles.has(file.name)"
+                    :aria-controls="`${commitDiffFileId(fileIndex)}-content`"
+                    @click="toggleCommitDiffFile(file.name)"
+                  >
+                    <PhCaretDown :size="14" weight="bold" aria-hidden="true" />
+                    <span>{{ file.name }}</span>
+                  </button>
+                </h4>
+                <pre v-show="!collapsedCommitDiffFiles.has(file.name)" :id="`${commitDiffFileId(fileIndex)}-content`"><span
                   v-for="(line, lineIndex) in file.lines"
                   :key="lineIndex"
                   class="commit-diff-line"
@@ -878,6 +895,7 @@ const commitStagedOnly = ref(false);
 const commitDiffLoading = ref(false);
 const commitDiffError = ref('');
 const commitDiffContent = ref('');
+const collapsedCommitDiffFiles = ref(new Set<string>());
 let commitDiffRequestId = 0;
 const branchDialogOpen = ref(false);
 const branchDialogMode = ref<BranchDialogMode>('switch');
@@ -2558,11 +2576,32 @@ function diffLineClass(line: string): string {
   return '';
 }
 
+function commitDiffFileId(index: number): string {
+  return `commit-diff-file-${index}`;
+}
+
+function toggleCommitDiffFile(name: string) {
+  const collapsed = new Set(collapsedCommitDiffFiles.value);
+  if (collapsed.has(name)) collapsed.delete(name);
+  else collapsed.add(name);
+  collapsedCommitDiffFiles.value = collapsed;
+}
+
+async function jumpToCommitDiffFile(name: string) {
+  const index = commitDiffFiles.value.findIndex((file) => file.name === name);
+  if (index < 0) return;
+
+  if (collapsedCommitDiffFiles.value.has(name)) toggleCommitDiffFile(name);
+  await nextTick();
+  document.getElementById(commitDiffFileId(index))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function resetCommitDiff() {
   ++commitDiffRequestId;
   commitDiffLoading.value = false;
   commitDiffError.value = '';
   commitDiffContent.value = '';
+  collapsedCommitDiffFiles.value = new Set();
 }
 
 async function loadCommitDiff() {
@@ -2573,6 +2612,7 @@ async function loadCommitDiff() {
   commitDiffLoading.value = true;
   commitDiffError.value = '';
   commitDiffContent.value = '';
+  collapsedCommitDiffFiles.value = new Set();
   try {
     const scope = preview.mode === 'commit' && commitStagedOnly.value ? 'staged' : 'all';
     const data = await gitOperations.getDiff({ cwd: preview.cwd, scope });
@@ -3754,11 +3794,28 @@ function handleInputKeydown(event: KeyboardEvent) {
 }
 
 .commit-file-list li {
+  margin: 0;
+}
+
+.commit-file-list button {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 0.125rem 0.625rem;
+  color: inherit;
+  background: none;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.commit-file-list button:hover,
+.commit-file-list button:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
 }
 
 .commit-file-path {
@@ -3803,13 +3860,42 @@ function handleInputKeydown(event: KeyboardEvent) {
   top: 0;
   z-index: 1;
   margin: 0;
-  padding: 0.5rem 0.625rem;
-  border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
   font-family: inherit;
 }
 
+.commit-diff-file h4 button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  color: inherit;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.commit-diff-file h4 button:hover,
+.commit-diff-file h4 button:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.commit-diff-file h4 button svg {
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+
+.commit-diff-file h4 button[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+
 .commit-diff-file pre {
+  border-top: 1px solid var(--border);
   margin: 0;
   padding: 0.5rem 0;
   overflow-x: auto;

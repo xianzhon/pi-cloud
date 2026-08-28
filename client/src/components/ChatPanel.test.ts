@@ -694,6 +694,22 @@ describe('ChatPanel', () => {
       .find((line) => line.textContent?.includes('indented first line'));
     expect(indentedLine?.textContent).toMatch(/^  indented first line/);
 
+    const diffHeader = document.querySelector<HTMLButtonElement>('.commit-diff-file h4 button');
+    diffHeader?.click();
+    await nextTick();
+    expect(diffHeader?.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector<HTMLElement>('.commit-diff-file pre')?.style.display).toBe('none');
+
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    document.querySelector<HTMLButtonElement>('.commit-file-list button')?.click();
+    await nextTick();
+    expect(diffHeader?.getAttribute('aria-expanded')).toBe('true');
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+
     checkbox?.click();
     await flushPromises();
 
