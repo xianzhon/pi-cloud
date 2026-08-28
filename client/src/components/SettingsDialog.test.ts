@@ -335,6 +335,37 @@ describe('SettingsDialog', () => {
     expect(wrapper.find('.weixin-pairing-note').text()).toBe('Pairing saves the account credentials. To start the gateway, set PI_WEBUI_WECHAT_GATEWAY_ENABLED=true and restart Pi WebUI.');
   });
 
+  it('unbinds a persisted WeChat account through the custom confirmation modal', async () => {
+    const wrapper = mountSettingsDialog();
+    const viewModel = wrapper.vm as unknown as {
+      activeSection: string;
+      weixinGatewayStatus: { enabled: boolean; running: boolean; paired: boolean; accountId?: string };
+    };
+
+    viewModel.activeSection = 'gateway';
+    viewModel.weixinGatewayStatus = { enabled: true, running: true, paired: true, accountId: 'bot***123' };
+    await wrapper.vm.$nextTick();
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      pairing: { status: 'idle' },
+      status: { enabled: true, running: false, paired: false },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await wrapper.find('.weixin-unpair-action').trigger('click');
+
+    expect(wrapper.find('.confirm-modal').text()).toContain('Unbind WeChat account?');
+    expect(wrapper.find('.confirm-modal').text()).toContain('This removes the saved account credentials and stops the gateway.');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await wrapper.find('.confirm-modal .btn-confirm').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.weixin-status-badge').text()).toBe('Not paired'));
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/gateways/weixin/pairing', expect.objectContaining({ method: 'DELETE' }));
+    expect(wrapper.find('.weixin-unpair-action').exists()).toBe(false);
+  });
+
   it('adds and removes gateway working directories with the folder picker', async () => {
     const wrapper = mountSettingsDialog({
       clientId: 'client-1',

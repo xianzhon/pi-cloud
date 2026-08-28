@@ -566,9 +566,14 @@
                       <h4 id="weixin-pairing-title">{{ t('components.settingsDialog.wechatPairing') }}</h4>
                       <p>{{ t('components.settingsDialog.pairATencentILinkWeChatBotAccount') }}</p>
                     </div>
-                    <button type="button" class="settings-action-btn weixin-pairing-action" :disabled="weixinPairingLoading" @click="startWeixinPairing">
-                      {{ weixinPairingButtonText }}
-                    </button>
+                    <div class="weixin-pairing-actions">
+                      <button v-if="weixinPaired" type="button" class="settings-action-btn weixin-unpair-action" :disabled="weixinPairingLoading || weixinUnpairing" @click="showWeixinUnpairConfirm = true">
+                        {{ weixinUnpairing ? t('components.settingsDialog.unbinding') : t('components.settingsDialog.unbind') }}
+                      </button>
+                      <button type="button" class="settings-action-btn weixin-pairing-action" :disabled="weixinPairingLoading || weixinUnpairing" @click="startWeixinPairing">
+                        {{ weixinPairingButtonText }}
+                      </button>
+                    </div>
                   </div>
                   <div class="weixin-status-panel" :aria-label="t('components.settingsDialog.wechatPairingStatus')">
                     <div class="weixin-status-primary">
@@ -678,6 +683,16 @@
       </div>
     </Transition>
   </Teleport>
+  <ConfirmModal
+    :visible="showWeixinUnpairConfirm"
+    variant="danger"
+    :confirm-text="t('components.settingsDialog.unbind')"
+    @confirm="unpairWeixin"
+    @cancel="showWeixinUnpairConfirm = false"
+  >
+    <template #title>{{ t('components.settingsDialog.unbindWechatAccount') }}</template>
+    <template #message>{{ t('components.settingsDialog.confirmUnbindWechat') }}</template>
+  </ConfirmModal>
 </template>
 
 <script setup lang="ts">
@@ -696,6 +711,7 @@ import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
 import SkillPresetsPanel from './SkillPresetsPanel.vue';
 import FolderPickerModal from './FolderPickerModal.vue';
+import ConfirmModal from './ConfirmModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 
 const t = i18n.global.t;
@@ -882,6 +898,8 @@ interface WeixinGatewayStatus {
 const weixinPairing = ref<WeixinPairingState>({ status: 'idle' });
 const weixinGatewayStatus = ref<WeixinGatewayStatus>({ enabled: false, running: false });
 const weixinPairingLoading = ref(false);
+const weixinUnpairing = ref(false);
+const showWeixinUnpairConfirm = ref(false);
 const weixinPairingError = ref('');
 let weixinPairingPoll: number | undefined;
 
@@ -1090,6 +1108,22 @@ async function startWeixinPairing() {
     weixinPairingError.value = error instanceof Error ? error.message : t('components.settingsDialog.failedToStartWechatPairing');
   } finally {
     weixinPairingLoading.value = false;
+  }
+}
+
+async function unpairWeixin() {
+  showWeixinUnpairConfirm.value = false;
+  weixinUnpairing.value = true;
+  weixinPairingError.value = '';
+  window.clearInterval(weixinPairingPoll);
+  try {
+    const data = await gatewayRequest<{ pairing: WeixinPairingState; status: WeixinGatewayStatus }>('/api/gateways/weixin/pairing', 'DELETE');
+    weixinPairing.value = data.pairing;
+    weixinGatewayStatus.value = data.status;
+  } catch (error) {
+    weixinPairingError.value = error instanceof Error ? error.message : t('components.settingsDialog.failedToUnbindWechat');
+  } finally {
+    weixinUnpairing.value = false;
   }
 }
 
@@ -1904,6 +1938,12 @@ const emit = defineEmits<{
   gap: 1rem;
 }
 
+.weixin-pairing-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+
 .weixin-pairing-action {
   flex: 0 0 auto;
 }
@@ -2182,6 +2222,10 @@ const emit = defineEmits<{
   .weixin-pairing-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .weixin-pairing-actions {
+    flex-wrap: wrap;
   }
 
   .weixin-status-details {

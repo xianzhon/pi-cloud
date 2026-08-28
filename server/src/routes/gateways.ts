@@ -21,6 +21,16 @@ export async function gatewayRoutes(app: FastifyInstance, options: GatewayRouteO
     }
   });
 
+  app.delete('/weixin/pairing', async (_req, reply) => {
+    try {
+      if (!options.weixin) throw new Error('WeChat gateway is unavailable');
+      await options.weixin.unpair();
+      return { pairing: options.weixin.getPairing(), status: options.weixin.status() };
+    } catch (error) {
+      return sendGatewayError(reply, error);
+    }
+  });
+
   app.post('/settings', async (req, reply) => {
     try {
       const body = (req.body || {}) as { cwds?: unknown; defaultProfile?: unknown; defaultSkillset?: unknown; defaultModelProvider?: unknown; defaultModelId?: unknown };

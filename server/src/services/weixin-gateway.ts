@@ -181,6 +181,12 @@ export class WeixinGatewayService {
     return this.pairingState;
   }
 
+  async unpair(): Promise<void> {
+    this.pairingState = { status: 'idle' };
+    this.db.prepare('DELETE FROM weixin_gateway_credentials WHERE id = 1').run();
+    await this.stop();
+  }
+
   private loadConfig(): WeixinGatewayConfig {
     const gatewaySettings = this.gatewaySettings.get();
     const credential = this.loadCredential();
