@@ -269,7 +269,8 @@ interface TooltipState { text: string; left: number; top: number }
 interface ToolbarPosition { left: number; top: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
 
-const props = defineProps<{ src: string; filePath: string }>();
+const props = defineProps<{ src: string; filePath: string; initialScale?: number }>();
+const emit = defineEmits<{ 'scale-change': [scale: number] }>();
 const t = i18n.global.t;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
@@ -515,8 +516,15 @@ function setTextEditorElement(element: unknown): void {
   textEditorEl.value = element instanceof HTMLTextAreaElement ? element : undefined;
 }
 
+function clampScale(value: number): number {
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
+}
+
 function setScale(value: number): void {
-  scale.value = Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
+  const nextScale = clampScale(value);
+  if (nextScale === scale.value) return;
+  scale.value = nextScale;
+  emit('scale-change', nextScale);
 }
 
 function handleZoomWheel(event: WheelEvent): void {
@@ -736,7 +744,7 @@ async function loadPdf(): Promise<void> {
     document = loadedDocument;
     pageCount.value = loadedDocument.numPages;
     pageNumber.value = 1;
-    scale.value = 1;
+    scale.value = clampScale(props.initialScale ?? 1);
     await nextTick();
     if (version !== loadVersion) return;
     loading.value = false;
