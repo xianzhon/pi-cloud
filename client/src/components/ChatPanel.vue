@@ -340,6 +340,7 @@
     <ConfirmModal
       :visible="Boolean(commitPreview)"
       :hideIcon="true"
+      wide
       :confirmText="commitDialogConfirmText"
       :cancelText="t('components.chatPanel.cancel')"
       variant="primary"
@@ -376,13 +377,31 @@
             <span>{{ t('components.chatPanel.stagedChangesOnly') }}</span>
           </label>
           <div class="commit-preview-label">{{ t('components.chatPanel.files') }}</div>
-          <ul v-if="commitPreview.files.length" class="commit-file-list">
-            <li v-for="file in commitPreview.files" :key="`${file.status}:${file.path}`">
-              <span class="commit-file-status">{{ file.status }}</span>
-              <span>{{ file.path }}</span>
+          <ul v-if="commitFileSummaries.length" class="commit-file-list">
+            <li v-for="file in commitFileSummaries" :key="file.path">
+              <span class="commit-file-path">{{ file.path }}</span>
+              <span v-if="file.additions || file.deletions" class="commit-file-stats">
+                <span class="is-added">+{{ file.additions }}</span>
+                <span class="is-removed">-{{ file.deletions }}</span>
+              </span>
             </li>
           </ul>
-          <p v-else class="commit-preview-empty">{{ t('components.chatPanel.noWorkingTreeChangesOnlyThePrevious') }}</p>
+          <div class="commit-diff-panel" :aria-label="t('components.chatPanel.commitDiff')">
+            <div v-if="commitDiffLoading" class="commit-diff-state">{{ t('components.gitHistory.loadingDiff') }}</div>
+            <div v-else-if="commitDiffError" class="commit-diff-state error" role="alert">{{ commitDiffError }}</div>
+            <div v-else-if="commitDiffFiles.length === 0" class="commit-diff-state">{{ t('components.chatPanel.noDiff') }}</div>
+            <template v-else>
+              <section v-for="(file, fileIndex) in commitDiffFiles" :key="`${file.name}:${fileIndex}`" class="commit-diff-file">
+                <h4>{{ file.name }}</h4>
+                <pre><span
+                  v-for="(line, lineIndex) in file.lines"
+                  :key="lineIndex"
+                  class="commit-diff-line"
+                  :class="diffLineClass(line)"
+                >{{ line }}{{ '\n' }}</span></pre>
+              </section>
+            </template>
+          </div>
           <p v-if="commitGenerationError" class="model-selector-empty error">{{ commitGenerationError }}</p>
         </div>
       </template>
@@ -646,7 +665,7 @@ import { replaceSlashToken, useSlashCommands } from '../composables/useSlashComm
 import { useFileSearch, replaceFileToken } from '../composables/useFileSearch';
 import type { SlashCommandItem } from '../types/slashCommands';
 import type { FileSearchResult } from '../types/fileSearch';
-import { PhArrowUp, PhCamera, PhCornersIn, PhCornersOut, PhDownloadSimple, PhEye, PhImage, PhLightbulb, PhListChecks, PhListDashes, PhMagicWand, PhRobot, PhX } from '@phosphor-icons/vue';
+import { PhArrowUp, PhCamera, PhCaretDown, PhCornersIn, PhCornersOut, PhDownloadSimple, PhEye, PhImage, PhLightbulb, PhListChecks, PhListDashes, PhMagicWand, PhRobot, PhX } from '@phosphor-icons/vue';
 import MessageBubble from './MessageBubble.vue';
 import SlashCommandMenu from './SlashCommandMenu.vue';
 import FileSearchMenu from './FileSearchMenu.vue';
@@ -753,6 +772,11 @@ interface CommitPreview {
   mode: 'commit' | 'amend';
 }
 
+interface CommitDiffFile {
+  name: string;
+  lines: string[];
+}
+
 type BranchDialogMode = 'switch' | 'changes' | 'base';
 type GitSyncCommand = 'push' | 'pull';
 
@@ -851,6 +875,10 @@ const commitStatusMessage = ref<ChatLocalMessage | null>(null);
 const commitGeneratingMessage = ref(false);
 const commitGenerationError = ref('');
 const commitStagedOnly = ref(false);
+const commitDiffLoading = ref(false);
+const commitDiffError = ref('');
+const commitDiffContent = ref('');
+let commitDiffRequestId = 0;
 const branchDialogOpen = ref(false);
 const branchDialogMode = ref<BranchDialogMode>('switch');
 const branchDialogLoading = ref(false);
@@ -1390,6 +1418,20 @@ const activeSkillCount = computed(() => {
 });
 const commitDialogTitle = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amendPreviousCommit') : t('components.chatPanel.commitChanges'));
 const commitDialogConfirmText = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amend') : t('components.chatPanel.commit'));
+const commitDiffFiles = computed(() => parseCommitDiffFiles(commitDiffContent.value));
+const commitFileSummaries = computed(() => {
+  const summaries = new Map<string, { path: string; additions: number; deletions: number }>();
+  for (const file of commitPreview.value?.files || []) {
+    summaries.set(file.path, { path: file.path, additions: 0, deletions: 0 });
+  }
+  for (const file of commitDiffFiles.value) {
+    const summary = summaries.get(file.name) || { path: file.name, additions: 0, deletions: 0 };
+    summary.additions += file.lines.filter((line) => line.startsWith('+') && !line.startsWith('+++')).length;
+    summary.deletions += file.lines.filter((line) => line.startsWith('-') && !line.startsWith('---')).length;
+    summaries.set(file.name, summary);
+  }
+  return Array.from(summaries.values());
+});
 const branchDialogActionLabel = computed(() => branchDialogMode.value === 'switch' ? t('components.chatPanel.switchBranch') : t('components.chatPanel.createBranch'));
 const branchSelectOptions = computed<CustomSelectOption[]>(() => branchOptions.value.map((branch) => ({ value: branch, label: branch })));
 
@@ -1449,6 +1491,7 @@ watch(isStreaming, (streaming, wasStreaming) => {
 
 watch(commitPreview, async (preview) => {
   if (!preview) return;
+  void loadCommitDiff();
   await nextTick();
   commitMessageInputRef.value?.focus();
 });
@@ -2427,6 +2470,7 @@ async function handleCommitCommand(text: string, showUserMessage = true) {
     };
     commitGenerationError.value = '';
     commitStagedOnly.value = false;
+    resetCommitDiff();
     commitPreview.value = preview;
     commitStatusMessage.value = responseMessage;
     responseMessage.kind = 'text';
@@ -2468,6 +2512,7 @@ async function handleAmendCommand(text: string) {
       mode: 'amend',
     };
     commitGenerationError.value = '';
+    resetCommitDiff();
     commitPreview.value = preview;
     commitStatusMessage.value = responseMessage;
     responseMessage.kind = 'text';
@@ -2481,6 +2526,71 @@ async function handleAmendCommand(text: string) {
   }
 }
 
+function parseCommitDiffFiles(diff: string): CommitDiffFile[] {
+  const files: CommitDiffFile[] = [];
+  const filesByName = new Map<string, CommitDiffFile>();
+  let current: CommitDiffFile | undefined;
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('diff --git ') || line.startsWith('diff --cc ') || line.startsWith('diff --combined ')) {
+      const name = line.match(/ b\/(.+)$/)?.[1]
+        || line.replace(/^diff --(?:cc|combined) /, '')
+        || t('components.gitHistory.changes');
+      current = filesByName.get(name);
+      if (current) {
+        current.lines.push(line);
+      } else {
+        current = { name, lines: [line] };
+        filesByName.set(name, current);
+        files.push(current);
+      }
+    } else if (current) {
+      current.lines.push(line);
+    }
+  }
+  return files;
+}
+
+function diffLineClass(line: string): string {
+  if (line.startsWith('@@')) return 'is-hunk';
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'is-added';
+  if (line.startsWith('-') && !line.startsWith('---')) return 'is-removed';
+  if (line.startsWith('diff --') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) return 'is-metadata';
+  return '';
+}
+
+function resetCommitDiff() {
+  ++commitDiffRequestId;
+  commitDiffLoading.value = false;
+  commitDiffError.value = '';
+  commitDiffContent.value = '';
+}
+
+async function loadCommitDiff() {
+  const preview = commitPreview.value;
+  if (!preview) return;
+
+  const requestId = ++commitDiffRequestId;
+  commitDiffLoading.value = true;
+  commitDiffError.value = '';
+  commitDiffContent.value = '';
+  try {
+    const scope = preview.mode === 'commit' && commitStagedOnly.value ? 'staged' : 'all';
+    const data = await gitOperations.getDiff({ cwd: preview.cwd, scope });
+    if (requestId !== commitDiffRequestId) return;
+    if (data.oversized) {
+      commitDiffError.value = String(data.message || t('components.gitHistory.diffFailed'));
+      return;
+    }
+    commitDiffContent.value = typeof data.diff === 'string' ? data.diff : '';
+  } catch (error) {
+    if (requestId === commitDiffRequestId) {
+      commitDiffError.value = error instanceof Error ? error.message : t('components.gitHistory.diffFailed');
+    }
+  } finally {
+    if (requestId === commitDiffRequestId) commitDiffLoading.value = false;
+  }
+}
+
 async function refreshCommitFiles() {
   const preview = commitPreview.value;
   if (!preview || preview.mode !== 'commit') return;
@@ -2489,6 +2599,7 @@ async function refreshCommitFiles() {
   try {
     const data = await gitOperations.getStatus({ cwd: preview.cwd, stagedOnly: commitStagedOnly.value });
     preview.files = Array.isArray(data.files) ? data.files : [];
+    await loadCommitDiff();
   } catch (error) {
     commitGenerationError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToPrepareGitCommit');
   }
@@ -2526,6 +2637,7 @@ function cancelCommit() {
   if (commitStatusMessage.value) {
     commitStatusMessage.value.content += '\n\nCommit cancelled.';
   }
+  resetCommitDiff();
   commitPreview.value = null;
   commitStatusMessage.value = null;
   commitGenerationError.value = '';
@@ -2536,6 +2648,7 @@ async function confirmCommit() {
   const responseMessage = commitStatusMessage.value;
   if (!preview || !responseMessage) return;
 
+  resetCommitDiff();
   commitPreview.value = null;
   commitGenerationError.value = '';
   responseMessage.kind = 'status';
@@ -3628,38 +3741,112 @@ function handleInputKeydown(event: KeyboardEvent) {
   resize: vertical;
 }
 
-.commit-preview-empty {
-  margin: 0;
-  padding: 0.625rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-}
-
 .commit-file-list {
-  max-height: 220px;
+  max-height: 140px;
   margin: 0;
-  padding: 0;
+  padding: 0.375rem 0;
   overflow: auto;
   list-style: none;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
+  font: 12px/1.4 var(--font-mono, monospace);
 }
 
 .commit-file-list li {
   display: flex;
-  gap: 0.375rem;
-  padding: 0.2rem 0.375rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8125rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.125rem 0.625rem;
 }
 
-.commit-file-status {
-  flex: 0 0 2.5rem;
+.commit-file-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.commit-file-stats {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.commit-file-stats .is-added {
+  color: var(--success, #4ade80);
+}
+
+.commit-file-stats .is-removed {
+  color: var(--danger, #f87171);
+}
+
+.commit-diff-panel {
+  max-height: min(55vh, 640px);
+  overflow: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.commit-diff-file {
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.commit-diff-file:last-child {
+  margin-bottom: 0;
+}
+
+.commit-diff-file h4 {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  font-family: inherit;
+}
+
+.commit-diff-file pre {
+  margin: 0;
+  padding: 0.5rem 0;
+  overflow-x: auto;
+}
+
+.commit-diff-line {
+  display: block;
+  min-height: 18px;
+  padding: 0 0.625rem;
+  white-space: pre;
+}
+
+.commit-diff-line.is-added {
+  color: var(--success, #4ade80);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.commit-diff-line.is-removed {
+  color: var(--danger, #f87171);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.commit-diff-line.is-hunk {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.commit-diff-line.is-metadata {
   color: var(--text-secondary);
-  font-weight: 700;
+}
+
+.commit-diff-state {
+  padding: 1.5rem;
+  color: var(--text-secondary);
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .model-selector-backdrop {

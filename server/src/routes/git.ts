@@ -167,7 +167,10 @@ function textFromAssistantMessage(message: AssistantMessage) {
 }
 
 function joinGitOutput(...parts: string[]) {
-  return parts.map((part) => part.trim()).filter(Boolean).join('\n\n');
+  return parts
+    .map((part) => part.replace(/^(?:\r?\n)+|(?:\r?\n)+$/g, ''))
+    .filter((part) => part.trim())
+    .join('\n\n');
 }
 
 async function getCombinedDiff(cwd: string, args: string[], maxBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES) {

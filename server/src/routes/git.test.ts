@@ -206,7 +206,7 @@ describe('gitRoutes status and diff', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({ scope: 'all' });
-      expect(response.json().stat).toContain('README.md');
+      expect(response.json().stat).toMatch(/^ README\.md/);
       expect(response.json().diff).toContain('+staged change');
     } finally {
       await app.close();

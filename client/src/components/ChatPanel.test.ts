@@ -658,6 +658,13 @@ describe('ChatPanel', () => {
           files: [{ status: 'M', path: 'staged.ts' }, { status: '??', path: 'unstaged.ts' }],
         }), { status: 200 });
       }
+      if (url.includes('/api/git/diff')) {
+        const stagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -1 +1 @@\n-old\n+staged change';
+        const unstagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -2 +2 @@\n  indented first line\n-old\n+all changes';
+        return new Response(JSON.stringify({
+          diff: url.includes('scope=staged') ? stagedDiff : `${unstagedDiff}\n\n${stagedDiff}`,
+        }), { status: 200 });
+      }
       if (url.includes('/api/git/commit-message')) {
         return new Response(JSON.stringify({ message: 'feat: update staged file' }), { status: 200 });
       }
@@ -672,13 +679,29 @@ describe('ChatPanel', () => {
 
     const checkbox = document.querySelector<HTMLInputElement>('.commit-staged-only input');
     expect(checkbox?.checked).toBe(false);
+    expect(document.querySelector('.commit-diff-toggle')).toBeNull();
+    expect(document.querySelector('.commit-diff-panel')).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=all');
+    expect(document.querySelectorAll('.commit-file-list li')).toHaveLength(2);
     expect(document.querySelector('.commit-file-list')?.textContent).toContain('unstaged.ts');
+    expect(document.querySelector('.commit-file-stats')?.textContent).toContain('+2');
+    expect(document.querySelector('.commit-file-stats')?.textContent).toContain('-2');
+    expect(document.querySelectorAll('.commit-diff-file')).toHaveLength(1);
+    expect(document.querySelector('.commit-diff-file h4')?.textContent).toBe('staged.ts');
+    expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+all changes');
+    expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+staged change');
+    const indentedLine = Array.from(document.querySelectorAll('.commit-diff-line'))
+      .find((line) => line.textContent?.includes('indented first line'));
+    expect(indentedLine?.textContent).toMatch(/^  indented first line/);
 
     checkbox?.click();
     await flushPromises();
 
-    expect(document.querySelector('.commit-file-list')?.textContent).toContain('staged.ts');
+    expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=staged');
+    expect(document.querySelectorAll('.commit-file-list li')).toHaveLength(1);
     expect(document.querySelector('.commit-file-list')?.textContent).not.toContain('unstaged.ts');
+    expect(document.querySelector('.commit-file-stats')?.textContent).toContain('+1');
+    expect(document.querySelector('.commit-diff-line.is-added')?.textContent).toContain('+staged change');
 
     document.querySelector<HTMLButtonElement>('.pr-ai-generate-btn')?.click();
     await flushPromises();

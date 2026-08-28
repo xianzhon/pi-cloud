@@ -5,7 +5,7 @@
       <div v-if="visible" class="modal-backdrop" @click.self="onBackdropClick">
         <section
           class="confirm-modal"
-          :class="{ 'confirm-modal--no-icon': hideIcon }"
+          :class="{ 'confirm-modal--no-icon': hideIcon, 'confirm-modal--wide': wide }"
           role="dialog"
           aria-modal="true"
           :aria-labelledby="titleId"
@@ -61,6 +61,7 @@ const props = withDefaults(defineProps<{
   initialFocus?: 'confirm' | 'none';
   closeOnBackdrop?: boolean;
   hideIcon?: boolean;
+  wide?: boolean;
 }>(), {
   confirmText: undefined,
   cancelText: undefined,
@@ -68,6 +69,7 @@ const props = withDefaults(defineProps<{
   initialFocus: 'confirm',
   closeOnBackdrop: false,
   hideIcon: false,
+  wide: false,
 });
 
 const emit = defineEmits<{
@@ -129,6 +131,10 @@ function onBackdropClick(): void {
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
+}
+
+.confirm-modal--wide {
+  width: min(1400px, calc(100vw - 3rem));
 }
 
 .modal-header {
