@@ -381,6 +381,7 @@
             <div v-else-if="commitDiffError" class="commit-diff-state error" role="alert">{{ commitDiffError }}</div>
             <div v-else-if="commitDiffFiles.length === 0" class="commit-diff-state">{{ t('components.chatPanel.noDiff') }}</div>
             <template v-else>
+              <p class="commit-diff-summary">{{ commitDiffSummary }}</p>
               <section
                 v-for="(file, fileIndex) in commitDiffFiles"
                 :id="commitDiffFileId(fileIndex)"
@@ -1435,6 +1436,18 @@ const commitFileStats = computed(() => new Map(commitDiffFiles.value.map((file) 
   additions: file.lines.filter((line) => line.startsWith('+') && !line.startsWith('+++')).length,
   deletions: file.lines.filter((line) => line.startsWith('-') && !line.startsWith('---')).length,
 }])));
+const commitDiffSummary = computed(() => {
+  const totals = Array.from(commitFileStats.value.values()).reduce((sum, stats) => ({
+    additions: sum.additions + stats.additions,
+    deletions: sum.deletions + stats.deletions,
+  }), { additions: 0, deletions: 0 });
+  const files = commitDiffFiles.value.length;
+  return [
+    t(files === 1 ? 'components.chatPanel.fileChanged' : 'components.chatPanel.filesChanged', { count: files }),
+    t(totals.additions === 1 ? 'components.chatPanel.insertion' : 'components.chatPanel.insertions', { count: totals.additions }),
+    t(totals.deletions === 1 ? 'components.chatPanel.deletion' : 'components.chatPanel.deletions', { count: totals.deletions }),
+  ].join(', ');
+});
 const branchDialogActionLabel = computed(() => branchDialogMode.value === 'switch' ? t('components.chatPanel.switchBranch') : t('components.chatPanel.createBranch'));
 const branchSelectOptions = computed<CustomSelectOption[]>(() => branchOptions.value.map((branch) => ({ value: branch, label: branch })));
 
@@ -3776,6 +3789,11 @@ function handleInputKeydown(event: KeyboardEvent) {
   overflow: auto;
   font-family: var(--font-mono, monospace);
   font-size: 12px;
+}
+
+.commit-diff-summary {
+  margin: 0 0 0.5rem;
+  color: var(--text-secondary);
 }
 
 .commit-diff-file {

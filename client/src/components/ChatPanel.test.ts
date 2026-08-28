@@ -661,8 +661,9 @@ describe('ChatPanel', () => {
       if (url.includes('/api/git/diff')) {
         const stagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -1 +1 @@\n-old\n+staged change';
         const unstagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -2 +2 @@\n  indented first line\n-old\n+all changes';
+        const binaryDiff = 'diff --git a/image.png b/image.png\nBinary files a/image.png and b/image.png differ';
         return new Response(JSON.stringify({
-          diff: url.includes('scope=staged') ? stagedDiff : `${unstagedDiff}\n\n${stagedDiff}`,
+          diff: url.includes('scope=staged') ? stagedDiff : `${unstagedDiff}\n\n${stagedDiff}\n\n${binaryDiff}`,
         }), { status: 200 });
       }
       if (url.includes('/api/git/commit-message')) {
@@ -683,9 +684,10 @@ describe('ChatPanel', () => {
     expect(document.querySelector('.commit-diff-panel')).not.toBeNull();
     expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=all');
     expect(document.querySelector('.commit-file-list')).toBeNull();
+    expect(document.querySelector('.commit-diff-summary')?.textContent).toBe('2 files changed, 2 insertions(+), 2 deletions(-)');
     expect(document.querySelector('.commit-file-stats')?.textContent).toContain('+2');
     expect(document.querySelector('.commit-file-stats')?.textContent).toContain('-2');
-    expect(document.querySelectorAll('.commit-diff-file')).toHaveLength(1);
+    expect(document.querySelectorAll('.commit-diff-file')).toHaveLength(2);
     expect(document.querySelector('.commit-diff-file h4')?.textContent).toContain('staged.ts');
     expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+all changes');
     expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+staged change');
@@ -708,6 +710,7 @@ describe('ChatPanel', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=staged');
     expect(document.querySelector('.commit-file-list')).toBeNull();
+    expect(document.querySelector('.commit-diff-summary')?.textContent).toBe('1 file changed, 1 insertion(+), 1 deletion(-)');
     expect(document.querySelector('.commit-file-stats')?.textContent).toContain('+1');
     expect(document.querySelector('.commit-file-stats')?.textContent).toContain('-1');
     expect(document.querySelector('.commit-diff-line.is-added')?.textContent).toContain('+staged change');
