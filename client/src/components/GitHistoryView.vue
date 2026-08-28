@@ -68,9 +68,40 @@
               <div v-else-if="diffError" class="git-history-diff-state is-error" role="alert">{{ diffError }}</div>
               <div v-else-if="diffFiles.length === 0" class="git-history-diff-state">{{ t('components.gitHistory.noPatch') }}</div>
               <div v-else class="git-history-diff" :aria-label="t('components.gitHistory.commitDiff')">
-                <section v-for="(file, fileIndex) in diffFiles" :key="`${file.name}:${fileIndex}`" class="git-diff-file">
-                  <h4>{{ file.name }}</h4>
-                  <pre><span
+                <div class="git-diff-toolbar">
+                  <p class="git-diff-summary">
+                    <span>{{ t(diffFiles.length === 1 ? 'components.chatPanel.fileChanged' : 'components.chatPanel.filesChanged', { count: diffFiles.length }) }}</span>
+                    <span class="is-added">+{{ diffTotals.additions }}</span>
+                    <span class="is-removed">-{{ diffTotals.deletions }}</span>
+                  </p>
+                  <button type="button" class="git-diff-collapse-all" @click="toggleAllDiffFiles">
+                    {{ t(allDiffFilesCollapsed ? 'components.chatPanel.expandAll' : 'components.chatPanel.collapseAll') }}
+                  </button>
+                </div>
+                <section
+                  v-for="(file, fileIndex) in diffFiles"
+                  :id="diffFileId(fileIndex)"
+                  :key="`${file.name}:${fileIndex}`"
+                  class="git-diff-file"
+                >
+                  <h4>
+                    <button
+                      type="button"
+                      :aria-expanded="!collapsedDiffFiles.has(file.name)"
+                      :aria-controls="`${diffFileId(fileIndex)}-content`"
+                      @click="toggleDiffFile(file.name)"
+                    >
+                      <span class="git-diff-file-title">
+                        <PhCaretDown :size="14" weight="bold" aria-hidden="true" />
+                        <span>{{ file.name }}</span>
+                      </span>
+                      <span class="git-diff-file-stats">
+                        <span class="is-added">+{{ file.additions }}</span>
+                        <span class="is-removed">-{{ file.deletions }}</span>
+                      </span>
+                    </button>
+                  </h4>
+                  <pre v-show="!collapsedDiffFiles.has(file.name)" :id="`${diffFileId(fileIndex)}-content`"><span
                     v-for="(line, lineIndex) in file.lines"
                     :key="lineIndex"
                     class="git-diff-line"
@@ -88,7 +119,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { PhArrowClockwise, PhCaretLeft, PhCaretRight, PhGitCommit, PhX } from '@phosphor-icons/vue';
+import { PhArrowClockwise, PhCaretDown, PhCaretLeft, PhCaretRight, PhGitCommit, PhX } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
 
@@ -106,6 +137,8 @@ interface GitCommit {
 interface DiffFile {
   name: string;
   lines: string[];
+  additions: number;
+  deletions: number;
 }
 
 const props = defineProps<{ visible: boolean; cwd: string }>();
@@ -125,10 +158,17 @@ const diffLoading = ref(false);
 const diffError = ref('');
 const diffStat = ref('');
 const diffContent = ref('');
+const collapsedDiffFiles = ref(new Set<string>());
 let historyRequestId = 0;
 let diffRequestId = 0;
 
 const diffFiles = computed(() => parseDiffFiles(diffContent.value));
+const diffTotals = computed(() => diffFiles.value.reduce((totals, file) => ({
+  additions: totals.additions + file.additions,
+  deletions: totals.deletions + file.deletions,
+}), { additions: 0, deletions: 0 }));
+const allDiffFilesCollapsed = computed(() => diffFiles.value.length > 0
+  && diffFiles.value.every((file) => collapsedDiffFiles.value.has(file.name)));
 
 function parseDiffFiles(diff: string): DiffFile[] {
   const files: DiffFile[] = [];
@@ -138,13 +178,32 @@ function parseDiffFiles(diff: string): DiffFile[] {
       const name = line.match(/ b\/(.+)$/)?.[1]
         || line.replace(/^diff --(?:cc|combined) /, '')
         || t('components.gitHistory.changes');
-      current = { name, lines: [line] };
+      current = { name, lines: [line], additions: 0, deletions: 0 };
       files.push(current);
     } else if (current) {
       current.lines.push(line);
+      if (line.startsWith('+') && !line.startsWith('+++')) current.additions += 1;
+      if (line.startsWith('-') && !line.startsWith('---')) current.deletions += 1;
     }
   }
   return files;
+}
+
+function diffFileId(index: number): string {
+  return `git-history-diff-file-${index}`;
+}
+
+function toggleDiffFile(name: string): void {
+  const collapsed = new Set(collapsedDiffFiles.value);
+  if (collapsed.has(name)) collapsed.delete(name);
+  else collapsed.add(name);
+  collapsedDiffFiles.value = collapsed;
+}
+
+function toggleAllDiffFiles(): void {
+  collapsedDiffFiles.value = allDiffFilesCollapsed.value
+    ? new Set()
+    : new Set(diffFiles.value.map((file) => file.name));
 }
 
 function diffLineClass(line: string): string {
@@ -170,6 +229,7 @@ async function loadDiff(commit: GitCommit): Promise<void> {
   diffError.value = '';
   diffStat.value = '';
   diffContent.value = '';
+  collapsedDiffFiles.value = new Set();
   try {
     const result = await gitOperations.getDiff({ cwd: props.cwd, commit: commit.hash });
     if (requestId !== diffRequestId) return;
@@ -446,6 +506,50 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   font-size: 12px;
 }
 
+.git-diff-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.git-diff-summary,
+.git-diff-file-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.git-diff-summary {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.git-diff-summary .is-added,
+.git-diff-file-stats .is-added {
+  color: var(--success, #4ade80);
+}
+
+.git-diff-summary .is-removed,
+.git-diff-file-stats .is-removed {
+  color: var(--danger, #f87171);
+}
+
+.git-diff-collapse-all {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font: inherit;
+}
+
+.git-diff-collapse-all:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
 .git-diff-file {
   margin-bottom: 14px;
   overflow: hidden;
@@ -458,13 +562,54 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   top: 0;
   z-index: 1;
   margin: 0;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
   font-family: inherit;
 }
 
+.git-diff-file h4 button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 10px;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+}
+
+.git-diff-file h4 button:hover,
+.git-diff-file h4 button:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.git-diff-file-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.git-diff-file h4 button svg {
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+
+.git-diff-file h4 button[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+
+.git-diff-file-stats {
+  flex: 0 0 auto;
+}
+
 .git-diff-file pre {
+  border-top: 1px solid var(--border);
   margin: 0;
   padding: 8px 0;
   overflow-x: auto;
