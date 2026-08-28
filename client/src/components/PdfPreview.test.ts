@@ -549,6 +549,54 @@ describe('PdfPreview', () => {
     expect(points[1].y).toBeCloseTo(0.5);
   });
 
+  it.each(['line', 'rectangle', 'ellipse'] as const)(
+    'resizes an existing %s annotation by dragging its handle',
+    async (type) => {
+      const fetchMock = vi.mocked(fetch);
+      fetchMock.mockImplementation(async (url, init) => {
+        if (String(url).startsWith('/api/files/read')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              content: JSON.stringify({
+                version: 1,
+                pages: {
+                  '1': [{
+                    type, color: '#ef4444', width: 1,
+                    points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 }],
+                  }],
+                },
+              }),
+            }),
+          } as Response;
+        }
+        if (url === '/api/files/write' && init?.method === 'POST') {
+          return { ok: true, status: 200 } as Response;
+        }
+        throw new Error(`Unexpected fetch: ${String(url)}`);
+      });
+      const wrapper = mount(PdfPreview, {
+        props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+      });
+      await flushPromises();
+      await wrapper.get('[aria-label="Move annotation"]').trigger('click');
+
+      const canvas = wrapper.get('.pdf-annotation-canvas');
+      await canvas.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 180, clientY: 240 });
+      await canvas.trigger('pointermove', { pointerId: 1, clientX: 300, clientY: 400 });
+      await canvas.trigger('pointerup', { pointerId: 1, clientX: 300, clientY: 400 });
+      await flushPromises();
+
+      const writeCall = fetchMock.mock.calls.find(([url]) => url === '/api/files/write');
+      const body = JSON.parse(String(writeCall?.[1]?.body));
+      expect(JSON.parse(body.content).pages['1'][0].points).toEqual([
+        { x: 0.1, y: 0.1 },
+        { x: 0.5, y: 0.5 },
+      ]);
+    },
+  );
+
   it('draws and saves annotations in a hidden sidecar file', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (url, init) => {

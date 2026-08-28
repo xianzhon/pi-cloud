@@ -384,7 +384,8 @@ const renderTasks = new Map<number, RenderTask>();
 const renderRequests = new Map<number, number>();
 let activePointer: number | undefined;
 let panStart: { pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined;
-let moveStart: { index: number; point: AnnotationPoint; points: AnnotationPoint[] } | undefined;
+let moveStart: { index: number; point: AnnotationPoint; points: AnnotationPoint[]; resizeIndex?: number } | undefined;
+const selectedAnnotation = ref<{ page: number; index: number }>();
 let annotationChanged = false;
 let loadVersion = 0;
 let saveVersion = 0;
@@ -667,6 +668,10 @@ function drawAnnotations(pageNumberToDraw = pageNumber.value): void {
     if (textEditor.value?.page === String(pageNumberToDraw) && textEditor.value.index === index) return;
     drawAnnotation(context, canvas, stroke);
   });
+  if (tool.value === 'move' && selectedAnnotation.value?.page === pageNumberToDraw) {
+    const selected = strokes[selectedAnnotation.value.index];
+    if (selected) drawResizeHandles(context, canvas, selected);
+  }
 }
 
 function drawVisibleAnnotations(): void {
@@ -722,6 +727,30 @@ function drawAnnotation(context: CanvasRenderingContext2D, canvas: HTMLCanvasEle
     return;
   }
   context.stroke();
+  context.restore();
+}
+
+function drawResizeHandles(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  stroke: AnnotationStroke,
+): void {
+  if (!isResizableAnnotation(stroke)) return;
+  const ratio = window.devicePixelRatio || 1;
+  const handleSize = 8 * ratio;
+  context.save();
+  context.strokeStyle = '#2563eb';
+  context.lineWidth = 2 * ratio;
+  for (const point of [stroke.points[0], stroke.points.at(-1)!]) {
+    context.beginPath();
+    context.rect(
+      point.x * canvas.width - handleSize / 2,
+      point.y * canvas.height - handleSize / 2,
+      handleSize,
+      handleSize,
+    );
+    context.stroke();
+  }
   context.restore();
 }
 
@@ -982,6 +1011,26 @@ function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoin
   return points.slice(1).some((end, index) => distanceToSegment(target, points[index], end) <= threshold);
 }
 
+function isResizableAnnotation(stroke: AnnotationStroke): boolean {
+  return ['line', 'arrow', 'rectangle', 'ellipse'].includes(stroke.type || '') && stroke.points.length >= 2;
+}
+
+function resizePointIndex(
+  stroke: AnnotationStroke,
+  point: AnnotationPoint,
+  canvas: HTMLCanvasElement,
+): number | undefined {
+  if (!isResizableAnnotation(stroke)) return undefined;
+  const target = { x: point.x * canvas.width, y: point.y * canvas.height };
+  const indexes = [0, stroke.points.length - 1];
+  const distances = indexes.map(index => {
+    const candidate = stroke.points[index];
+    return Math.hypot(target.x - candidate.x * canvas.width, target.y - candidate.y * canvas.height);
+  });
+  const closest = distances[0] <= distances[1] ? 0 : 1;
+  return distances[closest] <= 12 * (window.devicePixelRatio || 1) ? indexes[closest] : undefined;
+}
+
 function distanceToSegment(point: AnnotationPoint, start: AnnotationPoint, end: AnnotationPoint): number {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -1012,11 +1061,17 @@ function startAnnotation(event: PointerEvent, page: number): void {
         break;
       }
     }
-    if (index < 0) return;
+    if (index < 0) {
+      selectedAnnotation.value = undefined;
+      drawAnnotations();
+      return;
+    }
+    selectedAnnotation.value = { page, index };
     moveStart = {
       index,
       point,
       points: strokes[index].points.map(item => ({ ...item })),
+      resizeIndex: resizePointIndex(strokes[index], point, canvas),
     };
   }
 
@@ -1024,7 +1079,10 @@ function startAnnotation(event: PointerEvent, page: number): void {
   annotationChanged = false;
   annotationCanvasElements.get(pageNumber.value)?.setPointerCapture(event.pointerId);
   checkpoint();
-  if (tool.value === 'move') return;
+  if (tool.value === 'move') {
+    drawAnnotations();
+    return;
+  }
   if (tool.value === 'eraser') {
     eraseAt(point);
     return;
@@ -1123,14 +1181,20 @@ function continueAnnotation(event: PointerEvent): void {
   if (tool.value === 'move' && moveStart) {
     const stroke = currentPageStrokes.value[moveStart.index];
     if (!stroke) return;
-    const minX = Math.min(...moveStart.points.map(item => item.x));
-    const maxX = Math.max(...moveStart.points.map(item => item.x));
-    const minY = Math.min(...moveStart.points.map(item => item.y));
-    const maxY = Math.max(...moveStart.points.map(item => item.y));
-    const deltaX = Math.max(-minX, Math.min(1 - maxX, point.x - moveStart.point.x));
-    const deltaY = Math.max(-minY, Math.min(1 - maxY, point.y - moveStart.point.y));
-    stroke.points = moveStart.points.map(item => ({ x: item.x + deltaX, y: item.y + deltaY }));
-    annotationChanged = deltaX !== 0 || deltaY !== 0;
+    if (moveStart.resizeIndex !== undefined) {
+      stroke.points[moveStart.resizeIndex] = point;
+      const original = moveStart.points[moveStart.resizeIndex];
+      annotationChanged = point.x !== original.x || point.y !== original.y;
+    } else {
+      const minX = Math.min(...moveStart.points.map(item => item.x));
+      const maxX = Math.max(...moveStart.points.map(item => item.x));
+      const minY = Math.min(...moveStart.points.map(item => item.y));
+      const maxY = Math.max(...moveStart.points.map(item => item.y));
+      const deltaX = Math.max(-minX, Math.min(1 - maxX, point.x - moveStart.point.x));
+      const deltaY = Math.max(-minY, Math.min(1 - maxY, point.y - moveStart.point.y));
+      stroke.points = moveStart.points.map(item => ({ x: item.x + deltaX, y: item.y + deltaY }));
+      annotationChanged = deltaX !== 0 || deltaY !== 0;
+    }
   } else if (tool.value === 'pen' || tool.value === 'highlighter') {
     currentPageStrokes.value.at(-1)?.points.push(point);
     annotationChanged = true;
@@ -1197,6 +1261,7 @@ function undo(): void {
   const previous = undoStack.value.pop();
   if (!previous) return;
   redoStack.value.push(cloneAnnotations());
+  selectedAnnotation.value = undefined;
   annotations.value = previous;
   drawVisibleAnnotations();
   void saveAnnotations();
@@ -1206,6 +1271,7 @@ function redo(): void {
   const next = redoStack.value.pop();
   if (!next) return;
   undoStack.value.push(cloneAnnotations());
+  selectedAnnotation.value = undefined;
   annotations.value = next;
   drawVisibleAnnotations();
   void saveAnnotations();
@@ -1233,6 +1299,10 @@ function rerenderVisiblePages(): void {
 }
 
 watch(scale, rerenderVisiblePages);
+watch(tool, () => {
+  selectedAnnotation.value = undefined;
+  drawVisibleAnnotations();
+});
 watch([scale, pageNumber, tool, penColor, penWidth, toolbarVertical, toolbarPosition], scheduleViewSave);
 
 onMounted(() => {
