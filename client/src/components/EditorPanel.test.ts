@@ -289,6 +289,34 @@ describe('EditorPanel', () => {
     expect(editorPanelSource).toContain('background: #f6f8fa;');
   });
 
+  it('renders HTML embedded in markdown', async () => {
+    const markdown = [
+      '#### CLI Tools [<sup>[TOC]</sup>](#contents)',
+      '',
+      '<p>&nbsp;&nbsp; <a href="https://example.com"><b>Example</b></a><br>Safe text</p>',
+    ].join('\n');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: markdown, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => markdown),
+      dispose: vi.fn(),
+    } as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/README.md');
+    await flushPromises();
+
+    const preview = wrapper.find('.markdown-preview');
+    expect(preview.find('h4 sup').text()).toBe('[TOC]');
+    expect(preview.find('p a b').text()).toBe('Example');
+    expect(preview.find('p').text()).toContain('Safe text');
+  });
+
   it('renders Mermaid flowcharts and sequence diagrams in markdown preview', async () => {
     const markdown = [
       '```mermaid',

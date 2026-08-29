@@ -481,9 +481,6 @@ if (!monaco.languages.getLanguages().some(language => language.id === MAKEFILE_L
 const defaultMarkdownRenderer = new Renderer();
 const markdownRenderer = new Marked({
   renderer: {
-    html(html) {
-      return escapeHtml(String(html));
-    },
     image(href, title, text) {
       return defaultMarkdownRenderer.image(resolveMarkdownImageHref(href), title, text);
     },
