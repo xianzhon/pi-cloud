@@ -456,6 +456,7 @@ describe('SessionSidebar', () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.text()).toContain('title from first prompt');
+    expect(wrapper.text()).toContain('1 user message');
     expect(wrapper.text()).not.toContain('New Session');
   });
 

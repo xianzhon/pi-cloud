@@ -1280,13 +1280,15 @@ function updateFirstMessage(event: Event) {
     cwd: existingOptimistic?.cwd || existingSession?.cwd,
     created: existingOptimistic?.created || existingSession?.created || new Date().toISOString(),
     modified: new Date().toISOString(),
-    messageCount: existingOptimistic?.messageCount || existingSession?.messageCount || 0,
+    messageCount: Math.max(existingOptimistic?.messageCount || 0, existingSession?.messageCount || 0, 1),
     firstMessage: detail.firstMessage,
   };
 
   optimisticSessions.value.set(detail.id, nextSession);
   sessions.value = sessions.value.map((session) => (
-    session.id === detail.id ? { ...session, firstMessage: detail.firstMessage } : session
+    session.id === detail.id
+      ? { ...session, firstMessage: detail.firstMessage, messageCount: Math.max(session.messageCount, 1) }
+      : session
   ));
 }
 

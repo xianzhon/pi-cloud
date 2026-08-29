@@ -978,7 +978,7 @@ export default {
       globalMemoriesNeedReview: '{count} global memories need review',
       failedToMoveProjectStatus: 'Failed to move project ({status})',
       failedToRelocateSessionsStatus: 'Failed to relocate sessions ({status})',
-      userMessages: '{count} user messages',
+      userMessages: '{count} user message | {count} user messages',
       searchReviewSessions: 'Search review sessions…',
     },
     sessionTreeModal: {
