@@ -398,12 +398,12 @@ describe('SettingsDialog', () => {
     }]]);
   });
 
-  it('shows the GitHub proxy test result icon', async () => {
-    const wrapper = mountSettingsDialog({ githubProxyCheckResult: 'ok' });
+  it('shows the GitHub proxy test result and country', async () => {
+    const wrapper = mountSettingsDialog({ githubProxyCheckResult: 'ok', githubProxyCountry: 'US' });
 
     await wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!.trigger('click');
 
-    expect(wrapper.find('.git-proxy-check-button').text()).toContain('✓');
+    expect(wrapper.find('.git-proxy-check-button').text()).toContain('✓ US');
     expect(wrapper.find('.git-check-ok').exists()).toBe(true);
   });
 });

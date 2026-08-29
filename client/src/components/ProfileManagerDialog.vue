@@ -206,8 +206,8 @@
                 </button>
                 <button class="profile-secondary dialog-action profile-check-button" type="button" :disabled="checkingProxy" @click="checkProxy">
                   <span>{{ checkingProxy ? t('components.profileManagerDialog.checking') : t('components.profileManagerDialog.checkProxy') }}</span>
-                  <span v-if="proxyCheckResult" :class="proxyCheckResult === 'ok' ? 'profile-check-ok' : 'profile-check-failed'" aria-hidden="true">
-                    {{ proxyCheckResult === 'ok' ? '✓' : '✕' }}
+                  <span v-if="proxyCheckResult" :class="proxyCheckResult === 'ok' ? 'profile-check-ok' : 'profile-check-failed'" role="status">
+                    {{ proxyCheckStatus }}
                   </span>
                 </button>
                 <button v-if="managedProfileId !== 'default'" class="profile-delete" type="button" @click="deleteConfirm = true">{{ t('components.profileManagerDialog.deleteProfile') }}</button>
@@ -300,6 +300,12 @@ const savingSettings = ref(false);
 const settingsSaved = ref(false);
 const checkingProxy = ref(false);
 const proxyCheckResult = ref<'ok' | 'failed' | ''>('');
+const proxyCountry = ref('');
+const proxyCheckStatus = computed(() => {
+  if (proxyCheckResult.value === 'failed') return '✕';
+  if (!proxyCountry.value) return '✓';
+  return `✓ ${proxyCountry.value}`;
+});
 const models = ref<ModelOption[]>([]);
 const apiKeyProviders = ref<ApiKeyProvider[]>([]);
 const apiKeyProvider = ref('');
@@ -387,6 +393,7 @@ function resetSaveState(): void {
   settingsSaved.value = false;
   checkingProxy.value = false;
   proxyCheckResult.value = '';
+  proxyCountry.value = '';
   apiKeyProviders.value = [];
   apiKeyProvider.value = '';
   apiKey.value = '';
@@ -827,6 +834,7 @@ async function saveSettings(): Promise<void> {
 async function checkProxy(): Promise<void> {
   error.value = '';
   proxyCheckResult.value = '';
+  proxyCountry.value = '';
   checkingProxy.value = true;
 
   try {
@@ -842,8 +850,9 @@ async function checkProxy(): Promise<void> {
       }),
     });
     if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToCheckProxy')));
-    const data = await response.json() as { ok?: boolean };
+    const data = await response.json() as { ok?: boolean; country?: string };
     proxyCheckResult.value = data.ok ? 'ok' : 'failed';
+    proxyCountry.value = data.ok ? data.country || '' : '';
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToCheckProxy');
   } finally {
@@ -874,6 +883,7 @@ watch(apiKeyProvider, () => {
 watch([defaultModel, automationModel, autoRenameLanguage, proxy], () => {
   settingsSaved.value = false;
   proxyCheckResult.value = '';
+  proxyCountry.value = '';
 });
 
 watch(() => props.visible, (visible) => {

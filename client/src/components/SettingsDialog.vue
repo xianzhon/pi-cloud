@@ -454,8 +454,8 @@
                       <input class="settings-input" :value="draftGithubProxyUrl" placeholder="http://proxy.example:7890" @input="draftGithubProxyUrl = ($event.target as HTMLInputElement).value" />
                       <button type="button" class="settings-action-btn compact-action git-proxy-check-button" :disabled="githubProxyChecking" @click="emit('testGithubProxy', draftGithubProxyUrl)">
                         <span>{{ githubProxyChecking ? t('components.settingsDialog.checking') : t('components.settingsDialog.testProxy') }}</span>
-                        <span v-if="githubProxyCheckResult" :class="githubProxyCheckResult === 'ok' ? 'git-check-ok' : 'git-check-failed'" aria-hidden="true">
-                          {{ githubProxyCheckResult === 'ok' ? '✓' : '✕' }}
+                        <span v-if="githubProxyCheckResult" :class="githubProxyCheckResult === 'ok' ? 'git-check-ok' : 'git-check-failed'" role="status">
+                          {{ githubProxyCheckStatus }}
                         </span>
                       </button>
                     </span>
@@ -753,6 +753,7 @@ const props = withDefaults(defineProps<{
   gitSaveSuccessTick?: number;
   githubProxyChecking?: boolean;
   githubProxyCheckResult?: 'ok' | 'failed' | null;
+  githubProxyCountry?: string;
 }>(), {
   confirmSessionDelete: true,
   newSessionShortcut: 'ctrlMetaN',
@@ -782,11 +783,17 @@ const props = withDefaults(defineProps<{
   gitSaveSuccessTick: 0,
   githubProxyChecking: false,
   githubProxyCheckResult: null,
+  githubProxyCountry: '',
   clientId: '',
   projectPath: '~',
 });
 
 const projectName = computed(() => props.projectPath.replace(/\/+$/, '').split('/').pop() || props.projectPath);
+const githubProxyCheckStatus = computed(() => {
+  if (props.githubProxyCheckResult === 'failed') return '✕';
+  if (!props.githubProxyCountry) return '✓';
+  return `✓ ${props.githubProxyCountry}`;
+});
 
 const themeOptions = computed<CustomSelectOption[]>(() => [
   { value: 'system', label: t('settings.theme.system') },

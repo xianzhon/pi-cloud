@@ -55,6 +55,7 @@ const AGENT_SESSION_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'l
 const execFileAsync = promisify(execFile);
 const PROXY_CHECK_URL = 'https://www.google.com/generate_204';
 const PROXY_CHECK_ARGS = ['-fsSL', '--connect-timeout', '5', '--max-time', '10', PROXY_CHECK_URL];
+const PROXY_COUNTRY_ARGS = ['-fsSL', '--connect-timeout', '5', '--max-time', '10', 'https://ipinfo.io/country'];
 const PROXY_ENV_KEYS = ['ALL_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'all_proxy', 'http_proxy', 'https_proxy', 'no_proxy'];
 const SESSION_LIST_CACHE_TTL_MS = 2000;
 const USER_MESSAGE_COUNT_CONCURRENCY = 10;
@@ -782,18 +783,24 @@ export class PiSessionService {
     this.saveProfileProxy(profileId, proxy);
   }
 
-  async checkAgentProfileProxy(profileId: string, proxyEnv?: Record<string, unknown>): Promise<{ ok: boolean }> {
+  async checkAgentProfileProxy(profileId: string, proxyEnv?: Record<string, unknown>): Promise<{ ok: boolean; country?: string }> {
     const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
     if (!profile) throw new Error('Unknown agent profile');
 
+    const env = await this.buildProxyCheckEnv(profile.path, proxyEnv);
     try {
-      await execFileAsync('curl', PROXY_CHECK_ARGS, {
-        env: await this.buildProxyCheckEnv(profile.path, proxyEnv),
-        timeout: 12_000,
-      });
-      return { ok: true };
+      await execFileAsync('curl', PROXY_CHECK_ARGS, { env, timeout: 12_000 });
     } catch {
       return { ok: false };
+    }
+
+    try {
+      const output = await execFileAsync('curl', PROXY_COUNTRY_ARGS, { env, timeout: 12_000 });
+      const stdout = typeof output === 'string' ? output : output.stdout;
+      const country = stdout.trim().toUpperCase();
+      return /^[A-Z]{2}$/.test(country) ? { ok: true, country } : { ok: true };
+    } catch {
+      return { ok: true };
     }
   }
 

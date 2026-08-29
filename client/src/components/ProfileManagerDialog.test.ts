@@ -15,6 +15,7 @@ describe('ProfileManagerDialog', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/proxy/check')) return ok({ ok: true, country: 'US' });
       if (url.endsWith('/proxy')) return ok({ proxy: {} });
       if (url.endsWith('/api-key-providers')) {
         return ok({ providers: [
@@ -199,6 +200,25 @@ describe('ProfileManagerDialog', () => {
     ));
     expect((wrapper.find('[aria-label="Custom provider API key"]').element as HTMLInputElement).value).toBe('');
     expect(wrapper.text()).not.toContain('agnes-secret');
+  });
+
+  it('shows the proxy country after a successful check', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="API provider key"]').text()).toContain('OPENAI_API_KEY'));
+    await wrapper.vm.$nextTick();
+
+    const checkButton = wrapper.find('.profile-check-button');
+    await checkButton.trigger('click');
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/proxy/check',
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    await vi.waitFor(() => expect(wrapper.find('.profile-check-button').text()).toContain('✓ US'));
   });
 
   it('loads and saves all profile settings with one action', async () => {

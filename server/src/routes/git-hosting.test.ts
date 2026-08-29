@@ -33,7 +33,8 @@ function routeOptions(overrides: Record<string, unknown>) {
 const execFileMock = vi.mocked(execFile);
 
 beforeEach(() => {
-  execFileMock.mockClear();
+  execFileMock.mockReset();
+  execFileMock.mockImplementation(((_file: string, _args: string[], _options: unknown, callback: Function) => callback(null, '', '')) as any);
 });
 
 describe('git hosting routes', () => {
@@ -65,12 +66,15 @@ describe('git hosting routes', () => {
     const api = app();
     const originalHttpProxy = process.env.HTTP_PROXY;
     process.env.HTTP_PROXY = 'http://server-proxy';
+    execFileMock.mockImplementation(((_file: string, args: string[], _options: unknown, callback: Function) => {
+      callback(null, args.includes('https://ipinfo.io/country') ? 'ca\n' : '', '');
+    }) as any);
     await gitHostingRoutes(api.app as any, routeOptions({}) as any);
 
     try {
       const result = await api.handlers['POST /github/proxy/test']({ body: { proxyUrl: '' } }, {});
 
-      expect(result).toEqual({ ok: true });
+      expect(result).toEqual({ ok: true, country: 'CA' });
       expect(execFileMock).toHaveBeenCalledWith('curl', expect.any(Array), expect.objectContaining({ timeout: 12_000 }), expect.any(Function));
       const options = execFileMock.mock.calls.at(-1)?.[2] as { env: NodeJS.ProcessEnv };
       expect(options.env.HTTP_PROXY).toBeUndefined();
@@ -78,6 +82,19 @@ describe('git hosting routes', () => {
       if (originalHttpProxy === undefined) delete process.env.HTTP_PROXY;
       else process.env.HTTP_PROXY = originalHttpProxy;
     }
+  });
+
+  it('keeps successful GitHub connectivity when the country lookup fails', async () => {
+    const api = app();
+    execFileMock.mockImplementation(((_file: string, args: string[], _options: unknown, callback: Function) => {
+      if (args.includes('https://ipinfo.io/country')) callback(new Error('country lookup failed'), '', '');
+      else callback(null, '', '');
+    }) as any);
+    await gitHostingRoutes(api.app as any, routeOptions({}) as any);
+
+    const result = await api.handlers['POST /github/proxy/test']({ body: { proxyUrl: '' } }, {});
+
+    expect(result).toEqual({ ok: true });
   });
 
   it('tests GitHub connectivity through a draft proxy', async () => {

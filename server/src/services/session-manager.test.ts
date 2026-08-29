@@ -875,6 +875,9 @@ describe('PiSessionService', () => {
     readdir.mockResolvedValue([{ name: 'work', isDirectory: () => true }]);
     const originalHttpProxy = process.env.HTTP_PROXY;
     process.env.HTTP_PROXY = 'http://server-proxy';
+    execFile.mockImplementation((_file: string, args: string[], _options: any, callback: Function) => {
+      callback(null, args.includes('https://ipinfo.io/country') ? 'us\n' : '', '');
+    });
     const service = new PiSessionService();
 
     try {
@@ -891,12 +894,36 @@ describe('PiSessionService', () => {
         env: expect.objectContaining({ HTTPS_PROXY: 'http://new' }),
         timeout: 12_000,
       }), expect.any(Function));
+      expect(execFile).toHaveBeenNthCalledWith(2, 'curl', [
+        '-fsSL',
+        '--connect-timeout',
+        '5',
+        '--max-time',
+        '10',
+        'https://ipinfo.io/country',
+      ], expect.objectContaining({
+        env: expect.objectContaining({ HTTPS_PROXY: 'http://new' }),
+        timeout: 12_000,
+      }), expect.any(Function));
       expect(execFile.mock.calls[0][2].env.HTTP_PROXY).toBeUndefined();
-      expect(result).toEqual({ ok: true });
+      expect(result).toEqual({ ok: true, country: 'US' });
     } finally {
       if (originalHttpProxy === undefined) delete process.env.HTTP_PROXY;
       else process.env.HTTP_PROXY = originalHttpProxy;
     }
+  });
+
+  it('keeps a successful connectivity result when the country lookup fails', async () => {
+    readdir.mockResolvedValue([{ name: 'work', isDirectory: () => true }]);
+    execFile.mockImplementation((_file: string, args: string[], _options: any, callback: Function) => {
+      if (args.includes('https://ipinfo.io/country')) callback(new Error('country lookup failed'), '', '');
+      else callback(null, '', '');
+    });
+    const service = new PiSessionService();
+
+    const result = await service.checkAgentProfileProxy('work', { HTTPS_PROXY: 'http://new' });
+
+    expect(result).toEqual({ ok: true });
   });
 
   it('reports proxy check failures', async () => {
@@ -907,6 +934,7 @@ describe('PiSessionService', () => {
     const result = await service.checkAgentProfileProxy('work', { HTTPS_PROXY: 'http://bad' });
 
     expect(result).toEqual({ ok: false });
+    expect(execFile).toHaveBeenCalledTimes(1);
   });
 
   it('loads proxy env from the selected profile when creating a session', async () => {

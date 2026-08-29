@@ -46,7 +46,7 @@ export function useGitHosting() {
   }
 
   async function testGithubProxy(proxyUrl?: string) {
-    return request<{ ok: boolean }>('/api/git-hosting/github/proxy/test', 'POST', { proxyUrl: proxyUrl ?? githubSettings.value.proxyUrl ?? '' });
+    return request<{ ok: boolean; country?: string }>('/api/git-hosting/github/proxy/test', 'POST', { proxyUrl: proxyUrl ?? githubSettings.value.proxyUrl ?? '' });
   }
 
   async function previewIssue(taskId: string) {

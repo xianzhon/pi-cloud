@@ -514,6 +514,7 @@
       :git-save-success-tick="gitSaveSuccessTick"
       :github-proxy-checking="githubProxyChecking"
       :github-proxy-check-result="githubProxyCheckResult"
+      :github-proxy-country="githubProxyCountry"
       @update:show-hint-info="setShowHintInfo"
       @update:show-code-block-language-headers="setShowCodeBlockLanguageHeaders"
       @update:streaming-message-behavior="setStreamingMessageBehavior"
@@ -948,6 +949,7 @@ const gatewaySettingsSaving = ref(false);
 const gatewaySaveSuccessTick = ref(0);
 const githubProxyChecking = ref(false);
 const githubProxyCheckResult = ref<'ok' | 'failed' | null>(null);
+const githubProxyCountry = ref('');
 const sidebarCollapsedStorageKey = 'pi-webui-sidebar-collapsed';
 const sidebarCollapsed = ref(loadSidebarCollapsed());
 const showNewSessionDialog = ref(false);
@@ -1787,9 +1789,11 @@ async function handleTestGithubConnection(payload: { serverUrl: string; token: s
 async function handleTestGithubProxy(value: string) {
   githubProxyChecking.value = true;
   githubProxyCheckResult.value = null;
+  githubProxyCountry.value = '';
   try {
     const result = await gitHosting.testGithubProxy(value);
     githubProxyCheckResult.value = result.ok ? 'ok' : 'failed';
+    githubProxyCountry.value = result.ok ? result.country || '' : '';
   } catch (error) {
     githubProxyCheckResult.value = 'failed';
     window.alert(error instanceof Error ? error.message : t('app.githubProxyCheckFailed'));

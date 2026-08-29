@@ -27,6 +27,7 @@ export interface GitHostingRouteOptions {
 const execFileAsync = promisify(execFile);
 const maxDiffBuffer = 10 * 1024 * 1024;
 const githubProxyCheckArgs = ['-fsSL', '--connect-timeout', '5', '--max-time', '10', 'https://www.google.com/generate_204'];
+const githubProxyCountryArgs = ['-fsSL', '--connect-timeout', '5', '--max-time', '10', 'https://ipinfo.io/country'];
 const proxyEnvKeys = ['ALL_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'all_proxy', 'http_proxy', 'https_proxy', 'no_proxy'];
 
 function textFromAssistantMessage(message: AssistantMessage) {
@@ -42,7 +43,7 @@ async function runGit(cwd: string, args: string[]) {
   return stdout;
 }
 
-async function checkGithubProxy(proxyUrl: string): Promise<boolean> {
+async function checkGithubProxy(proxyUrl: string): Promise<{ ok: boolean; country?: string }> {
   const value = proxyUrl.trim();
   const env = { ...process.env };
   for (const key of proxyEnvKeys) delete env[key];
@@ -52,9 +53,17 @@ async function checkGithubProxy(proxyUrl: string): Promise<boolean> {
   }
   try {
     await execFileAsync('curl', githubProxyCheckArgs, { env, timeout: 12_000 });
-    return true;
   } catch {
-    return false;
+    return { ok: false };
+  }
+
+  try {
+    const output = await execFileAsync('curl', githubProxyCountryArgs, { env, timeout: 12_000 });
+    const stdout = typeof output === 'string' ? output : output.stdout;
+    const country = stdout.trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(country) ? { ok: true, country } : { ok: true };
+  } catch {
+    return { ok: true };
   }
 }
 
@@ -283,7 +292,7 @@ export async function gitHostingRoutes(app: FastifyInstance, options: GitHosting
   app.post('/github/proxy/test', async (req, reply) => {
     const body = req.body as { proxyUrl?: string };
     try {
-      return { ok: await checkGithubProxy(body.proxyUrl ?? options.githubSettings.get().proxyUrl ?? '') };
+      return await checkGithubProxy(body.proxyUrl ?? options.githubSettings.get().proxyUrl ?? '');
     } catch (error) {
       return sendError(reply, error, 400);
     }
