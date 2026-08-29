@@ -415,8 +415,8 @@
                       <span>{{ file.name }}</span>
                     </span>
                     <span class="commit-file-stats">
-                      <span class="is-added">+{{ commitFileStats.get(file.name)?.additions || 0 }}</span>
-                      <span class="is-removed">-{{ commitFileStats.get(file.name)?.deletions || 0 }}</span>
+                      <span class="is-added">+{{ file.additions }}</span>
+                      <span class="is-removed">-{{ file.deletions }}</span>
                     </span>
                   </button>
                 </h4>
@@ -428,7 +428,7 @@
                     :class="diffLineClass(line)"
                   >{{ line }}{{ '\n' }}</span></pre>
                   <div v-else class="commit-split-diff">
-                    <div v-for="(row, rowIndex) in pairCommitDiffLines(file.lines)" :key="rowIndex" class="commit-split-row">
+                    <div v-for="(row, rowIndex) in pairDiffLines(file.lines)" :key="rowIndex" class="commit-split-row">
                       <span class="commit-diff-line" :class="row.left == null ? 'is-empty' : diffLineClass(row.left)">{{ row.left ?? '' }}</span>
                       <span class="commit-diff-line" :class="row.right == null ? 'is-empty' : diffLineClass(row.right)">{{ row.right ?? '' }}</span>
                     </div>
@@ -711,6 +711,7 @@ import SkillPicker from './SkillPicker.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import { exportSessionPdf, hasExportableMessages } from '../utils/sessionPdfExport';
+import { diffLineClass, pairDiffLines, parseDiffFiles } from '../utils/gitDiff';
 import { getReviewTranscript } from '../services/reviewSourceService';
 import type { ReviewSessionTranscript } from '../types/reviewSource';
 import { formatFileSize, useChatAttachments, type PendingAttachment } from '../composables/useChatAttachments';
@@ -805,16 +806,6 @@ interface CommitPreview {
   message: string;
   files: CommitStatusFile[];
   mode: 'commit' | 'amend';
-}
-
-interface CommitDiffFile {
-  name: string;
-  lines: string[];
-}
-
-interface CommitSplitDiffRow {
-  left: string | null;
-  right: string | null;
 }
 
 type BranchDialogMode = 'switch' | 'changes' | 'base';
@@ -1460,17 +1451,17 @@ const activeSkillCount = computed(() => {
 });
 const commitDialogTitle = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amendPreviousCommit') : t('components.chatPanel.commitChanges'));
 const commitDialogConfirmText = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amend') : t('components.chatPanel.commit'));
-const commitDiffFiles = computed(() => parseCommitDiffFiles(commitDiffContent.value));
-const commitFileStats = computed(() => new Map(commitDiffFiles.value.map((file) => [file.name, {
-  additions: file.lines.filter((line) => line.startsWith('+') && !line.startsWith('+++')).length,
-  deletions: file.lines.filter((line) => line.startsWith('-') && !line.startsWith('---')).length,
-}])));
+const commitDiffFiles = computed(() => parseDiffFiles(
+  commitDiffContent.value,
+  t('components.gitHistory.changes'),
+  { mergeByName: true },
+));
 const allCommitDiffFilesCollapsed = computed(() => commitDiffFiles.value.length > 0
   && commitDiffFiles.value.every((file) => collapsedCommitDiffFiles.value.has(file.name)));
 const commitDiffSummary = computed(() => {
-  const totals = Array.from(commitFileStats.value.values()).reduce((sum, stats) => ({
-    additions: sum.additions + stats.additions,
-    deletions: sum.deletions + stats.deletions,
+  const totals = commitDiffFiles.value.reduce((sum, file) => ({
+    additions: sum.additions + file.additions,
+    deletions: sum.deletions + file.deletions,
   }), { additions: 0, deletions: 0 });
   const files = commitDiffFiles.value.length;
   return [
@@ -2571,63 +2562,6 @@ async function handleAmendCommand(text: string) {
     responseMessage.title = t('components.chatPanel.gitAmendFailed');
     responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToPrepareGitAmend');
   }
-}
-
-function parseCommitDiffFiles(diff: string): CommitDiffFile[] {
-  const files: CommitDiffFile[] = [];
-  const filesByName = new Map<string, CommitDiffFile>();
-  let current: CommitDiffFile | undefined;
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('diff --git ') || line.startsWith('diff --cc ') || line.startsWith('diff --combined ')) {
-      const name = line.match(/ b\/(.+)$/)?.[1]
-        || line.replace(/^diff --(?:cc|combined) /, '')
-        || t('components.gitHistory.changes');
-      current = filesByName.get(name);
-      if (current) {
-        current.lines.push(line);
-      } else {
-        current = { name, lines: [line] };
-        filesByName.set(name, current);
-        files.push(current);
-      }
-    } else if (current) {
-      current.lines.push(line);
-    }
-  }
-  return files;
-}
-
-function diffLineClass(line: string): string {
-  if (line.startsWith('@@')) return 'is-hunk';
-  if (line.startsWith('+') && !line.startsWith('+++')) return 'is-added';
-  if (line.startsWith('-') && !line.startsWith('---')) return 'is-removed';
-  if (line.startsWith('diff --') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) return 'is-metadata';
-  return '';
-}
-
-// Pair each contiguous removal/addition block so corresponding edits share a split row.
-function pairCommitDiffLines(lines: string[]): CommitSplitDiffRow[] {
-  const rows: CommitSplitDiffRow[] = [];
-  for (let index = 0; index < lines.length;) {
-    const line = lines[index];
-    const isRemoval = line.startsWith('-') && !line.startsWith('---');
-    const isAddition = line.startsWith('+') && !line.startsWith('+++');
-    if (!isRemoval && !isAddition) {
-      rows.push({ left: line, right: line });
-      index += 1;
-      continue;
-    }
-
-    const removals: string[] = [];
-    const additions: string[] = [];
-    while (index < lines.length && lines[index].startsWith('-') && !lines[index].startsWith('---')) removals.push(lines[index++]);
-    while (index < lines.length && lines[index].startsWith('+') && !lines[index].startsWith('+++')) additions.push(lines[index++]);
-    const rowCount = Math.max(removals.length, additions.length);
-    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-      rows.push({ left: removals[rowIndex] ?? null, right: additions[rowIndex] ?? null });
-    }
-  }
-  return rows;
 }
 
 function commitDiffFileId(index: number): string {
