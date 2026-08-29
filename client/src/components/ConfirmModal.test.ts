@@ -49,4 +49,9 @@ describe('ConfirmModal behavior', () => {
 
     expect(wrapper.emitted('cancel')).toHaveLength(1);
   });
+
+  it('supports wide content while preserving the default size', () => {
+    expect(mountModal().get('.confirm-modal').classes()).not.toContain('confirm-modal--wide');
+    expect(mountModal({ wide: true }).get('.confirm-modal').classes()).toContain('confirm-modal--wide');
+  });
 });

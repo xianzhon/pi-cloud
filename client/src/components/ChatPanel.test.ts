@@ -658,6 +658,14 @@ describe('ChatPanel', () => {
           files: [{ status: 'M', path: 'staged.ts' }, { status: '??', path: 'unstaged.ts' }],
         }), { status: 200 });
       }
+      if (url.includes('/api/git/diff')) {
+        const stagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -1 +1 @@\n-old\n+staged change';
+        const unstagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -2,3 +2,2 @@\n  indented first line\n-old\n-older\n+all changes';
+        const binaryDiff = 'diff --git a/image.png b/image.png\nBinary files a/image.png and b/image.png differ';
+        return new Response(JSON.stringify({
+          diff: url.includes('scope=staged') ? stagedDiff : `${unstagedDiff}\n\n${stagedDiff}\n\n${binaryDiff}`,
+        }), { status: 200 });
+      }
       if (url.includes('/api/git/commit-message')) {
         return new Response(JSON.stringify({ message: 'feat: update staged file' }), { status: 200 });
       }
@@ -672,13 +680,65 @@ describe('ChatPanel', () => {
 
     const checkbox = document.querySelector<HTMLInputElement>('.commit-staged-only input');
     expect(checkbox?.checked).toBe(false);
-    expect(document.querySelector('.commit-file-list')?.textContent).toContain('unstaged.ts');
+    expect(document.querySelector('.commit-diff-toggle')).toBeNull();
+    expect(document.querySelector('.commit-diff-panel')).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=all');
+    expect(document.querySelector('.commit-file-list')).toBeNull();
+    expect(document.querySelector('.commit-diff-summary')?.textContent).toBe('2 files changed, 2 insertions(+), 3 deletions(-)');
+    expect(document.querySelector('.commit-file-stats')?.textContent).toContain('+2');
+    expect(document.querySelector('.commit-file-stats')?.textContent).toContain('-3');
+    expect(document.querySelectorAll('.commit-diff-file')).toHaveLength(2);
+    expect(document.querySelector('.commit-diff-file h4')?.textContent).toContain('staged.ts');
+    expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+all changes');
+    expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+staged change');
+    const indentedLine = Array.from(document.querySelectorAll('.commit-diff-line'))
+      .find((line) => line.textContent?.includes('indented first line'));
+    expect(indentedLine?.textContent).toMatch(/^  indented first line/);
+
+    const splitButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.commit-diff-view-toggle button'))
+      .find((button) => button.textContent?.trim() === 'Split');
+    splitButton?.click();
+    await nextTick();
+    const splitRows = Array.from(document.querySelectorAll('.commit-split-row'));
+    const pairedRow = splitRows.find((row) => row.children[0]?.textContent === '-old');
+    expect(pairedRow?.children[1]?.textContent).toBe('+all changes');
+    const unpairedRow = splitRows.find((row) => row.children[0]?.textContent === '-older');
+    expect(unpairedRow?.children[1]?.classList.contains('is-empty')).toBe(true);
+
+    const collapseAll = document.querySelector<HTMLButtonElement>('.commit-diff-collapse-all');
+    expect(collapseAll?.textContent?.trim()).toBe('Collapse all');
+    collapseAll?.click();
+    await nextTick();
+    expect(document.querySelectorAll('.commit-diff-file h4 button[aria-expanded="false"]')).toHaveLength(2);
+    expect(collapseAll?.textContent?.trim()).toBe('Expand all');
+    collapseAll?.click();
+    await nextTick();
+    expect(document.querySelectorAll('.commit-diff-file h4 button[aria-expanded="true"]')).toHaveLength(2);
+
+    const unifiedButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.commit-diff-view-toggle button'))
+      .find((button) => button.textContent?.trim() === 'Unified');
+    unifiedButton?.click();
+    await nextTick();
+
+    const diffHeader = document.querySelector<HTMLButtonElement>('.commit-diff-file h4 button');
+    diffHeader?.click();
+    await nextTick();
+    expect(diffHeader?.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector<HTMLElement>('.commit-diff-file .commit-diff-content')?.style.display).toBe('none');
+
+    diffHeader?.click();
+    await nextTick();
+    expect(diffHeader?.getAttribute('aria-expanded')).toBe('true');
 
     checkbox?.click();
     await flushPromises();
 
-    expect(document.querySelector('.commit-file-list')?.textContent).toContain('staged.ts');
-    expect(document.querySelector('.commit-file-list')?.textContent).not.toContain('unstaged.ts');
+    expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=staged');
+    expect(document.querySelector('.commit-file-list')).toBeNull();
+    expect(document.querySelector('.commit-diff-summary')?.textContent).toBe('1 file changed, 1 insertion(+), 1 deletion(-)');
+    expect(document.querySelector('.commit-file-stats')?.textContent).toContain('+1');
+    expect(document.querySelector('.commit-file-stats')?.textContent).toContain('-1');
+    expect(document.querySelector('.commit-diff-line.is-added')?.textContent).toContain('+staged change');
 
     document.querySelector<HTMLButtonElement>('.pr-ai-generate-btn')?.click();
     await flushPromises();

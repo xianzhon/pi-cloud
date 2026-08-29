@@ -65,6 +65,50 @@ describe('GitHistoryView', () => {
     expect(wrapper.get('.git-history-next').attributes('disabled')).toBeDefined();
   });
 
+  it('shows colored change counts and collapses individual or all file diffs', async () => {
+    const onlyCommit = commit('d'.repeat(40), 'File changes');
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response({ branch: 'main', page: 0, hasPrevious: false, hasNext: false, commits: [onlyCommit] }))
+      .mockResolvedValueOnce(response({
+        stat: '2 files changed',
+        diff: 'diff --git a/app.ts b/app.ts\n@@ -1 +1,2 @@\n-old\n+new\n+another\ndiff --git a/style.css b/style.css\n@@ -1 +0,0 @@\n-red',
+      }));
+
+    const wrapper = mount(GitHistoryView, {
+      props: { visible: true, cwd: '/workspace' },
+      global: { stubs: { Teleport: true } },
+    });
+    await flushPromises();
+
+    expect(wrapper.get('.git-diff-summary').text()).toContain('2 files changed');
+    expect(wrapper.get('.git-diff-summary .is-added').text()).toBe('+2');
+    expect(wrapper.get('.git-diff-summary .is-removed').text()).toBe('-2');
+    expect(wrapper.findAll('.git-diff-file-stats')[0].text()).toContain('+2');
+    expect(wrapper.findAll('.git-diff-file-stats')[0].text()).toContain('-1');
+    expect(wrapper.get('.git-diff-view-toggle button[aria-pressed="true"]').text()).toBe('Unified');
+
+    const splitButton = wrapper.findAll<HTMLButtonElement>('.git-diff-view-toggle button')[1];
+    await splitButton.trigger('click');
+    expect(wrapper.get('.git-diff-view-toggle button[aria-pressed="true"]').text()).toBe('Split');
+    expect(wrapper.findAll('.git-split-diff')).toHaveLength(2);
+    const splitRows = wrapper.findAll('.git-split-row');
+    expect(splitRows.some((row) => row.findAll('.git-diff-line')[0].text() === '-old'
+      && row.findAll('.git-diff-line')[1].text() === '+new')).toBe(true);
+    expect(splitRows.some((row) => row.findAll('.git-diff-line')[0].classes().includes('is-empty')
+      && row.findAll('.git-diff-line')[1].text() === '+another')).toBe(true);
+
+    await wrapper.findAll<HTMLButtonElement>('.git-diff-file h4 button')[0].trigger('click');
+    expect(wrapper.findAll('.git-diff-file h4 button')[0].attributes('aria-expanded')).toBe('false');
+    expect(wrapper.findAll<HTMLElement>('.git-diff-content')[0].element.style.display).toBe('none');
+
+    expect(wrapper.get('.git-diff-collapse-all').text()).toBe('Collapse all');
+    await wrapper.get('.git-diff-collapse-all').trigger('click');
+    expect(wrapper.findAll('.git-diff-file h4 button[aria-expanded="false"]')).toHaveLength(2);
+    expect(wrapper.get('.git-diff-collapse-all').text()).toBe('Expand all');
+    await wrapper.get('.git-diff-collapse-all').trigger('click');
+    expect(wrapper.findAll('.git-diff-file h4 button[aria-expanded="true"]')).toHaveLength(2);
+  });
+
   it('shows empty history and oversized patch states without closing', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ branch: 'main', page: 0, hasPrevious: false, hasNext: false, commits: [] }));
     const emptyWrapper = mount(GitHistoryView, {
