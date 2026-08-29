@@ -1955,11 +1955,10 @@ defineExpose({ focusProjectPath, loadSessions, showContextMenuForSession, switch
 .session-item {
   min-width: 0;
   max-width: 100%;
-  padding: 0.625rem 0.75rem;
+  padding: 0.375rem 0.625rem;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  margin-bottom: 0.125rem;
   overflow: hidden;
   transition: background var(--duration-fast) var(--ease-out),
               border-color var(--duration-fast) var(--ease-out),
@@ -2002,7 +2001,7 @@ defineExpose({ focusProjectPath, loadSessions, showContextMenuForSession, switch
   align-items: center;
   gap: 0.45rem;
   font-weight: 500;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.125rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
