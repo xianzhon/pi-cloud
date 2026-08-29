@@ -283,7 +283,7 @@ export default {
       commitDiff: '待提交的变更',
       collapseAll: '全部折叠',
       expandAll: '全部展开',
-      noDiff: '这些变更没有可用的差异。',
+      noDiff: '暂无可显示的变更差异。',
       fileChanged: '{count} 个文件变更',
       filesChanged: '{count} 个文件变更',
       insertion: '插入 {count} 行(+)',
