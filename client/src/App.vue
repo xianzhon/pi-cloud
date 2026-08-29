@@ -388,6 +388,17 @@
     />
 
     <ConfirmModal
+      :visible="showNewVersionConfirm"
+      :confirm-text="t('app.reload')"
+      :cancel-text="t('app.cancel')"
+      @confirm="reloadForNewVersion"
+      @cancel="showNewVersionConfirm = false"
+    >
+      <template #title>{{ t('app.newVersionAvailableTitle') }}</template>
+      <template #message>{{ t('app.newVersionAvailable') }}</template>
+    </ConfirmModal>
+
+    <ConfirmModal
       :visible="showFinishWorktreeConfirm"
       :confirm-text="t('app.finish')"
       :cancel-text="t('app.cancel')"
@@ -580,6 +591,7 @@ import { useGitHosting } from './composables/useGitHosting';
 import { useGatewaySettings } from './composables/useGatewaySettings';
 import { cachedLaunchResource, invalidateLaunchResourceCache, launchCacheKey } from './composables/useLaunchResourceCache';
 import { normalizePathSeparators } from './utils/paths';
+import { createPreloadErrorHandler } from './utils/preloadErrorRecovery';
 
 let editorPanelPromise: ReturnType<typeof importEditorPanel> | undefined;
 function importEditorPanel() {
@@ -923,6 +935,10 @@ const finishWorktreePreview = ref<FinishWorktreePreview | null>(null);
 const finishWorktreePreviewLoading = ref(false);
 const finishWorktreePreviewError = ref('');
 const showDeleteConfirm = ref(false);
+const showNewVersionConfirm = ref(false);
+const handlePreloadError = createPreloadErrorHandler(() => {
+  showNewVersionConfirm.value = true;
+});
 const showSearch = ref(false);
 const showSettings = ref(false);
 const settingsFeatureLoaded = ref(false);
@@ -1827,7 +1843,12 @@ function hasBlockingOverlayOpen() {
     || showGitHistory.value
     || showNewSessionDialog.value
     || showDeleteConfirm.value
+    || showNewVersionConfirm.value
     || showFinishWorktreeConfirm.value;
+}
+
+function reloadForNewVersion(): void {
+  window.location.reload();
 }
 
 function isEditorToggleShortcut(event: KeyboardEvent): boolean {
@@ -2174,6 +2195,7 @@ onMounted(() => {
   window.addEventListener('session-streaming-state', handleSessionStreamingState);
   window.addEventListener('open-file-in-editor', handleOpenFileInEditor);
   window.addEventListener('open-virtual-diff-in-editor', handleOpenVirtualDiffInEditor);
+  window.addEventListener('vite:preloadError', handlePreloadError);
   document.addEventListener('visibilitychange', handleVisibilityChange);
   document.addEventListener('fullscreenchange', updateFullscreenState);
   updateFullscreenState();
@@ -2187,6 +2209,7 @@ onUnmounted(() => {
   window.removeEventListener('session-streaming-state', handleSessionStreamingState);
   window.removeEventListener('open-file-in-editor', handleOpenFileInEditor);
   window.removeEventListener('open-virtual-diff-in-editor', handleOpenVirtualDiffInEditor);
+  window.removeEventListener('vite:preloadError', handlePreloadError);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   document.removeEventListener('fullscreenchange', updateFullscreenState);
   authRefreshMounted = false;

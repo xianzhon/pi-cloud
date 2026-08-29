@@ -362,6 +362,53 @@ describe('App routing', () => {
     wrapper.unmount();
   });
 
+  const preloadErrorStubs = {
+    ChatPanel: true,
+    TerminalPanel: true,
+    EditorPanel: true,
+    FolderPickerModal: true,
+    Teleport: true,
+  };
+
+  it('shows the custom confirmation dialog when a lazy chunk cannot load', async () => {
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: { stubs: preloadErrorStubs },
+    });
+    await flushPromises();
+    const preloadError = new Event('vite:preloadError', { cancelable: true });
+
+    window.dispatchEvent(preloadError);
+    await flushPromises();
+
+    const modal = wrapper.get('.confirm-modal');
+    const modalText = modal.text();
+    expect(preloadError.defaultPrevented).toBe(true);
+    expect(modalText).toContain('Update available');
+    expect(modalText).toContain('A new version of Pi WebUI is available. Reload now?');
+
+    await modal.get('.btn-cancel').trigger('click');
+    expect(wrapper.find('.confirm-modal').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('reloads from the custom confirmation dialog after a lazy chunk failure', async () => {
+    const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {});
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: { stubs: preloadErrorStubs },
+    });
+    await flushPromises();
+
+    window.dispatchEvent(new Event('vite:preloadError', { cancelable: true }));
+    await flushPromises();
+    await wrapper.get('.confirm-modal .btn-confirm').trigger('click');
+
+    expect(reload).toHaveBeenCalledOnce();
+    wrapper.unmount();
+    reload.mockRestore();
+  });
+
   it('waits for the socket and sidebar before submitting a new-tab queued task', async () => {
     const SessionSidebarStub = defineComponent({
       emits: ['initialized'],

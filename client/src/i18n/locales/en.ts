@@ -1,7 +1,9 @@
 export default {
   app: {
     loading: 'Loading…',
+    newVersionAvailableTitle: 'Update available',
     newVersionAvailable: 'A new version of Pi WebUI is available. Reload now?',
+    reload: 'Reload',
     connected: 'Connected',
     disconnected: 'Disconnected',
     switchProject: 'Switch',
