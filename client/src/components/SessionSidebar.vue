@@ -490,9 +490,11 @@ const props = withDefaults(defineProps<{
   clientId: string;
   username?: string;
   readySessionIds?: string[];
+  confirmSessionDelete?: boolean;
   collapsed?: boolean;
 }>(), {
   readySessionIds: () => [],
+  confirmSessionDelete: true,
   collapsed: false,
 });
 
@@ -1538,7 +1540,11 @@ async function confirmRename(newName: string) {
 
 function openDeleteConfirm() {
   closeContextMenu();
-  deleteConfirm.value.visible = true;
+  if (props.confirmSessionDelete) {
+    deleteConfirm.value.visible = true;
+    return;
+  }
+  void confirmDeleteSession();
 }
 
 async function confirmDeleteSession() {

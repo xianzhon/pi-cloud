@@ -94,6 +94,7 @@
       :activeSessionId="activeSessionId"
       :activeReviewSessionId="activeReviewSession?.sessionId"
       :readySessionIds="readySessionIdList"
+      :confirm-session-delete="confirmSessionDelete"
       :class="{ 'mobile-open': showMobileSidebar }"
       @selectSession="selectSession"
       @reviewSourceSelected="handleReviewSourceSelected"

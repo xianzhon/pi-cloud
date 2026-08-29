@@ -1112,6 +1112,33 @@ describe('SessionSidebar', () => {
     expect(document.body.querySelector('.session-context-menu')).toBeNull();
   });
 
+  it('deletes from the context menu without prompting when confirmation is disabled', async () => {
+    mockFetchWithNoSessions(['/project']);
+    const wrapper = mount(SessionSidebar, {
+      props: { clientId: 'client-1', confirmSessionDelete: false },
+    });
+    await vi.waitFor(() => expect(wrapper.text()).toContain('No sessions found'));
+
+    window.dispatchEvent(new CustomEvent('session-created', {
+      detail: {
+        id: 'saved-session-1',
+        path: '/project',
+        cwd: '/project',
+        firstMessage: 'saved conversation',
+        created: '2026-07-14T00:00:00.000Z',
+      },
+    }));
+    await wrapper.vm.$nextTick();
+    await wrapper.get('.session-item').trigger('contextmenu', { clientX: 20, clientY: 30 });
+    await vi.waitFor(() => expect(document.body.querySelector('.session-context-menu .danger')).not.toBeNull());
+    vi.mocked(fetch).mockResolvedValueOnce({ json: async () => ({ success: true }) } as Response);
+
+    (document.body.querySelector('.session-context-menu .danger') as HTMLButtonElement).click();
+
+    await vi.waitFor(() => expect(wrapper.emitted('sessionDeleted')).toEqual([['saved-session-1']]));
+    expect(document.body.querySelector('.confirm-modal')).toBeNull();
+  });
+
   it('notifies the app when a session is deleted from the context menu', async () => {
     mockFetchWithNoSessions(['/project']);
     const wrapper = mountSidebar();

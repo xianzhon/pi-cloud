@@ -1,6 +1,7 @@
 export default {
   app: {
     loading: '加载中…',
+    newVersionAvailable: 'Pi WebUI 有新版本可用。是否立即重新加载？',
     connected: '已连接',
     disconnected: '未连接',
     switchProject: '切换',

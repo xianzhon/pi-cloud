@@ -437,6 +437,7 @@ describe('App routing', () => {
     fetchMock.mockClear();
     fetchMock.mockResolvedValueOnce({ json: async () => ({ success: true }) } as Response);
 
+    expect(wrapper.findComponent({ name: 'SessionSidebar' }).props('confirmSessionDelete')).toBe(false);
     await wrapper.get('.header-actions .delete-btn').trigger('click');
     await flushPromises();
 
