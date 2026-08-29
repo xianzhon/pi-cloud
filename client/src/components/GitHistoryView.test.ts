@@ -85,10 +85,21 @@ describe('GitHistoryView', () => {
     expect(wrapper.get('.git-diff-summary .is-removed').text()).toBe('-2');
     expect(wrapper.findAll('.git-diff-file-stats')[0].text()).toContain('+2');
     expect(wrapper.findAll('.git-diff-file-stats')[0].text()).toContain('-1');
+    expect(wrapper.get('.git-diff-view-toggle button[aria-pressed="true"]').text()).toBe('Unified');
+
+    const splitButton = wrapper.findAll<HTMLButtonElement>('.git-diff-view-toggle button')[1];
+    await splitButton.trigger('click');
+    expect(wrapper.get('.git-diff-view-toggle button[aria-pressed="true"]').text()).toBe('Split');
+    expect(wrapper.findAll('.git-split-diff')).toHaveLength(2);
+    const splitRows = wrapper.findAll('.git-split-row');
+    expect(splitRows.some((row) => row.findAll('.git-diff-line')[0].text() === '-old'
+      && row.findAll('.git-diff-line')[1].text() === '+new')).toBe(true);
+    expect(splitRows.some((row) => row.findAll('.git-diff-line')[0].classes().includes('is-empty')
+      && row.findAll('.git-diff-line')[1].text() === '+another')).toBe(true);
 
     await wrapper.findAll<HTMLButtonElement>('.git-diff-file h4 button')[0].trigger('click');
     expect(wrapper.findAll('.git-diff-file h4 button')[0].attributes('aria-expanded')).toBe('false');
-    expect(wrapper.findAll<HTMLElement>('.git-diff-file pre')[0].element.style.display).toBe('none');
+    expect(wrapper.findAll<HTMLElement>('.git-diff-content')[0].element.style.display).toBe('none');
 
     expect(wrapper.get('.git-diff-collapse-all').text()).toBe('Collapse all');
     await wrapper.get('.git-diff-collapse-all').trigger('click');

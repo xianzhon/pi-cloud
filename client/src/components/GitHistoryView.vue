@@ -74,9 +74,19 @@
                     <span class="is-added">+{{ diffTotals.additions }}</span>
                     <span class="is-removed">-{{ diffTotals.deletions }}</span>
                   </p>
-                  <button type="button" class="git-diff-collapse-all" @click="toggleAllDiffFiles">
-                    {{ t(allDiffFilesCollapsed ? 'components.chatPanel.expandAll' : 'components.chatPanel.collapseAll') }}
-                  </button>
+                  <div class="git-diff-actions">
+                    <div class="git-diff-view-toggle" role="group" :aria-label="t('components.editorPanel.diffViewMode')">
+                      <button type="button" :class="{ active: diffViewMode === 'unified' }" :aria-pressed="diffViewMode === 'unified'" @click="diffViewMode = 'unified'">
+                        {{ t('components.editorPanel.unified') }}
+                      </button>
+                      <button type="button" :class="{ active: diffViewMode === 'split' }" :aria-pressed="diffViewMode === 'split'" @click="diffViewMode = 'split'">
+                        {{ t('components.editorPanel.split') }}
+                      </button>
+                    </div>
+                    <button type="button" class="git-diff-collapse-all" @click="toggleAllDiffFiles">
+                      {{ t(allDiffFilesCollapsed ? 'components.chatPanel.expandAll' : 'components.chatPanel.collapseAll') }}
+                    </button>
+                  </div>
                 </div>
                 <section
                   v-for="(file, fileIndex) in diffFiles"
@@ -101,12 +111,20 @@
                       </span>
                     </button>
                   </h4>
-                  <pre v-show="!collapsedDiffFiles.has(file.name)" :id="`${diffFileId(fileIndex)}-content`"><span
-                    v-for="(line, lineIndex) in file.lines"
-                    :key="lineIndex"
-                    class="git-diff-line"
-                    :class="diffLineClass(line)"
-                  >{{ line }}{{ '\n' }}</span></pre>
+                  <div v-show="!collapsedDiffFiles.has(file.name)" :id="`${diffFileId(fileIndex)}-content`" class="git-diff-content">
+                    <pre v-if="diffViewMode === 'unified'"><span
+                      v-for="(line, lineIndex) in file.lines"
+                      :key="lineIndex"
+                      class="git-diff-line"
+                      :class="diffLineClass(line)"
+                    >{{ line }}{{ '\n' }}</span></pre>
+                    <div v-else class="git-split-diff">
+                      <div v-for="(row, rowIndex) in pairDiffLines(file.lines)" :key="rowIndex" class="git-split-row">
+                        <span class="git-diff-line" :class="row.left == null ? 'is-empty' : diffLineClass(row.left)">{{ row.left ?? '' }}</span>
+                        <span class="git-diff-line" :class="row.right == null ? 'is-empty' : diffLineClass(row.right)">{{ row.right ?? '' }}</span>
+                      </div>
+                    </div>
+                  </div>
                 </section>
               </div>
             </template>
@@ -141,6 +159,11 @@ interface DiffFile {
   deletions: number;
 }
 
+interface SplitDiffRow {
+  left: string | null;
+  right: string | null;
+}
+
 const props = defineProps<{ visible: boolean; cwd: string }>();
 const emit = defineEmits<{ close: [] }>();
 const t = i18n.global.t;
@@ -159,6 +182,7 @@ const diffError = ref('');
 const diffStat = ref('');
 const diffContent = ref('');
 const collapsedDiffFiles = ref(new Set<string>());
+const diffViewMode = ref<'unified' | 'split'>('unified');
 let historyRequestId = 0;
 let diffRequestId = 0;
 
@@ -212,6 +236,31 @@ function diffLineClass(line: string): string {
   if (line.startsWith('-') && !line.startsWith('---')) return 'is-removed';
   if (line.startsWith('diff --') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) return 'is-metadata';
   return '';
+}
+
+// Pair each contiguous removal/addition block so corresponding edits share a split row.
+function pairDiffLines(lines: string[]): SplitDiffRow[] {
+  const rows: SplitDiffRow[] = [];
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+    const isRemoval = line.startsWith('-') && !line.startsWith('---');
+    const isAddition = line.startsWith('+') && !line.startsWith('+++');
+    if (!isRemoval && !isAddition) {
+      rows.push({ left: line, right: line });
+      index += 1;
+      continue;
+    }
+
+    const removals: string[] = [];
+    const additions: string[] = [];
+    while (index < lines.length && lines[index].startsWith('-') && !lines[index].startsWith('---')) removals.push(lines[index++]);
+    while (index < lines.length && lines[index].startsWith('+') && !lines[index].startsWith('+++')) additions.push(lines[index++]);
+    const rowCount = Math.max(removals.length, additions.length);
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      rows.push({ left: removals[rowIndex] ?? null, right: additions[rowIndex] ?? null });
+    }
+  }
+  return rows;
 }
 
 function formatDate(value: string): string {
@@ -372,7 +421,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(280px, 36%) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 24%) minmax(0, 1fr);
 }
 
 .git-history-list-pane,
@@ -419,10 +468,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 }
 
 .git-history-commit-subject {
-  overflow: hidden;
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .git-history-commit-meta {
@@ -536,15 +584,45 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   color: var(--danger, #f87171);
 }
 
-.git-diff-collapse-all {
+.git-diff-actions,
+.git-diff-view-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.git-diff-actions {
   flex: 0 0 auto;
-  padding: 4px 8px;
+  gap: 8px;
+}
+
+.git-diff-view-toggle {
+  padding: 2px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+.git-diff-view-toggle button,
+.git-diff-collapse-all {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 3px;
   color: var(--text-secondary);
+  background: transparent;
   font: inherit;
 }
 
+.git-diff-view-toggle button.active {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.git-diff-collapse-all {
+  border: 1px solid var(--border);
+}
+
+.git-diff-view-toggle button:hover,
 .git-diff-collapse-all:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
@@ -608,11 +686,36 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   flex: 0 0 auto;
 }
 
-.git-diff-file pre {
+.git-diff-content {
   border-top: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.git-diff-file pre {
   margin: 0;
   padding: 8px 0;
-  overflow-x: auto;
+}
+
+.git-split-diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  min-width: 768px;
+  padding: 8px 0;
+}
+
+.git-split-row {
+  display: contents;
+}
+
+.git-split-row > .git-diff-line {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.git-split-row > :first-child {
+  border-right: 1px solid var(--border);
 }
 
 .git-diff-line {
@@ -639,6 +742,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
 .git-diff-line.is-metadata {
   color: var(--text-secondary);
+}
+
+.git-diff-line.is-empty {
+  background: var(--bg-secondary);
 }
 
 .git-history-state,
