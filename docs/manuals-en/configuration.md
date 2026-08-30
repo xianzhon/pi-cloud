@@ -74,6 +74,8 @@ Open **Agent profiles → Custom API provider** to add an OpenAI-compatible remo
 
 Model discovery depends on the provider's `GET /models` response. Most OpenAI-compatible services return model IDs but not context-window, reasoning, or image capabilities, so discovered models use Pi's defaults unless those fields already exist in `models.json`.
 
+For Cloudflare Workers AI, choose **Cloudflare Workers AI** as the provider type and enter the Cloudflare Account ID and an API token with Workers AI read access. Pi WebUI generates the fixed `https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1` endpoint and loads chat-compatible models from Cloudflare's model catalog. Select the models to expose and mark image support as needed. AI Gateway is not enabled and no gateway ID is required.
+
 ## Provider and Gateway Variables
 
 Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are optional because the server uses the Pi agent's own authentication by default.

@@ -146,15 +146,24 @@
                     :aria-label="t('components.profileManagerDialog.customApiProvider')"
                     @update:model-value="selectCustomProvider"
                   />
-                  <input v-model="customProviderId" :disabled="customProviderSelection !== '__new__'" :aria-label="t('components.profileManagerDialog.providerId')" :placeholder="t('components.profileManagerDialog.providerIdPlaceholder')" />
-                  <input v-model="customProviderBaseUrl" type="url" :aria-label="t('components.profileManagerDialog.customProviderUrl')" placeholder="https://api.example.com/v1" />
+                  <CustomSelect
+                    v-model="customProviderType"
+                    :options="customProviderTypeOptions"
+                    :disabled="customProviderSelection !== '__new__'"
+                    :aria-label="t('components.profileManagerDialog.providerType')"
+                    @update:model-value="applyCustomProviderType"
+                  />
+                  <input v-model="customProviderId" :disabled="customProviderSelection !== '__new__' || isCloudflareProvider" :aria-label="t('components.profileManagerDialog.providerId')" :placeholder="t('components.profileManagerDialog.providerIdPlaceholder')" />
+                  <input v-if="isCloudflareProvider" v-model="customProviderAccountId" :aria-label="t('components.profileManagerDialog.cloudflareAccountId')" :placeholder="t('components.profileManagerDialog.cloudflareAccountIdPlaceholder')" @input="updateCloudflareBaseUrl" />
+                  <input v-model="customProviderBaseUrl" type="url" :readonly="isCloudflareProvider" :aria-label="t('components.profileManagerDialog.customProviderUrl')" placeholder="https://api.example.com/v1" />
                   <input v-model="customProviderApiKey" type="password" autocomplete="new-password" :aria-label="t('components.profileManagerDialog.customProviderApiKey')" :placeholder="selectedCustomProvider?.configured ? t('components.profileManagerDialog.leaveBlankToKeepKey') : t('components.profileManagerDialog.enterApiKey')" />
-                  <button class="profile-secondary dialog-action" type="button" :disabled="discoveringCustomModels || !customProviderBaseUrl.trim()" @click="discoverCustomModels">
+                  <button class="profile-secondary dialog-action" type="button" :disabled="discoveringCustomModels || !customProviderCanDiscover" @click="discoverCustomModels">
                     {{ discoveringCustomModels ? t('components.profileManagerDialog.connecting') : t('components.profileManagerDialog.connectAndDiscover') }}
                   </button>
                   <fieldset v-if="customModels.length" class="local-model-list custom-model-list">
                     <legend>{{ t('components.profileManagerDialog.discoveredModels') }}</legend>
-                    <div v-for="model in customModels" :key="model.id" class="custom-model-row">
+                    <input v-model="customModelSearch" class="custom-model-search" type="search" :aria-label="t('components.profileManagerDialog.searchModels')" :placeholder="t('components.profileManagerDialog.searchModels')" />
+                    <div v-for="model in filteredCustomModels" :key="model.id" class="custom-model-row">
                       <label>
                         <input v-model="selectedCustomModelIds" type="checkbox" :value="model.id" />
                         <span>{{ model.id }}</span>
@@ -325,10 +334,13 @@ const localLlmSaved = ref(false);
 const localLlmRemoved = ref(false);
 const customProviders = ref<CustomProvider[]>([]);
 const customProviderSelection = ref('__new__');
+const customProviderType = ref('custom');
 const customProviderId = ref('');
+const customProviderAccountId = ref('');
 const customProviderBaseUrl = ref('');
 const customProviderApiKey = ref('');
 const customModels = ref<LocalModel[]>([]);
+const customModelSearch = ref('');
 const selectedCustomModelIds = ref<string[]>([]);
 const imageCustomModelIds = ref<string[]>([]);
 const discoveringCustomModels = ref(false);
@@ -356,10 +368,22 @@ const apiKeyProviderOptions = computed<CustomSelectOption[]>(() => apiKeyProvide
 })));
 const selectedApiKeyProvider = computed(() => apiKeyProviders.value.find((provider) => provider.envVar === apiKeyProvider.value));
 const selectedCustomProvider = computed(() => customProviders.value.find((provider) => provider.id === customProviderSelection.value));
+const isCloudflareProvider = computed(() => customProviderType.value === 'cloudflare-workers-ai');
+const customProviderCanDiscover = computed(() => isCloudflareProvider.value
+  ? Boolean(customProviderAccountId.value.trim() && customProviderApiKey.value.trim())
+  : Boolean(customProviderBaseUrl.value.trim()));
+const filteredCustomModels = computed(() => {
+  const search = customModelSearch.value.trim().toLowerCase();
+  return search ? customModels.value.filter((model) => model.id.toLowerCase().includes(search)) : customModels.value;
+});
 const customProviderOptions = computed<CustomSelectOption[]>(() => [
   { value: '__new__', label: t('components.profileManagerDialog.addCustomProvider') },
   ...customProviders.value.map((provider) => ({ value: provider.id, label: `${provider.id}${provider.configured ? ` — ${t('components.profileManagerDialog.configured')}` : ''}` })),
 ]);
+const customProviderTypeOptions: CustomSelectOption[] = [
+  { value: 'custom', label: t('components.profileManagerDialog.customOpenAiCompatible') },
+  { value: 'cloudflare-workers-ai', label: 'Cloudflare Workers AI' },
+];
 const configuredApiKeyCount = computed(() => apiKeyProviders.value.filter((provider) => provider.configured).length);
 const autoRenameLanguageOptions: CustomSelectOption[] = [
   { value: 'english', label: t('components.profileManagerDialog.english') },
@@ -412,10 +436,13 @@ function resetSaveState(): void {
   localLlmRemoved.value = false;
   customProviders.value = [];
   customProviderSelection.value = '__new__';
+  customProviderType.value = 'custom';
   customProviderId.value = '';
+  customProviderAccountId.value = '';
   customProviderBaseUrl.value = '';
   customProviderApiKey.value = '';
   customModels.value = [];
+  customModelSearch.value = '';
   selectedCustomModelIds.value = [];
   imageCustomModelIds.value = [];
   discoveringCustomModels.value = false;
@@ -598,16 +625,41 @@ function selectCustomProvider(selection: string): void {
   customProviderSelection.value = selection;
   customProviderApiKey.value = '';
   customProviderSaved.value = false;
+  customModelSearch.value = '';
   const provider = customProviders.value.find((item) => item.id === selection);
+  const cloudflareMatch = provider?.baseUrl.match(/^https:\/\/api\.cloudflare\.com\/client\/v4\/accounts\/([^/]+)\/ai\/v1$/);
+  customProviderType.value = cloudflareMatch ? 'cloudflare-workers-ai' : 'custom';
   customProviderId.value = provider?.id || '';
+  customProviderAccountId.value = cloudflareMatch?.[1] || '';
   customProviderBaseUrl.value = provider?.baseUrl || '';
   selectedCustomModelIds.value = provider?.modelIds || [];
   imageCustomModelIds.value = provider?.imageModelIds || [];
   customModels.value = selectedCustomModelIds.value.map((id) => ({ id, supportsImages: imageCustomModelIds.value.includes(id) }));
 }
 
+function applyCustomProviderType(providerType: string): void {
+  customProviderType.value = providerType;
+  customProviderId.value = providerType === 'cloudflare-workers-ai' ? 'cloudflare-workers-ai' : '';
+  customProviderAccountId.value = '';
+  customProviderBaseUrl.value = '';
+  customModels.value = [];
+  selectedCustomModelIds.value = [];
+  imageCustomModelIds.value = [];
+  customModelSearch.value = '';
+}
+
+function updateCloudflareBaseUrl(): void {
+  customProviderBaseUrl.value = customProviderAccountId.value.trim()
+    ? `https://api.cloudflare.com/client/v4/accounts/${customProviderAccountId.value.trim()}/ai/v1`
+    : '';
+  customModels.value = [];
+  selectedCustomModelIds.value = [];
+  imageCustomModelIds.value = [];
+  customModelSearch.value = '';
+}
+
 async function discoverCustomModels(): Promise<void> {
-  if (!customProviderBaseUrl.value.trim()) return;
+  if (!customProviderCanDiscover.value) return;
   error.value = '';
   customProviderSaved.value = false;
   discoveringCustomModels.value = true;
@@ -615,11 +667,18 @@ async function discoverCustomModels(): Promise<void> {
     const response = await fetch(profileUrl(managedProfileId.value, '/custom-providers/discover'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ baseUrl: customProviderBaseUrl.value, apiKey: customProviderApiKey.value || undefined }),
+      body: JSON.stringify(isCloudflareProvider.value
+        ? {
+            providerType: 'cloudflare-workers-ai',
+            accountId: customProviderAccountId.value,
+            apiKey: customProviderApiKey.value || undefined,
+          }
+        : { baseUrl: customProviderBaseUrl.value, apiKey: customProviderApiKey.value || undefined }),
     });
     if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToDiscoverCustomModels')));
     const data = await response.json() as { models?: LocalModel[] };
     customModels.value = data.models || [];
+    customModelSearch.value = '';
     selectedCustomModelIds.value = customModels.value.map((model) => model.id);
     imageCustomModelIds.value = customModels.value.filter((model) => model.supportsImages).map((model) => model.id);
   } catch (exception) {
@@ -1093,6 +1152,10 @@ small {
 .profile-manager-form .local-model-list input {
   width: auto;
   margin: 0;
+}
+.profile-manager-form .local-model-list .custom-model-search {
+  width: 100%;
+  margin-bottom: 0.25rem;
 }
 .local-model-list span {
   overflow-wrap: anywhere;

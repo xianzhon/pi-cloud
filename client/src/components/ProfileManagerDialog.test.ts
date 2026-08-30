@@ -41,7 +41,24 @@ describe('ProfileManagerDialog', () => {
       }
       if (url.endsWith('/local-llm') && options?.method === 'DELETE') return ok({ config: { baseUrl: '', modelIds: [] } });
       if (url.endsWith('/local-llm')) return ok({ config: { baseUrl: '', modelIds: [] } });
-      if (url.endsWith('/custom-providers/discover')) return ok({ models: [{ id: 'agnes-2.5-flash', supportsImages: true }] });
+      if (url.endsWith('/custom-providers/discover')) {
+        const body = JSON.parse(String(options?.body || '{}'));
+        return body.providerType === 'cloudflare-workers-ai'
+          ? ok({ models: [
+              { id: '@cf/meta/llama-3.2-3b-instruct', supportsImages: false },
+              { id: '@cf/meta/llama-3.2-11b-vision-instruct', supportsImages: true },
+            ] })
+          : ok({ models: [{ id: 'agnes-2.5-flash', supportsImages: true }] });
+      }
+      if (url.endsWith('/custom-providers/cloudflare-workers-ai') && options?.method === 'PUT') {
+        return ok({ provider: {
+          id: 'cloudflare-workers-ai',
+          baseUrl: 'https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/v1',
+          modelIds: ['@cf/meta/llama-3.2-3b-instruct', '@cf/meta/llama-3.2-11b-vision-instruct'],
+          imageModelIds: ['@cf/meta/llama-3.2-11b-vision-instruct'],
+          configured: true,
+        } });
+      }
       if (url.endsWith('/custom-providers/agnes') && options?.method === 'PUT') {
         return ok({ provider: { id: 'agnes', baseUrl: 'https://api.agnes.test/v1', modelIds: ['agnes-2.5-flash'], imageModelIds: ['agnes-2.5-flash'], configured: true } });
       }
@@ -200,6 +217,54 @@ describe('ProfileManagerDialog', () => {
     ));
     expect((wrapper.find('[aria-label="Custom provider API key"]').element as HTMLInputElement).value).toBe('');
     expect(wrapper.text()).not.toContain('agnes-secret');
+  });
+
+  it('loads and saves Cloudflare Workers AI models from an account ID', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Provider type"]').exists()).toBe(true));
+
+    await wrapper.find('[aria-label="Provider type"]').trigger('click');
+    await wrapper.findAll('.custom-select-option').find((option) => option.text() === 'Cloudflare Workers AI')!.trigger('click');
+    expect((wrapper.find('[aria-label="Provider ID"]').element as HTMLInputElement).value).toBe('cloudflare-workers-ai');
+
+    await wrapper.find('[aria-label="Cloudflare Account ID"]').setValue('0123456789abcdef0123456789abcdef');
+    await wrapper.find('[aria-label="Custom provider API key"]').setValue('cloudflare-secret');
+    expect((wrapper.find('[aria-label="Custom provider URL"]').element as HTMLInputElement).value).toBe(
+      'https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/v1',
+    );
+    await wrapper.findAll('button').filter((button) => button.text() === 'Connect & discover models')[1].trigger('click');
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('@cf/meta/llama-3.2-3b-instruct'));
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/custom-providers/discover',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          providerType: 'cloudflare-workers-ai',
+          accountId: '0123456789abcdef0123456789abcdef',
+          apiKey: 'cloudflare-secret',
+        }),
+      }),
+    );
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Save custom provider')!.trigger('click');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/custom-providers/cloudflare-workers-ai',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          baseUrl: 'https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/v1',
+          modelIds: ['@cf/meta/llama-3.2-3b-instruct', '@cf/meta/llama-3.2-11b-vision-instruct'],
+          imageModelIds: ['@cf/meta/llama-3.2-11b-vision-instruct'],
+          apiKey: 'cloudflare-secret',
+        }),
+      }),
+    ));
+    expect((wrapper.find('[aria-label="Custom provider API key"]').element as HTMLInputElement).value).toBe('');
   });
 
   it('shows the proxy country after a successful check', async () => {

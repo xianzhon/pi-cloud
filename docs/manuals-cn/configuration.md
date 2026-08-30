@@ -74,6 +74,8 @@ PI_WEBUI_MEMORY_POLICY=legacy
 
 模型发现依赖提供商的 `GET /models` 响应。大多数 OpenAI 兼容服务只返回模型 ID，不提供上下文窗口、推理或图像能力，因此发现的模型会使用 Pi 默认值；如果 `models.json` 中已经存在这些字段，则会予以保留。
 
+如需使用 Cloudflare Workers AI，请将提供商类型选择为 **Cloudflare Workers AI**，然后输入 Cloudflare 账户 ID 和具有 Workers AI 读取权限的 API Token。Pi WebUI 会自动生成固定地址 `https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1`，并从 Cloudflare 模型目录加载兼容聊天的模型。选择需要使用的模型，并按需标记图片支持。此配置不会启用 AI Gateway，也不需要网关 ID。
+
 ## 提供商和网关变量
 
 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等提供商 API 密钥是可选的，因为服务器默认使用 Pi 智能体自身的身份验证。
