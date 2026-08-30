@@ -71,6 +71,15 @@
         <button
           v-if="activeIsMarkdown && activePreviewMode === 'preview'"
           class="window-btn tooltip"
+          @click="handleExportMarkdownPdf"
+          :data-tooltip="t('components.editorPanel.exportMarkdownPdf')"
+          :aria-label="t('components.editorPanel.exportMarkdownPdf')"
+        >
+          <PhDownloadSimple :size="16" weight="bold" />
+        </button>
+        <button
+          v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+          class="window-btn tooltip"
           :class="{ active: showMarkdownOutline }"
           :disabled="!activeMarkdownOutline.length"
           @click="showMarkdownOutline = !showMarkdownOutline"
@@ -414,11 +423,12 @@ import { i18n } from '../i18n';
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/basic-languages/monaco.contribution';
-import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhMinus, PhPlus, PhList } from '@phosphor-icons/vue';
+import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhMinus, PhPlus, PhList, PhDownloadSimple } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
 import { normalizePathSeparators } from '../utils/paths';
+import { exportMarkdownPdf } from '../utils/markdownPdfExport';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
 import CssWorker from 'monaco-editor/language/css/css.worker?worker';
@@ -1164,6 +1174,22 @@ function setActivePreviewMode(mode: PreviewMode) {
   nextModes.set(activeTab.value, mode);
   previewModes.value = nextModes;
   if (mode === 'edit') nextTick(() => editor?.layout());
+}
+
+async function handleExportMarkdownPdf(): Promise<void> {
+  const filePath = activeTab.value;
+  const preview = markdownPreviewEl.value;
+  if (!filePath || !preview) return;
+
+  try {
+    await exportMarkdownPdf({ filePath, html: preview.innerHTML });
+  } catch (error) {
+    const errorMessage = t('components.editorPanel.exportMarkdownPdfFailed');
+    console.error(errorMessage, error);
+    statusType.value = 'error';
+    statusMessage.value = errorMessage;
+    scheduleStatusClear();
+  }
 }
 
 type GitChangeType = 'added' | 'modified' | 'deleted';

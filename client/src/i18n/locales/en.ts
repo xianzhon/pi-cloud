@@ -394,6 +394,8 @@ export default {
       resizeMarkdownOutline: 'Resize Markdown outline',
       previewMarkdown: 'Preview markdown',
       editMarkdownSource: 'Edit markdown source',
+      exportMarkdownPdf: 'Export Markdown as PDF',
+      exportMarkdownPdfFailed: 'Could not export Markdown as PDF',
       htmlViewMode: 'HTML view mode',
       previewHtml: 'Preview HTML',
       editHtmlSource: 'Edit HTML source',

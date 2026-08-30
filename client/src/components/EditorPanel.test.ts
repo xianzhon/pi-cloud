@@ -8,8 +8,10 @@ const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn(),
   render: vi.fn(),
 }));
+const markdownPdfExportMock = vi.hoisted(() => vi.fn());
 
 vi.mock('mermaid', () => ({ default: mermaidMock }));
+vi.mock('../utils/markdownPdfExport', () => ({ exportMarkdownPdf: markdownPdfExportMock }));
 vi.mock('./PdfPreview.vue', () => ({
   default: {
     name: 'PdfPreviewStub',
@@ -315,6 +317,31 @@ describe('EditorPanel', () => {
     expect(preview.find('h4 sup').text()).toBe('[TOC]');
     expect(preview.find('p a b').text()).toBe('Example');
     expect(preview.find('p').text()).toContain('Safe text');
+  });
+
+  it('exports the rendered markdown preview as PDF', async () => {
+    const markdown = '# Export me\n\nRendered content';
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: markdown, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => markdown),
+      dispose: vi.fn(),
+    } as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/README.md');
+    await flushPromises();
+    await wrapper.get('[aria-label="Export Markdown as PDF"]').trigger('click');
+
+    expect(markdownPdfExportMock).toHaveBeenCalledWith({
+      filePath: '/project/README.md',
+      html: expect.stringContaining('<h1 id="export-me">Export me</h1>'),
+    });
   });
 
   it('shows a markdown heading outline and scrolls to the selected section', async () => {

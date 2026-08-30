@@ -394,6 +394,8 @@ export default {
       resizeMarkdownOutline: '调整 Markdown 大纲大小',
       previewMarkdown: '预览 Markdown',
       editMarkdownSource: '编辑 Markdown 源',
+      exportMarkdownPdf: '将 Markdown 导出为 PDF',
+      exportMarkdownPdfFailed: '无法将 Markdown 导出为 PDF',
       htmlViewMode: 'HTML 视图模式',
       previewHtml: '预览 HTML',
       editHtmlSource: '编辑 HTML 源',
