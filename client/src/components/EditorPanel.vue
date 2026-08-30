@@ -68,6 +68,18 @@
             {{ t('components.editorPanel.split') }}
           </button>
         </div>
+        <button
+          v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+          class="window-btn tooltip"
+          :class="{ active: showMarkdownOutline }"
+          :disabled="!activeMarkdownOutline.length"
+          @click="showMarkdownOutline = !showMarkdownOutline"
+          :data-tooltip="markdownOutlineToggleLabel"
+          :aria-label="markdownOutlineToggleLabel"
+          :aria-pressed="showMarkdownOutline"
+        >
+          <PhList :size="16" weight="bold" />
+        </button>
         <div v-if="activeIsPreviewable" class="view-mode-toggle" role="group" :aria-label="activeViewModeLabel">
           <button
             :class="{ active: activePreviewMode === 'preview' }"
@@ -188,12 +200,54 @@
       
       <div
         v-if="activeIsMarkdown && activePreviewMode === 'preview'"
-        ref="markdownPreviewEl"
-        class="markdown-preview"
-        :class="{ 'markdown-preview-light': resolvedTheme === 'light' }"
-        v-html="activeMarkdownHtml"
-        @click="handleMarkdownPreviewClick"
-      ></div>
+        ref="markdownPreviewLayoutEl"
+        class="markdown-preview-layout"
+      >
+        <div
+          ref="markdownPreviewEl"
+          class="markdown-preview"
+          :class="{ 'markdown-preview-light': resolvedTheme === 'light' }"
+          v-html="activeMarkdownHtml"
+          @click="handleMarkdownPreviewClick"
+        ></div>
+        <nav
+          v-if="showMarkdownOutline && activeMarkdownOutline.length"
+          class="markdown-outline"
+          :style="markdownOutlineStyle"
+          :aria-label="t('components.editorPanel.markdownOutline')"
+        >
+          <div
+            class="markdown-outline-resize-handle"
+            :class="{ 'is-resizing': isMarkdownOutlineResizing }"
+            :title="t('components.editorPanel.resizeMarkdownOutline')"
+            @mousedown.prevent.stop="startMarkdownOutlineResize"
+          />
+          <div class="markdown-outline-header">
+            <div class="markdown-outline-title">{{ t('components.editorPanel.outline') }}</div>
+            <button
+              type="button"
+              class="markdown-outline-close"
+              :title="t('components.editorPanel.hideMarkdownOutline')"
+              :aria-label="t('components.editorPanel.hideMarkdownOutline')"
+              @click="showMarkdownOutline = false"
+            >
+              <PhX :size="14" />
+            </button>
+          </div>
+          <div class="markdown-outline-items">
+            <button
+              v-for="heading in activeMarkdownOutline"
+              :key="heading.id"
+              type="button"
+              :style="{ paddingLeft: `${0.75 + (heading.level - 1) * 0.75}rem` }"
+              :title="heading.text"
+              @click="scrollToMarkdownHeading(heading.id)"
+            >
+              {{ heading.text }}
+            </button>
+          </div>
+        </nav>
+      </div>
       <iframe
         v-else-if="activeIsHtml && activePreviewMode === 'preview'"
         class="html-preview"
@@ -359,7 +413,7 @@ import { i18n } from '../i18n';
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/basic-languages/monaco.contribution';
-import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhMinus, PhPlus } from '@phosphor-icons/vue';
+import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhMinus, PhPlus, PhList } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
@@ -544,6 +598,7 @@ const isSaving = ref(false);
 const editorContainer = ref<HTMLElement>();
 const splitDiffContainer = ref<HTMLElement>();
 const markdownPreviewEl = ref<HTMLElement>();
+const markdownPreviewLayoutEl = ref<HTMLElement>();
 const fileTreeEl = ref<HTMLElement>();
 const imagePreviewEl = ref<HTMLElement>();
 const imageEl = ref<HTMLImageElement>();
@@ -595,6 +650,12 @@ const fileTreeWidthPx = ref(220);
 const fileTreePaneStyle = computed<CSSProperties>(() => ({
   '--file-tree-pane-width': `${fileTreeWidthPx.value}px`,
 }));
+const showMarkdownOutline = ref(true);
+const markdownOutlineWidthPx = ref(220);
+const markdownOutlineStyle = computed<CSSProperties>(() => ({
+  width: `${markdownOutlineWidthPx.value}px`,
+}));
+const isMarkdownOutlineResizing = ref(false);
 const tabTooltip = ref({
   visible: false,
   text: '',
@@ -708,6 +769,24 @@ const activeMarkdownHtml = computed(() => {
   if (!model) return '';
   return sanitizeHtmlFragment(renderMarkdownPreview(model.getValue()));
 });
+interface MarkdownOutlineItem {
+  id: string;
+  level: number;
+  text: string;
+}
+const activeMarkdownOutline = computed<MarkdownOutlineItem[]>(() => {
+  const previewDocument = new DOMParser().parseFromString(activeMarkdownHtml.value, 'text/html');
+  return Array.from(previewDocument.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4, h5, h6'))
+    .filter(heading => Boolean(heading.id && heading.textContent?.trim()))
+    .map(heading => ({
+      id: heading.id,
+      level: Number(heading.tagName.slice(1)),
+      text: heading.textContent!.trim(),
+    }));
+});
+const markdownOutlineToggleLabel = computed(() => t(showMarkdownOutline.value
+  ? 'components.editorPanel.hideMarkdownOutline'
+  : 'components.editorPanel.showMarkdownOutline'));
 const activeHtmlDocument = computed(() => {
   void previewVersion.value;
   const filePath = activeTab.value;
@@ -810,6 +889,12 @@ function isLocalMarkdownHref(href: string): boolean {
   return !href.startsWith('/') && !href.startsWith('//') && !/^[a-z][a-z\d+.-]*:/i.test(href);
 }
 
+function scrollToMarkdownHeading(headingId: string): void {
+  const heading = Array.from(markdownPreviewEl.value?.querySelectorAll<HTMLElement>('[id]') || [])
+    .find(element => element.id === headingId);
+  heading?.scrollIntoView({ block: 'start' });
+}
+
 async function handleMarkdownPreviewClick(event: MouseEvent): Promise<void> {
   const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
   const href = link?.getAttribute('href');
@@ -836,9 +921,7 @@ async function handleMarkdownPreviewClick(event: MouseEvent): Promise<void> {
 
   if (!headingId) return;
   await nextTick();
-  const heading = Array.from(markdownPreviewEl.value?.querySelectorAll<HTMLElement>('[id]') || [])
-    .find(element => element.id === headingId);
-  heading?.scrollIntoView({ block: 'start' });
+  scrollToMarkdownHeading(headingId);
 }
 
 function parseFrontmatter(markdown: string): { metadata: Array<{ key: string; value: string }>; body: string } | null {
@@ -1230,10 +1313,21 @@ function stopFileTreeResize() {
   window.removeEventListener('blur', stopFileTreeResize);
 }
 
+function stopMarkdownOutlineResize() {
+  isMarkdownOutlineResizing.value = false;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  window.removeEventListener('mousemove', handleMarkdownOutlineResize);
+  window.removeEventListener('mouseup', stopMarkdownOutlineResize);
+  window.removeEventListener('blur', stopMarkdownOutlineResize);
+}
+
 let resizeStartX = 0;
 let resizeStartWidth = 0;
 let fileTreeResizeStartX = 0;
 let fileTreeResizeStartWidth = 0;
+let markdownOutlineResizeStartX = 0;
+let markdownOutlineResizeStartWidth = 0;
 
 function handleEditorResize(event: MouseEvent) {
   const delta = resizeStartX - event.clientX;
@@ -1272,6 +1366,28 @@ function startFileTreeResize(event: MouseEvent) {
   window.addEventListener('mousemove', handleFileTreeResize);
   window.addEventListener('mouseup', stopFileTreeResize);
   window.addEventListener('blur', stopFileTreeResize);
+}
+
+function clampMarkdownOutlineWidth(width: number): number {
+  const layoutWidth = markdownPreviewLayoutEl.value?.clientWidth || window.innerWidth;
+  const maxWidth = Math.max(160, Math.min(480, Math.floor(layoutWidth * 0.6)));
+  return Math.min(maxWidth, Math.max(160, width));
+}
+
+function handleMarkdownOutlineResize(event: MouseEvent) {
+  const delta = markdownOutlineResizeStartX - event.clientX;
+  markdownOutlineWidthPx.value = clampMarkdownOutlineWidth(markdownOutlineResizeStartWidth + delta);
+}
+
+function startMarkdownOutlineResize(event: MouseEvent) {
+  isMarkdownOutlineResizing.value = true;
+  markdownOutlineResizeStartX = event.clientX;
+  markdownOutlineResizeStartWidth = markdownOutlineWidthPx.value;
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  window.addEventListener('mousemove', handleMarkdownOutlineResize);
+  window.addEventListener('mouseup', stopMarkdownOutlineResize);
+  window.addEventListener('blur', stopMarkdownOutlineResize);
 }
 
 function toggleMaximize() {
@@ -2955,6 +3071,7 @@ onUnmounted(() => {
   splitDiffEditor?.dispose();
   stopEditorResize();
   stopFileTreeResize();
+  stopMarkdownOutlineResize();
   window.removeEventListener('open-file', handleOpenFile);
   window.removeEventListener('click', closeContextMenus);
   window.removeEventListener('pointerdown', hideTabTooltip);
@@ -3515,6 +3632,14 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   background: #fff;
 }
 
+.markdown-preview-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
 .markdown-preview {
   flex: 1 1 auto;
   min-width: 0;
@@ -3523,6 +3648,101 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   color: var(--text-primary);
   background: var(--bg-primary);
   line-height: 1.65;
+}
+
+.markdown-outline {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 1rem 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.markdown-outline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.5rem 0.6rem 0.75rem;
+}
+
+.markdown-outline-title {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.markdown-outline-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.markdown-outline-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.markdown-outline-resize-handle {
+  position: absolute;
+  inset: 0 auto 0 -5px;
+  z-index: 1;
+  width: 10px;
+  cursor: col-resize;
+}
+
+.markdown-outline-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 4px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.markdown-outline-resize-handle:hover::after,
+.markdown-outline-resize-handle.is-resizing::after {
+  background: var(--accent);
+}
+
+.markdown-outline-items {
+  overflow: auto;
+}
+
+.markdown-outline-items button {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding-top: 0.35rem;
+  padding-right: 0.75rem;
+  padding-bottom: 0.35rem;
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.markdown-outline-items button:hover,
+.markdown-outline-items button:focus-visible {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .markdown-preview :deep(h1),
@@ -3703,6 +3923,23 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
     z-index: 7;
     display: block;
     background: rgba(0, 0, 0, 0.28);
+  }
+
+  .markdown-preview-layout {
+    flex-direction: column;
+  }
+
+  .markdown-outline {
+    order: -1;
+    flex: 0 0 auto;
+    width: 100% !important;
+    max-height: 28%;
+    border-bottom: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .markdown-outline-resize-handle {
+    display: none;
   }
 
   .editor-container,

@@ -317,6 +317,53 @@ describe('EditorPanel', () => {
     expect(preview.find('p').text()).toContain('Safe text');
   });
 
+  it('shows a markdown heading outline and scrolls to the selected section', async () => {
+    const markdown = '# Overview\n\n## Setup *guide*\n\n### Details\n';
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: markdown, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => markdown),
+      dispose: vi.fn(),
+    } as any);
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/README.md');
+    await wrapper.vm.$nextTick();
+
+    const outline = wrapper.find('.markdown-outline');
+    const outlineItems = outline.findAll('.markdown-outline-items button');
+    expect(outline.attributes('aria-label')).toBe('Markdown outline');
+    expect(outlineItems.map(button => button.text())).toEqual([
+      'Overview',
+      'Setup guide',
+      'Details',
+    ]);
+
+    await outlineItems[1].trigger('click');
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+
+    await outline.find('.markdown-outline-close').trigger('click');
+    expect(wrapper.find('.markdown-outline').exists()).toBe(false);
+    await wrapper.find('[aria-label="Show Markdown outline"]').trigger('click');
+    expect(wrapper.find('.markdown-outline').exists()).toBe(true);
+
+    await wrapper.find('.markdown-outline-resize-handle').trigger('mousedown', { clientX: 500 });
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 450 }));
+    window.dispatchEvent(new MouseEvent('mouseup'));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.markdown-outline').attributes('style')).toContain('width: 270px');
+  });
+
   it('renders Mermaid flowcharts and sequence diagrams in markdown preview', async () => {
     const markdown = [
       '```mermaid',
