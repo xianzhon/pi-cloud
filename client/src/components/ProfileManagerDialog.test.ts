@@ -43,12 +43,13 @@ describe('ProfileManagerDialog', () => {
       if (url.endsWith('/local-llm')) return ok({ config: { baseUrl: '', modelIds: [] } });
       if (url.endsWith('/custom-providers/discover')) {
         const body = JSON.parse(String(options?.body || '{}'));
-        return body.providerType === 'cloudflare-workers-ai'
-          ? ok({ models: [
-              { id: '@cf/meta/llama-3.2-3b-instruct', supportsImages: false },
-              { id: '@cf/meta/llama-3.2-11b-vision-instruct', supportsImages: true },
-            ] })
-          : ok({ models: [{ id: 'agnes-2.5-flash', supportsImages: true }] });
+        if (body.providerType === 'cloudflare-workers-ai') {
+          return ok({ models: [
+            { id: '@cf/meta/llama-3.2-3b-instruct', supportsImages: false },
+            { id: '@cf/meta/llama-3.2-11b-vision-instruct', supportsImages: true },
+          ] });
+        }
+        return ok({ models: [{ id: 'agnes-2.5-flash', supportsImages: true }] });
       }
       if (url.endsWith('/custom-providers/cloudflare-workers-ai') && options?.method === 'PUT') {
         return ok({ provider: {
