@@ -302,11 +302,9 @@ export class PiSessionService {
       const apiKeyProvider = API_KEY_PROVIDERS.find(({ providerIds }) => (
         (providerIds as readonly string[]).includes(provider.id)
       ));
-      const label = provider.id === 'openai'
-        ? 'OpenAI API'
-        : provider.id === 'openai-codex'
-          ? 'OpenAI Codex / ChatGPT Plus/Pro'
-          : provider.name;
+      let label = provider.name;
+      if (provider.id === 'openai') label = 'OpenAI API';
+      if (provider.id === 'openai-codex') label = 'OpenAI Codex / ChatGPT Plus/Pro';
 
       return {
         id: provider.id,

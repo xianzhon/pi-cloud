@@ -371,10 +371,18 @@ const modelOptions = computed<CustomSelectOption[]>(() => models.value.map((mode
   value: `${model.provider}\u0000${model.id}`,
   label: `${model.name || model.id} [${model.provider}]`,
 })));
-const apiKeyProviderOptions = computed<CustomSelectOption[]>(() => apiKeyProviders.value.map((provider) => ({
-  value: provider.id,
-  label: `${provider.label} [${provider.id}] — ${providerAuthStatus(provider)}`,
-})));
+const apiKeyProviderOptions = computed<CustomSelectOption[]>(() => [...apiKeyProviders.value]
+  .sort((a, b) => Number(b.configured) - Number(a.configured))
+  .map((provider) => ({
+    value: provider.id,
+    label: provider.label,
+    description: `[${provider.id}]`,
+    status: providerAuthStatus(provider),
+    statusTone: provider.configured ? 'success' : 'muted',
+    group: t(provider.configured
+      ? 'components.profileManagerDialog.configuredProviders'
+      : 'components.profileManagerDialog.availableProviders'),
+  })));
 const selectedApiKeyProvider = computed(() => apiKeyProviders.value.find((provider) => provider.id === apiKeyProvider.value));
 const selectedCustomProvider = computed(() => customProviders.value.find((provider) => provider.id === customProviderSelection.value));
 const isCloudflareProvider = computed(() => customProviderType.value === 'cloudflare-workers-ai');
@@ -1136,6 +1144,9 @@ small {
   line-height: 1;
   transform: rotate(90deg);
   transition: transform 0.15s ease;
+}
+.profile-collapsible[open] {
+  overflow: visible;
 }
 .profile-collapsible[open] .profile-section-chevron {
   transform: rotate(-90deg);

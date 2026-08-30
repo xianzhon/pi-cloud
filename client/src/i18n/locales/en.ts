@@ -770,6 +770,8 @@ export default {
       providerAuthentication: 'Provider authentication',
       providerAuthenticationHelp: 'View API key and OAuth status detected locally by Pi. OAuth sign-in must be completed in the terminal; this page does not contact providers.',
       providersAuthenticated: '{count} provider authenticated | {count} providers authenticated',
+      configuredProviders: 'Configured',
+      availableProviders: 'Available providers',
       notConfigured: 'Not configured',
       apiKeyFromEnvironment: 'API key from environment ({source})',
       storedApiKey: 'Stored API key',

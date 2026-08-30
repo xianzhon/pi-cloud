@@ -32,7 +32,19 @@
       @click="toggle"
       @keydown="handleTriggerKeydown"
     >
-      <span class="custom-select-value" :class="{ placeholder: !selectedOption }">{{ selectedLabel }}</span>
+      <span class="custom-select-value" :class="{ placeholder: !selectedOption }">
+        <span class="custom-select-option-content">
+          <span>{{ selectedLabel }}</span>
+          <small v-if="selectedOption?.description">{{ selectedOption.description }}</small>
+        </span>
+        <span
+          v-if="selectedOption?.status"
+          class="custom-select-status"
+          :class="`custom-select-status-${selectedOption.statusTone || 'muted'}`"
+        >
+          {{ selectedOption.status }}
+        </span>
+      </span>
       <span class="custom-select-chevron" aria-hidden="true">⌄</span>
     </button>
 
@@ -45,19 +57,35 @@
       role="listbox"
       :aria-labelledby="id"
     >
-      <button
-        v-for="(option, index) in filteredOptions"
-        :key="option.value || `empty-${index}`"
-        type="button"
-        class="custom-select-option"
-        :class="{ active: option.value === modelValue, highlighted: index === highlightedIndex }"
-        role="option"
-        :aria-selected="option.value === modelValue"
-        @click="selectOption(option.value)"
-        @mouseenter="highlightedIndex = index"
-      >
-        {{ option.label }}
-      </button>
+      <template v-for="(option, index) in filteredOptions" :key="option.value || `empty-${index}`">
+        <div
+          v-if="option.group && option.group !== filteredOptions[index - 1]?.group"
+          class="custom-select-group"
+        >
+          {{ option.group }}
+        </div>
+        <button
+          type="button"
+          class="custom-select-option"
+          :class="{ active: option.value === modelValue, highlighted: index === highlightedIndex }"
+          role="option"
+          :aria-selected="option.value === modelValue"
+          @click="selectOption(option.value)"
+          @mouseenter="highlightedIndex = index"
+        >
+          <span class="custom-select-option-content">
+            <span>{{ option.label }}</span>
+            <small v-if="option.description">{{ option.description }}</small>
+          </span>
+          <span
+            v-if="option.status"
+            class="custom-select-status"
+            :class="`custom-select-status-${option.statusTone || 'muted'}`"
+          >
+            {{ option.status }}
+          </span>
+        </button>
+      </template>
       <div v-if="filteredOptions.length === 0" class="custom-select-empty">{{ t('components.customSelect.noMatchingOptions') }}</div>
     </div>
   </div>
@@ -72,6 +100,10 @@ const t = i18n.global.t;
 export type CustomSelectOption = {
   value: string;
   label: string;
+  description?: string;
+  status?: string;
+  statusTone?: 'success' | 'muted';
+  group?: string;
 };
 
 const props = withDefaults(defineProps<{
@@ -226,7 +258,7 @@ function updateListPosition(): void {
   const available = Math.max(openUp ? availableAbove : availableBelow, 120);
 
   dropdownPlacement.value = openUp ? 'top' : 'bottom';
-  listMaxHeight.value = `${Math.min(240, available)}px`;
+  listMaxHeight.value = `${Math.min(360, available)}px`;
 }
 
 function handleWindowResize(): void {
@@ -321,10 +353,13 @@ onUnmounted(() => {
 }
 
 .custom-select-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   min-width: 0;
+  flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .custom-select-value.placeholder,
@@ -356,9 +391,12 @@ onUnmounted(() => {
 }
 
 .custom-select-option {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   width: 100%;
-  padding: 0.45rem 0.55rem;
+  padding: 0.55rem 0.7rem;
   color: var(--text-primary);
   font-size: 0.8125rem;
   line-height: 1.35;
@@ -367,6 +405,63 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
   transition: background var(--duration-fast) var(--ease-out),
               color var(--duration-fast) var(--ease-out);
+}
+
+.custom-select-option-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.custom-select-option-content > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-select-option-content small {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.custom-select-group {
+  padding: 0.6rem 0.7rem 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.custom-select-group:not(:first-child) {
+  border-top: 1px solid var(--border);
+  margin-top: 0.25rem;
+}
+
+.custom-select-status {
+  flex: none;
+  max-width: 45%;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-select-status-success {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+}
+
+.custom-select-status-muted {
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
 }
 
 .custom-select-option:hover,

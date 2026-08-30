@@ -20,6 +20,38 @@ describe('CustomSelect', () => {
     expect(wrapper.findAll('.custom-select-option').map((option) => option.text())).toEqual(['develop']);
   });
 
+  it('renders grouped options with descriptions and status badges', async () => {
+    const wrapper = mount(CustomSelect, {
+      props: {
+        modelValue: 'connected',
+        options: [
+          {
+            value: 'connected',
+            label: 'Connected provider',
+            description: '[connected]',
+            status: 'Key configured',
+            statusTone: 'success',
+            group: 'Configured',
+          },
+          {
+            value: 'available',
+            label: 'Available provider',
+            description: '[available]',
+            status: 'Not configured',
+            statusTone: 'muted',
+            group: 'Available providers',
+          },
+        ],
+      },
+    });
+
+    await wrapper.get('.custom-select-trigger').trigger('click');
+
+    expect(wrapper.findAll('.custom-select-group').map((group) => group.text())).toEqual(['Configured', 'Available providers']);
+    expect(wrapper.find('.custom-select-status-success').text()).toBe('Key configured');
+    expect(wrapper.find('.custom-select-status-muted').text()).toBe('Not configured');
+  });
+
   it('closes a searchable list after selecting an option with the mouse', async () => {
     const wrapper = mount(CustomSelect, {
       props: {

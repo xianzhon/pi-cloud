@@ -770,6 +770,8 @@ export default {
       providerAuthentication: '提供商身份验证',
       providerAuthenticationHelp: '查看 Pi 在本地检测到的 API 密钥和 OAuth 状态。OAuth 登录必须在终端中完成；此页面不会联系提供商。',
       providersAuthenticated: '已验证 {count} 个提供商',
+      configuredProviders: '已配置',
+      availableProviders: '可用提供商',
       notConfigured: '未配置',
       apiKeyFromEnvironment: '来自环境变量的 API 密钥（{source}）',
       storedApiKey: '已存储 API 密钥',
