@@ -135,6 +135,31 @@ describe('EditorPanel', () => {
     });
   });
 
+  it('opens archive listings as read-only plaintext', async () => {
+    const content = 'Archive contents (2 entries)\n\nMETA-INF/MANIFEST.MF\ncom/example/App.class';
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content, kind: 'archive', mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    const model = {
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => content),
+      dispose: vi.fn(),
+    };
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue(model as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/app.jar');
+    await flushPromises();
+
+    expect(monaco.editor.createModel).toHaveBeenCalledWith(content, 'plaintext', expect.anything());
+    expect(model.onDidChangeContent).not.toHaveBeenCalled();
+    const editorInstance = vi.mocked(monaco.editor.create).mock.results.at(-1)?.value as any;
+    expect(editorInstance.updateOptions.mock.calls.at(-1)?.[0]).toMatchObject({ readOnly: true });
+  });
+
   it('uses source line numbers and enables wrapping for virtual diffs', async () => {
     mockFileTreeFetch();
     const lines = [

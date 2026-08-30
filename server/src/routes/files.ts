@@ -8,6 +8,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { ZipArchive } from 'archiver';
 import { glob } from 'glob';
+import { archivePreview, isArchivePath } from '../utils/archive-preview.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
 
 interface TreeNode {
@@ -316,6 +317,25 @@ export async function fileRoutes(app: FastifyInstance) {
     }
 
     const imageMimeType = getImageMimeType(resolvedPath);
+
+    if (isArchivePath(resolvedPath)) {
+      try {
+        return {
+          path: resolvedPath,
+          content: await archivePreview(resolvedPath),
+          kind: 'archive',
+          mtime: stats.mtimeMs,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown archive error';
+        return reply.code(415).send({
+          error: `Archive preview failed: ${message}`,
+          kind: 'binary',
+          path: resolvedPath,
+          mtime: stats.mtimeMs,
+        });
+      }
+    }
 
     if (path.extname(resolvedPath).toLowerCase() === '.pdf') {
       return reply.code(415).send({

@@ -2,8 +2,31 @@ import Fastify from 'fastify';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { gzipSync } from 'zlib';
+import { ZipArchive } from 'archiver';
+import { pack } from 'tar-stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fileRoutes, getSystemOpenCommand } from './files';
+
+async function streamBuffer(stream: AsyncIterable<unknown>): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk as Uint8Array));
+  return Buffer.concat(chunks);
+}
+
+async function createZip(entries: Record<string, string>): Promise<Buffer> {
+  const archive = new ZipArchive();
+  for (const [name, content] of Object.entries(entries)) archive.append(content, { name });
+  void archive.finalize();
+  return streamBuffer(archive as unknown as AsyncIterable<unknown>);
+}
+
+async function createTar(entries: Record<string, string>): Promise<Buffer> {
+  const archive = pack();
+  for (const [name, content] of Object.entries(entries)) archive.entry({ name }, content);
+  archive.finalize();
+  return streamBuffer(archive);
+}
 
 async function buildApp() {
   const app = Fastify();
@@ -189,6 +212,59 @@ describe('fileRoutes', () => {
     expect(body.path).toBe(filePath);
     expect(body.content).toBe('readme');
     expect(typeof body.mtime).toBe('number');
+  });
+
+  it.each(['zip', 'jar'])('previews entries in a .%s archive', async (extension) => {
+    const filePath = path.join(tempDir, `bundle.${extension}`);
+    await fs.writeFile(filePath, await createZip({
+      'META-INF/MANIFEST.MF': 'Manifest-Version: 1.0',
+      'com/example/App.class': 'bytecode',
+    }));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/read?path=${encodeURIComponent(filePath)}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      kind: 'archive',
+      content: expect.stringContaining('META-INF/MANIFEST.MF'),
+    });
+    expect(response.json().content).toContain('com/example/App.class');
+  });
+
+  it('previews entries in a tar.gz archive', async () => {
+    const filePath = path.join(tempDir, 'source.tar.gz');
+    await fs.writeFile(filePath, gzipSync(await createTar({
+      'src/index.ts': 'export {};',
+      'README.md': 'readme',
+    })));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/read?path=${encodeURIComponent(filePath)}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      kind: 'archive',
+      content: expect.stringContaining('src/index.ts'),
+    });
+    expect(response.json().content).toContain('README.md');
+  });
+
+  it('reports invalid archives without trying to show them as text', async () => {
+    const filePath = path.join(tempDir, 'broken.zip');
+    await fs.writeFile(filePath, 'not a zip');
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/read?path=${encodeURIComponent(filePath)}`,
+    });
+
+    expect(response.statusCode).toBe(415);
+    expect(response.json()).toMatchObject({ kind: 'binary', error: 'Archive preview failed: Invalid ZIP archive' });
   });
 
   it('rejects file access outside the configured allowed roots', async () => {

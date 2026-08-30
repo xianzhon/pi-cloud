@@ -586,7 +586,7 @@ const emit = defineEmits<{
 interface Tab {
   name: string;
   path: string;
-  kind: 'text' | 'image' | 'pdf';
+  kind: 'text' | 'image' | 'pdf' | 'archive';
   virtual?: boolean;
   pinned?: boolean;
   pdfScale?: number;
@@ -595,7 +595,7 @@ interface Tab {
 interface FileReadResponse {
   content?: string;
   error?: string;
-  kind?: 'text' | 'image' | 'pdf' | 'binary';
+  kind?: 'text' | 'image' | 'pdf' | 'archive' | 'binary';
   message?: string;
   mtime?: number;
 }
@@ -1994,7 +1994,7 @@ async function openFile(filePath: string, line?: number, column?: number) {
   if (existing) {
     activeTab.value = filePath;
     collapseFileTreeOnMobile();
-    if (existing.kind === 'text') {
+    if (existing.kind === 'text' || existing.kind === 'archive') {
       // Refresh file content if it changed on disk
       await refreshFile(filePath);
       revealPosition(line, column);
@@ -2031,16 +2031,17 @@ async function openFile(filePath: string, line?: number, column?: number) {
       return;
     }
     
-    const model = monaco.editor.createModel(data.content!, monacoLanguageForFile(filePath), monaco.Uri.file(filePath));
-    const listener = model.onDidChangeContent(() => markDirty(filePath));
+    const isArchive = data.kind === 'archive';
+    const model = monaco.editor.createModel(data.content!, isArchive ? 'plaintext' : monacoLanguageForFile(filePath), monaco.Uri.file(filePath));
+    const listener = isArchive ? undefined : model.onDidChangeContent(() => markDirty(filePath));
     
     models.set(filePath, model);
-    modelListeners.set(filePath, listener);
+    if (listener) modelListeners.set(filePath, listener);
     if (data.mtime) fileTimestamps.set(filePath, data.mtime);
     tabs.value.push({
       name: basename(filePath),
       path: filePath,
-      kind: 'text',
+      kind: isArchive ? 'archive' : 'text',
     });
     
     activeTab.value = filePath;
@@ -2128,7 +2129,7 @@ async function openContextNodeWithSystemTool(): Promise<void> {
 }
 
 async function saveFile() {
-  if (!activeTab.value || activeIsVirtual.value || !editor || isSaving.value) return;
+  if (!activeTab.value || activeIsVirtual.value || activeTabInfo.value?.kind === 'archive' || !editor || isSaving.value) return;
   
   const filePath = activeTab.value;
   const content = editor.getValue();
@@ -2965,12 +2966,14 @@ watch(isMaximized, () => {
 
 function showActiveEditor(path = activeTab.value): void {
   const model = path ? models.get(path) || null : null;
-  const isVirtualDiff = !!tabs.value.find(tab => tab.path === path)?.virtual;
+  const tab = tabs.value.find(tab => tab.path === path);
+  const isVirtualDiff = !!tab?.virtual;
+  const isReadOnly = isVirtualDiff || tab?.kind === 'archive';
   const useSplitView = isVirtualDiff && diffViewMode.value === 'split';
   editor?.setModel(useSplitView ? null : model);
   if (typeof editor?.updateOptions === 'function') {
     editor.updateOptions({
-      readOnly: isVirtualDiff,
+      readOnly: isReadOnly,
       wordWrap: 'on',
       lineNumbers: isVirtualDiff && model ? diffLineNumbers(model) : 'on',
       lineNumbersMinChars: isVirtualDiff ? 9 : 5,

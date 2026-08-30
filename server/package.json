@@ -27,6 +27,7 @@
     "glob": "catalog:",
     "otplib": "catalog:",
     "qrcode": "catalog:",
+    "tar-stream": "catalog:",
     "typebox": "catalog:",
     "undici": "catalog:"
   },
