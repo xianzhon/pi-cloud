@@ -325,7 +325,7 @@ describe('SettingsDialog', () => {
 
     expect(wrapper.find('.weixin-status-badge').text()).toBe('Paired');
     expect(wrapper.find('[aria-label="WeChat pairing status"]').text()).toContain('Paired as bot***123.');
-    expect(wrapper.findAll('.gateway-settings')[1].text()).toContain('Env flagEnabled');
+    expect(wrapper.find('.weixin-pairing-settings').text()).toContain('Env flagEnabled');
     expect(wrapper.find('.weixin-pairing-note').text()).toBe('The gateway starts automatically after successful pairing.');
     expect(wrapper.findAll('button').find((button) => button.text().includes('Pair again'))?.exists()).toBe(true);
 
@@ -364,6 +364,40 @@ describe('SettingsDialog', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/gateways/weixin/pairing', expect.objectContaining({ method: 'DELETE' }));
     expect(wrapper.find('.weixin-unpair-action').exists()).toBe(false);
+  });
+
+  it('configures WeCom in the gateway wizard and reveals callback credentials', async () => {
+    const wrapper = mountSettingsDialog();
+    const viewModel = wrapper.vm as unknown as {
+      activeSection: string;
+      wecomGatewayStatus: { configured: boolean; managedBy: string; allowedUsers: string[]; callbackVerified: boolean };
+    };
+    viewModel.activeSection = 'gateway';
+    viewModel.wecomGatewayStatus = { configured: false, managedBy: 'none', allowedUsers: [], callbackVerified: false };
+    await wrapper.vm.$nextTick();
+
+    await wrapper.find('.wecom-corp-id').setValue('corp-1');
+    await wrapper.find('.wecom-agent-id').setValue('1000002');
+    await wrapper.find('.wecom-corp-secret').setValue('app-secret');
+    await wrapper.find('.wecom-allowed-users').setValue('alice, bob');
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      status: { configured: true, managedBy: 'database', corpId: 'corp-1', agentId: '1000002', allowedUsers: ['alice', 'bob'], callbackVerified: false },
+      callbackToken: 'generated-token',
+      encodingAesKey: 'generated-aes-key',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    await wrapper.find('.wecom-save-action').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.wecom-generated-secrets').exists()).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/gateways/wecom/configuration', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ corpId: 'corp-1', corpSecret: 'app-secret', agentId: '1000002', allowedUsers: ['alice', 'bob'] }),
+    }));
+    expect(wrapper.find('.wecom-generated-secrets').text()).toContain('generated-token');
+    expect(wrapper.find('.wecom-generated-secrets').text()).toContain('generated-aes-key');
+    expect((wrapper.find('.wecom-callback-url').element as HTMLInputElement).value).toContain('/api/gateways/wecom/callback');
   });
 
   it('adds and removes gateway working directories with the folder picker', async () => {

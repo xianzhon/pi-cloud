@@ -80,4 +80,4 @@ For Cloudflare Workers AI, choose **Cloudflare Workers AI** as the provider type
 
 Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are optional because the server uses the Pi agent's own authentication by default.
 
-See `.env.example` for provider-specific variables and the dedicated [Feishu](feishu-gateway.md) and [WeChat](weixin-gateway.md) gateway manuals for messaging configuration.
+See `.env.example` for provider-specific variables and the dedicated [Feishu](feishu-gateway.md), [WeCom](wecom-gateway.md), and [WeChat](weixin-gateway.md) gateway manuals for messaging configuration.

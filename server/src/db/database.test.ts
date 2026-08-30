@@ -50,6 +50,9 @@ describe('openPiCloudDatabase', () => {
       'session_worktrees',
       'sessions',
       'skill_presets',
+      'wecom_gateway_configs',
+      'wecom_gateway_credentials',
+      'wecom_gateway_sessions',
       'weixin_gateway_configs',
       'weixin_gateway_context_tokens',
       'weixin_gateway_credentials',
@@ -234,10 +237,11 @@ describe('openPiCloudDatabase', () => {
       { version: 1, name: 'application-schema' },
       { version: 2, name: 'gateway-schema' },
       { version: 3, name: 'project-history-schema' },
+      { version: 4, name: 'wecom-gateway-schema' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 3 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 4 });
     db.close();
   });
 

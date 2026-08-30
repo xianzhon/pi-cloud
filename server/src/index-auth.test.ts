@@ -25,6 +25,23 @@ afterEach(async () => {
 });
 
 describe('buildApp auth protection', () => {
+  it('allows unauthenticated WeCom callback verification while protecting setup APIs', async () => {
+    const { buildApp } = await import('./index');
+    const app = await buildApp();
+
+    const callback = await app.inject({
+      method: 'GET',
+      url: '/api/gateways/wecom/callback?msg_signature=x&timestamp=1&nonce=2&echostr=x',
+    });
+    expect(callback.statusCode).toBe(503);
+    expect(callback.json()).toEqual({ error: 'WeCom gateway is not configured' });
+
+    const status = await app.inject({ method: 'GET', url: '/api/gateways/wecom/status' });
+    expect(status.statusCode).toBe(401);
+
+    await app.close();
+  });
+
   it('allows health and blocks file API without a session', async () => {
     const { buildApp } = await import('./index');
     const app = await buildApp();
