@@ -319,7 +319,7 @@ describe('App routing', () => {
     theme.value = 'system';
     language.value = 'en';
     authUser.value = { username: 'me', totpEnabled: false };
-    document.title = 'Pi WebUI';
+    document.title = 'Pi Cloud';
     sessionStorage.clear();
     route.params.id = 'session-1';
     route.path = '/sessions/session-1';
@@ -385,7 +385,7 @@ describe('App routing', () => {
     const modalText = modal.text();
     expect(preloadError.defaultPrevented).toBe(true);
     expect(modalText).toContain('Update available');
-    expect(modalText).toContain('A new version of Pi WebUI is available. Reload now?');
+    expect(modalText).toContain('A new version of Pi Cloud is available. Reload now?');
 
     await modal.get('.btn-cancel').trigger('click');
     expect(wrapper.find('.confirm-modal').exists()).toBe(false);
@@ -517,7 +517,7 @@ describe('App routing', () => {
   });
 
   it('keeps global actions in a permanent desktop utility rail beside the session panel', async () => {
-    localStorage.setItem('pi-webui-sidebar-collapsed', 'false');
+    localStorage.setItem('pi-cloud-sidebar-collapsed', 'false');
     const wrapper = mount(App, {
       global: {
         stubs: {
@@ -575,7 +575,7 @@ describe('App routing', () => {
   });
 
   it('shows the Git tool by default and dispatches toolbar actions through the chat composer', async () => {
-    localStorage.setItem('pi-webui-sidebar-collapsed', 'false');
+    localStorage.setItem('pi-cloud-sidebar-collapsed', 'false');
     vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => {
       if (String(url).startsWith('/api/git/status')) {
         return { ok: true, status: 200, json: async () => ({ files: [{ status: 'M', path: 'src/app.ts' }] }) } as Response;
@@ -602,7 +602,7 @@ describe('App routing', () => {
   });
 
   it('opens the session context menu from the collapsed utility rail', async () => {
-    localStorage.setItem('pi-webui-sidebar-collapsed', 'true');
+    localStorage.setItem('pi-cloud-sidebar-collapsed', 'true');
     const wrapper = mount(App, {
       global: {
         stubs: {
@@ -915,7 +915,7 @@ describe('App routing', () => {
   });
 
   it('switches review sessions from the collapsed utility rail', async () => {
-    localStorage.setItem('pi-webui-sidebar-collapsed', 'true');
+    localStorage.setItem('pi-cloud-sidebar-collapsed', 'true');
     const wrapper = mount(App, {
       global: {
         stubs: {

@@ -5,14 +5,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ProjectMover } from './project-mover.js';
 
 async function tempRoot() {
-  const root = await mkdtemp(join(tmpdir(), 'piui-project-mover-'));
-  process.env.PI_WEBUI_ALLOWED_ROOTS = root;
+  const root = await mkdtemp(join(tmpdir(), 'pi-cloud-project-mover-'));
+  process.env.PI_CLOUD_ALLOWED_ROOTS = root;
   return root;
 }
 
 describe('ProjectMover', () => {
   afterEach(() => {
-    delete process.env.PI_WEBUI_ALLOWED_ROOTS;
+    delete process.env.PI_CLOUD_ALLOWED_ROOTS;
   });
   it('moves a project directory into a selected parent with a new name', async () => {
     const root = await tempRoot();
@@ -59,7 +59,7 @@ describe('ProjectMover', () => {
 
   it('rejects project moves outside the configured roots', async () => {
     const root = await tempRoot();
-    const outside = await mkdtemp(join(tmpdir(), 'piui-project-mover-outside-'));
+    const outside = await mkdtemp(join(tmpdir(), 'pi-cloud-project-mover-outside-'));
     await mkdir(join(root, 'old-app'));
 
     await expect(new ProjectMover().move({

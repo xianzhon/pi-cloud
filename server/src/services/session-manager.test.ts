@@ -1,7 +1,7 @@
 import { rmSync } from 'fs';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database';
 import { SkillPolicyStore } from './skill-policy-store';
 
 const readdir = vi.fn<(...args: any[]) => Promise<any[]>>(async () => []);
@@ -99,7 +99,7 @@ const sessionManagerInMemory = vi.fn<(cwd: string) => MockSessionManager>(create
 const sessionManagerOpen = vi.fn<(sessionPath: string, agentDir: string) => MockSessionManager>(createMockSessionManager);
 
 function createMemoryRuntimeMock() {
-  const extension = { name: 'webui-memory', factory: vi.fn() };
+  const extension = { name: 'pi-cloud-memory', factory: vi.fn() };
   return {
     extension,
     createExtension: vi.fn(() => extension),
@@ -166,13 +166,13 @@ const { PiSessionService } = await import('./session-manager.js');
 
 describe('PiSessionService', () => {
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const originalLocalLlmAllowedOrigins = process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS;
-  let db: PiuiDatabase;
+  const originalLocalLlmAllowedOrigins = process.env.PI_CLOUD_LOCAL_LLM_ALLOWED_ORIGINS;
+  let db: PiCloudDatabase;
   let dbPath: string;
 
   beforeEach(() => {
     dbPath = join(process.cwd(), `.tmp-session-manager-${Date.now()}-${Math.random()}.sqlite`);
-    db = openPiuiDatabase(dbPath);
+    db = openPiCloudDatabase(dbPath);
     discoveredSkills = [
       { name: 'brainstorming', description: 'Creative work', filePath: '/skills/brainstorming/SKILL.md' },
       { name: 'frontend-design', description: 'Design work', filePath: '/skills/frontend-design/SKILL.md' },
@@ -228,7 +228,7 @@ describe('PiSessionService', () => {
       }
     });
     process.env.PI_CODING_AGENT_DIR = '/app/config';
-    delete process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS;
+    delete process.env.PI_CLOUD_LOCAL_LLM_ALLOWED_ORIGINS;
   });
 
   afterEach(() => {
@@ -241,9 +241,9 @@ describe('PiSessionService', () => {
       process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
     if (originalLocalLlmAllowedOrigins === undefined) {
-      delete process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS;
+      delete process.env.PI_CLOUD_LOCAL_LLM_ALLOWED_ORIGINS;
     } else {
-      process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS = originalLocalLlmAllowedOrigins;
+      process.env.PI_CLOUD_LOCAL_LLM_ALLOWED_ORIGINS = originalLocalLlmAllowedOrigins;
     }
   });
 
@@ -411,7 +411,7 @@ describe('PiSessionService', () => {
           apiKey: 'literal-secret',
           models: [{ id: 'agnes-2.5-flash' }, { id: 'agnes-image-generator', input: ['text'] }],
         },
-        'pi-webui-local': { baseUrl: 'http://127.0.0.1:11434/v1', models: [{ id: 'local' }] },
+        'pi-cloud-local': { baseUrl: 'http://127.0.0.1:11434/v1', models: [{ id: 'local' }] },
       } })
       : '');
     const service = new PiSessionService();
@@ -561,7 +561,7 @@ describe('PiSessionService', () => {
   });
 
   it('allows only configured non-loopback local LLM origins with an exact port match', async () => {
-    process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS = 'http://192.168.1.20:11434';
+    process.env.PI_CLOUD_LOCAL_LLM_ALLOWED_ORIGINS = 'http://192.168.1.20:11434';
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       data: [{ id: 'qwen3:8b' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
@@ -606,7 +606,7 @@ describe('PiSessionService', () => {
     readFile.mockImplementation(async (path: string) => path.endsWith('/models.json')
       ? JSON.stringify({ providers: {
         custom: { baseUrl: 'https://example.com', models: [{ id: 'remote' }] },
-        'pi-webui-local': { models: [{ id: 'qwen3:8b', contextWindow: 8192 }] },
+        'pi-cloud-local': { models: [{ id: 'qwen3:8b', contextWindow: 8192 }] },
       } })
       : '');
     const service = new PiSessionService();
@@ -616,7 +616,7 @@ describe('PiSessionService', () => {
     const writeCalls = writeFile.mock.calls as unknown as Array<[string, string, string]>;
     const saved = JSON.parse(writeCalls.find(([path]) => path.endsWith('/models.json'))![1]);
     expect(saved.providers.custom.models).toEqual([{ id: 'remote' }]);
-    expect(saved.providers['pi-webui-local']).toMatchObject({
+    expect(saved.providers['pi-cloud-local']).toMatchObject({
       baseUrl: 'http://127.0.0.1:11434/v1',
       api: 'openai-completions',
       apiKey: 'local',
@@ -628,7 +628,7 @@ describe('PiSessionService', () => {
     readFile.mockImplementation(async (path: string) => path.endsWith('/models.json')
       ? JSON.stringify({ providers: {
         custom: { baseUrl: 'https://example.com', models: [{ id: 'remote' }] },
-        'pi-webui-local': { models: [{ id: 'qwen3:8b' }] },
+        'pi-cloud-local': { models: [{ id: 'qwen3:8b' }] },
       } })
       : '');
     const service = new PiSessionService();
@@ -638,7 +638,7 @@ describe('PiSessionService', () => {
     const writeCalls = writeFile.mock.calls as unknown as Array<[string, string, string]>;
     const saved = JSON.parse(writeCalls.find(([path]) => path.endsWith('/models.json'))![1]);
     expect(saved.providers.custom).toBeDefined();
-    expect(saved.providers['pi-webui-local']).toBeUndefined();
+    expect(saved.providers['pi-cloud-local']).toBeUndefined();
   });
 
   it('stores selected profile per client and falls back to default', async () => {
@@ -745,8 +745,8 @@ describe('PiSessionService', () => {
     expect(memoryRuntime.createExtension).toHaveBeenCalledWith({ profileId: 'default', cwd: '/workspace' });
     expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories)
       .toEqual([
-        expect.objectContaining({ name: 'pi-webui-auto-rename' }),
-        expect.objectContaining({ name: 'webui-memory' }),
+        expect.objectContaining({ name: 'pi-cloud-auto-rename' }),
+        expect.objectContaining({ name: 'pi-cloud-memory' }),
       ]);
     expect(createAgentSession.mock.calls.at(-1)?.[0].tools).toContain('memory');
 
@@ -754,8 +754,8 @@ describe('PiSessionService', () => {
 
     expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories)
       .toEqual([
-        expect.objectContaining({ name: 'pi-webui-auto-rename' }),
-        expect.objectContaining({ name: 'webui-memory' }),
+        expect.objectContaining({ name: 'pi-cloud-auto-rename' }),
+        expect.objectContaining({ name: 'pi-cloud-memory' }),
       ]);
   });
 
@@ -776,7 +776,7 @@ describe('PiSessionService', () => {
 
     await service.createSession('memory-disabled', { cwd: '/workspace', memoryEnabled: false });
     expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories)
-      .toEqual([expect.objectContaining({ name: 'pi-webui-auto-rename' })]);
+      .toEqual([expect.objectContaining({ name: 'pi-cloud-auto-rename' })]);
     expect(createAgentSession.mock.calls.at(-1)?.[0].tools).not.toContain('memory');
     expect(memoryRuntime.createExtension).not.toHaveBeenCalled();
   });

@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 
 export type StoredSkillPolicyMode = 'all' | 'enabled' | 'disabled';
 
@@ -31,7 +31,7 @@ interface SkillPolicyRow {
 }
 
 export class SkillPolicyStore {
-  constructor(private readonly db: PiuiDatabase) {}
+  constructor(private readonly db: PiCloudDatabase) {}
 
   save(input: SaveSkillPolicyInput): SkillPolicyRecord {
     const now = new Date().toISOString();

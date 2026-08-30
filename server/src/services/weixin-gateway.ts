@@ -4,7 +4,7 @@ import { isAbsolute } from 'node:path';
 import type { ImageContent } from '@earendil-works/pi-ai';
 import QRCode from 'qrcode';
 import { Agent, fetch as undiciFetch } from 'undici';
-import type { PiuiDatabase } from '../db/database.js';
+import type { PiCloudDatabase } from '../db/database.js';
 import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_COUNT, sniffImageMimeType, validateImages } from './image-input.js';
@@ -111,7 +111,7 @@ export class WeixinGatewayService {
   private pairingPromise?: Promise<void>;
 
   constructor(
-    private readonly db: PiuiDatabase,
+    private readonly db: PiCloudDatabase,
     gatewaySettings: GatewaySettingsStore | undefined,
     private readonly sessionService: PiSessionService,
   ) {
@@ -124,7 +124,7 @@ export class WeixinGatewayService {
     if (!config.enabled) return;
     if (this.running) return;
     if (!config.accountId || !config.token) {
-      console.warn('[weixin-gateway] enabled but PI_WEBUI_WECHAT_ACCOUNT_ID and PI_WEBUI_WECHAT_TOKEN are required');
+      console.warn('[weixin-gateway] enabled but PI_CLOUD_WECHAT_ACCOUNT_ID and PI_CLOUD_WECHAT_TOKEN are required');
       return;
     }
 
@@ -192,18 +192,18 @@ export class WeixinGatewayService {
     const credential = this.loadCredential();
     const cwdChoices = gatewaySettings.cwds;
     return {
-      enabled: parseBoolean(process.env.PI_WEBUI_WECHAT_GATEWAY_ENABLED, false),
-      accountId: process.env.PI_WEBUI_WECHAT_ACCOUNT_ID?.trim() || credential?.accountId || '',
-      token: process.env.PI_WEBUI_WECHAT_TOKEN?.trim() || credential?.token || '',
-      baseUrl: (process.env.PI_WEBUI_WECHAT_BASE_URL?.trim() || credential?.baseUrl || ILINK_BASE_URL).replace(/\/+$/, ''),
+      enabled: parseBoolean(process.env.PI_CLOUD_WECHAT_GATEWAY_ENABLED, false),
+      accountId: process.env.PI_CLOUD_WECHAT_ACCOUNT_ID?.trim() || credential?.accountId || '',
+      token: process.env.PI_CLOUD_WECHAT_TOKEN?.trim() || credential?.token || '',
+      baseUrl: (process.env.PI_CLOUD_WECHAT_BASE_URL?.trim() || credential?.baseUrl || ILINK_BASE_URL).replace(/\/+$/, ''),
       defaultCwd: cwdChoices[0],
       cwdChoices,
       agentProfile: gatewaySettings.defaultProfile,
       modelProvider: gatewaySettings.defaultModelProvider,
       modelId: gatewaySettings.defaultModelId,
       ...this.resolveSkillsetConfig(gatewaySettings.defaultSkillset),
-      dmPolicy: parseDmPolicy(process.env.PI_WEBUI_WECHAT_DM_POLICY),
-      allowedUsers: parseList(process.env.PI_WEBUI_WECHAT_ALLOWED_USERS),
+      dmPolicy: parseDmPolicy(process.env.PI_CLOUD_WECHAT_DM_POLICY),
+      allowedUsers: parseList(process.env.PI_CLOUD_WECHAT_ALLOWED_USERS),
     };
   }
 
@@ -366,7 +366,7 @@ export class WeixinGatewayService {
   private isDmAllowed(senderId: string, config: WeixinGatewayConfig): boolean {
     if (config.dmPolicy === 'disabled') return false;
     if (config.dmPolicy === 'allowlist') return config.allowedUsers.includes(senderId);
-    if (config.dmPolicy === 'open') return parseBoolean(process.env.PI_WEBUI_WECHAT_ALLOW_ALL_USERS || process.env.GATEWAY_ALLOW_ALL_USERS, false);
+    if (config.dmPolicy === 'open') return parseBoolean(process.env.PI_CLOUD_WECHAT_ALLOW_ALL_USERS || process.env.GATEWAY_ALLOW_ALL_USERS, false);
     return true; // pairing mode accepts inbound DMs so operators can discover sender IDs.
   }
 

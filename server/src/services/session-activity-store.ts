@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 
 export type SessionActivityKind = 'commit_created' | 'commit_amended' | 'pr_created' | 'branch_deleted';
 export type PullRequestStatus = 'ready' | 'merged';
@@ -59,7 +59,7 @@ interface SessionActivityRow {
 export class SessionActivityStore {
   private readonly now: () => string;
 
-  constructor(private readonly db: PiuiDatabase, options: SessionActivityStoreOptions = {}) {
+  constructor(private readonly db: PiCloudDatabase, options: SessionActivityStoreOptions = {}) {
     this.now = options.now || (() => new Date().toISOString());
   }
 

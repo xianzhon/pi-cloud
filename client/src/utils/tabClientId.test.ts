@@ -56,8 +56,8 @@ describe('getTabClientId', () => {
 
   it('regenerates the client id when a duplicated tab copies a live tab id', async () => {
     const existingOwner = JSON.stringify({ token: 'other-tab', updatedAt: Date.now() });
-    const localStorage = createStorageStub({ 'pi-webui-client-owner:client-1': existingOwner });
-    const sessionStorage = createStorageStub({ 'pi-webui-client-id': 'client-1' });
+    const localStorage = createStorageStub({ 'pi-cloud-client-owner:client-1': existingOwner });
+    const sessionStorage = createStorageStub({ 'pi-cloud-client-id': 'client-1' });
     const randomUUID = vi.fn()
       .mockReturnValueOnce('owner-duplicate')
       .mockReturnValueOnce('client-2');
@@ -69,6 +69,6 @@ describe('getTabClientId', () => {
     const { getTabClientId } = await importClientId();
 
     expect(getTabClientId()).toBe('client-2');
-    expect(sessionStorage.setItem).toHaveBeenCalledWith('pi-webui-client-id', 'client-2');
+    expect(sessionStorage.setItem).toHaveBeenCalledWith('pi-cloud-client-id', 'client-2');
   });
 });

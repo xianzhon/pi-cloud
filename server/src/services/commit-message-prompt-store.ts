@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../db/database.js';
+import type { PiCloudDatabase } from '../db/database.js';
 
 export interface CommitMessagePrompts {
   systemPrompt: string;
@@ -63,7 +63,7 @@ export interface CommitMessagePromptConfiguration {
 }
 
 export class CommitMessagePromptStore {
-  constructor(private readonly db: PiuiDatabase) {}
+  constructor(private readonly db: PiCloudDatabase) {}
 
   get(projectPath: string): CommitMessagePromptConfiguration {
     const global = this.getScope('');

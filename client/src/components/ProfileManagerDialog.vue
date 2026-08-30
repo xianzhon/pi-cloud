@@ -641,9 +641,9 @@ async function removeLocalLlm(): Promise<void> {
     localLlmBaseUrl.value = localLlmPresets.ollama;
     localModels.value = [];
     selectedLocalModelIds.value = [];
-    models.value = models.value.filter((model) => model.provider !== 'pi-webui-local');
-    if (defaultModel.value.startsWith('pi-webui-local\u0000')) defaultModel.value = '';
-    if (automationModel.value.startsWith('pi-webui-local\u0000')) automationModel.value = '';
+    models.value = models.value.filter((model) => model.provider !== 'pi-cloud-local');
+    if (defaultModel.value.startsWith('pi-cloud-local\u0000')) defaultModel.value = '';
+    if (automationModel.value.startsWith('pi-cloud-local\u0000')) automationModel.value = '';
     localLlmRemoved.value = true;
     emit('updated');
   } catch (exception) {

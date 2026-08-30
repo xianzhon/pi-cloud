@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { normalizeGatewayCommandText } from './gateway-command-aliases';
 
-const ORIGINAL_PREFIX = process.env.PI_WEBUI_GATEWAY_COMMAND_PREFIX;
+const ORIGINAL_PREFIX = process.env.PI_CLOUD_GATEWAY_COMMAND_PREFIX;
 
 afterEach(() => {
   if (ORIGINAL_PREFIX === undefined) {
-    delete process.env.PI_WEBUI_GATEWAY_COMMAND_PREFIX;
+    delete process.env.PI_CLOUD_GATEWAY_COMMAND_PREFIX;
   } else {
-    process.env.PI_WEBUI_GATEWAY_COMMAND_PREFIX = ORIGINAL_PREFIX;
+    process.env.PI_CLOUD_GATEWAY_COMMAND_PREFIX = ORIGINAL_PREFIX;
   }
 });
 
@@ -47,7 +47,7 @@ describe('normalizeGatewayCommandText', () => {
   });
 
   it('uses a configurable gateway command prefix', () => {
-    process.env.PI_WEBUI_GATEWAY_COMMAND_PREFIX = 'Pi';
+    process.env.PI_CLOUD_GATEWAY_COMMAND_PREFIX = 'Pi';
 
     expect(normalizeGatewayCommandText('Pi: show session')).toBe('/status');
     expect(normalizeGatewayCommandText('Pishow session')).toBe('/status');

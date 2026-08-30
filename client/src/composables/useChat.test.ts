@@ -82,7 +82,7 @@ describe('useChat', () => {
       payload: { text: 'steer with image', sessionId: undefined, images: [image] },
     });
 
-    localStorage.setItem('pi-webui.streamingMessageBehavior', 'followUp');
+    localStorage.setItem('pi-cloud.streamingMessageBehavior', 'followUp');
     const second = mountChat().chat;
     handlers.get('event')?.({ event: { type: 'agent_start' } });
     second.sendMessage('follow up with image', undefined, { images: [image] });
@@ -195,7 +195,7 @@ describe('useChat', () => {
   });
 
   it('sends follow-up messages while streaming when configured', () => {
-    localStorage.setItem('pi-webui.streamingMessageBehavior', 'followUp');
+    localStorage.setItem('pi-cloud.streamingMessageBehavior', 'followUp');
     const { chat } = mountChat();
 
     handlers.get('event')?.({ event: { type: 'agent_start' } });

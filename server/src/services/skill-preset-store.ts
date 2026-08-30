@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 
 export type SkillPresetMode = 'enabled' | 'disabled';
 
@@ -35,7 +35,7 @@ interface SkillPresetRow {
 }
 
 export class SkillPresetStore {
-  constructor(private readonly db: PiuiDatabase) {}
+  constructor(private readonly db: PiCloudDatabase) {}
 
   list(): SkillPresetRecord[] {
     const rows = this.db.prepare('SELECT * FROM skill_presets ORDER BY lower(name), id').all() as SkillPresetRow[];

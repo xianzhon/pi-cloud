@@ -1,7 +1,7 @@
 import { createDecipheriv, createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
-import type { PiuiDatabase } from '../db/database.js';
+import type { PiCloudDatabase } from '../db/database.js';
 import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import type { PiSessionService } from './session-manager.js';
@@ -56,7 +56,7 @@ export class FeishuGatewayService {
   private tokenCache?: FeishuTokenCache;
 
   constructor(
-    private readonly db: PiuiDatabase,
+    private readonly db: PiCloudDatabase,
     gatewaySettings: GatewaySettingsStore | undefined,
     private readonly sessionService: PiSessionService,
   ) {
@@ -92,14 +92,14 @@ export class FeishuGatewayService {
   }
 
   private loadConfig(): FeishuGatewayConfig {
-    const domain = (process.env.PI_WEBUI_FEISHU_DOMAIN || 'feishu').trim().toLowerCase();
+    const domain = (process.env.PI_CLOUD_FEISHU_DOMAIN || 'feishu').trim().toLowerCase();
     const gatewaySettings = this.gatewaySettings.get();
     const cwdChoices = gatewaySettings.cwds;
     return {
-      appId: process.env.PI_WEBUI_FEISHU_APP_ID?.trim() || '',
-      appSecret: process.env.PI_WEBUI_FEISHU_APP_SECRET?.trim() || '',
-      verificationToken: process.env.PI_WEBUI_FEISHU_VERIFICATION_TOKEN?.trim() || '',
-      encryptKey: process.env.PI_WEBUI_FEISHU_ENCRYPT_KEY?.trim() || '',
+      appId: process.env.PI_CLOUD_FEISHU_APP_ID?.trim() || '',
+      appSecret: process.env.PI_CLOUD_FEISHU_APP_SECRET?.trim() || '',
+      verificationToken: process.env.PI_CLOUD_FEISHU_VERIFICATION_TOKEN?.trim() || '',
+      encryptKey: process.env.PI_CLOUD_FEISHU_ENCRYPT_KEY?.trim() || '',
       domain: domain === 'lark' ? 'lark' : 'feishu',
       defaultCwd: cwdChoices[0],
       cwdChoices,
@@ -118,8 +118,8 @@ export class FeishuGatewayService {
     const encrypted = stringValue(payload.encrypt);
     if (!encrypted) return payload;
     if (!config.encryptKey) {
-      console.warn('[feishu-gateway] received encrypted callback payload but PI_WEBUI_FEISHU_ENCRYPT_KEY is not configured');
-      const error = new Error('Feishu encrypted callback requires PI_WEBUI_FEISHU_ENCRYPT_KEY');
+      console.warn('[feishu-gateway] received encrypted callback payload but PI_CLOUD_FEISHU_ENCRYPT_KEY is not configured');
+      const error = new Error('Feishu encrypted callback requires PI_CLOUD_FEISHU_ENCRYPT_KEY');
       (error as Error & { statusCode?: number }).statusCode = 400;
       throw error;
     }
@@ -635,7 +635,7 @@ function parseJsonRecord(value: string): Record<string, unknown> {
 
 function truncateFeishuText(text: string): string {
   const limit = 8000;
-  return text.length > limit ? `${text.slice(0, limit - 40)}\n\n[truncated by Pi WebUI]` : text;
+  return text.length > limit ? `${text.slice(0, limit - 40)}\n\n[truncated by Pi Cloud]` : text;
 }
 
 function extractLastAssistantText(messages: unknown): string {

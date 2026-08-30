@@ -1,7 +1,7 @@
 import { createClientId } from './id';
 
-const CLIENT_ID_KEY = 'pi-webui-client-id';
-const OWNER_KEY_PREFIX = 'pi-webui-client-owner:';
+const CLIENT_ID_KEY = 'pi-cloud-client-id';
+const OWNER_KEY_PREFIX = 'pi-cloud-client-owner:';
 const OWNER_TTL_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 2_000;
 

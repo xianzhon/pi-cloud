@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Pi WebUI Status Script
+# Pi Cloud Status Script
 # Check current status of backend and frontend servers
 
 # Colors
@@ -109,7 +109,7 @@ fi
 # Main
 echo ""
 echo -e "${BOLD}=========================================="
-echo "       Pi WebUI - Status Report"
+echo "       Pi Cloud - Status Report"
 echo -e "==========================================${NC}"
 echo ""
 

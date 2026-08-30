@@ -14,7 +14,7 @@ const { TerminalManager } = await import('./terminal-manager.js');
 describe('TerminalManager', () => {
   beforeEach(() => {
     spawn.mockClear();
-    vi.stubEnv('PI_WEBUI_TERMINAL_SHELL', '');
+    vi.stubEnv('PI_CLOUD_TERMINAL_SHELL', '');
   });
 
   afterEach(() => {
@@ -33,7 +33,7 @@ describe('TerminalManager', () => {
 
   it('uses the configured terminal shell', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
-    vi.stubEnv('PI_WEBUI_TERMINAL_SHELL', 'pwsh.exe');
+    vi.stubEnv('PI_CLOUD_TERMINAL_SHELL', 'pwsh.exe');
     vi.stubEnv('COMSPEC', 'C:\\Windows\\System32\\cmd.exe');
 
     const manager = new TerminalManager();

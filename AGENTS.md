@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-Pi WebUI is a pnpm monorepo providing a browser interface for the Pi coding agent.
+Pi Cloud is a pnpm monorepo providing a browser interface for the Pi coding agent.
 
 - `server/`: Fastify REST and WebSocket backend, Pi SDK integration, SQLite persistence, authentication, terminal sessions, memory, tasks, skills, and messaging gateways.
 - `client/`: Vue 3 and Vite frontend with chat, session management, Monaco editor, xterm.js terminal, task queue, memory center, settings, and gateway setup.
-- `bin/pi-webui.mjs`: CLI entry point for the npm package.
+- `bin/pi-cloud.mjs`: CLI entry point for the npm package.
 - `docs/manuals-en/` and `docs/manuals-cn/`: English and Chinese user manuals. Keep corresponding translations aligned when changing user-facing documentation.
 
 Node.js 22 or newer is required. Use pnpm for workspace commands.
@@ -81,7 +81,7 @@ The client uses Vue 3, TypeScript, Vue I18n, Monaco, and xterm.js. Tests run wit
 
 ## Configuration and Documentation
 
-Configuration comes from shell environment variables and `.env` files; shell variables take precedence. Important defaults include `PORT=3000`, `FRONTEND_PORT=5173`, and `HOST=127.0.0.1`. Authentication requires `PI_WEBUI_AUTH_USERNAME` and exactly one of `PI_WEBUI_AUTH_PASSWORD` or `PI_WEBUI_AUTH_PASSWORD_HASH`.
+Configuration comes from shell environment variables and `.env` files; shell variables take precedence. Important defaults include `PORT=3000`, `FRONTEND_PORT=5173`, and `HOST=127.0.0.1`. Authentication requires `PI_CLOUD_AUTH_USERNAME` and exactly one of `PI_CLOUD_AUTH_PASSWORD` or `PI_CLOUD_AUTH_PASSWORD_HASH`.
 
 Use these references instead of duplicating detailed operational guidance here:
 

@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 
 export interface AuditEventInput {
   type: string;
@@ -32,7 +32,7 @@ interface AuditEventRow {
 }
 
 export class AuditLog {
-  constructor(private db: PiuiDatabase) {}
+  constructor(private db: PiCloudDatabase) {}
 
   record(event: AuditEventInput): void {
     this.db.prepare(`

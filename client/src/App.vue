@@ -778,14 +778,14 @@ const activeProjectPath = computed(() => sessionCwd.value || selectedProjectPath
 const sessionCwdDisplay = computed(() => formatHomePath(sessionCwd.value));
 const showTaskQueue = ref(false);
 const taskQueueFeatureLoaded = ref(false);
-const headerTitle = computed(() => sessionTitle.value || 'Pi WebUI');
+const headerTitle = computed(() => sessionTitle.value || 'Pi Cloud');
 const headerSubtitle = computed(() => sessionCwdDisplay.value || formatHomePath(selectedProjectPath.value));
 const headerProjectName = computed(() => formatProjectName(headerSubtitle.value));
 const canSwitchToSessionProject = computed(() => (
   Boolean(sessionCwd.value)
   && formatHomePath(sessionCwd.value) !== formatHomePath(selectedProjectPath.value)
 ));
-const pageTitle = computed(() => [sessionTitle.value || 'Pi WebUI', selectedAgentName.value].filter(Boolean).join(' - '));
+const pageTitle = computed(() => [sessionTitle.value || 'Pi Cloud', selectedAgentName.value].filter(Boolean).join(' - '));
 const readySessionIds = ref<Set<string>>(new Set());
 const readySessionIdList = computed(() => Array.from(readySessionIds.value));
 const tabTitle = computed(() => readySessionIds.value.size > 0 ? `🔔 ${pageTitle.value}` : pageTitle.value);
@@ -950,7 +950,7 @@ const gatewaySaveSuccessTick = ref(0);
 const githubProxyChecking = ref(false);
 const githubProxyCheckResult = ref<'ok' | 'failed' | null>(null);
 const githubProxyCountry = ref('');
-const sidebarCollapsedStorageKey = 'pi-webui-sidebar-collapsed';
+const sidebarCollapsedStorageKey = 'pi-cloud-sidebar-collapsed';
 const sidebarCollapsed = ref(loadSidebarCollapsed());
 const showNewSessionDialog = ref(false);
 const pendingNewSessionPath = ref('');
@@ -1421,7 +1421,7 @@ function updateFullscreenState(): void {
 
 function setTaskQueueVisible(visible: boolean): void {
   showTaskQueue.value = visible;
-  sessionStorage.setItem('pi-webui-sidebar-mode', visible ? 'tasks' : 'single');
+  sessionStorage.setItem('pi-cloud-sidebar-mode', visible ? 'tasks' : 'single');
   showMobileSidebar.value = false;
 }
 
@@ -2185,11 +2185,11 @@ watch(isConnected, (connected) => {
 
 onMounted(() => {
   authRefreshMounted = true;
-  const savedSidebarMode = sessionStorage.getItem('pi-webui-sidebar-mode');
+  const savedSidebarMode = sessionStorage.getItem('pi-cloud-sidebar-mode');
   if (savedSidebarMode === 'single' || savedSidebarMode === 'tasks') {
     showTaskQueue.value = savedSidebarMode === 'tasks';
   } else if (savedSidebarMode) {
-    sessionStorage.removeItem('pi-webui-sidebar-mode');
+    sessionStorage.removeItem('pi-cloud-sidebar-mode');
   }
   void refreshAuth();
   window.addEventListener('keydown', handleEditorToggleKeydown, true);

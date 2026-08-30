@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { openPiuiDatabase } from '../db/database';
+import { openPiCloudDatabase } from '../db/database';
 import { SessionActivityStore } from './session-activity-store';
 
 describe('SessionActivityStore', () => {
   it('stores commit and PR activity for a session', () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     const store = new SessionActivityStore(db, { now: () => '2026-07-22T00:00:00.000Z' });
 
     store.recordCommit({
@@ -70,7 +70,7 @@ describe('SessionActivityStore', () => {
   });
 
   it('ignores activity without a session id', () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     const store = new SessionActivityStore(db);
 
     expect(store.recordCommit({

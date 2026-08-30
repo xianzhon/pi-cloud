@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../database.js';
+import type { PiCloudDatabase } from '../database.js';
 import type { DatabaseMigration } from './migration.js';
 
 export const applicationSchemaMigration: DatabaseMigration = {
@@ -338,7 +338,7 @@ export const applicationSchemaMigration: DatabaseMigration = {
   },
 };
 
-function migrateSessionBuiltinEventsTable(db: PiuiDatabase): void {
+function migrateSessionBuiltinEventsTable(db: PiCloudDatabase): void {
   if (!tableExists(db, 'session_builtin_events')) return;
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'session_builtin_events'").get() as { sql?: string } | undefined;
   if (table?.sql?.includes("'branch_deleted'")) return;
@@ -358,7 +358,7 @@ function migrateSessionBuiltinEventsTable(db: PiuiDatabase): void {
   `);
 }
 
-function resetLegacySessionPinTables(db: PiuiDatabase): void {
+function resetLegacySessionPinTables(db: PiCloudDatabase): void {
   if (!tableExists(db, 'session_pin_groups')) return;
   const columns = db.prepare('PRAGMA table_info(session_pin_groups)').all() as Array<{ name: string }>;
   if (columns.some((column) => column.name === 'owner_type')) return;
@@ -369,13 +369,13 @@ function resetLegacySessionPinTables(db: PiuiDatabase): void {
   `);
 }
 
-function ensureColumn(db: PiuiDatabase, table: string, column: string, definition: string): void {
+function ensureColumn(db: PiCloudDatabase, table: string, column: string, definition: string): void {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (columns.some((item) => item.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
-function tableExists(db: PiuiDatabase, table: string): boolean {
+function tableExists(db: PiCloudDatabase, table: string): boolean {
   const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
   return Boolean(row);
 }

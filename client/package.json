@@ -1,5 +1,5 @@
 {
-  "name": "@pi-webui/client",
+  "name": "@pi-cloud/client",
   "version": "1.0.0",
   "private": true,
   "type": "module",

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { PiuiDatabase } from '../db/database';
-import { openPiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
+import { openPiCloudDatabase } from '../db/database';
 import {
   ProjectTaskConflictError,
   ProjectTaskStore,
@@ -22,13 +22,13 @@ const baseDraft: ProjectTaskDraft = {
 };
 
 describe('ProjectTaskStore', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let now: string;
   let nextId: number;
   let store: ProjectTaskStore;
 
   beforeEach(() => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     now = '2026-07-14T00:00:00.000Z';
     nextId = 1;
     store = new ProjectTaskStore(db, {

@@ -1,10 +1,10 @@
 # Contributing
 
-Thank you for contributing to Pi WebUI. By contributing to this project, you agree that your contributions are licensed under the Apache License, Version 2.0.
+Thank you for contributing to Pi Cloud. By contributing to this project, you agree that your contributions are licensed under the Apache License, Version 2.0.
 
 ## Development setup
 
-Pi WebUI is a pnpm monorepo with a Vue client and a Fastify server. You need:
+Pi Cloud is a pnpm monorepo with a Vue client and a Fastify server. You need:
 
 - Node.js 22 or newer
 - pnpm 9 or newer
@@ -14,13 +14,13 @@ Pi WebUI is a pnpm monorepo with a Vue client and a Fastify server. You need:
 Fork the repository on GitHub, then clone your fork and install dependencies:
 
 ```bash
-git clone https://github.com/xianzhon/pi-webui.git
-cd pi-webui
+git clone https://github.com/xianzhon/pi-cloud.git
+cd pi-cloud
 pnpm install --frozen-lockfile
 cp .env.example .env
 ```
 
-Set `PI_WEBUI_AUTH_USERNAME` and `PI_WEBUI_AUTH_PASSWORD` in `.env`, then start both development servers:
+Set `PI_CLOUD_AUTH_USERNAME` and `PI_CLOUD_AUTH_PASSWORD` in `.env`, then start both development servers:
 
 ```bash
 pnpm dev
@@ -61,8 +61,8 @@ To test the package artifact that users install:
 
 ```bash
 make package
-npm install -g ./xianzhon-pi-webui-1.0.0.tgz
-pi-webui --help
+npm install -g ./pi-cloud-1.0.0.tgz
+pi-cloud --help
 ```
 
 Replace the tarball filename if the package version has changed.

@@ -2,18 +2,18 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database';
 import { SessionStore } from './sessions';
 
 describe('SessionStore', () => {
   let tempDir: string;
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let store: SessionStore;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-sessions-'));
-    db = openPiuiDatabase(path.join(tempDir, 'piui.sqlite'));
-    store = new SessionStore(db, 'piui_session');
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-sessions-'));
+    db = openPiCloudDatabase(path.join(tempDir, 'pi-cloud.sqlite'));
+    store = new SessionStore(db, 'pi_cloud_session');
   });
 
   afterEach(async () => {
@@ -29,7 +29,7 @@ describe('SessionStore', () => {
       userAgent: 'test-agent',
     });
 
-    expect(created.cookieName).toBe('piui_session');
+    expect(created.cookieName).toBe('pi_cloud_session');
     expect(created.token).toHaveLength(64);
 
     const validated = store.validateToken(created.token);

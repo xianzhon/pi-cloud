@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { generateSync } from 'otplib';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database';
 import { AuditLog } from '../auth/audit';
 import { IpRateLimiter } from '../auth/rate-limit';
 import { SessionStore } from '../auth/sessions';
@@ -14,11 +14,11 @@ import { authRoutes } from './auth';
 
 async function buildApp(options?: { skip2faVerify?: boolean }) {
   const app = Fastify();
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-auth-routes-'));
-  const db = openPiuiDatabase(path.join(tempDir, 'piui.sqlite'));
-  const sessions = new SessionStore(db, 'piui_session');
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-auth-routes-'));
+  const db = openPiCloudDatabase(path.join(tempDir, 'pi-cloud.sqlite'));
+  const sessions = new SessionStore(db, 'pi_cloud_session');
   const audit = new AuditLog(db);
-  const totp = new TotpService(db, 'Pi WebUI', 'me');
+  const totp = new TotpService(db, 'Pi Cloud', 'me');
 
   await app.register(cookie);
   await app.register(authRoutes, {
@@ -28,11 +28,11 @@ async function buildApp(options?: { skip2faVerify?: boolean }) {
       password: 'secret',
       sessionTtlHours: 8,
       sessionMaxHours: 24 * 30,
-      dbPath: path.join(tempDir, 'piui.sqlite'),
+      dbPath: path.join(tempDir, 'pi-cloud.sqlite'),
       trustProxy: false,
       skip2faVerify: options?.skip2faVerify ?? false,
       cookieSecure: false,
-      cookieName: 'piui_session',
+      cookieName: 'pi_cloud_session',
     },
     sessions,
     audit,
@@ -47,7 +47,7 @@ async function buildApp(options?: { skip2faVerify?: boolean }) {
 describe('authRoutes', () => {
   let app: FastifyInstance | undefined;
   let tempDir: string | undefined;
-  let db: PiuiDatabase | undefined;
+  let db: PiCloudDatabase | undefined;
   let totp: TotpService | undefined;
 
   afterEach(async () => {
@@ -71,7 +71,7 @@ describe('authRoutes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ authenticated: true, requires2fa: false, user: { username: 'me', totpEnabled: false } });
     expect(response.json().sessionExpiresAt).toEqual(expect.any(String));
-    expect(response.headers['set-cookie']).toContain('piui_session=');
+    expect(response.headers['set-cookie']).toContain('pi_cloud_session=');
   });
 
   it('does not mark session cookies secure by default so local HTTP production login persists', async () => {
@@ -87,7 +87,7 @@ describe('authRoutes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.headers['set-cookie']).toContain('piui_session=');
+      expect(response.headers['set-cookie']).toContain('pi_cloud_session=');
       expect(response.headers['set-cookie']).not.toContain('Secure');
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
@@ -119,7 +119,7 @@ describe('authRoutes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().authenticated).toBe(true);
-    expect(response.headers['set-cookie']).toContain('piui_session=');
+    expect(response.headers['set-cookie']).toContain('pi_cloud_session=');
   });
 
   it('bypasses totp when SKIP_2FA_VERIFY is active', async () => {

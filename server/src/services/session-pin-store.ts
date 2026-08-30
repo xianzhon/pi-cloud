@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { PiuiDatabase } from '../db/database.js';
+import type { PiCloudDatabase } from '../db/database.js';
 
 export const DEFAULT_PIN_GROUP_ID = 'default';
 
@@ -23,7 +23,7 @@ interface PinGroupRow {
 }
 
 export class SessionPinStore {
-  constructor(private readonly db: PiuiDatabase) {}
+  constructor(private readonly db: PiCloudDatabase) {}
 
   listGroups(owner: SessionPinOwner): SessionPinGroup[] {
     this.ensureDefaultGroup(owner);

@@ -50,8 +50,8 @@ describe('fileRoutes', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-files-'));
-    process.env.PI_WEBUI_ALLOWED_ROOTS = tempDir;
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-files-'));
+    process.env.PI_CLOUD_ALLOWED_ROOTS = tempDir;
     app = await buildApp();
     await fs.mkdir(path.join(tempDir, 'src'));
     await fs.mkdir(path.join(tempDir, 'node_modules'));
@@ -63,8 +63,8 @@ describe('fileRoutes', () => {
 
   afterEach(async () => {
     await app.close();
-    delete process.env.PI_WEBUI_ALLOWED_ROOTS;
-    delete process.env.PI_WEBUI_ENABLE_SYSTEM_OPEN;
+    delete process.env.PI_CLOUD_ALLOWED_ROOTS;
+    delete process.env.PI_CLOUD_ENABLE_SYSTEM_OPEN;
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -268,7 +268,7 @@ describe('fileRoutes', () => {
   });
 
   it('rejects file access outside the configured allowed roots', async () => {
-    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-files-outside-'));
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-files-outside-'));
     const outsideFile = path.join(outsideDir, 'secret.txt');
     await fs.writeFile(outsideFile, 'secret', 'utf8');
 
@@ -388,7 +388,7 @@ describe('fileRoutes', () => {
   });
 
   it('rejects HTML preview assets outside the configured allowed roots', async () => {
-    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-preview-outside-'));
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-preview-outside-'));
     await fs.writeFile(path.join(outsideDir, 'secret.css'), 'secret');
 
     try {
@@ -548,7 +548,7 @@ describe('fileRoutes', () => {
     expect(disabledResponse.statusCode).toBe(200);
     expect(disabledResponse.json()).toEqual({ systemOpen: false });
 
-    process.env.PI_WEBUI_ENABLE_SYSTEM_OPEN = 'true';
+    process.env.PI_CLOUD_ENABLE_SYSTEM_OPEN = 'true';
     const enabledResponse = await app.inject({
       method: 'GET',
       url: '/api/files/capabilities',

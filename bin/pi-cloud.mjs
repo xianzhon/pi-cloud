@@ -8,7 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { loadRuntimeConfig } from './runtime-config.mjs';
 
 function printHelp() {
-  console.log(`Usage: pi-webui [options]
+  console.log(`Usage: pi-cloud [options]
 
 Options:
   -p, --port <port>       Listen on this port (default: 3000)
@@ -58,9 +58,9 @@ function parseArgs(args) {
   return options;
 }
 
-const SERVICE_NAME = 'pi-webui';
-const SERVICE_LABEL = 'com.pi-webui';
-const NPM_PACKAGE_NAME = '@xianzhon/pi-webui';
+const SERVICE_NAME = 'pi-cloud';
+const SERVICE_LABEL = 'com.pi-cloud';
+const NPM_PACKAGE_NAME = 'pi-cloud';
 const scriptPath = fileURLToPath(import.meta.url);
 
 function runCommand(command, args) {
@@ -94,7 +94,7 @@ function macServicePath() {
 function installLinuxService() {
   const servicePath = linuxServicePath();
   mkdirSync(join(servicePath, '..'), { recursive: true });
-  writeFileSync(servicePath, `[Unit]\nDescription=Pi WebUI\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart="${process.execPath}" "${scriptPath}" --no-open\nWorkingDirectory=${homedir()}\nEnvironment=HOME=${homedir()}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n`);
+  writeFileSync(servicePath, `[Unit]\nDescription=Pi Cloud\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart="${process.execPath}" "${scriptPath}" --no-open\nWorkingDirectory=${homedir()}\nEnvironment=HOME=${homedir()}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n`);
   runCommand('systemctl', ['--user', 'daemon-reload']);
   runCommand('systemctl', ['--user', 'enable', '--now', SERVICE_NAME]);
   console.log(`Installed Linux service at ${servicePath}`);
@@ -116,7 +116,7 @@ function installWindowsService() {
   const taskCommand = `"${process.execPath}" "${scriptPath}" --no-open`;
   runCommand('schtasks', ['/Create', '/TN', SERVICE_NAME, '/SC', 'ONLOGON', '/TR', taskCommand, '/F']);
   runCommand('schtasks', ['/Run', '/TN', SERVICE_NAME]);
-  console.log('Installed Windows startup task Pi WebUI.');
+  console.log('Installed Windows startup task Pi Cloud.');
 }
 
 function installedVersion() {
@@ -133,7 +133,7 @@ function updateCommand(version) {
     const latestVersion = result.stdout.trim();
     console.log(`Installed version: ${currentVersion}`);
     console.log(`Latest version: ${latestVersion}`);
-    console.log(currentVersion === latestVersion ? 'Pi WebUI is up to date.' : 'An update is available. Run: pi-webui update');
+    console.log(currentVersion === latestVersion ? 'Pi Cloud is up to date.' : 'An update is available. Run: pi-cloud update');
     return;
   }
 
@@ -143,12 +143,12 @@ function updateCommand(version) {
   const packageSpec = version ? `${NPM_PACKAGE_NAME}@${version}` : `${NPM_PACKAGE_NAME}@latest`;
   runNpm(['install', '-g', packageSpec]);
   console.log(`Updated ${packageSpec}.`);
-  console.log('If Pi WebUI is running as a service, restart it to use the new version:');
-  console.log('  pi-webui service restart');
+  console.log('If Pi Cloud is running as a service, restart it to use the new version:');
+  console.log('  pi-cloud service restart');
 }
 
 function serviceCommand(action) {
-  if (!action) throw new Error('Usage: pi-webui service <install|start|stop|restart|status|uninstall>');
+  if (!action) throw new Error('Usage: pi-cloud service <install|start|stop|restart|status|uninstall>');
 
   if (process.platform === 'linux') {
     if (action === 'install') return installLinuxService();
@@ -227,7 +227,7 @@ try {
   }
 
   const options = parseArgs(args);
-  process.env.PI_WEBUI_CLI_IMPORT = '1';
+  process.env.PI_CLOUD_CLI_IMPORT = '1';
 
   const { startServer } = await loadRuntimeConfig(options, () => import('../server/dist/index.js'));
   const app = await startServer();
@@ -235,12 +235,12 @@ try {
   const port = typeof address === 'object' && address ? address.port : process.env.PORT;
   const url = `http://${process.env.HOST}:${port}`;
   const configHome = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
-  const configPath = join(configHome, 'pi-webui', '.env');
-  const databasePath = process.env.PI_WEBUI_DB_PATH ?? join(configHome, 'pi-webui', 'pi-webui.sqlite');
-  console.log(`Pi WebUI running at ${url}`);
+  const configPath = join(configHome, 'pi-cloud', '.env');
+  const databasePath = process.env.PI_CLOUD_DB_PATH ?? join(configHome, 'pi-cloud', 'pi-cloud.sqlite');
+  console.log(`Pi Cloud running at ${url}`);
   console.log(`Configuration: ${configPath}`);
   console.log(`Database: ${databasePath}`);
-  console.log('These files are preserved when Pi WebUI is uninstalled.');
+  console.log('These files are preserved when Pi Cloud is uninstalled.');
   if (!options.noOpen) openBrowser(url);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

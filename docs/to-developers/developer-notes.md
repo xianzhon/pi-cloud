@@ -19,8 +19,8 @@ To test the same package artifact that users will install:
 
 ```bash
 make package               # equivalent to npm pack
-npm install -g ./xianzhon-pi-webui-1.0.0.tgz
-pi-webui --help
+npm install -g ./pi-cloud-1.0.0.tgz
+pi-cloud --help
 ```
 
 Replace the tarball filename if the package version is different. The tarball path is required; without it, npm tries to install the current directory and may report that `package.json` is missing.

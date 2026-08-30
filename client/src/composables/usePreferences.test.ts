@@ -26,18 +26,18 @@ describe('usePreferences', () => {
   });
 
   it('initializes display preferences from localStorage cache', () => {
-    localStorage.setItem('pi-webui.showHintInfo', 'false');
-    localStorage.setItem('pi-webui.showCodeBlockLanguageHeaders', 'false');
-    localStorage.setItem('pi-webui.streamingMessageBehavior', 'followUp');
-    localStorage.setItem('pi-webui.editorAutoRefresh', 'false');
-    localStorage.setItem('pi-webui.confirmSessionDelete', 'false');
-    localStorage.setItem('pi-webui.newSessionShortcut', 'ctrlAltN');
-    localStorage.setItem('pi-webui.fullscreenShortcut', 'ctrlShiftF');
-    localStorage.setItem('pi-webui.showGoToTopButton', 'false');
-    localStorage.setItem('pi-webui.showChatViewOptionsButton', 'false');
-    localStorage.setItem('pi-webui.theme', 'light');
-    localStorage.setItem('pi-webui.language', 'zh-CN');
-    localStorage.setItem('pi-webui.soundNotification', 'chime');
+    localStorage.setItem('pi-cloud.showHintInfo', 'false');
+    localStorage.setItem('pi-cloud.showCodeBlockLanguageHeaders', 'false');
+    localStorage.setItem('pi-cloud.streamingMessageBehavior', 'followUp');
+    localStorage.setItem('pi-cloud.editorAutoRefresh', 'false');
+    localStorage.setItem('pi-cloud.confirmSessionDelete', 'false');
+    localStorage.setItem('pi-cloud.newSessionShortcut', 'ctrlAltN');
+    localStorage.setItem('pi-cloud.fullscreenShortcut', 'ctrlShiftF');
+    localStorage.setItem('pi-cloud.showGoToTopButton', 'false');
+    localStorage.setItem('pi-cloud.showChatViewOptionsButton', 'false');
+    localStorage.setItem('pi-cloud.theme', 'light');
+    localStorage.setItem('pi-cloud.language', 'zh-CN');
+    localStorage.setItem('pi-cloud.soundNotification', 'chime');
 
     const preferences = usePreferences();
 
@@ -76,24 +76,24 @@ describe('usePreferences', () => {
     expect(preferences.theme.value).toBe('dark');
     expect(preferences.language.value).toBe('zh-CN');
     expect(preferences.soundNotification.value).toBe('ding');
-    expect(localStorage.getItem('pi-webui.showHintInfo')).toBe('false');
-    expect(localStorage.getItem('pi-webui.showCodeBlockLanguageHeaders')).toBe('false');
-    expect(localStorage.getItem('pi-webui.streamingMessageBehavior')).toBe('followUp');
-    expect(localStorage.getItem('pi-webui.editorAutoRefresh')).toBe('false');
-    expect(localStorage.getItem('pi-webui.confirmSessionDelete')).toBe('false');
-    expect(localStorage.getItem('pi-webui.newSessionShortcut')).toBe('disabled');
-    expect(localStorage.getItem('pi-webui.fullscreenShortcut')).toBe('ctrlShiftF');
-    expect(localStorage.getItem('pi-webui.showGoToTopButton')).toBe('false');
-    expect(localStorage.getItem('pi-webui.showChatViewOptionsButton')).toBe('false');
-    expect(localStorage.getItem('pi-webui.theme')).toBe('dark');
-    expect(localStorage.getItem('pi-webui.language')).toBe('zh-CN');
-    expect(localStorage.getItem('pi-webui.soundNotification')).toBe('ding');
+    expect(localStorage.getItem('pi-cloud.showHintInfo')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.showCodeBlockLanguageHeaders')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.streamingMessageBehavior')).toBe('followUp');
+    expect(localStorage.getItem('pi-cloud.editorAutoRefresh')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.confirmSessionDelete')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.newSessionShortcut')).toBe('disabled');
+    expect(localStorage.getItem('pi-cloud.fullscreenShortcut')).toBe('ctrlShiftF');
+    expect(localStorage.getItem('pi-cloud.showGoToTopButton')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.showChatViewOptionsButton')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.theme')).toBe('dark');
+    expect(localStorage.getItem('pi-cloud.language')).toBe('zh-CN');
+    expect(localStorage.getItem('pi-cloud.soundNotification')).toBe('ding');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences');
   });
 
   it('ignores backend load failures and keeps the cached preference', async () => {
-    localStorage.setItem('pi-webui.showHintInfo', 'false');
-    localStorage.setItem('pi-webui.showCodeBlockLanguageHeaders', 'false');
+    localStorage.setItem('pi-cloud.showHintInfo', 'false');
+    localStorage.setItem('pi-cloud.showCodeBlockLanguageHeaders', 'false');
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new Error('network down');
     }));
@@ -103,8 +103,8 @@ describe('usePreferences', () => {
 
     expect(preferences.showHintInfo.value).toBe(false);
     expect(preferences.showCodeBlockLanguageHeaders.value).toBe(false);
-    expect(localStorage.getItem('pi-webui.showHintInfo')).toBe('false');
-    expect(localStorage.getItem('pi-webui.showCodeBlockLanguageHeaders')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.showHintInfo')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.showCodeBlockLanguageHeaders')).toBe('false');
   });
 
   it('saves hint info to cache immediately and persists to backend', async () => {
@@ -117,7 +117,7 @@ describe('usePreferences', () => {
     await preferences.setShowHintInfo(false);
 
     expect(preferences.showHintInfo.value).toBe(false);
-    expect(localStorage.getItem('pi-webui.showHintInfo')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.showHintInfo')).toBe('false');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -135,7 +135,7 @@ describe('usePreferences', () => {
     await preferences.setShowCodeBlockLanguageHeaders(false);
 
     expect(preferences.showCodeBlockLanguageHeaders.value).toBe(false);
-    expect(localStorage.getItem('pi-webui.showCodeBlockLanguageHeaders')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.showCodeBlockLanguageHeaders')).toBe('false');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -153,7 +153,7 @@ describe('usePreferences', () => {
     await preferences.setStreamingMessageBehavior('followUp');
 
     expect(preferences.streamingMessageBehavior.value).toBe('followUp');
-    expect(localStorage.getItem('pi-webui.streamingMessageBehavior')).toBe('followUp');
+    expect(localStorage.getItem('pi-cloud.streamingMessageBehavior')).toBe('followUp');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -171,7 +171,7 @@ describe('usePreferences', () => {
     await preferences.setEditorAutoRefresh(false);
 
     expect(preferences.editorAutoRefresh.value).toBe(false);
-    expect(localStorage.getItem('pi-webui.editorAutoRefresh')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.editorAutoRefresh')).toBe('false');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -189,7 +189,7 @@ describe('usePreferences', () => {
     await preferences.setConfirmSessionDelete(false);
 
     expect(preferences.confirmSessionDelete.value).toBe(false);
-    expect(localStorage.getItem('pi-webui.confirmSessionDelete')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.confirmSessionDelete')).toBe('false');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -207,7 +207,7 @@ describe('usePreferences', () => {
     await preferences.setNewSessionShortcut('ctrlAltN');
 
     expect(preferences.newSessionShortcut.value).toBe('ctrlAltN');
-    expect(localStorage.getItem('pi-webui.newSessionShortcut')).toBe('ctrlAltN');
+    expect(localStorage.getItem('pi-cloud.newSessionShortcut')).toBe('ctrlAltN');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -225,7 +225,7 @@ describe('usePreferences', () => {
     await preferences.setFullscreenShortcut('ctrlShiftF');
 
     expect(preferences.fullscreenShortcut.value).toBe('ctrlShiftF');
-    expect(localStorage.getItem('pi-webui.fullscreenShortcut')).toBe('ctrlShiftF');
+    expect(localStorage.getItem('pi-cloud.fullscreenShortcut')).toBe('ctrlShiftF');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -245,8 +245,8 @@ describe('usePreferences', () => {
 
     expect(preferences.showGoToTopButton.value).toBe(false);
     expect(preferences.showChatViewOptionsButton.value).toBe(false);
-    expect(localStorage.getItem('pi-webui.showGoToTopButton')).toBe('false');
-    expect(localStorage.getItem('pi-webui.showChatViewOptionsButton')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.showGoToTopButton')).toBe('false');
+    expect(localStorage.getItem('pi-cloud.showChatViewOptionsButton')).toBe('false');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -269,7 +269,7 @@ describe('usePreferences', () => {
     await preferences.setTheme('light');
 
     expect(preferences.theme.value).toBe('light');
-    expect(localStorage.getItem('pi-webui.theme')).toBe('light');
+    expect(localStorage.getItem('pi-cloud.theme')).toBe('light');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -287,7 +287,7 @@ describe('usePreferences', () => {
     await preferences.setLanguage('zh-CN');
 
     expect(preferences.language.value).toBe('zh-CN');
-    expect(localStorage.getItem('pi-webui.language')).toBe('zh-CN');
+    expect(localStorage.getItem('pi-cloud.language')).toBe('zh-CN');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -305,7 +305,7 @@ describe('usePreferences', () => {
     await preferences.setSoundNotification('chime');
 
     expect(preferences.soundNotification.value).toBe('chime');
-    expect(localStorage.getItem('pi-webui.soundNotification')).toBe('chime');
+    expect(localStorage.getItem('pi-cloud.soundNotification')).toBe('chime');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

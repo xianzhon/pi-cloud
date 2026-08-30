@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PiuiDatabase } from '../db/database';
-import { openPiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
+import { openPiCloudDatabase } from '../db/database';
 import { ProjectTaskConflictError, ProjectTaskStore, ProjectTaskValidationError } from './project-task-store';
 import { ProjectTaskStarter } from './project-task-starter';
 
@@ -21,7 +21,7 @@ function draft(overrides: Record<string, unknown> = {}) {
 }
 
 describe('ProjectTaskStarter', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let store: ProjectTaskStore;
   let sessionService: any;
   let worktreeManager: any;
@@ -31,7 +31,7 @@ describe('ProjectTaskStarter', () => {
   let starter: ProjectTaskStarter;
 
   beforeEach(() => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     store = new ProjectTaskStore(db, { createId: () => 'task-1', now: () => '2026-07-14T00:00:00.000Z' });
     sessionService = {
       listAgentProfiles: vi.fn().mockResolvedValue([

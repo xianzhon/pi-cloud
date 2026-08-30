@@ -101,7 +101,7 @@ const emit = defineEmits<{
   create: [payload: { cwd: string; modelProvider?: string; modelId?: string; enabledSkills?: string[]; disabledSkills?: string[]; presetId?: string; worktree?: WorktreePayload }];
 }>();
 
-const STORAGE_KEY = 'pi-webui.newSessionOptions';
+const STORAGE_KEY = 'pi-cloud.newSessionOptions';
 
 function storageKey(): string {
   return `${STORAGE_KEY}:${props.projectPath || '~'}`;

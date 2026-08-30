@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openPiuiDatabase } from '../db/database';
+import { openPiCloudDatabase } from '../db/database';
 import { FeishuGatewayService } from './feishu-gateway';
 import { GatewaySettingsStore } from './gateway-settings-store';
 import { PiSessionService } from './session-manager';
@@ -27,15 +27,15 @@ afterEach(() => {
 
 describe('FeishuGatewayService', () => {
   it('decrypts encrypted URL verification callbacks before token and challenge handling', async () => {
-    process.env.PI_WEBUI_FEISHU_APP_ID = 'cli_test';
-    process.env.PI_WEBUI_FEISHU_APP_SECRET = 'secret_test';
-    process.env.PI_WEBUI_FEISHU_VERIFICATION_TOKEN = 'verify_test';
-    process.env.PI_WEBUI_FEISHU_ENCRYPT_KEY = 'encrypt_test';
-    const service = createService(openPiuiDatabase(':memory:') as any);
+    process.env.PI_CLOUD_FEISHU_APP_ID = 'cli_test';
+    process.env.PI_CLOUD_FEISHU_APP_SECRET = 'secret_test';
+    process.env.PI_CLOUD_FEISHU_VERIFICATION_TOKEN = 'verify_test';
+    process.env.PI_CLOUD_FEISHU_ENCRYPT_KEY = 'encrypt_test';
+    const service = createService(openPiCloudDatabase(':memory:') as any);
 
-    const encrypted = encryptFeishuPayload(process.env.PI_WEBUI_FEISHU_ENCRYPT_KEY, {
+    const encrypted = encryptFeishuPayload(process.env.PI_CLOUD_FEISHU_ENCRYPT_KEY, {
       type: 'url_verification',
-      token: process.env.PI_WEBUI_FEISHU_VERIFICATION_TOKEN,
+      token: process.env.PI_CLOUD_FEISHU_VERIFICATION_TOKEN,
       challenge: 'challenge_test',
     });
 
@@ -45,10 +45,10 @@ describe('FeishuGatewayService', () => {
   });
 
   it('rejects callbacks when the verification token is not configured', async () => {
-    process.env.PI_WEBUI_FEISHU_APP_ID = 'cli_test';
-    process.env.PI_WEBUI_FEISHU_APP_SECRET = 'secret_test';
-    delete process.env.PI_WEBUI_FEISHU_VERIFICATION_TOKEN;
-    const service = createService(openPiuiDatabase(':memory:') as any);
+    process.env.PI_CLOUD_FEISHU_APP_ID = 'cli_test';
+    process.env.PI_CLOUD_FEISHU_APP_SECRET = 'secret_test';
+    delete process.env.PI_CLOUD_FEISHU_VERIFICATION_TOKEN;
+    const service = createService(openPiCloudDatabase(':memory:') as any);
 
     await expect(service.handleCallback({ type: 'url_verification', challenge: 'challenge_test' })).rejects.toMatchObject({
       message: 'Feishu gateway is not configured',
@@ -57,21 +57,21 @@ describe('FeishuGatewayService', () => {
   });
 
   it('rejects encrypted callbacks when the encrypt key is missing', async () => {
-    process.env.PI_WEBUI_FEISHU_APP_ID = 'cli_test';
-    process.env.PI_WEBUI_FEISHU_APP_SECRET = 'secret_test';
-    process.env.PI_WEBUI_FEISHU_VERIFICATION_TOKEN = 'verify_test';
-    delete process.env.PI_WEBUI_FEISHU_ENCRYPT_KEY;
-    const service = createService(openPiuiDatabase(':memory:') as any);
+    process.env.PI_CLOUD_FEISHU_APP_ID = 'cli_test';
+    process.env.PI_CLOUD_FEISHU_APP_SECRET = 'secret_test';
+    process.env.PI_CLOUD_FEISHU_VERIFICATION_TOKEN = 'verify_test';
+    delete process.env.PI_CLOUD_FEISHU_ENCRYPT_KEY;
+    const service = createService(openPiCloudDatabase(':memory:') as any);
     const encrypted = encryptFeishuPayload('encrypt_test', { type: 'url_verification' });
 
     await expect(service.handleCallback({ encrypt: encrypted })).rejects.toMatchObject({
-      message: 'Feishu encrypted callback requires PI_WEBUI_FEISHU_ENCRYPT_KEY',
+      message: 'Feishu encrypted callback requires PI_CLOUD_FEISHU_ENCRYPT_KEY',
       statusCode: 400,
     });
   });
 
   it('persists a Feishu chat profile selected by command', async () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     const service = createService(db as any);
     const replies: string[] = [];
     (service as any).sendReply = vi.fn(async (_config, _messageId, text) => replies.push(text));
@@ -90,7 +90,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('loads default gateway profile and skillset from Web UI settings', () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     db.prepare(`
       INSERT INTO skill_presets (id, username, name, mode, skills_json, created_at, updated_at)
       VALUES ('preset-debug', 'me', 'debug', 'enabled', '["systematic-debugging"]', 'now', 'now')
@@ -107,7 +107,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('saves gateway cwd choices and lists them by command', async () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     const settings = new GatewaySettingsStore(db as any);
     const service = createService(db as any);
     const replies: string[] = [];
@@ -127,7 +127,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('uses the first Web UI cwd choice as the default cwd', () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     const settings = new GatewaySettingsStore(db as any);
     settings.save({ cwds: ['/workspace/default', '/workspace/other'] });
     const service = createService(db as any, settings);
@@ -139,7 +139,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('reports no gateway folders when no Web UI cwd choices exist', async () => {
-    const service = createService(openPiuiDatabase(':memory:') as any);
+    const service = createService(openPiCloudDatabase(':memory:') as any);
     const replies: string[] = [];
     (service as any).sendReply = vi.fn(async (_config, _messageId, text) => replies.push(text));
     const config = (service as any).loadConfig();
@@ -150,7 +150,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('switches Feishu cwd only through Web UI configured cwd choices', async () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     const service = createService(db as any);
     (service as any).sendReply = vi.fn(async () => undefined);
     sessionService.listAgentProfiles = vi.fn(async () => [
@@ -167,7 +167,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('rejects arbitrary Feishu cwd paths', async () => {
-    const service = createService(openPiuiDatabase(':memory:') as any);
+    const service = createService(openPiCloudDatabase(':memory:') as any);
     const replies: string[] = [];
     (service as any).sendReply = vi.fn(async (_config, _messageId, text) => replies.push(text));
     const config = { ...minimalConfig(), cwdChoices: [process.cwd()] };
@@ -178,7 +178,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('persists a Feishu chat skillset selected by command', async () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     db.prepare(`
       INSERT INTO skill_presets (id, username, name, mode, skills_json, created_at, updated_at)
       VALUES ('preset-debug', 'me', 'debug', 'enabled', '["systematic-debugging"]', 'now', 'now')
@@ -203,7 +203,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('formats Feishu status as a readable bullet summary', async () => {
-    const service = createService(openPiuiDatabase(':memory:') as any);
+    const service = createService(openPiCloudDatabase(':memory:') as any);
     sessionService.listAgentProfiles = vi.fn(async () => [
       { id: 'default', label: 'default', path: '/tmp/default', isDefault: true, defaultProvider: 'openrouter', defaultModel: 'model-a' },
     ] as any);
@@ -221,7 +221,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('lists common command aliases in help', () => {
-    const service = createService(openPiuiDatabase(':memory:') as any);
+    const service = createService(openPiCloudDatabase(':memory:') as any);
 
     const help = (service as any).formatHelp();
 
@@ -232,7 +232,7 @@ describe('FeishuGatewayService', () => {
   });
 
   it('returns status summary after /new resets the Feishu session', async () => {
-    const service = createService(openPiuiDatabase(':memory:') as any);
+    const service = createService(openPiCloudDatabase(':memory:') as any);
     const replies: string[] = [];
     (service as any).sendReply = vi.fn(async (_config, _messageId, text) => replies.push(text));
     sessionService.listAgentProfiles = vi.fn(async () => [

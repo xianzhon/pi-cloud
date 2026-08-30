@@ -1,16 +1,16 @@
 {
-  "name": "@xianzhon/pi-webui",
+  "name": "pi-cloud",
   "version": "1.0.6",
   "description": "A self-hosted, mobile-friendly web workspace for the Pi coding agent, with persistent sessions, task queues, memory, file editing, terminals, and Git workflows.",
   "license": "Apache-2.0",
   "author": "xianzhon",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xianzhon/pi-webui.git"
+    "url": "git+https://github.com/xianzhon/pi-cloud.git"
   },
-  "homepage": "https://github.com/xianzhon/pi-webui",
+  "homepage": "https://github.com/xianzhon/pi-cloud",
   "bugs": {
-    "url": "https://github.com/xianzhon/pi-webui/issues"
+    "url": "https://github.com/xianzhon/pi-cloud/issues"
   },
   "keywords": [
     "pi",
@@ -20,7 +20,7 @@
     "developer-tools"
   ],
   "bin": {
-    "pi-webui": "bin/pi-webui.mjs"
+    "pi-cloud": "bin/pi-cloud.mjs"
   },
   "files": [
     ".env.example",
@@ -41,7 +41,7 @@
     "build": "pnpm -r run build",
     "prepack": "pnpm build",
     "start": "pnpm -r run start",
-    "start:prod": "pnpm --filter @pi-webui/server start",
+    "start:prod": "pnpm --filter @pi-cloud/server start",
     "test": "pnpm -r --if-present run test:run",
     "test:coverage": "pnpm -r --if-present run test:coverage",
     "test:watch": "pnpm -r --if-present run test",

@@ -2,19 +2,19 @@ import { mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database.js';
 import { MemoryProjectResolver } from './project-resolver.js';
 import { MemoryStore } from './store.js';
 
 describe('MemoryProjectResolver', () => {
   let tempDir: string;
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let store: MemoryStore;
   const worktrees = new Map<string, { baseRepoPath: string }>();
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'piui-memory-project-'));
-    db = openPiuiDatabase(':memory:');
+    tempDir = await mkdtemp(join(tmpdir(), 'pi-cloud-memory-project-'));
+    db = openPiCloudDatabase(':memory:');
     store = new MemoryStore(db);
     worktrees.clear();
   });

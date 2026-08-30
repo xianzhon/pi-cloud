@@ -9,20 +9,20 @@ let tempDir: string;
 let dbPath: string;
 
 beforeEach(async () => {
-  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-ws-auth-'));
-  dbPath = path.join(tempDir, 'piui.sqlite');
-  process.env.PI_WEBUI_AUTH_USERNAME = 'me';
-  process.env.PI_WEBUI_AUTH_PASSWORD = 'secret';
-  process.env.PI_WEBUI_AUTH_PASSWORD_HASH = '';
-  process.env.PI_WEBUI_DB_PATH = dbPath;
+  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-ws-auth-'));
+  dbPath = path.join(tempDir, 'pi-cloud.sqlite');
+  process.env.PI_CLOUD_AUTH_USERNAME = 'me';
+  process.env.PI_CLOUD_AUTH_PASSWORD = 'secret';
+  process.env.PI_CLOUD_AUTH_PASSWORD_HASH = '';
+  process.env.PI_CLOUD_DB_PATH = dbPath;
 });
 
 afterEach(async () => {
   vi.resetModules();
-  delete process.env.PI_WEBUI_AUTH_USERNAME;
-  delete process.env.PI_WEBUI_AUTH_PASSWORD;
-  delete process.env.PI_WEBUI_AUTH_PASSWORD_HASH;
-  delete process.env.PI_WEBUI_DB_PATH;
+  delete process.env.PI_CLOUD_AUTH_USERNAME;
+  delete process.env.PI_CLOUD_AUTH_PASSWORD;
+  delete process.env.PI_CLOUD_AUTH_PASSWORD_HASH;
+  delete process.env.PI_CLOUD_DB_PATH;
   await fs.rm(tempDir, { recursive: true, force: true });
 });
 

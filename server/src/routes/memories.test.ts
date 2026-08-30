@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database.js';
 import { createMemoryRuntime, type MemoryRuntime } from '../memory/runtime.js';
 
 const sessionService = {
@@ -11,13 +11,13 @@ const sessionService = {
 
 describe('memory routes', () => {
   let app: FastifyInstance;
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let runtime: MemoryRuntime;
   let openSession: MockInstance<typeof SessionManager.open>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     runtime = createMemoryRuntime({
       db,
       worktrees: { get: () => null },

@@ -2,17 +2,17 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database';
 import { AuditLog } from './audit';
 
 describe('AuditLog', () => {
   let tempDir: string;
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let audit: AuditLog;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-audit-'));
-    db = openPiuiDatabase(path.join(tempDir, 'piui.sqlite'));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-audit-'));
+    db = openPiCloudDatabase(path.join(tempDir, 'pi-cloud.sqlite'));
     audit = new AuditLog(db);
   });
 

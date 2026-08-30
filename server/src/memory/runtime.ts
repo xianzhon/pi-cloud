@@ -3,7 +3,7 @@ import { realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { InlineExtension } from '@earendil-works/pi-coding-agent';
 import type { AgentProfile } from '../types.js';
-import type { PiuiDatabase } from '../db/database.js';
+import type { PiCloudDatabase } from '../db/database.js';
 import { runWithAgentDirAndProxyEnv } from '../services/profile-proxy.js';
 import { expandHomePath } from '../utils/paths.js';
 import { MemoryExtractionCoordinator } from './coordinator.js';
@@ -19,7 +19,7 @@ export const MEMORY_UPDATED_EVENT = 'memory-updated';
 export const MEMORY_RECALL_EVENT = 'memory-recall';
 
 export interface CreateMemoryRuntimeOptions {
-  db: PiuiDatabase;
+  db: PiCloudDatabase;
   worktrees: WorktreeLookup;
   resolveProfile(profileId: string): Promise<AgentProfile | undefined>;
   resolveProxyEnv?: (agentDir: string) => Record<string, string>;

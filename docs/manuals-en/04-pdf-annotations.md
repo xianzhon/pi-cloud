@@ -1,6 +1,6 @@
 # PDF Annotations User Manual
 
-Pi WebUI lets you annotate PDF files opened in the workspace editor. Annotations are stored separately, so editing does not modify the original PDF.
+Pi Cloud lets you annotate PDF files opened in the workspace editor. Annotations are stored separately, so editing does not modify the original PDF.
 
 ## Open and Annotate a PDF
 
@@ -35,7 +35,7 @@ There is no separate Save command for PDF annotations.
 
 ## Storage Location
 
-Pi WebUI writes annotations to a JSON sidecar file beside the PDF:
+Pi Cloud writes annotations to a JSON sidecar file beside the PDF:
 
 ```text
 <PDF directory>/.<PDF filename>.annotations.json
@@ -48,21 +48,21 @@ For example:
 /books/.example.pdf.annotations.json
 ```
 
-The leading `.` makes the sidecar hidden in the default Pi WebUI file-tree view. Enable **Show hidden files** in the file tree when you need to see or manage it. The sidecar contains vector strokes grouped by PDF page, and the original `example.pdf` remains unchanged.
+The leading `.` makes the sidecar hidden in the default Pi Cloud file-tree view. Enable **Show hidden files** in the file tree when you need to see or manage it. The sidecar contains vector strokes grouped by PDF page, and the original `example.pdf` remains unchanged.
 
-Sidecars created by earlier Pi WebUI versions used the visible name `example.pdf.annotations.json`. These files are still loaded for compatibility. After the next annotation change, Pi WebUI saves the annotations under the new hidden name; the old file can then be removed manually.
+Sidecars created by earlier Pi Cloud versions used the visible name `example.pdf.annotations.json`. These files are still loaded for compatibility. After the next annotation change, Pi Cloud saves the annotations under the new hidden name; the old file can then be removed manually.
 
-The sidecar is a regular workspace file and is subject to the same allowed-root and filesystem permissions as other editor files. Pi WebUI must have write permission in the PDF's directory to save annotations.
+The sidecar is a regular workspace file and is subject to the same allowed-root and filesystem permissions as other editor files. Pi Cloud must have write permission in the PDF's directory to save annotations.
 
 ## Back Up, Move, or Share Annotations
 
-Keep the PDF and its sidecar file together when backing up, copying, moving, renaming, or sharing an annotated document. Pi WebUI matches them by filename and location; moving or renaming only the PDF does not automatically move or rename its sidecar.
+Keep the PDF and its sidecar file together when backing up, copying, moving, renaming, or sharing an annotated document. Pi Cloud matches them by filename and location; moving or renaming only the PDF does not automatically move or rename its sidecar.
 
 To remove all saved annotations, show hidden files, delete the corresponding `.<PDF filename>.annotations.json` sidecar, and reopen the PDF.
 
 ## Current Limitations
 
-- Annotations are displayed by Pi WebUI and are not embedded into the PDF.
+- Annotations are displayed by Pi Cloud and are not embedded into the PDF.
 - Opening the original PDF in another PDF reader will not show the sidecar annotations.
 - Exporting or flattening annotations into a new PDF is not currently supported.
 - Exporting individual annotations to other annotation formats is not currently supported.

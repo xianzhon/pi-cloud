@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 
 export interface GiteaSettings {
   serverUrl: string;
@@ -14,7 +14,7 @@ const SERVER_URL_KEY = 'gitea.serverUrl';
 const TOKEN_KEY = 'gitea.token';
 
 export class GiteaSettingsStore {
-  constructor(private readonly db: PiuiDatabase) {}
+  constructor(private readonly db: PiCloudDatabase) {}
 
   get(): GiteaSettings {
     return {

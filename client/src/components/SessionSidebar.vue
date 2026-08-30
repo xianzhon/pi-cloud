@@ -2,7 +2,7 @@
 <template>
   <aside class="session-sidebar" :class="{ collapsed }" :style="{ '--session-sidebar-width': `${sidebarWidth}px` }">
     <div class="sidebar-header">
-      <h3>Pi WebUI <span class="version-tag">v{{ version }}</span></h3>
+      <h3>Pi Cloud <span class="version-tag">v{{ version }}</span></h3>
       <div class="sidebar-header-actions">
         <button class="mobile-close-btn" @click="$emit('close')" :aria-label="t('components.sessionSidebar.closeSidebar')">
           <PhX :size="18" weight="bold" />
@@ -565,8 +565,8 @@ let reviewSearchTimeout: ReturnType<typeof setTimeout> | undefined;
 const sidebarWidth = ref(280);
 const minSidebarWidth = 220;
 const maxSidebarWidth = 420;
-const storageKey = 'pi-webui-project-path';
-const agentProfileStorageKey = 'pi-webui-agent-profile';
+const storageKey = 'pi-cloud-project-path';
+const agentProfileStorageKey = 'pi-cloud-agent-profile';
 const version = import.meta.env.VITE_APP_VERSION || 'dev';
 const projectPathDisplay = computed(() => formatProjectPath(projectPath.value));
 const filteredProjectPathOptions = computed(() => {

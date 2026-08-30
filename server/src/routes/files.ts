@@ -121,7 +121,7 @@ function isLocalHostname(hostname: string): boolean {
 }
 
 function isSystemOpenExplicitlyEnabled(): boolean {
-  return parseBoolean(process.env.PI_WEBUI_ENABLE_SYSTEM_OPEN, false);
+  return parseBoolean(process.env.PI_CLOUD_ENABLE_SYSTEM_OPEN, false);
 }
 
 function openWithSystemTool(filePath: string): void {

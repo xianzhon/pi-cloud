@@ -34,31 +34,31 @@ function parsePositiveHours(value: string | undefined, name: string, defaultValu
 function defaultDbPath(env: NodeJS.ProcessEnv): string {
   const home = env.HOME || os.homedir();
   const configHome = env.XDG_CONFIG_HOME || path.join(home, '.config');
-  return path.join(configHome, 'pi-webui', 'pi-webui.sqlite');
+  return path.join(configHome, 'pi-cloud', 'pi-cloud.sqlite');
 }
 
 export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig {
-  const username = env.PI_WEBUI_AUTH_USERNAME?.trim();
+  const username = env.PI_CLOUD_AUTH_USERNAME?.trim();
   if (!username) {
-    throw new Error('PI_WEBUI_AUTH_USERNAME is required');
+    throw new Error('PI_CLOUD_AUTH_USERNAME is required');
   }
 
-  const passwordHash = env.PI_WEBUI_AUTH_PASSWORD_HASH?.trim();
-  const password = env.PI_WEBUI_AUTH_PASSWORD;
+  const passwordHash = env.PI_CLOUD_AUTH_PASSWORD_HASH?.trim();
+  const password = env.PI_CLOUD_AUTH_PASSWORD;
   if (!passwordHash && !password) {
-    throw new Error('PI_WEBUI_AUTH_PASSWORD_HASH or PI_WEBUI_AUTH_PASSWORD is required');
+    throw new Error('PI_CLOUD_AUTH_PASSWORD_HASH or PI_CLOUD_AUTH_PASSWORD is required');
   }
 
   return {
     username,
     password,
     passwordHash,
-    sessionTtlHours: parsePositiveHours(env.PI_WEBUI_SESSION_TTL_HOURS, 'PI_WEBUI_SESSION_TTL_HOURS', DEFAULT_SESSION_TTL_HOURS),
-    sessionMaxHours: parsePositiveHours(env.PI_WEBUI_SESSION_MAX_HOURS, 'PI_WEBUI_SESSION_MAX_HOURS', DEFAULT_SESSION_MAX_HOURS),
-    dbPath: env.PI_WEBUI_DB_PATH || defaultDbPath(env),
-    trustProxy: parseBoolean(env.PI_WEBUI_TRUST_PROXY),
+    sessionTtlHours: parsePositiveHours(env.PI_CLOUD_SESSION_TTL_HOURS, 'PI_CLOUD_SESSION_TTL_HOURS', DEFAULT_SESSION_TTL_HOURS),
+    sessionMaxHours: parsePositiveHours(env.PI_CLOUD_SESSION_MAX_HOURS, 'PI_CLOUD_SESSION_MAX_HOURS', DEFAULT_SESSION_MAX_HOURS),
+    dbPath: env.PI_CLOUD_DB_PATH || defaultDbPath(env),
+    trustProxy: parseBoolean(env.PI_CLOUD_TRUST_PROXY),
     skip2faVerify: parseBoolean(env.SKIP_2FA_VERIFY),
-    cookieSecure: parseBoolean(env.PI_WEBUI_COOKIE_SECURE),
-    cookieName: 'piui_session',
+    cookieSecure: parseBoolean(env.PI_CLOUD_COOKIE_SECURE),
+    cookieName: 'pi_cloud_session',
   };
 }

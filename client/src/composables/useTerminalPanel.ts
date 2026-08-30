@@ -41,8 +41,8 @@ type PanelMode = 'docked' | 'floating' | 'maximized'
 const MIN_HEIGHT = 140
 const MIN_WIDTH = 400
 const DEFAULT_HEIGHT = 300
-const HEIGHT_STORAGE_KEY = 'pi-webui-terminal-height'
-const FLOAT_STORAGE_KEY = 'pi-webui-terminal-float-rect-v2'
+const HEIGHT_STORAGE_KEY = 'pi-cloud-terminal-height'
+const FLOAT_STORAGE_KEY = 'pi-cloud-terminal-float-rect-v2'
 const DRAG_ACTIVATION_DISTANCE = 4
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
 

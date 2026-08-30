@@ -58,7 +58,7 @@ The task appears in the **Waiting** list.
 
 ## Starting a Task
 
-Click **Start** beside a task in the **Waiting** list. To launch it without replacing the current tab, click **Start in new tab** instead. Pi WebUI then:
+Click **Start** beside a task in the **Waiting** list. To launch it without replacing the current tab, click **Start in new tab** instead. Pi Cloud then:
 
 1. Changes the task from `waiting` to `starting` to prevent duplicate starts.
 2. Validates that the project directory, agent profile, model, and skills are still available.
@@ -72,7 +72,7 @@ If the prompt cannot be sent, the session remains available and the prompt stays
 
 ## Issues and Pull Requests
 
-Every task offers **Create issue** when GitHub or Gitea integration is configured for its project. Pi WebUI builds a draft from the task title, prompt, and private notes; you can edit the title and body or click **AI polish** before creating it. The resulting issue is linked from the task row.
+Every task offers **Create issue** when GitHub or Gitea integration is configured for its project. Pi Cloud builds a draft from the task title, prompt, and private notes; you can edit the title and body or click **AI polish** before creating it. The resulting issue is linked from the task row.
 
 When a pull request is created from the task's linked session, the task row shows the PR number and whether it is ready or merged. PR generation and creation also append `Close #<issue-number>` when the session belongs to a task with a linked issue.
 

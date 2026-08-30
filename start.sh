@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Pi WebUI Start Script
+# Pi Cloud Start Script
 # Starts both backend (Fastify) and frontend (Vite) servers
 
 set -e
@@ -172,7 +172,7 @@ start_client() {
 
 # Main
 echo "=========================================="
-echo "       Pi WebUI - Starting Servers"
+echo "       Pi Cloud - Starting Servers"
 echo "=========================================="
 echo ""
 

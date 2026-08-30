@@ -28,7 +28,7 @@ import { chatWebSocket } from './ws/chat.js';
 import { terminalWebSocket } from './ws/terminal.js';
 import { loadAuthConfig, type AuthConfig } from './config/auth.js';
 import { renderDefaultConfig } from './config/default-config.js';
-import { openPiuiDatabase, type PiuiDatabase } from './db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from './db/database.js';
 import { AuditLog } from './auth/audit.js';
 import { IpRateLimiter } from './auth/rate-limit.js';
 import { isAllowedCorsOrigin, isAllowedRequestOrigin } from './auth/origin.js';
@@ -68,7 +68,7 @@ const __dirname = path.dirname(__filename);
 loadEnv({ path: path.resolve(__dirname, '../../.env'), quiet: true });
 loadEnv({ path: path.resolve(process.cwd(), '.env'), quiet: true });
 const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
-const userConfigDir = path.join(configHome, 'pi-webui');
+const userConfigDir = path.join(configHome, 'pi-cloud');
 const userConfigPath = path.join(userConfigDir, '.env');
 loadEnv({ path: userConfigPath, quiet: true });
 
@@ -97,7 +97,7 @@ async function refreshPullRequestStatus(
 
 function createDefaultConfig(): void {
   if (process.env.NODE_ENV === 'test') return;
-  if (process.env.PI_WEBUI_AUTH_USERNAME || process.env.PI_WEBUI_AUTH_PASSWORD || process.env.PI_WEBUI_AUTH_PASSWORD_HASH) return;
+  if (process.env.PI_CLOUD_AUTH_USERNAME || process.env.PI_CLOUD_AUTH_PASSWORD || process.env.PI_CLOUD_AUTH_PASSWORD_HASH) return;
 
   const username = 'admin';
   const password = randomBytes(6).toString('base64url');
@@ -108,7 +108,7 @@ function createDefaultConfig(): void {
   try {
     writeFileSync(userConfigPath, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     console.log(`Created default configuration at ${userConfigPath}`);
-    console.log(`Pi WebUI login: ${username} / ${password}`);
+    console.log(`Pi Cloud login: ${username} / ${password}`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
   }
@@ -149,7 +149,7 @@ const port = parsePort(process.env.PORT);
 
 interface AuthServices {
   authConfig: AuthConfig;
-  db: PiuiDatabase;
+  db: PiCloudDatabase;
   audit: AuditLog;
   sessions: SessionStore;
   totp: TotpService;
@@ -185,7 +185,7 @@ function isSpaRoute(req: { method: string; url: string }): boolean {
   return true;
 }
 
-function getSecuritySetting(db: PiuiDatabase, key: string): string {
+function getSecuritySetting(db: PiCloudDatabase, key: string): string {
   const row = db.prepare('SELECT value FROM security_settings WHERE key = ?').get(key) as { value: string } | undefined;
   return row?.value || '';
 }
@@ -218,7 +218,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   const authConfig = loadAuthConfig();
-  const db = openPiuiDatabase(authConfig.dbPath);
+  const db = openPiCloudDatabase(authConfig.dbPath);
   const worktreeMetadataStore = new WorktreeMetadataStore(db);
   // The memory runtime resolves profiles lazily, after the paired session service is constructed.
   let piSessionService: PiSessionService;
@@ -278,7 +278,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   const audit = new AuditLog(db);
   const sessions = new SessionStore(db, authConfig.cookieName);
-  const totp = new TotpService(db, 'Pi WebUI', authConfig.username);
+  const totp = new TotpService(db, 'Pi Cloud', authConfig.username);
   const rateLimiter = new IpRateLimiter({ maxFailures: 5, windowMs: 15 * 60 * 1000 });
   app.decorate('authServices', { authConfig, db, audit, sessions, totp, rateLimiter });
   app.decorate('memoryRuntime', memoryRuntime);
@@ -415,7 +415,7 @@ export async function startServer(): Promise<FastifyInstance> {
 }
 
 // The npm CLI imports this module to start the server and report its bound URL.
-if (process.env.NODE_ENV !== 'test' && process.env.PI_WEBUI_CLI_IMPORT !== '1') {
+if (process.env.NODE_ENV !== 'test' && process.env.PI_CLOUD_CLI_IMPORT !== '1') {
   startServer().catch((err) => {
     console.error(err);
     process.exit(1);

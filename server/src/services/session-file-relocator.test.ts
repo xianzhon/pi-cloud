@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { SessionFileRelocator } from './session-file-relocator.js';
 
 async function makeTempDir() {
-  return mkdtemp(join(tmpdir(), 'piui-relocator-'));
+  return mkdtemp(join(tmpdir(), 'pi-cloud-relocator-'));
 }
 
 function jsonl(records: unknown[]) {

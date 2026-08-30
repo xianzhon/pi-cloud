@@ -85,7 +85,7 @@ describe('TaskEditorDialog', () => {
   });
 
   it('uses the cached skillset selection for a new task', async () => {
-    localStorage.setItem('pi-webui.newSessionOptions:/repo/app', JSON.stringify({
+    localStorage.setItem('pi-cloud.newSessionOptions:/repo/app', JSON.stringify({
       mode: 'preset',
       selectedPresetId: 'preset-1',
     }));

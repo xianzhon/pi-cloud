@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { openPiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase } from '../db/database.js';
 import { reviewSourceRoutes } from './review-sources.js';
 import { ReviewSourceService } from '../services/review-source-service.js';
 import { ReviewSourceStore } from '../services/review-source-store.js';
@@ -20,9 +20,9 @@ describe('review source routes', () => {
   let app: ReturnType<typeof Fastify>;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(path.join(tmpdir(), 'pi-webui-review-routes-'));
-    dbPath = path.join(tempDir, 'piui.db');
-    db = openPiuiDatabase(dbPath);
+    tempDir = await mkdtemp(path.join(tmpdir(), 'pi-cloud-review-routes-'));
+    dbPath = path.join(tempDir, 'pi-cloud.db');
+    db = openPiCloudDatabase(dbPath);
     store = new ReviewSourceStore(db, []);
     service = new ReviewSourceService(store);
     pinStore = new SessionPinStore(db);

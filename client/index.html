@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Pi WebUI</title>
+  <title>Pi Cloud</title>
   <script>
     (function() {
       try {
-        var pref = localStorage.getItem('piui.theme') || 'system';
+        var pref = localStorage.getItem('pi-cloud.theme') || 'system';
         var theme = pref;
         if (theme !== 'dark' && theme !== 'light') {
           theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -33,7 +33,7 @@
 
   <!-- Theme color -->
   <meta name="theme-color" content="#6c8cff">
-  <meta name="description" content="Pi WebUI - Web interface for Pi Coding Agent">
+  <meta name="description" content="Pi Cloud - Web interface for Pi Coding Agent">
 </head>
 <body>
   <div id="app"></div>

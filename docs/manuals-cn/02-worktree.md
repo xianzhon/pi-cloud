@@ -86,7 +86,7 @@ WebUI 托管的 worktree 默认放在原仓库同级目录下，目录名形如�
 例如原仓库是：
 
 ```text
-/Users/me/code/pi-webui
+/Users/me/code/pi-cloud
 ```
 
 分支是：
@@ -98,7 +98,7 @@ feat/worktree-manual
 则托管目录可能是：
 
 ```text
-/Users/me/code/.pi-webui-worktrees/feat-worktree-manual
+/Users/me/code/.pi-cloud-worktrees/feat-worktree-manual
 ```
 
 其中分支名中的特殊字符会被转换成适合目录名的形式。

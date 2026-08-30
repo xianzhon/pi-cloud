@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 import { normalizeServerUrl } from './gitea-settings-store';
 
 export interface GithubSettings {
@@ -19,7 +19,7 @@ const PROXY_URL_KEY = 'github.proxyUrl';
 const DEFAULT_SERVER_URL = 'https://github.com';
 
 export class GithubSettingsStore {
-  constructor(private readonly db: PiuiDatabase) {}
+  constructor(private readonly db: PiCloudDatabase) {}
 
   get(): GithubSettings {
     return {

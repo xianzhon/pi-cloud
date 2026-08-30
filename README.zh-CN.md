@@ -1,4 +1,4 @@
-# Pi WebUI
+# Pi Cloud
 
 [English](README.md) | 简体中文
 
@@ -6,9 +6,9 @@
 
 | 深色主题                                                           | 浅色主题                                                            |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| ![Pi WebUI 深色主题主窗口](docs/images/main-window-dark-theme.png) | ![Pi WebUI 浅色主题主窗口](docs/images/main-window-white-theme.png) |
+| ![Pi Cloud 深色主题主窗口](docs/images/main-window-dark-theme.png) | ![Pi Cloud 浅色主题主窗口](docs/images/main-window-white-theme.png) |
 
-**[▶ 观看 Pi WebUI 完成 Git 缺陷修复工作流](https://xianzhon.github.io/pi-webui-website/assets/videos/demo-git-bugfix-workflow.mp4)**
+**[▶ 观看 Pi Cloud 完成 Git 缺陷修复工作流](https://xianzhon.github.io/pi-cloud-website/assets/videos/demo-git-bugfix-workflow.mp4)**
 
 ## 功能特性
 
@@ -32,9 +32,9 @@
 - Node.js 22 或更高版本
 - pnpm 9 或更高版本（仅从源码开发时需要）
 
-Pi WebUI 已包含 [Pi 编程智能体](http://pi.dev)，因此使用 API 密钥进行身份验证时无需单独安装 `pi`。API 密钥可以在 Agent 配置对话框中设置。
+Pi Cloud 已包含 [Pi 编程智能体](http://pi.dev)，因此使用 API 密钥进行身份验证时无需单独安装 `pi`。API 密钥可以在 Agent 配置对话框中设置。
 
-WebUI 目前尚不支持 OAuth 订阅登录；原生 OAuth 支持已列为未来改进计划。现阶段若要使用 OAuth，请安装独立的 Pi CLI，并以运行 Pi WebUI 的同一操作系统用户在终端中完成 `/login`：
+WebUI 目前尚不支持 OAuth 订阅登录；原生 OAuth 支持已列为未来改进计划。现阶段若要使用 OAuth，请安装独立的 Pi CLI，并以运行 Pi Cloud 的同一操作系统用户在终端中完成 `/login`：
 
 ```bash
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
@@ -42,7 +42,7 @@ pi
 # 输入 /login 并选择提供商
 ```
 
-之后，Pi WebUI 会检测默认 `~/.pi/agent` 配置中存储的 OAuth 凭据。
+之后，Pi Cloud 会检测默认 `~/.pi/agent` 配置中存储的 OAuth 凭据。
 
 ### 无需安装直接运行
 
@@ -51,7 +51,7 @@ pi
 设置登录凭据，然后运行最新版本：
 
 ```bash
-PI_WEBUI_AUTH_USERNAME=pi PI_WEBUI_AUTH_PASSWORD='change-this-password' npx @xianzhon/pi-webui@latest
+PI_CLOUD_AUTH_USERNAME=pi PI_CLOUD_AUTH_PASSWORD='change-this-password' npx pi-cloud@latest
 ```
 
 打开 http://127.0.0.1:3000。服务器准备就绪后，CLI 会自动打开浏览器。
@@ -59,31 +59,31 @@ PI_WEBUI_AUTH_USERNAME=pi PI_WEBUI_AUTH_PASSWORD='change-this-password' npx @xia
 ### 全局安装
 
 ```bash
-npm install -g @xianzhon/pi-webui
-pi-webui
+npm install -g pi-cloud
+pi-cloud
 ```
 
-首次运行时，Pi WebUI 会创建受保护的配置文件，用户名默认为 `admin`，并仅显示一次随机生成的密码。
+首次运行时，Pi Cloud 会创建受保护的配置文件，用户名默认为 `admin`，并仅显示一次随机生成的密码。
 
 请参阅[配置手册](docs/manuals-cn/configuration.md)，了解如何自定义凭据、端口和其他设置。如需远程或公网访问，请参阅[部署手册](docs/manuals-cn/deployment.md)。
 
 ### 作为系统服务运行
 
-在 Linux、macOS 或 Windows 上将 Pi WebUI 安装为开机启动服务：
+在 Linux、macOS 或 Windows 上将 Pi Cloud 安装为开机启动服务：
 
 ```bash
-pi-webui service install
-pi-webui service status
+pi-cloud service install
+pi-cloud service status
 ```
 
-在 Windows 上，防病毒软件可能会阻止 `pi-webui service install`，因为该命令会创建自动启动的计划任务。允许前请核对防病毒软件的检测内容；请勿禁用防病毒软件，也不要排除整个 npm 目录。
+在 Windows 上，防病毒软件可能会阻止 `pi-cloud service install`，因为该命令会创建自动启动的计划任务。允许前请核对防病毒软件的检测内容；请勿禁用防病毒软件，也不要排除整个 npm 目录。
 
 ### 从源码运行
 
 ```bash
-git clone https://github.com/xianzhon/pi-webui && cd pi-webui
+git clone https://github.com/xianzhon/pi-cloud && cd pi-cloud
 pnpm install
-cp .env.example .env    # 设置 PI_WEBUI_AUTH_USERNAME 和 PI_WEBUI_AUTH_PASSWORD
+cp .env.example .env    # 设置 PI_CLOUD_AUTH_USERNAME 和 PI_CLOUD_AUTH_PASSWORD
 pnpm dev
 ```
 
@@ -95,12 +95,12 @@ pnpm dev
 
 | 变量                       | 说明                              |
 | -------------------------- | --------------------------------- |
-| `PI_WEBUI_AUTH_USERNAME` | 登录用户名                        |
-| `PI_WEBUI_AUTH_PASSWORD` | 简单部署所使用的登录密码          |
+| `PI_CLOUD_AUTH_USERNAME` | 登录用户名                        |
+| `PI_CLOUD_AUTH_PASSWORD` | 简单部署所使用的登录密码          |
 | `PORT`                   | 后端端口（默认值：`3000`）      |
 | `HOST`                   | 绑定地址（默认值：`127.0.0.1`） |
 
-生产环境中，请使用 `PI_WEBUI_AUTH_PASSWORD_HASH`，而不是明文密码。有关配置文件、安全、会话、存储、工作区、记忆、提供商和网关设置，请参阅[配置手册](docs/manuals-cn/configuration.md)。
+生产环境中，请使用 `PI_CLOUD_AUTH_PASSWORD_HASH`，而不是明文密码。有关配置文件、安全、会话、存储、工作区、记忆、提供商和网关设置，请参阅[配置手册](docs/manuals-cn/configuration.md)。
 
 ## 部署
 

@@ -7,7 +7,7 @@ import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const completeSimpleMock = vi.hoisted(() => vi.fn());
-const ORIGINAL_ALLOWED_ROOTS = process.env.PI_WEBUI_ALLOWED_ROOTS;
+const ORIGINAL_ALLOWED_ROOTS = process.env.PI_CLOUD_ALLOWED_ROOTS;
 
 const modelRegistryFindMock = vi.hoisted(() => vi.fn(() => ({ provider: 'mock', id: 'automation-model', api: 'mock-api' })));
 const modelRegistryGetAvailableMock = vi.hoisted(() => vi.fn(() => [{ provider: 'fallback', id: 'first-model', api: 'mock-api' }]));
@@ -43,7 +43,7 @@ async function git(cwd: string, ...args: string[]) {
 }
 
 async function createRepo() {
-  const cwd = await mkdtemp(join(tmpdir(), 'piui-git-route-'));
+  const cwd = await mkdtemp(join(tmpdir(), 'pi-cloud-git-route-'));
   await git(cwd, 'init');
   await git(cwd, 'config', 'user.email', 'test@example.com');
   await git(cwd, 'config', 'user.name', 'Test User');
@@ -61,23 +61,23 @@ async function buildApp(options: GitRouteOptions = {}) {
 }
 
 beforeEach(() => {
-  process.env.PI_WEBUI_ALLOWED_ROOTS = tmpdir();
+  process.env.PI_CLOUD_ALLOWED_ROOTS = tmpdir();
 });
 
 afterEach(() => {
   if (ORIGINAL_ALLOWED_ROOTS === undefined) {
-    delete process.env.PI_WEBUI_ALLOWED_ROOTS;
+    delete process.env.PI_CLOUD_ALLOWED_ROOTS;
   } else {
-    process.env.PI_WEBUI_ALLOWED_ROOTS = ORIGINAL_ALLOWED_ROOTS;
+    process.env.PI_CLOUD_ALLOWED_ROOTS = ORIGINAL_ALLOWED_ROOTS;
   }
 });
 
 describe('gitRoutes status and diff', () => {
   it('rejects git operations outside configured allowed roots', async () => {
-    const allowedRoot = await mkdtemp(join(tmpdir(), 'piui-git-allowed-'));
+    const allowedRoot = await mkdtemp(join(tmpdir(), 'pi-cloud-git-allowed-'));
     const cwd = await createRepo();
     const app = await buildApp();
-    process.env.PI_WEBUI_ALLOWED_ROOTS = allowedRoot;
+    process.env.PI_CLOUD_ALLOWED_ROOTS = allowedRoot;
 
     try {
       const response = await app.inject({
@@ -95,7 +95,7 @@ describe('gitRoutes status and diff', () => {
   });
 
   it('reports a non-Git directory as an expected empty state', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'piui-non-git-route-'));
+    const cwd = await mkdtemp(join(tmpdir(), 'pi-cloud-non-git-route-'));
     const app = await buildApp();
 
     try {
@@ -710,7 +710,7 @@ describe('gitRoutes history', () => {
 
   it('uses HEAD as the branch label when detached and handles an empty repository', async () => {
     const cwd = await createRepo();
-    const emptyCwd = await mkdtemp(join(tmpdir(), 'piui-git-empty-'));
+    const emptyCwd = await mkdtemp(join(tmpdir(), 'pi-cloud-git-empty-'));
     const app = await buildApp();
     try {
       await git(cwd, 'checkout', '--detach');

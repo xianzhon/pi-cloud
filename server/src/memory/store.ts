@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { PiuiDatabase } from '../db/database.js';
+import type { PiCloudDatabase } from '../db/database.js';
 import type {
   CreateMemoryInput,
   EnqueueExtractionRunInput,
@@ -98,7 +98,7 @@ interface CountRow {
 }
 
 export class MemoryStore {
-  constructor(private readonly db: PiuiDatabase) {}
+  constructor(private readonly db: PiCloudDatabase) {}
 
   isAutoExtractionEnabled(): boolean {
     const row = this.db.prepare('SELECT value FROM security_settings WHERE key = ?').get('memory.autoExtract') as { value: string } | undefined;

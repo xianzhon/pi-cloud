@@ -3,18 +3,18 @@ import * as os from 'os';
 import * as path from 'path';
 import { generateSync, verifySync } from 'otplib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database';
 import { TotpService } from './totp';
 
 describe('TotpService', () => {
   let tempDir: string;
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let totp: TotpService;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-totp-'));
-    db = openPiuiDatabase(path.join(tempDir, 'piui.sqlite'));
-    totp = new TotpService(db, 'Pi WebUI', 'me');
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-totp-'));
+    db = openPiCloudDatabase(path.join(tempDir, 'pi-cloud.sqlite'));
+    totp = new TotpService(db, 'Pi Cloud', 'me');
   });
 
   afterEach(async () => {

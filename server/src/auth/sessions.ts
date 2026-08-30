@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'crypto';
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 
 const HOURS_TO_MS = 60 * 60 * 1000;
 const RENEWAL_THRESHOLD_FRACTION = 0.5;
@@ -25,7 +25,7 @@ export interface CreateSessionInput {
 }
 
 export class SessionStore {
-  constructor(private db: PiuiDatabase, private cookieName: string) {}
+  constructor(private db: PiCloudDatabase, private cookieName: string) {}
 
   createSession(input: CreateSessionInput): { cookieName: string; token: string; expiresAt: Date } {
     const token = randomBytes(32).toString('hex');

@@ -1,4 +1,4 @@
-# Pi WebUI development and source deployment commands
+# Pi Cloud development and source deployment commands
 
 .PHONY: build test package clean deploy start status stop restart
 
@@ -16,7 +16,7 @@ package: build test
 	$(NPM) pack
 
 clean:
-	rm -f pi-webui-*.tgz
+	rm -f pi-cloud-*.tgz
 
 start:
 	./start.sh

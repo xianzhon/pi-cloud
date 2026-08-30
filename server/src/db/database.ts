@@ -3,9 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { runDatabaseMigrations } from './migrations/index.js';
 
-export type PiuiDatabase = Database.Database;
+export type PiCloudDatabase = Database.Database;
 
-export function openPiuiDatabase(dbPath: string): PiuiDatabase {
+export function openPiCloudDatabase(dbPath: string): PiCloudDatabase {
   const isPersistent = dbPath !== ':memory:';
 
   if (isPersistent) {
@@ -15,7 +15,7 @@ export function openPiuiDatabase(dbPath: string): PiuiDatabase {
   // SQLite creates the database and journal sidecars using the process umask.
   // Restrict creation before any credentials or TOTP secrets can be persisted.
   const previousUmask = process.umask(0o077);
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   try {
     db = new Database(dbPath);
   } finally {

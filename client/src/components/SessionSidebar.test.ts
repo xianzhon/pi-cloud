@@ -129,7 +129,7 @@ describe('SessionSidebar', () => {
   });
 
   it('restores the tab-saved agent profile instead of reusing another tab selection', async () => {
-    sessionStorage.setItem('pi-webui-agent-profile', 'work');
+    sessionStorage.setItem('pi-cloud-agent-profile', 'work');
     mockFetchWithNoSessions();
     const wrapper = mountSidebar();
 
@@ -146,8 +146,8 @@ describe('SessionSidebar', () => {
 
   it('uses the profile and project query parameters before tab-saved values when opening a session URL', async () => {
     window.history.replaceState(null, '', '/sessions/session-1?profile=work&project=%2Fworkspace%2Fapp');
-    sessionStorage.setItem('pi-webui-agent-profile', 'default');
-    sessionStorage.setItem('pi-webui-project-path', '/saved/project');
+    sessionStorage.setItem('pi-cloud-agent-profile', 'default');
+    sessionStorage.setItem('pi-cloud-project-path', '/saved/project');
     mockFetchWithNoSessions(['/workspace/app', '/saved/project']);
     const wrapper = mountSidebar();
 
@@ -189,7 +189,7 @@ describe('SessionSidebar', () => {
       expect(wrapper.emitted('agentProfileChanged')?.at(-1)).toEqual(['work']);
       expect(wrapper.text()).toContain('openai / gpt-4.1');
     });
-    expect(sessionStorage.getItem('pi-webui-agent-profile')).toBe('work');
+    expect(sessionStorage.getItem('pi-cloud-agent-profile')).toBe('work');
   });
 
   it('loads review-source project paths when selecting a review source', async () => {
@@ -286,7 +286,7 @@ describe('SessionSidebar', () => {
       expect((wrapper.find('.project-path-input').element as HTMLInputElement).value).toBe('/project');
     });
 
-    expect(wrapper.find('.sidebar-header').text()).toContain('Pi WebUI');
+    expect(wrapper.find('.sidebar-header').text()).toContain('Pi Cloud');
     expect(wrapper.find('.new-session-btn').exists()).toBe(false);
   });
 
@@ -506,7 +506,7 @@ describe('SessionSidebar', () => {
   });
 
   it('records project access in the database and ignores legacy local MRU data', async () => {
-    localStorage.setItem('pi-webui-project-path-mru:default', JSON.stringify({
+    localStorage.setItem('pi-cloud-project-path-mru:default', JSON.stringify({
       updatedAt: Date.now(),
       paths: ['/workspace/api'],
     }));
@@ -519,7 +519,7 @@ describe('SessionSidebar', () => {
       method: 'POST',
       body: JSON.stringify({ clientId: 'client-1', projectPath: '/home/alice/work/app' }),
     })));
-    expect(localStorage.getItem('pi-webui-project-path-mru:default')).toContain('/workspace/api');
+    expect(localStorage.getItem('pi-cloud-project-path-mru:default')).toContain('/workspace/api');
 
     await wrapper.find('.project-path-input').trigger('focus');
     await vi.waitFor(() => expect(wrapper.findAll('.recent-project-option')[0].text()).toBe('~/work/app'));
@@ -1014,7 +1014,7 @@ describe('SessionSidebar', () => {
     mockFetchWithNoSessions();
     const wrapper = mountSidebar();
 
-    await vi.waitFor(() => expect(wrapper.find('.sidebar-header h3').text()).toContain('Pi WebUI'));
+    await vi.waitFor(() => expect(wrapper.find('.sidebar-header h3').text()).toContain('Pi Cloud'));
     expect(wrapper.find('.sidebar-mode-toggle').exists()).toBe(false);
   });
 
@@ -1156,7 +1156,7 @@ describe('SessionSidebar', () => {
       method: 'POST',
       body: JSON.stringify({ clientId: 'client-1', projectPath: '/Users/test/git/github/acme/tool' }),
     }));
-    expect(localStorage.getItem('pi-webui-project-path-mru:default')).toBeNull();
+    expect(localStorage.getItem('pi-cloud-project-path-mru:default')).toBeNull();
   });
 
   it('renders pinned sessions in collapsible groups and creates groups', async () => {

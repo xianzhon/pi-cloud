@@ -153,7 +153,7 @@ function buildExportHtml(options: ExportSessionPdfOptions, exportDate: Date): st
   return `
     <section class="pdf-export-root">
       <header class="pdf-document-header">
-        <p class="pdf-eyebrow">Pi WebUI transcript</p>
+        <p class="pdf-eyebrow">Pi Cloud transcript</p>
         <h1>${escapeHtml(title)}</h1>
         <dl>
           <div><dt>Exported</dt><dd>${escapeHtml(exportedAt)}</dd></div>

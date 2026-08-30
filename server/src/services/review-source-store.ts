@@ -1,6 +1,6 @@
 import * as os from 'os';
 import * as path from 'path';
-import type { PiuiDatabase } from '../db/database.js';
+import type { PiCloudDatabase } from '../db/database.js';
 import type { CreateReviewSourceRequest, ReviewSource } from '../types.js';
 import { reviewSourceProviders, type ReviewSourceProvider } from './review-source-providers.js';
 
@@ -30,7 +30,7 @@ export class ReviewSourceStore {
   private autoDetectedIds = new Set<string>();
 
   constructor(
-    private db: PiuiDatabase,
+    private db: PiCloudDatabase,
     private providers: ReviewSourceProvider[] = reviewSourceProviders,
   ) {
     this.ensureDefaultSources();

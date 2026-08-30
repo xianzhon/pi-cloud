@@ -60,7 +60,7 @@ Task Queue 用来把“以后要让 Pi 做的事”先保存成任务，再在�
 
 ## 启动任务
 
-在 **Waiting** 列表中点击任务右侧的 **Start**。如果不想替换当前标签页，请改用 **Start in new tab**。随后 Pi WebUI 会：
+在 **Waiting** 列表中点击任务右侧的 **Start**。如果不想替换当前标签页，请改用 **Start in new tab**。随后 Pi Cloud 会：
 
 1. 后端先把任务从 `waiting` 标记为 `starting`，防止重复启动。
 2. 校验项目目录、Agent Profile、模型和技能是否仍然可用。
@@ -74,7 +74,7 @@ Task Queue 用来把“以后要让 Pi 做的事”先保存成任务，再在�
 
 ## Issue 和拉取请求
 
-为任务所属项目配置 GitHub 或 Gitea 集成后，每个任务都会提供 **Create issue**。Pi WebUI 会根据任务标题、Prompt 和私有备注生成草稿；创建前可以编辑标题和正文，也可以点击 **AI polish**。创建后的 issue 会显示在任务行中。
+为任务所属项目配置 GitHub 或 Gitea 集成后，每个任务都会提供 **Create issue**。Pi Cloud 会根据任务标题、Prompt 和私有备注生成草稿；创建前可以编辑标题和正文，也可以点击 **AI polish**。创建后的 issue 会显示在任务行中。
 
 从任务关联的会话创建拉取请求后，任务行会显示 PR 编号及其是否就绪或已合并。为关联了 issue 的任务生成和创建 PR 时，正文还会追加 `Close #<issue-number>`。
 

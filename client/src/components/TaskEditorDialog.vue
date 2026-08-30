@@ -154,7 +154,7 @@ const loadingResources = ref(false);
 const error = ref('');
 const polishingTask = ref(false);
 const showFolderPicker = ref(false);
-const STORAGE_KEY = 'pi-webui.newSessionOptions';
+const STORAGE_KEY = 'pi-cloud.newSessionOptions';
 
 type StoredSkillOptions = {
   mode?: SessionLaunchValue['skillSelection'];

@@ -1,10 +1,10 @@
-# Project Skills in Pi WebUI
+# Project Skills in Pi Cloud
 
-Project skills let a repository provide task-specific instructions that are available when you start a Pi WebUI session in that repository.
+Project skills let a repository provide task-specific instructions that are available when you start a Pi Cloud session in that repository.
 
-## Where Pi WebUI looks for project skills
+## Where Pi Cloud looks for project skills
 
-Pi WebUI uses the same skill discovery as the Pi coding agent. For a selected project directory, project skills are discovered from:
+Pi Cloud uses the same skill discovery as the Pi coding agent. For a selected project directory, project skills are discovered from:
 
 - `.pi/skills/` in the selected project directory
 - `.agents/skills/` in the selected project directory and its ancestor directories, up to the Git repository root
@@ -53,7 +53,7 @@ my-project/
             └── SKILL.md
 ```
 
-Pi WebUI also checks `.agents/skills/` in ancestor directories up to the Git repository root. This is useful for monorepos where several packages share the same skills.
+Pi Cloud also checks `.agents/skills/` in ancestor directories up to the Git repository root. This is useful for monorepos where several packages share the same skills.
 
 ## Option 3: Keep an existing `skills/` directory
 
@@ -102,15 +102,15 @@ Rules to remember:
 - The description should be specific, because the agent uses it to decide when to load the skill.
 - Extra scripts or reference files can live beside `SKILL.md`; refer to them with paths relative to the skill directory.
 
-## Using the skill in Pi WebUI
+## Using the skill in Pi Cloud
 
 1. Put the skill under one of the supported locations above.
-2. In Pi WebUI, select the project directory in the sidebar or when creating a new session.
+2. In Pi Cloud, select the project directory in the sidebar or when creating a new session.
 3. Open **New session**.
 4. In the skill selector, confirm the project skill appears.
 5. Start the session.
 
-If Pi WebUI is already open and the skill list looks stale, use the launch-cache clear action if available, or refresh the page. If the backend was running before you added project trust/settings changes, restart it manually.
+If Pi Cloud is already open and the skill list looks stale, use the launch-cache clear action if available, or refresh the page. If the backend was running before you added project trust/settings changes, restart it manually.
 
 ## Troubleshooting
 
@@ -128,13 +128,13 @@ Check these common causes:
 
 ### Do I need `.skills_store_lock.json`?
 
-No. `.skills_store_lock.json` is metadata used by skill-store tooling. Pi WebUI does not require a manually-created skill to be registered there.
+No. `.skills_store_lock.json` is metadata used by skill-store tooling. Pi Cloud does not require a manually-created skill to be registered there.
 
 If a skill installed from a store appears but a manually-created skill does not, compare their `SKILL.md` files first. Store-installed skills usually include valid frontmatter; a hand-written skill that starts directly with `# Title` will not be discovered.
 
 ### I can see global skills but not project skills
 
-Make sure the new session is being opened for the intended project path, not for the Pi WebUI repository or your home directory. Project skill discovery depends on the session cwd.
+Make sure the new session is being opened for the intended project path, not for the Pi Cloud repository or your home directory. Project skill discovery depends on the session cwd.
 
 ### Which layout should I choose?
 

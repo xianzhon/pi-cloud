@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database.js';
 import { LEGACY_MEMORY_POLICY } from './policy.js';
 import { MemoryProjectResolver } from './project-resolver.js';
 import { MemoryService } from './service.js';
@@ -7,14 +7,14 @@ import { MemoryStore } from './store.js';
 import type { MemoryContext } from './types.js';
 
 describe('MemoryService', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let store: MemoryStore;
   let service: MemoryService;
   let resolver: MemoryProjectResolver;
   let context: MemoryContext;
 
   beforeEach(() => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     store = new MemoryStore(db);
     resolver = new MemoryProjectResolver(store, { get: () => null });
     service = new MemoryService(store, resolver);

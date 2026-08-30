@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../database.js';
+import type { PiCloudDatabase } from '../database.js';
 import { applicationSchemaMigration } from './001-application-schema.js';
 import { gatewaySchemaMigration } from './002-gateway-schema.js';
 import { projectHistorySchemaMigration } from './003-project-history-schema.js';
@@ -10,7 +10,7 @@ const migrations: DatabaseMigration[] = [
   projectHistorySchemaMigration,
 ];
 
-export function runDatabaseMigrations(db: PiuiDatabase): void {
+export function runDatabaseMigrations(db: PiCloudDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY,

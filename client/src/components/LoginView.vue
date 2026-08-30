@@ -6,7 +6,7 @@
           <img src="/icon.svg" alt="" />
         </span>
         <div>
-          <h1>Pi WebUI</h1>
+          <h1>Pi Cloud</h1>
           <p class="login-subtitle">{{ t('components.loginView.signInToContinue') }}</p>
         </div>
       </div>

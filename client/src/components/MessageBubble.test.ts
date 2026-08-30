@@ -663,7 +663,7 @@ describe('MessageBubble', () => {
   });
 
   it('truncates long bash tool call commands in the header only', () => {
-    const command = 'cd /workspace/pi-webui && tea pr create --help 2>&1 && pnpm test:run MessageBubble.test.ts -- --reporter verbose --coverage.enabled false';
+    const command = 'cd /workspace/pi-cloud && tea pr create --help 2>&1 && pnpm test:run MessageBubble.test.ts -- --reporter verbose --coverage.enabled false';
     const toolInput = JSON.stringify({ command }, null, 2);
 
     const wrapper = mount(MessageBubble, {
@@ -689,7 +689,7 @@ describe('MessageBubble', () => {
   });
 
   it('shows Codex exec commands only in the event header', () => {
-    const toolInput = JSON.stringify({ cmd: 'git status --short', workdir: '/workspace/pi-webui' }, null, 2);
+    const toolInput = JSON.stringify({ cmd: 'git status --short', workdir: '/workspace/pi-cloud' }, null, 2);
     const wrapper = mount(MessageBubble, {
       props: {
         message: {

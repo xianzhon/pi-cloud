@@ -1,7 +1,7 @@
-import type { PiuiDatabase } from '../database.js';
+import type { PiCloudDatabase } from '../database.js';
 
 export interface DatabaseMigration {
   version: number;
   name: string;
-  up(db: PiuiDatabase): void;
+  up(db: PiCloudDatabase): void;
 }

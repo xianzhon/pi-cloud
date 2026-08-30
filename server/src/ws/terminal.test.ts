@@ -58,14 +58,14 @@ describe('terminal websocket', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-terminal-'));
-    process.env.PI_WEBUI_ALLOWED_ROOTS = tempDir;
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-terminal-'));
+    process.env.PI_CLOUD_ALLOWED_ROOTS = tempDir;
     mocks.create.mockReturnValue(mocks.terminal);
     vi.clearAllMocks();
   });
 
   afterEach(async () => {
-    delete process.env.PI_WEBUI_ALLOWED_ROOTS;
+    delete process.env.PI_CLOUD_ALLOWED_ROOTS;
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -80,7 +80,7 @@ describe('terminal websocket', () => {
   });
 
   it('rejects cwd outside the configured allowed roots', async () => {
-    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-terminal-outside-'));
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-terminal-outside-'));
 
     try {
       const socket = await openSocket(outsideDir);

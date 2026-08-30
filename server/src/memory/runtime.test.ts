@@ -1,16 +1,16 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database.js';
 import { MemoryStore } from './store.js';
 import { MEMORY_UPDATED_EVENT, createMemoryRuntime } from './runtime.js';
 import type { MemoryUpdatedEvent } from './types.js';
 
 describe('MemoryRuntime', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let events: EventEmitter;
 
   beforeEach(() => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     events = new EventEmitter();
   });
 
@@ -35,7 +35,7 @@ describe('MemoryRuntime', () => {
     runtime.start();
 
     const extension = runtime.createExtension({ profileId: 'default', cwd: '/repo/app' });
-    expect(typeof extension === 'function' ? undefined : extension.name).toBe('webui-memory');
+    expect(typeof extension === 'function' ? undefined : extension.name).toBe('pi-cloud-memory');
     await expect(runtime.withForeground('default', async () => 'done')).resolves.toBe('done');
 
     await runtime.stop();

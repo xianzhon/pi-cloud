@@ -1,6 +1,6 @@
 import type { SessionEntry } from '@earendil-works/pi-coding-agent';
 import { readFileSync } from 'node:fs';
-import { openPiuiDatabase } from '../../db/database.js';
+import { openPiCloudDatabase } from '../../db/database.js';
 import { evaluateDurableSignal } from '../extraction-gate.js';
 import { buildExtractionSource, type ExtractionEvidence, type ExtractionSource } from '../extraction-format.js';
 import { ADAPTIVE_MEMORY_POLICY, LEGACY_MEMORY_POLICY } from '../policy.js';
@@ -162,7 +162,7 @@ function buildFixtureExtractionSource(fixture: ExtractionFixture): ExtractionSou
 }
 
 function evaluateRecallFixture(fixture: RecallFixture): MemoryEvaluationReport['recallCases'][number] {
-  const db = openPiuiDatabase(':memory:');
+  const db = openPiCloudDatabase(':memory:');
   try {
     const store = new MemoryStore(db);
     const project = store.getOrCreateProject('default', '/fixture/project');

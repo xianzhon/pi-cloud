@@ -1,19 +1,19 @@
 import { ref } from 'vue';
 
-const SHOW_HINT_INFO_KEY = 'pi-webui.showHintInfo';
-const SHOW_CODE_BLOCK_LANGUAGE_HEADERS_KEY = 'pi-webui.showCodeBlockLanguageHeaders';
-const STREAMING_MESSAGE_BEHAVIOR_KEY = 'pi-webui.streamingMessageBehavior';
-const EDITOR_AUTO_REFRESH_KEY = 'pi-webui.editorAutoRefresh';
-const CONFIRM_SESSION_DELETE_KEY = 'pi-webui.confirmSessionDelete';
-const NEW_SESSION_SHORTCUT_KEY = 'pi-webui.newSessionShortcut';
-const FULLSCREEN_SHORTCUT_KEY = 'pi-webui.fullscreenShortcut';
-const SHOW_GO_TO_TOP_BUTTON_KEY = 'pi-webui.showGoToTopButton';
-const SHOW_CHAT_VIEW_OPTIONS_BUTTON_KEY = 'pi-webui.showChatViewOptionsButton';
-const AUTO_EXTRACT_MEMORY_KEY = 'pi-webui.autoExtractMemory';
-const THEME_KEY = 'pi-webui.theme';
-const LANGUAGE_KEY = 'pi-webui.language';
-const SOUND_NOTIFICATION_KEY = 'pi-webui.soundNotification';
-const GIT_CLONE_PARENT_PATH_KEY = 'pi-webui.gitCloneParentPath';
+const SHOW_HINT_INFO_KEY = 'pi-cloud.showHintInfo';
+const SHOW_CODE_BLOCK_LANGUAGE_HEADERS_KEY = 'pi-cloud.showCodeBlockLanguageHeaders';
+const STREAMING_MESSAGE_BEHAVIOR_KEY = 'pi-cloud.streamingMessageBehavior';
+const EDITOR_AUTO_REFRESH_KEY = 'pi-cloud.editorAutoRefresh';
+const CONFIRM_SESSION_DELETE_KEY = 'pi-cloud.confirmSessionDelete';
+const NEW_SESSION_SHORTCUT_KEY = 'pi-cloud.newSessionShortcut';
+const FULLSCREEN_SHORTCUT_KEY = 'pi-cloud.fullscreenShortcut';
+const SHOW_GO_TO_TOP_BUTTON_KEY = 'pi-cloud.showGoToTopButton';
+const SHOW_CHAT_VIEW_OPTIONS_BUTTON_KEY = 'pi-cloud.showChatViewOptionsButton';
+const AUTO_EXTRACT_MEMORY_KEY = 'pi-cloud.autoExtractMemory';
+const THEME_KEY = 'pi-cloud.theme';
+const LANGUAGE_KEY = 'pi-cloud.language';
+const SOUND_NOTIFICATION_KEY = 'pi-cloud.soundNotification';
+const GIT_CLONE_PARENT_PATH_KEY = 'pi-cloud.gitCloneParentPath';
 
 export type StreamingMessageBehavior = 'steer' | 'followUp';
 export type NewSessionShortcut = 'ctrlAltN' | 'ctrlMetaN' | 'disabled';

@@ -1,17 +1,17 @@
 import { rmSync } from 'fs';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database';
 import { WorktreeMetadataStore } from './worktree-metadata-store';
 
 describe('WorktreeMetadataStore', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let dbPath: string;
   let store: WorktreeMetadataStore;
 
   beforeEach(() => {
     dbPath = join(process.cwd(), `.tmp-worktree-store-${Date.now()}-${Math.random()}.sqlite`);
-    db = openPiuiDatabase(dbPath);
+    db = openPiCloudDatabase(dbPath);
     store = new WorktreeMetadataStore(db);
   });
 

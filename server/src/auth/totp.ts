@@ -1,9 +1,9 @@
 import { generateSecret, generateURI, verifySync } from 'otplib';
 import qrcode from 'qrcode';
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 
 export class TotpService {
-  constructor(private db: PiuiDatabase, private issuer: string, private username: string) {}
+  constructor(private db: PiCloudDatabase, private issuer: string, private username: string) {}
 
   getStatus(): { enabled: boolean } {
     return { enabled: this.getValue('totp.enabled') === 'true' };

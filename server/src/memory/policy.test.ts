@@ -7,10 +7,10 @@ describe('memory efficiency policy', () => {
   });
 
   it('allows rolling back to the legacy policy', () => {
-    expect(loadMemoryEfficiencyPolicy({ PI_WEBUI_MEMORY_POLICY: LEGACY_MEMORY_POLICY })).toBe(LEGACY_MEMORY_POLICY);
+    expect(loadMemoryEfficiencyPolicy({ PI_CLOUD_MEMORY_POLICY: LEGACY_MEMORY_POLICY })).toBe(LEGACY_MEMORY_POLICY);
   });
 
   it('rejects unknown policy names', () => {
-    expect(() => loadMemoryEfficiencyPolicy({ PI_WEBUI_MEMORY_POLICY: 'experimental' })).toThrow(/PI_WEBUI_MEMORY_POLICY/);
+    expect(() => loadMemoryEfficiencyPolicy({ PI_CLOUD_MEMORY_POLICY: 'experimental' })).toThrow(/PI_CLOUD_MEMORY_POLICY/);
   });
 });

@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest released version of Pi WebUI. Please upgrade to the newest release before reporting an issue that may already have been fixed.
+Security fixes are provided for the latest released version of Pi Cloud. Please upgrade to the newest release before reporting an issue that may already have been fixed.
 
 ## Reporting a vulnerability
 

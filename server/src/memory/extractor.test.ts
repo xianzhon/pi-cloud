@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database.js';
 import { MemoryExtractor } from './extractor.js';
 import { LEGACY_MEMORY_POLICY } from './policy.js';
 import { MemoryStore } from './store.js';
@@ -26,7 +26,7 @@ function branch() {
 }
 
 describe('MemoryExtractor', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let store: MemoryStore;
   let run: ReturnType<MemoryStore['enqueueExtractionRun']>['run'];
   let completeModel: any;
@@ -34,7 +34,7 @@ describe('MemoryExtractor', () => {
   let runWithProxy: any;
 
   beforeEach(() => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     store = new MemoryStore(db);
     const project = store.getOrCreateProject('default', '/repo/app');
     store.createMemory({

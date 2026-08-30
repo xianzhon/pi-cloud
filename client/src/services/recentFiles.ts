@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'pi-webui-recent-files';
+const STORAGE_KEY = 'pi-cloud-recent-files';
 const MAX_RECENT_FILES = 20;
 
 export function getRecentFiles(): string[] {

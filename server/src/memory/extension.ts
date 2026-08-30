@@ -33,7 +33,7 @@ interface MemoryExtensionDependencies {
 
 export function createMemoryExtension(dependencies: MemoryExtensionDependencies): InlineExtension {
   return {
-    name: 'webui-memory',
+    name: 'pi-cloud-memory',
     factory(pi) {
       let baselineLeafId: string | null = null;
 

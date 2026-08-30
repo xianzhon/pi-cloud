@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 import type { SessionWorktreeInfo } from '../types';
 
 export type SaveWorktreeInfo = Omit<SessionWorktreeInfo, 'createdAt' | 'updatedAt' | 'finishedAt'> & {
@@ -42,7 +42,7 @@ function rowToInfo(row: WorktreeRow): SessionWorktreeInfo {
 }
 
 export class WorktreeMetadataStore {
-  constructor(private readonly db: PiuiDatabase) {}
+  constructor(private readonly db: PiCloudDatabase) {}
 
   save(info: SaveWorktreeInfo): SessionWorktreeInfo {
     const existing = this.get(info.sessionId);

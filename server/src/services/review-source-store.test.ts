@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase } from '../db/database.js';
 import { reviewSourceProviders } from './review-source-providers.js';
 import { ReviewSourceStore } from './review-source-store.js';
 
@@ -13,8 +13,8 @@ describe('ReviewSourceStore', () => {
   let store: ReviewSourceStore;
 
   beforeEach(() => {
-    dbPath = path.join(os.tmpdir(), `piui-review-source-test-${Date.now()}.db`);
-    db = openPiuiDatabase(dbPath);
+    dbPath = path.join(os.tmpdir(), `pi-cloud-review-source-test-${Date.now()}.db`);
+    db = openPiCloudDatabase(dbPath);
     store = new ReviewSourceStore(db, []);
   });
 

@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 
 export interface GatewaySettings {
   cwds: string[];
@@ -14,7 +14,7 @@ const DEFAULT_SKILLSET_KEY = 'gateway.defaultSkillset';
 const DEFAULT_MODEL_PROVIDER_KEY = 'gateway.defaultModelProvider';
 const DEFAULT_MODEL_ID_KEY = 'gateway.defaultModelId';
 export class GatewaySettingsStore {
-  constructor(private readonly db: PiuiDatabase) {}
+  constructor(private readonly db: PiCloudDatabase) {}
 
   get(): GatewaySettings {
     return {

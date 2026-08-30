@@ -2,7 +2,7 @@
 
 ## Problem
 
-Pi WebUI can run AI requests for different browser tabs and profiles in the same Node.js server process. Some requests, such as chat streaming and AI automation actions like task polish, need the active Pi profile's proxy settings.
+Pi Cloud can run AI requests for different browser tabs and profiles in the same Node.js server process. Some requests, such as chat streaming and AI automation actions like task polish, need the active Pi profile's proxy settings.
 
 The current proxy integration has to touch process-global state:
 
@@ -90,7 +90,7 @@ With per-request proxy handling, each request owns its network configuration and
 ## Recommended migration path
 
 1. Investigate whether `pi-ai` already supports per-request `dispatcher`, custom `fetch`, or provider-specific HTTP agents.
-2. If supported, pass the profile-specific dispatcher/fetch from Pi WebUI instead of using global env mutation.
+2. If supported, pass the profile-specific dispatcher/fetch from Pi Cloud instead of using global env mutation.
 3. If not supported, extend the AI/provider layer with a small per-request network option.
 4. Migrate the most-used providers first.
 5. Keep the current global-lock path as a fallback for providers that cannot yet use per-request proxy configuration.

@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database.js';
 import { DEFAULT_PIN_GROUP_ID, SessionPinStore } from './session-pin-store.js';
 
 describe('SessionPinStore', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
 
   afterEach(() => db?.close());
 
   it('isolates groups and pins by profile or review source owner', () => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     const store = new SessionPinStore(db);
     const defaultProfile = { type: 'profile', id: 'default' } as const;
     const workProfile = { type: 'profile', id: 'work' } as const;

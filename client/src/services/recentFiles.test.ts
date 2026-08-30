@@ -30,7 +30,7 @@ describe('recentFiles', () => {
     localStorageMock.getItem.mockReturnValue(JSON.stringify(['existing.ts']));
     addRecentFile('new.ts');
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'pi-webui-recent-files',
+      'pi-cloud-recent-files',
       JSON.stringify(['new.ts', 'existing.ts'])
     );
   });
@@ -39,7 +39,7 @@ describe('recentFiles', () => {
     localStorageMock.getItem.mockReturnValue(JSON.stringify(['file.ts', 'other.ts']));
     addRecentFile('file.ts');
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'pi-webui-recent-files',
+      'pi-cloud-recent-files',
       JSON.stringify(['file.ts', 'other.ts'])
     );
   });
@@ -56,6 +56,6 @@ describe('recentFiles', () => {
 
   it('clearRecentFiles removes item from localStorage', () => {
     clearRecentFiles();
-    expect(localStorageMock.removeItem).toHaveBeenCalledWith('pi-webui-recent-files');
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('pi-cloud-recent-files');
   });
 });

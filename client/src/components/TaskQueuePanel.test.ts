@@ -35,10 +35,10 @@ vi.mock('./TaskEditorDialog.vue', () => ({
   },
 }));
 
-const issuePreview = { owner: 'earendil', repo: 'pi-webui', title: 'Waiting task', body: 'Implement it' };
+const issuePreview = { owner: 'earendil', repo: 'pi-cloud', title: 'Waiting task', body: 'Implement it' };
 const createdIssue = {
   owner: 'earendil',
-  repo: 'pi-webui',
+  repo: 'pi-cloud',
   number: 42,
   url: 'https://git.example/issue/42',
   createdAt: '2026-07-14T00:00:00.000Z',
@@ -129,7 +129,7 @@ describe('TaskQueuePanel', () => {
 
     expect(generateIssueContent).toHaveBeenCalledWith('client-1', 'task-1', issuePreview);
     const inputs = wrapper.findAll('.issue-preview-form input');
-    expect((inputs[0].element as HTMLInputElement).value).toBe('earendil/pi-webui');
+    expect((inputs[0].element as HTMLInputElement).value).toBe('earendil/pi-cloud');
     expect((inputs[0].element as HTMLInputElement).readOnly).toBe(true);
     expect((inputs[1].element as HTMLInputElement).value).toBe('Polished issue title');
     expect((wrapper.find('.issue-preview-form textarea').element as HTMLTextAreaElement).value).toBe('## Summary\nPolished body');

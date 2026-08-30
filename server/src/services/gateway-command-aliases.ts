@@ -53,7 +53,7 @@ export function normalizeGatewayCommandText(text: string): string {
 }
 
 function stripGatewayCommandPrefix(text: string): string | undefined {
-  const prefix = (process.env.PI_WEBUI_GATEWAY_COMMAND_PREFIX || DEFAULT_COMMAND_PREFIX).trim() || DEFAULT_COMMAND_PREFIX;
+  const prefix = (process.env.PI_CLOUD_GATEWAY_COMMAND_PREFIX || DEFAULT_COMMAND_PREFIX).trim() || DEFAULT_COMMAND_PREFIX;
   if (!text.startsWith(prefix)) return undefined;
 
   const remaining = text.slice(prefix.length);

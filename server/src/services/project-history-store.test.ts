@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database.js';
 import { ProjectHistoryStore } from './project-history-store.js';
 
 describe('ProjectHistoryStore', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
 
   afterEach(() => db?.close());
 
   it('stores project history per agent profile in most-recent order', () => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     let now = '2026-08-30T01:00:00.000Z';
     const store = new ProjectHistoryStore(db, { now: () => now });
 
@@ -27,7 +27,7 @@ describe('ProjectHistoryStore', () => {
   });
 
   it('updates an existing project access time and removes it explicitly', () => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     let now = '2026-08-30T01:00:00.000Z';
     const store = new ProjectHistoryStore(db, { now: () => now });
 

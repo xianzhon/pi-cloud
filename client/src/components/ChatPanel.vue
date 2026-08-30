@@ -926,7 +926,7 @@ const branchBaseName = ref('');
 const branchNewName = ref('');
 const branchPullAfterSwitch = ref(false);
 const branchDeleteOriginal = ref(true);
-const BRANCH_SELECTION_STORAGE_KEY = 'pi-webui:last-branch-selection';
+const BRANCH_SELECTION_STORAGE_KEY = 'pi-cloud:last-branch-selection';
 
 function branchSelectionStorageKey(): string {
   return `${BRANCH_SELECTION_STORAGE_KEY}:${props.projectPath || '~'}`;
@@ -1066,7 +1066,7 @@ function isMessagesScrolledNearBottom(threshold = AUTO_SCROLL_BOTTOM_THRESHOLD):
   return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
 }
 
-const inputHeightStorageKey = 'pi-webui-message-input-height';
+const inputHeightStorageKey = 'pi-cloud-message-input-height';
 const inputResizeStartY = ref<number | null>(null);
 let inputResizeStartHeight = 0;
 let userInputHeight = loadInputHeight();

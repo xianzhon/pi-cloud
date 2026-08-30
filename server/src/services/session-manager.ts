@@ -7,10 +7,10 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import { promisify } from 'util';
 import { basename, dirname, join, resolve } from 'path';
-import type { PiuiDatabase } from '../db/database.js';
+import type { PiCloudDatabase } from '../db/database.js';
 import type { MemoryRuntime } from '../memory/runtime.js';
 import type { AgentProfile, AppliedSkillPolicy, AvailableSkillInfo, CreateSessionResult, SessionCommandInfo, SessionInfo, SessionOptions, SessionRuntimeStatus } from '../types.js';
-import { createWebuiAutoRenameExtension } from '../extensions/auto-rename.js';
+import { createPiCloudAutoRenameExtension } from '../extensions/auto-rename.js';
 import { expandHomePath } from '../utils/paths.js';
 import { runWithAgentDirAndProxyEnv } from './profile-proxy.js';
 import { SkillPolicyStore, type SkillPolicyRecord } from './skill-policy-store.js';
@@ -19,7 +19,7 @@ import type { WorktreeMetadataStore } from './worktree-metadata-store.js';
 interface PiSessionServiceOptions {
   skillPolicyStore?: SkillPolicyStore;
   username?: string;
-  db?: PiuiDatabase;
+  db?: PiCloudDatabase;
   memoryRuntime?: MemoryRuntime;
   worktreeMetadataStore?: Pick<WorktreeMetadataStore, 'getMany'>;
 }
@@ -61,7 +61,7 @@ const SESSION_LIST_CACHE_TTL_MS = 2000;
 const USER_MESSAGE_COUNT_CONCURRENCY = 10;
 const DEFAULT_AUTOMATION_PROVIDER = 'anthropic';
 const DEFAULT_AUTOMATION_MODEL_ID = 'claude-haiku-4-5';
-const LOCAL_LLM_PROVIDER_ID = 'pi-webui-local';
+const LOCAL_LLM_PROVIDER_ID = 'pi-cloud-local';
 const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4/accounts';
 const MODEL_DISCOVERY_TIMEOUT_MS = 10_000;
 
@@ -89,7 +89,7 @@ function isPrivateNetworkHostname(hostname: string): boolean {
 
 function localLlmAllowedOrigins(): Set<string> {
   const origins = new Set<string>();
-  for (const value of (process.env.PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS || '').split(',')) {
+  for (const value of (process.env.PI_CLOUD_LOCAL_LLM_ALLOWED_ORIGINS || '').split(',')) {
     try {
       const parsed = new URL(value.trim());
       if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && !parsed.username && !parsed.password) {
@@ -147,7 +147,7 @@ export class PiSessionService {
   private skillPolicyStore?: SkillPolicyStore;
   private username: string;
   private memoryRuntime?: MemoryRuntime;
-  private db?: PiuiDatabase;
+  private db?: PiCloudDatabase;
   private worktreeMetadataStore?: Pick<WorktreeMetadataStore, 'getMany'>;
   private sessions: Map<string, AgentSession> = new Map();
   private clientSessions: Map<string, Set<string>> = new Map();
@@ -1625,7 +1625,7 @@ export class PiSessionService {
     autoRenameConfig: Pick<ProfileSettings, 'automationProvider' | 'automationModelId' | 'autoRenameLanguage'>;
   }): InlineExtension[] {
     return [
-      ...(options.autoRenameEnabled ? [createWebuiAutoRenameExtension({
+      ...(options.autoRenameEnabled ? [createPiCloudAutoRenameExtension({
         model: {
           provider: options.autoRenameConfig.automationProvider,
           id: options.autoRenameConfig.automationModelId,

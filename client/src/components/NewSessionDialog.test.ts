@@ -131,7 +131,7 @@ describe('NewSessionDialog', () => {
   });
 
   it('restores saved session and skill options from localStorage', async () => {
-    localStorage.setItem('pi-webui.newSessionOptions:/workspace', JSON.stringify({
+    localStorage.setItem('pi-cloud.newSessionOptions:/workspace', JSON.stringify({
       mode: 'custom',
       customMode: 'enabled',
       selectedSkills: ['systematic-debugging'],
@@ -145,7 +145,7 @@ describe('NewSessionDialog', () => {
   });
 
   it('does not restore session options from another project', async () => {
-    localStorage.setItem('pi-webui.newSessionOptions:/workspace', JSON.stringify({
+    localStorage.setItem('pi-cloud.newSessionOptions:/workspace', JSON.stringify({
       mode: 'custom',
       customMode: 'enabled',
       selectedSkills: ['systematic-debugging'],
@@ -166,7 +166,7 @@ describe('NewSessionDialog', () => {
     await wrapper.find('.skill-option-checkbox').setValue(true);
     await wrapper.find('form').trigger('submit');
 
-    expect(JSON.parse(localStorage.getItem('pi-webui.newSessionOptions:/workspace') || '{}')).toEqual({
+    expect(JSON.parse(localStorage.getItem('pi-cloud.newSessionOptions:/workspace') || '{}')).toEqual({
       mode: 'custom',
       customMode: 'enabled',
       selectedSkills: ['systematic-debugging'],

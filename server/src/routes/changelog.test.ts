@@ -16,7 +16,7 @@ afterEach(async () => {
 
 describe('changelogRoutes', () => {
   it('reads the packaged changelog independently of the working directory', async () => {
-    tempDir = await mkdtemp(path.join(tmpdir(), 'pi-webui-changelog-'));
+    tempDir = await mkdtemp(path.join(tmpdir(), 'pi-cloud-changelog-'));
     process.chdir(tempDir);
 
     const app = Fastify();

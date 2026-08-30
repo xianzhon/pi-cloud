@@ -3,16 +3,16 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
-import { openPiuiDatabase } from './database';
+import { openPiCloudDatabase } from './database';
 import { runDatabaseMigrations } from './migrations/index';
 
-describe('openPiuiDatabase', () => {
+describe('openPiCloudDatabase', () => {
   let tempDir: string;
   let dbPath: string;
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-db-'));
-    dbPath = path.join(tempDir, 'nested', 'piui.sqlite');
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-db-'));
+    dbPath = path.join(tempDir, 'nested', 'pi-cloud.sqlite');
   });
 
   afterEach(async () => {
@@ -20,7 +20,7 @@ describe('openPiuiDatabase', () => {
   });
 
   it('creates parent directories and required tables', () => {
-    const db = openPiuiDatabase(dbPath);
+    const db = openPiCloudDatabase(dbPath);
 
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT GLOB 'memory_fts_*' ORDER BY name")
@@ -112,7 +112,7 @@ describe('openPiuiDatabase', () => {
   });
 
   it.runIf(process.platform !== 'win32')('restricts database and journal files to the current user', async () => {
-    const db = openPiuiDatabase(dbPath);
+    const db = openPiCloudDatabase(dbPath);
     db.exec('CREATE TABLE permission_check (id INTEGER); INSERT INTO permission_check VALUES (1);');
 
     for (const filePath of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
@@ -139,7 +139,7 @@ describe('openPiuiDatabase', () => {
     `);
     legacyDb.close();
 
-    const db = openPiuiDatabase(dbPath);
+    const db = openPiCloudDatabase(dbPath);
     expect(() => db.prepare(`INSERT INTO session_builtin_events (session_id, kind, data_json, created_at)
       VALUES (?, 'branch_deleted', '{}', ?)`)
       .run('session-1', '2026-07-22T00:00:01.000Z')).not.toThrow();
@@ -189,7 +189,7 @@ describe('openPiuiDatabase', () => {
     `);
     legacyDb.close();
 
-    const db = openPiuiDatabase(dbPath);
+    const db = openPiCloudDatabase(dbPath);
     expect(db.prepare(`SELECT pinned_applicability, positive_utility_count,
       negative_utility_count, last_utility_at, use_count FROM memories WHERE id = 'memory-1'`).get()).toEqual({
       pinned_applicability: 'always',
@@ -209,7 +209,7 @@ describe('openPiuiDatabase', () => {
   });
 
   it('indexes memory content and tags with FTS5', () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     db.prepare(`INSERT INTO memory_projects (id, profile_id, canonical_path, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?)`).run('project-1', 'default', '/workspace', '2026-07-14T00:00:00.000Z', '2026-07-14T00:00:00.000Z');
     db.prepare(`INSERT INTO memories (
@@ -228,7 +228,7 @@ describe('openPiuiDatabase', () => {
   });
 
   it('records migrations and does not reapply them', () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
 
     expect(db.prepare('SELECT version, name FROM schema_migrations ORDER BY version').all()).toEqual([
       { version: 1, name: 'application-schema' },
@@ -256,7 +256,7 @@ describe('openPiuiDatabase', () => {
     `);
     legacyDb.close();
 
-    const db = openPiuiDatabase(dbPath);
+    const db = openPiCloudDatabase(dbPath);
     for (const table of ['feishu_gateway_configs', 'weixin_gateway_configs']) {
       const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
       expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining(['skill_mode', 'skill_preset_id']));
@@ -285,7 +285,7 @@ describe('openPiuiDatabase', () => {
   });
 
   it('enables foreign keys and wal mode', () => {
-    const db = openPiuiDatabase(dbPath);
+    const db = openPiCloudDatabase(dbPath);
 
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
     expect(String(db.pragma('journal_mode', { simple: true })).toLowerCase()).toBe('wal');

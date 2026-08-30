@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createWebuiAutoRenameExtension } from './auto-rename';
+import { createPiCloudAutoRenameExtension } from './auto-rename';
 
 function createPiMock() {
   return {
@@ -9,10 +9,10 @@ function createPiMock() {
   };
 }
 
-describe('createWebuiAutoRenameExtension', () => {
+describe('createPiCloudAutoRenameExtension', () => {
   it('always registers auto-rename lifecycle hooks', () => {
     const pi = createPiMock();
-    const extension = createWebuiAutoRenameExtension({
+    const extension = createPiCloudAutoRenameExtension({
       model: { provider: 'anthropic', id: 'claude-haiku-4-5' },
       language: 'english',
     }) as { factory: (pi: unknown) => void };

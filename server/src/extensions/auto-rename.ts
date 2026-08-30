@@ -146,9 +146,9 @@ async function generateName(
   return sanitizeSessionName(raw, config.language) || null;
 }
 
-export function createWebuiAutoRenameExtension(config: RenameConfig): InlineExtension {
+export function createPiCloudAutoRenameExtension(config: RenameConfig): InlineExtension {
   return {
-    name: 'pi-webui-auto-rename',
+    name: 'pi-cloud-auto-rename',
     factory: (pi: ExtensionAPI) => {
       let namingAttempted = false;
       let namingInProgress = false;

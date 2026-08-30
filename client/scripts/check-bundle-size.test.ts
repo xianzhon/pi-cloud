@@ -8,7 +8,7 @@ import { checkBundleBudget } from './check-bundle-size.mjs';
 const temporaryDirectories: string[] = [];
 
 async function createBuild(manifest: Record<string, unknown>, assets: Record<string, string>) {
-  const distDir = await mkdtemp(path.join(tmpdir(), 'pi-webui-bundle-'));
+  const distDir = await mkdtemp(path.join(tmpdir(), 'pi-cloud-bundle-'));
   temporaryDirectories.push(distDir);
   await mkdir(path.join(distDir, '.vite'), { recursive: true });
   await writeFile(path.join(distDir, '.vite/manifest.json'), JSON.stringify(manifest));

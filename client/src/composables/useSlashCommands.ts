@@ -22,7 +22,7 @@ const clientOnlyCommands: SlashCommandItem[] = [
     id: 'changelog',
     label: '/changelog',
     insertText: '/changelog ',
-    description: 'Show the changelog for recent Pi WebUI versions.',
+    description: 'Show the changelog for recent Pi Cloud versions.',
     category: 'built-in',
     aliases: ['changes', 'release notes', 'version'],
   },

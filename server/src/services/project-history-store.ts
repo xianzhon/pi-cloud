@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../db/database.js';
+import type { PiCloudDatabase } from '../db/database.js';
 
 export interface ProjectHistoryEntry {
   path: string;
@@ -17,7 +17,7 @@ interface ProjectHistoryStoreOptions {
 export class ProjectHistoryStore {
   private readonly now: () => string;
 
-  constructor(private readonly db: PiuiDatabase, options: ProjectHistoryStoreOptions = {}) {
+  constructor(private readonly db: PiCloudDatabase, options: ProjectHistoryStoreOptions = {}) {
     this.now = options.now || (() => new Date().toISOString());
   }
 

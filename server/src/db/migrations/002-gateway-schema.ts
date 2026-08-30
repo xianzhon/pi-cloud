@@ -1,4 +1,4 @@
-import type { PiuiDatabase } from '../database.js';
+import type { PiCloudDatabase } from '../database.js';
 import type { DatabaseMigration } from './migration.js';
 
 export const gatewaySchemaMigration: DatabaseMigration = {
@@ -73,7 +73,7 @@ export const gatewaySchemaMigration: DatabaseMigration = {
   },
 };
 
-function ensureColumn(db: PiuiDatabase, table: string, column: string, definition: string): void {
+function ensureColumn(db: PiCloudDatabase, table: string, column: string, definition: string): void {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (columns.some((item) => item.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);

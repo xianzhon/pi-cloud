@@ -14,13 +14,13 @@ export class PathAccessError extends Error {
 }
 
 function isPathCheckDisabled(): boolean {
-  const configured = process.env.PI_WEBUI_DISABLE_PATH_CHECK?.trim().toLowerCase();
+  const configured = process.env.PI_CLOUD_DISABLE_PATH_CHECK?.trim().toLowerCase();
   if (!configured) return process.platform === 'win32';
   return ['true', '1', 'yes', 'on'].includes(configured);
 }
 
 function configuredAllowedRoots(): string[] {
-  const raw = process.env.PI_WEBUI_ALLOWED_ROOTS;
+  const raw = process.env.PI_CLOUD_ALLOWED_ROOTS;
   if (!raw?.trim()) return DEFAULT_ALLOWED_ROOTS;
 
   return raw

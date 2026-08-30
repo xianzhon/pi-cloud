@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add Feishu/Lark as a messaging gateway so a Feishu bot can talk to the Pi WebUI server. Each Feishu chat maps to a persistent Pi agent session, letting users continue a conversation from Feishu without opening the browser UI.
+Add Feishu/Lark as a messaging gateway so a Feishu bot can talk to the Pi Cloud server. Each Feishu chat maps to a persistent Pi agent session, letting users continue a conversation from Feishu without opening the browser UI.
 
 ## Prior art: Hermes gateway
 
@@ -14,11 +14,11 @@ Hermes implements Feishu as a platform adapter that:
 4. Serializes work per session key so concurrent messages do not corrupt conversation state.
 5. Runs the agent and routes the final response back through Feishu.
 
-Pi WebUI can use the same core idea, but the implementation should integrate directly with `sessionService` instead of copying Hermes' full platform framework.
+Pi Cloud can use the same core idea, but the implementation should integrate directly with `sessionService` instead of copying Hermes' full platform framework.
 
 ## MVP scope
 
-The initial Pi WebUI Feishu gateway supports:
+The initial Pi Cloud Feishu gateway supports:
 
 - Feishu event callback URL verification.
 - `im.message.receive_v1` text messages.
@@ -42,14 +42,14 @@ These can be added later without changing the session-binding model.
 
 ## Configuration
 
-Use Pi WebUI-specific environment variables to avoid accidental coupling to an existing Hermes installation:
+Use Pi Cloud-specific environment variables to avoid accidental coupling to an existing Hermes installation:
 
 | Variable | Purpose |
 | --- | --- |
-| `PI_WEBUI_FEISHU_APP_ID` | Feishu/Lark app id. |
-| `PI_WEBUI_FEISHU_APP_SECRET` | Feishu/Lark app secret. |
-| `PI_WEBUI_FEISHU_VERIFICATION_TOKEN` | Optional callback verification token. |
-| `PI_WEBUI_FEISHU_DOMAIN` | `feishu` or `lark`; defaults to `feishu`. |
+| `PI_CLOUD_FEISHU_APP_ID` | Feishu/Lark app id. |
+| `PI_CLOUD_FEISHU_APP_SECRET` | Feishu/Lark app secret. |
+| `PI_CLOUD_FEISHU_VERIFICATION_TOKEN` | Optional callback verification token. |
+| `PI_CLOUD_FEISHU_DOMAIN` | `feishu` or `lark`; defaults to `feishu`. |
 
 Configure allowed folders plus the default gateway profile, model, and skillset in **Settings > Gateway**.
 
@@ -65,7 +65,7 @@ It must be public because Feishu cannot send the browser session cookie. The rou
 
 ## Session binding
 
-Build a deterministic Pi WebUI `clientId` from Feishu message identity:
+Build a deterministic Pi Cloud `clientId` from Feishu message identity:
 
 ```text
 feishu:<chat_type>:<chat_id>[:<thread_id>]

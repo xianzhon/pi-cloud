@@ -1,6 +1,6 @@
 # Memory System User Manual
 
-The Memory system lets Pi WebUI retain long-lived information and automatically provide it to the model in later conversations. It is designed for project conventions, user preferences, confirmed facts, decisions, and pitfalls that should not need to be explained again in every new session.
+The Memory system lets Pi Cloud retain long-lived information and automatically provide it to the model in later conversations. It is designed for project conventions, user preferences, confirmed facts, decisions, and pitfalls that should not need to be explained again in every new session.
 
 ## What It Is For
 
@@ -76,11 +76,11 @@ Actions on each memory row let you:
 - Restore an archived memory to active status.
 - Permanently delete a memory.
 
-The system uses a `revision` value for concurrency control. If a memory changes before your action is applied, Pi WebUI reports a conflict instead of overwriting the newer update.
+The system uses a `revision` value for concurrency control. If a memory changes before your action is applied, Pi Cloud reports a conflict instead of overwriting the newer update.
 
 ### Tidy Up Memories
 
-On the **Project** and **Global** tabs, click **Tidy up** to review duplicate or stale contradictory active memories. Pi WebUI proposes which entries to keep and archive, but makes no changes until you select suggestions and confirm **Archive selected**.
+On the **Project** and **Global** tabs, click **Tidy up** to review duplicate or stale contradictory active memories. Pi Cloud proposes which entries to keep and archive, but makes no changes until you select suggestions and confirm **Archive selected**.
 
 ### Review Automatically Extracted Global Memories
 
@@ -128,7 +128,7 @@ Simplified flow:
 ```text
 Conversation or manual action
         ↓
-Pi WebUI MemoryService
+Pi Cloud MemoryService
         ↓
 MemoryStore writes to SQLite
         ↓
@@ -158,7 +158,7 @@ Before the agent responds, the Memory extension:
 3. Searches the current user prompt for relevant active `fact`, `decision`, and `pitfall` memories.
 4. Trims the results to the active policy's token budget and injects them into the system prompt.
 
-The default adaptive lexical policy scores prompt intent, lexical relevance, scope, freshness, and prior utility; removes redundant results; and chooses a dynamic total budget of 0, 400, 800, 1,500, or 2,500 tokens. Pins marked **Only when matched** are included only when their relevance score passes the threshold. Set `PI_WEBUI_MEMORY_POLICY=legacy` to use separate budgets of approximately 2,000 tokens each for pinned memories and relevant references, with at most 8 references.
+The default adaptive lexical policy scores prompt intent, lexical relevance, scope, freshness, and prior utility; removes redundant results; and chooses a dynamic total budget of 0, 400, 800, 1,500, or 2,500 tokens. Pins marked **Only when matched** are included only when their relevance score passes the threshold. Set `PI_CLOUD_MEMORY_POLICY=legacy` to use separate budgets of approximately 2,000 tokens each for pinned memories and relevant references, with at most 8 references.
 
 The injected sections have different semantics:
 

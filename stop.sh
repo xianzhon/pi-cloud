@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Pi WebUI Stop Script
+# Pi Cloud Stop Script
 # Stops both backend (Fastify) and frontend (Vite) servers
 
 set -e
@@ -107,7 +107,7 @@ fi
 
 # Main
 echo "=========================================="
-echo "       Pi WebUI - Stopping Servers"
+echo "       Pi Cloud - Stopping Servers"
 echo "=========================================="
 echo ""
 
@@ -124,8 +124,8 @@ kill_port "$CLIENT_PORT"
 # Clean up any tsx/vite processes related to this project
 echo ""
 echo -e "${YELLOW}Cleaning up related processes...${NC}"
-pkill -f "tsx.*pi-webui" 2>/dev/null || true
-pkill -f "vite.*pi-webui" 2>/dev/null || true
+pkill -f "tsx.*pi-cloud" 2>/dev/null || true
+pkill -f "vite.*pi-cloud" 2>/dev/null || true
 
 echo ""
 echo "=========================================="

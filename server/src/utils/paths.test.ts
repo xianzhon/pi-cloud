@@ -10,7 +10,7 @@ describe('expandHomePath', () => {
   });
 
   it('expands paths that start with tilde slash', () => {
-    expect(expandHomePath('~/projects/piui')).toBe(path.join(os.homedir(), 'projects/piui'));
+    expect(expandHomePath('~/projects/pi-cloud')).toBe(path.join(os.homedir(), 'projects/pi-cloud'));
   });
 
   it('leaves non-home paths unchanged', () => {

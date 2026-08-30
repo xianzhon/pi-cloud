@@ -594,7 +594,7 @@
                   <p class="settings-inline-note weixin-pairing-note">
                     {{ t(weixinGatewayStatus.enabled
                       ? 'components.settingsDialog.theGatewayStartsAutomaticallyAfterSuccessfulPairing'
-                      : 'components.settingsDialog.pairingSavesCredentialsEnablePIWEBUI') }}
+                      : 'components.settingsDialog.pairingSavesCredentialsEnablePICLOUD') }}
                   </p>
                   <p v-if="weixinPairingError" class="settings-error-text" role="alert">{{ weixinPairingError }}</p>
                   <div v-if="weixinPairing.qrDataUrl" class="weixin-qr-panel">

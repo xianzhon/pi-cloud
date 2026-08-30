@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { openPiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase } from '../db/database.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { extractLastAssistantText, WeixinGatewayService } from './weixin-gateway.js';
 
 describe('WeixinGatewayService', () => {
   it('removes a saved pairing', async () => {
-    const db = openPiuiDatabase(':memory:');
+    const db = openPiCloudDatabase(':memory:');
     db.prepare(`
       INSERT INTO weixin_gateway_credentials (id, account_id, token, base_url, updated_at)
       VALUES (1, 'bot-123', 'secret-token', 'https://ilinkai.weixin.qq.com', '2026-01-01T00:00:00.000Z')

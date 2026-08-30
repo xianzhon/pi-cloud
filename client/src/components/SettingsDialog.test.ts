@@ -79,7 +79,7 @@ describe('SettingsDialog', () => {
   });
 
   it('shows only user prompt customization for commit messages', async () => {
-    const wrapper = mountSettingsDialog({ projectPath: '/workspace/pi-webui' });
+    const wrapper = mountSettingsDialog({ projectPath: '/workspace/pi-cloud' });
     const gitButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!;
 
     await gitButton.trigger('click');
@@ -332,7 +332,7 @@ describe('SettingsDialog', () => {
     viewModel.weixinGatewayStatus.enabled = false;
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.find('.weixin-pairing-note').text()).toBe('Pairing saves the account credentials. To start the gateway, set PI_WEBUI_WECHAT_GATEWAY_ENABLED=true and restart Pi WebUI.');
+    expect(wrapper.find('.weixin-pairing-note').text()).toBe('Pairing saves the account credentials. To start the gateway, set PI_CLOUD_WECHAT_GATEWAY_ENABLED=true and restart Pi Cloud.');
   });
 
   it('unbinds a persisted WeChat account through the custom confirmation modal', async () => {

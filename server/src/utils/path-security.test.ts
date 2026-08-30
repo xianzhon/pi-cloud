@@ -6,8 +6,8 @@ import { resolveAllowedPath } from './path-security.js';
 
 describe('path security', () => {
   afterEach(() => {
-    delete process.env.PI_WEBUI_ALLOWED_ROOTS;
-    delete process.env.PI_WEBUI_DISABLE_PATH_CHECK;
+    delete process.env.PI_CLOUD_ALLOWED_ROOTS;
+    delete process.env.PI_CLOUD_DISABLE_PATH_CHECK;
     vi.restoreAllMocks();
   });
 
@@ -16,10 +16,10 @@ describe('path security', () => {
   });
 
   it('rejects paths outside configured allowed roots when the check is enabled', async () => {
-    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-allowed-'));
-    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-outside-'));
-    process.env.PI_WEBUI_ALLOWED_ROOTS = allowedDir;
-    process.env.PI_WEBUI_DISABLE_PATH_CHECK = 'false';
+    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-allowed-'));
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-outside-'));
+    process.env.PI_CLOUD_ALLOWED_ROOTS = allowedDir;
+    process.env.PI_CLOUD_DISABLE_PATH_CHECK = 'false';
 
     try {
       await expect(resolveAllowedPath(outsideDir)).rejects.toThrow('Path is outside the configured allowed roots');
@@ -30,10 +30,10 @@ describe('path security', () => {
   });
 
   it('allows paths outside configured roots when the check is explicitly disabled', async () => {
-    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-allowed-'));
-    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-outside-'));
-    process.env.PI_WEBUI_ALLOWED_ROOTS = allowedDir;
-    process.env.PI_WEBUI_DISABLE_PATH_CHECK = 'true';
+    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-allowed-'));
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-outside-'));
+    process.env.PI_CLOUD_ALLOWED_ROOTS = allowedDir;
+    process.env.PI_CLOUD_DISABLE_PATH_CHECK = 'true';
 
     try {
       await expect(resolveAllowedPath(outsideDir)).resolves.toBe(path.resolve(outsideDir));
@@ -45,17 +45,17 @@ describe('path security', () => {
 
   it('disables the path check by default on Windows', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
-    process.env.PI_WEBUI_ALLOWED_ROOTS = 'C:\\Users\\test';
+    process.env.PI_CLOUD_ALLOWED_ROOTS = 'C:\\Users\\test';
 
     await expect(resolveAllowedPath('D:\\Projects')).resolves.toBe(path.resolve('D:\\Projects'));
   });
 
   it('allows Windows users to explicitly enable the path check', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
-    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-allowed-'));
-    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'piui-outside-'));
-    process.env.PI_WEBUI_ALLOWED_ROOTS = allowedDir;
-    process.env.PI_WEBUI_DISABLE_PATH_CHECK = 'false';
+    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-allowed-'));
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-outside-'));
+    process.env.PI_CLOUD_ALLOWED_ROOTS = allowedDir;
+    process.env.PI_CLOUD_DISABLE_PATH_CHECK = 'false';
 
     try {
       await expect(resolveAllowedPath(outsideDir)).rejects.toThrow('Path is outside the configured allowed roots');

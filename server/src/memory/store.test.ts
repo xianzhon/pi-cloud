@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database.js';
 import { MemoryStore } from './store.js';
 import type { CreateMemoryInput } from './types.js';
 
@@ -19,11 +19,11 @@ function memoryInput(overrides: Partial<CreateMemoryInput> = {}): CreateMemoryIn
 }
 
 describe('MemoryStore', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let store: MemoryStore;
 
   beforeEach(() => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     store = new MemoryStore(db);
   });
 

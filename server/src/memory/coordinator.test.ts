@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openPiuiDatabase, type PiuiDatabase } from '../db/database.js';
+import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database.js';
 import { MemoryExtractionCoordinator } from './coordinator.js';
 import { RetryableExtractionError } from './extractor.js';
 import { MemoryStore } from './store.js';
@@ -16,14 +16,14 @@ function deferred<T>() {
 }
 
 describe('MemoryExtractionCoordinator', () => {
-  let db: PiuiDatabase;
+  let db: PiCloudDatabase;
   let store: MemoryStore;
   let projectId: string;
   let sequence: number;
   let emit: ReturnType<typeof vi.fn<(event: MemoryUpdatedEvent) => void>>;
 
   beforeEach(() => {
-    db = openPiuiDatabase(':memory:');
+    db = openPiCloudDatabase(':memory:');
     store = new MemoryStore(db);
     projectId = store.getOrCreateProject('default', '/repo/app').id;
     sequence = 0;

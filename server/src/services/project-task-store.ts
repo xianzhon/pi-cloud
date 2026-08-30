@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 import type { CreateSessionWorktreeOptions } from '../types';
 
 export type ProjectTaskStatus = 'waiting' | 'starting' | 'started' | 'completed';
@@ -90,7 +90,7 @@ export class ProjectTaskStore {
   private readonly createId: () => string;
   private readonly now: () => string;
 
-  constructor(private readonly db: PiuiDatabase, options: ProjectTaskStoreOptions = {}) {
+  constructor(private readonly db: PiCloudDatabase, options: ProjectTaskStoreOptions = {}) {
     this.createId = options.createId || randomUUID;
     this.now = options.now || (() => new Date().toISOString());
   }

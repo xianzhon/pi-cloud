@@ -6,7 +6,7 @@ import { clearSessionCookie, getRequestContext, renewSessionFromRequest, setSess
 import type { SessionRecord, SessionStore } from '../auth/sessions';
 import type { TotpService } from '../auth/totp';
 import { verifyConfiguredPassword } from '../auth/password.js';
-import type { PiuiDatabase } from '../db/database';
+import type { PiCloudDatabase } from '../db/database';
 import { SkillPresetStore } from '../services/skill-preset-store.js';
 import type { SkillPresetMode } from '../services/skill-preset-store.js';
 
@@ -16,7 +16,7 @@ interface AuthRouteOptions {
   audit: AuditLog;
   totp: TotpService;
   rateLimiter: IpRateLimiter;
-  db: PiuiDatabase;
+  db: PiCloudDatabase;
 }
 
 type PreferencePatchBody = {

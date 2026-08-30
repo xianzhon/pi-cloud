@@ -18,7 +18,7 @@ export class TerminalManager {
     const platformShell = process.platform === 'win32'
       ? process.env.COMSPEC || 'cmd.exe'
       : process.env.SHELL || 'bash';
-    const shell = process.env.PI_WEBUI_TERMINAL_SHELL || platformShell;
+    const shell = process.env.PI_CLOUD_TERMINAL_SHELL || platformShell;
     const ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-256color',
       cols: 80,

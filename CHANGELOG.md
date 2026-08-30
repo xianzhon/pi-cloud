@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Pi WebUI are documented here.
+All notable changes to Pi Cloud are documented here.
 
 ## [1.0.6] - 2026-08-27
 
@@ -26,13 +26,13 @@ All notable changes to Pi WebUI are documented here.
 - Added collapsible pin groups for organizing, moving, and unpinning agent-profile and review-source sessions.
 - Added a project history tab with last-accessed details, session counts, and confirmed removal of saved session history without deleting project files.
 - Added an option to generate commit messages from and commit only staged changes.
-- Added `PI_WEBUI_ENABLE_SYSTEM_OPEN` for enabling **Open with system tool** through trusted non-localhost URLs.
+- Added `PI_CLOUD_ENABLE_SYSTEM_OPEN` for enabling **Open with system tool** through trusted non-localhost URLs.
 
 ### Changed
 
 - Reduced the initial session page from 30 sessions to 10 and limited pull request status refreshes to the visible page for faster session loading.
 - Lazy-load heavy interface features such as the editor, terminal, settings, memory center, and task queue.
-- Local LLM endpoints outside the loopback interface must now be explicitly allowed with `PI_WEBUI_LOCAL_LLM_ALLOWED_ORIGINS`; endpoint credentials and redirects are rejected.
+- Local LLM endpoints outside the loopback interface must now be explicitly allowed with `PI_CLOUD_LOCAL_LLM_ALLOWED_ORIGINS`; endpoint credentials and redirects are rejected.
 - Database schema updates now use tracked, transactional versioned migrations.
 
 ### Fixed
@@ -91,7 +91,7 @@ All notable changes to Pi WebUI are documented here.
 - Added a shallow-clone option when cloning repositories.
 - Added Mermaid diagram rendering to the Markdown preview.
 - Added modified-time sorting to the folder picker and file tree.
-- Added `pi-webui --version` and `pi-webui -v` commands.
+- Added `pi-cloud --version` and `pi-cloud -v` commands.
 
 ### Changed
 
@@ -109,17 +109,17 @@ All notable changes to Pi WebUI are documented here.
 ### Added
 
 - Added a responsive GitHub Pages website with an illustrated feature guide, updated product screenshots, and automated deployment.
-- Added `pi-webui service restart` support on Linux, macOS, and Windows.
+- Added `pi-cloud service restart` support on Linux, macOS, and Windows.
 
 ### Changed
 
-- Always use Pi WebUI's bundled session auto-rename extension instead of disabling it when an external auto-rename plugin is detected.
+- Always use Pi Cloud's bundled session auto-rename extension instead of disabling it when an external auto-rename plugin is detected.
 - Upgraded `better-sqlite3` from version 12 to 13 and removed the deprecated `prebuild-install` dependency.
 - Added a GitHub social preview image and refreshed the main interface screenshots.
 
 ### Fixed
 
-- Respect `PORT` and `HOST` values from `~/.config/pi-webui/.env` when the CLI starts Pi WebUI, while preserving explicit CLI option precedence.
+- Respect `PORT` and `HOST` values from `~/.config/pi-cloud/.env` when the CLI starts Pi Cloud, while preserving explicit CLI option precedence.
 - Open home-relative (`~/`) file links from chat in the editor instead of resolving them against the workspace.
 - Open relative links and heading anchors within the Markdown preview instead of navigating to browser routes.
 - Improved user-message link contrast and hover/focus visibility in the light theme.
@@ -129,7 +129,7 @@ All notable changes to Pi WebUI are documented here.
 
 ### Added
 
-- **Packaging and deployment** — install with the `pi-webui` executable, run from source, deploy behind a reverse proxy, and use Apache-2.0 licensing.
+- **Packaging and deployment** — install with the `pi-cloud` executable, run from source, deploy behind a reverse proxy, and use Apache-2.0 licensing.
 - **Authentication** — protect the WebUI with password/TOTP authentication, renewable sessions, absolute session lifetime, and production cookie settings.
 - **Settings** — manage model defaults, automation model, shortcuts, gateway profiles, skillsets, Git hosting, and session launch preferences.
 - **Workspace tools** — browse files, search workspace paths with `@`, edit code with Monaco, and use an embedded xterm terminal.

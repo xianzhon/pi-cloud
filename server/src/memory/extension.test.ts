@@ -76,7 +76,7 @@ describe('createMemoryExtension', () => {
   });
 
   it('registers a named durable-memory tool', () => {
-    expect(harness.inline.name).toBe('webui-memory');
+    expect(harness.inline.name).toBe('pi-cloud-memory');
     expect(harness.pi.registerTool).toHaveBeenCalledWith(expect.objectContaining({
       name: 'memory',
       promptSnippet: expect.stringContaining('durable'),

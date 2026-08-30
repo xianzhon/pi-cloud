@@ -1,4 +1,4 @@
-# Pi WebUI
+# Pi Cloud
 
 English | [简体中文](README.zh-CN.md)
 
@@ -6,9 +6,9 @@ A web-based, mobile-friendly interface for the [Pi coding agent](http://pi.dev).
 
 | Dark theme                                                                    | Light theme                                                                     |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| ![Pi WebUI main window in dark theme](docs/images/main-window-dark-theme.png) | ![Pi WebUI main window in light theme](docs/images/main-window-white-theme.png) |
+| ![Pi Cloud main window in dark theme](docs/images/main-window-dark-theme.png) | ![Pi Cloud main window in light theme](docs/images/main-window-white-theme.png) |
 
-**[▶ Watch Pi WebUI handle a Git bugfix workflow](https://xianzhon.github.io/pi-webui-website/assets/videos/demo-git-bugfix-workflow.mp4)**
+**[▶ Watch Pi Cloud handle a Git bugfix workflow](https://xianzhon.github.io/pi-cloud-website/assets/videos/demo-git-bugfix-workflow.mp4)**
 
 ## Features
 
@@ -32,9 +32,9 @@ A web-based, mobile-friendly interface for the [Pi coding agent](http://pi.dev).
 - Node.js 22 or newer
 - pnpm 9 or newer (source development only)
 
-Pi WebUI includes the [Pi coding agent](http://pi.dev), so a separate `pi` installation is not required when using API-key authentication. API keys can be configured from the agent profile dialog.
+Pi Cloud includes the [Pi coding agent](http://pi.dev), so a separate `pi` installation is not required when using API-key authentication. API keys can be configured from the agent profile dialog.
 
-OAuth subscription sign-in is not currently available in the WebUI; native OAuth support is a planned future improvement. For now, install the standalone Pi CLI and complete `/login` in the terminal as the same OS user that runs Pi WebUI:
+OAuth subscription sign-in is not currently available in the WebUI; native OAuth support is a planned future improvement. For now, install the standalone Pi CLI and complete `/login` in the terminal as the same OS user that runs Pi Cloud:
 
 ```bash
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
@@ -42,7 +42,7 @@ pi
 # Enter /login and select a provider
 ```
 
-Pi WebUI then detects the OAuth credentials stored in the default `~/.pi/agent` profile.
+Pi Cloud then detects the OAuth credentials stored in the default `~/.pi/agent` profile.
 
 ### Run without installing
 
@@ -51,7 +51,7 @@ If npm fails while building native dependencies, install system build tools such
 Set login credentials, then run the latest release:
 
 ```bash
-PI_WEBUI_AUTH_USERNAME=pi PI_WEBUI_AUTH_PASSWORD='change-this-password' npx @xianzhon/pi-webui@latest
+PI_CLOUD_AUTH_USERNAME=pi PI_CLOUD_AUTH_PASSWORD='change-this-password' npx pi-cloud@latest
 ```
 
 Open http://127.0.0.1:3000. The CLI opens the browser automatically after the server is ready.
@@ -59,31 +59,31 @@ Open http://127.0.0.1:3000. The CLI opens the browser automatically after the se
 ### Install globally
 
 ```bash
-npm install -g @xianzhon/pi-webui
-pi-webui
+npm install -g pi-cloud
+pi-cloud
 ```
 
-On first run, Pi WebUI creates a protected configuration file with username `admin` and prints a randomly generated password once.
+On first run, Pi Cloud creates a protected configuration file with username `admin` and prints a randomly generated password once.
 
 See the [Configuration Manual](docs/manuals-en/configuration.md) to customize credentials, ports, and other settings. For remote or public access, see the [Deployment Manual](docs/manuals-en/deployment.md).
 
 ### Run as a system service
 
-Install Pi WebUI as a startup service on Linux, macOS, or Windows:
+Install Pi Cloud as a startup service on Linux, macOS, or Windows:
 
 ```bash
-pi-webui service install
-pi-webui service status
+pi-cloud service install
+pi-cloud service status
 ```
 
-On Windows, antivirus software may block `pi-webui service install` because it creates an automatic-start scheduled task. Review the antivirus detection before allowing it; do not disable antivirus or exclude the entire npm directory.
+On Windows, antivirus software may block `pi-cloud service install` because it creates an automatic-start scheduled task. Review the antivirus detection before allowing it; do not disable antivirus or exclude the entire npm directory.
 
 ### Run from source
 
 ```bash
-git clone https://github.com/xianzhon/pi-webui && cd pi-webui
+git clone https://github.com/xianzhon/pi-cloud && cd pi-cloud
 pnpm install
-cp .env.example .env    # set PI_WEBUI_AUTH_USERNAME and PI_WEBUI_AUTH_PASSWORD
+cp .env.example .env    # set PI_CLOUD_AUTH_USERNAME and PI_CLOUD_AUTH_PASSWORD
 pnpm dev
 ```
 
@@ -95,12 +95,12 @@ The essential settings are:
 
 | Variable                   | Description                          |
 | -------------------------- | ------------------------------------ |
-| `PI_WEBUI_AUTH_USERNAME` | Login username                       |
-| `PI_WEBUI_AUTH_PASSWORD` | Login password for a simple setup    |
+| `PI_CLOUD_AUTH_USERNAME` | Login username                       |
+| `PI_CLOUD_AUTH_PASSWORD` | Login password for a simple setup    |
 | `PORT`                   | Backend port (default:`3000`)      |
 | `HOST`                   | Bind address (default:`127.0.0.1`) |
 
-For production, use `PI_WEBUI_AUTH_PASSWORD_HASH` instead of a plaintext password. See the [Configuration Manual](docs/manuals-en/configuration.md) for configuration files, security, session, storage, workspace, memory, provider, and gateway settings.
+For production, use `PI_CLOUD_AUTH_PASSWORD_HASH` instead of a plaintext password. See the [Configuration Manual](docs/manuals-en/configuration.md) for configuration files, security, session, storage, workspace, memory, provider, and gateway settings.
 
 ## Deployment
 

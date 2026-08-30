@@ -67,7 +67,7 @@ describe('ChatPanel', () => {
     chatIsStreaming.value = false;
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
     localStorage.clear();
-    sessionStorage.removeItem('pi-webui-message-input-height');
+    sessionStorage.removeItem('pi-cloud-message-input-height');
   });
 
   afterEach(() => {
@@ -275,7 +275,7 @@ describe('ChatPanel', () => {
   });
 
   it('restores the resized composer height after remounting', async () => {
-    sessionStorage.setItem('pi-webui-message-input-height', '144');
+    sessionStorage.setItem('pi-cloud-message-input-height', '144');
 
     const wrapper = mount(ChatPanel);
     await nextTick();
@@ -1051,7 +1051,7 @@ describe('ChatPanel', () => {
   });
 
   it('keeps the file search selection when arrow navigation is followed by caret sync', async () => {
-    localStorage.setItem('pi-webui-recent-files', JSON.stringify([
+    localStorage.setItem('pi-cloud-recent-files', JSON.stringify([
       'src/components/ChatPanel.vue',
       'src/composables/useChat.ts',
     ]));
@@ -1105,7 +1105,7 @@ describe('ChatPanel', () => {
   });
 
   it('filters recent files when the file mention has a query', async () => {
-    localStorage.setItem('pi-webui-recent-files', JSON.stringify([
+    localStorage.setItem('pi-cloud-recent-files', JSON.stringify([
       'README.md',
       'src/components/ChatPanel.vue',
     ]));
