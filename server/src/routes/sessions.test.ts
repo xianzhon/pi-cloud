@@ -66,6 +66,7 @@ const sessionService = {
     removeAgentProfileApiKey: vi.fn(),
     listAgentProfileCustomProviders: vi.fn(),
     discoverAgentProfileCustomProvider: vi.fn(),
+    discoverAgentProfileCloudflareModels: vi.fn(),
     saveAgentProfileCustomProvider: vi.fn(),
     removeAgentProfileCustomProvider: vi.fn(),
     getAgentProfileLocalLlm: vi.fn(),
@@ -248,6 +249,29 @@ describe('session routes', () => {
 
     expect(sessionService.removeAgentProfileApiKey).toHaveBeenCalledWith('work', 'OPENAI_API_KEY');
     expect(result.providers[0].configured).toBe(false);
+  });
+
+  it('discovers Cloudflare Workers AI models from account credentials', async () => {
+    vi.mocked(sessionService.discoverAgentProfileCloudflareModels).mockResolvedValue([
+      { id: '@cf/meta/llama-3.2-3b-instruct', supportsImages: false },
+    ]);
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+
+    const result = await handlers['POST /agent-profiles/:profileId/custom-providers/discover']({
+      params: { profileId: 'work' },
+      body: {
+        providerType: 'cloudflare-workers-ai',
+        accountId: '0123456789abcdef0123456789abcdef',
+        apiKey: 'secret',
+      },
+    }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
+
+    expect(sessionService.discoverAgentProfileCloudflareModels).toHaveBeenCalledWith(
+      'work', '0123456789abcdef0123456789abcdef', 'secret',
+    );
+    expect(result.models).toEqual([{ id: '@cf/meta/llama-3.2-3b-instruct', supportsImages: false }]);
   });
 
   it('discovers, saves, and removes a custom API provider', async () => {

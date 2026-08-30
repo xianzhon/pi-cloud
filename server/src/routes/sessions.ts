@@ -283,7 +283,16 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
   app.post('/agent-profiles/:profileId/custom-providers/discover', async (req, reply) => {
     try {
       const { profileId } = req.params as { profileId: string };
-      const { baseUrl, apiKey } = req.body as { baseUrl?: string; apiKey?: string };
+      const { baseUrl, apiKey, providerType, accountId } = req.body as {
+        baseUrl?: string;
+        apiKey?: string;
+        providerType?: string;
+        accountId?: string;
+      };
+      if (providerType === 'cloudflare-workers-ai') {
+        if (!accountId) return reply.status(400).send({ error: 'accountId is required' });
+        return { models: await sessionService.discoverAgentProfileCloudflareModels(profileId, accountId, apiKey) };
+      }
       if (!baseUrl) return reply.status(400).send({ error: 'baseUrl is required' });
       return { models: await sessionService.discoverAgentProfileCustomProvider(profileId, baseUrl, apiKey) };
     } catch (error) {

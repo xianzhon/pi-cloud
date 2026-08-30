@@ -377,6 +377,72 @@ describe('PiSessionService', () => {
     fetchMock.mockRestore();
   });
 
+  it('discovers chat-compatible models from the current paginated Cloudflare catalog', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        result: [
+          { id: 'model-uuid-1', name: '@cf/meta/llama-3.2-3b-instruct', task: { name: 'Text Generation' }, properties: [] },
+          { id: 'embedding-uuid', name: '@cf/baai/bge-m3', task: { name: 'Text Embeddings' }, properties: [] },
+        ],
+        result_info: { page: 1, per_page: 1, total_count: 2 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        result: [
+          {
+            id: 'model-uuid-2',
+            name: '@cf/example/multimodal-instruct',
+            task: { name: 'Text Generation' },
+            properties: [{ property_id: 'vision', value: 'true' }],
+          },
+        ],
+        result_info: { page: 2, per_page: 1, total_count: 2 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const service = new PiSessionService();
+
+    try {
+      await expect(service.discoverAgentProfileCloudflareModels(
+        'default', '0123456789abcdef0123456789abcdef', 'cloudflare-token',
+      )).resolves.toEqual([
+        { id: '@cf/example/multimodal-instruct', supportsImages: true },
+        { id: '@cf/meta/llama-3.2-3b-instruct', supportsImages: false },
+      ]);
+      expect(fetchMock).toHaveBeenNthCalledWith(1,
+        'https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/models/search?page=1&per_page=50',
+        expect.objectContaining({ headers: { Authorization: 'Bearer cloudflare-token' }, redirect: 'manual' }),
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringContaining('page=2&per_page=50'), expect.any(Object));
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('surfaces Cloudflare catalog authentication errors', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      success: false,
+      errors: [{ code: 9106, message: 'Authentication failed' }],
+      result: null,
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } }));
+    const service = new PiSessionService();
+
+    try {
+      await expect(service.discoverAgentProfileCloudflareModels(
+        'default', '0123456789abcdef0123456789abcdef', 'invalid-token',
+      )).rejects.toThrow('Cloudflare: Authentication failed');
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('validates Cloudflare catalog credentials before making a request', async () => {
+    const service = new PiSessionService();
+    await expect(service.discoverAgentProfileCloudflareModels('default', 'not-an-account', 'token'))
+      .rejects.toThrow('Enter a valid Cloudflare Account ID');
+    await expect(service.discoverAgentProfileCloudflareModels('default', '0123456789abcdef0123456789abcdef'))
+      .rejects.toThrow('Cloudflare API token is required');
+  });
+
   it('saves a custom provider while moving a newly entered key to protected auth', async () => {
     readFile.mockImplementation(async (path: string) => path.endsWith('/models.json')
       ? JSON.stringify({ providers: {

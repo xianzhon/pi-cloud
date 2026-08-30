@@ -62,6 +62,7 @@ const USER_MESSAGE_COUNT_CONCURRENCY = 10;
 const DEFAULT_AUTOMATION_PROVIDER = 'anthropic';
 const DEFAULT_AUTOMATION_MODEL_ID = 'claude-haiku-4-5';
 const LOCAL_LLM_PROVIDER_ID = 'pi-webui-local';
+const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4/accounts';
 const MODEL_DISCOVERY_TIMEOUT_MS = 10_000;
 
 function isLoopbackHostname(hostname: string): boolean {
@@ -357,6 +358,79 @@ export class PiSessionService {
   async discoverAgentProfileCustomProvider(profileId: string, baseUrl: string, apiKey?: string) {
     await this.requireAgentProfile(profileId);
     return this.discoverOpenAiModels(this.normalizeCustomProviderBaseUrl(baseUrl), apiKey);
+  }
+
+  async discoverAgentProfileCloudflareModels(profileId: string, accountId: string, apiKey?: string) {
+    await this.requireAgentProfile(profileId);
+    const normalizedAccountId = accountId.trim();
+    const key = apiKey?.trim();
+    if (!/^[a-f0-9]{32}$/i.test(normalizedAccountId)) throw new Error('Enter a valid Cloudflare Account ID');
+    if (!key) throw new Error('Cloudflare API token is required to load models');
+
+    const models = new Map<string, boolean>();
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const endpoint = `${CLOUDFLARE_API_BASE_URL}/${normalizedAccountId}/ai/models/search?page=${page}&per_page=50`;
+      const response = await fetch(endpoint, {
+        headers: { Authorization: `Bearer ${key}` },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS),
+      });
+      const body = await response.json().catch(() => null) as {
+        success?: boolean;
+        errors?: Array<{ message?: unknown }>;
+        result?: unknown;
+        result_info?: { total_pages?: unknown; total_count?: unknown; per_page?: unknown };
+      } | null;
+      if (!response.ok || body?.success === false) {
+        const cloudflareMessage = body?.errors
+          ?.map((error) => typeof error.message === 'string' ? error.message.trim() : '')
+          .filter(Boolean)
+          .join('; ');
+        throw new Error(cloudflareMessage
+          ? `Cloudflare: ${cloudflareMessage}`
+          : `Cloudflare returned HTTP ${response.status}`);
+      }
+      if (!body) throw new Error('Cloudflare returned an invalid model catalog response');
+      const candidates = Array.isArray(body.result) ? body.result : [];
+      for (const model of candidates) {
+        if (!model || typeof model !== 'object') continue;
+        const candidate = model as {
+          id?: unknown;
+          name?: unknown;
+          task?: { name?: unknown };
+          properties?: Array<{ property_id?: unknown; value?: unknown }>;
+        };
+        const modelId = [candidate.name, candidate.id]
+          .find((value) => typeof value === 'string' && /^@(cf|hf)\//.test(value)) as string | undefined;
+        if (!modelId) continue;
+        const taskName = typeof candidate.task?.name === 'string' ? candidate.task.name : '';
+        if (!/(text generation|text-to-text|image-to-text|vision)/i.test(taskName)) continue;
+        const hasVisionProperty = candidate.properties?.some((property) => property.property_id === 'vision'
+          && (property.value === true || property.value === 'true')) || false;
+        const supportsImages = hasVisionProperty
+          || /(image|vision)/i.test(taskName)
+          || /(vision|llava|moondream|uform)/i.test(modelId);
+        models.set(modelId, (models.get(modelId) || false) || supportsImages);
+      }
+      const resultInfo = body.result_info;
+      const reportedTotalPages = resultInfo?.total_pages;
+      const calculatedTotalPages = typeof resultInfo?.total_count === 'number'
+        && typeof resultInfo.per_page === 'number'
+        && resultInfo.per_page > 0
+        ? Math.ceil(resultInfo.total_count / resultInfo.per_page)
+        : 1;
+      totalPages = typeof reportedTotalPages === 'number' && Number.isSafeInteger(reportedTotalPages)
+        ? Math.max(1, Math.min(reportedTotalPages, 100))
+        : Math.max(1, Math.min(calculatedTotalPages, 100));
+      page += 1;
+    } while (page <= totalPages);
+
+    if (models.size === 0) throw new Error('Cloudflare returned no chat-compatible Workers AI models');
+    return [...models.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([id, supportsImages]) => ({ id, supportsImages }));
   }
 
   async saveAgentProfileCustomProvider(profileId: string, providerId: string, baseUrl: string, modelIds: string[], imageModelIds?: string[], apiKey?: string) {
