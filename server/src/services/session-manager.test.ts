@@ -116,7 +116,16 @@ const modelRuntimeLogin = vi.fn<(
   callbacks: { prompt: () => Promise<string>; notify: () => void },
 ) => Promise<Record<string, never>>>(async () => ({}));
 const modelRuntimeLogout = vi.fn(async () => {});
+const modelRuntimeCheckAuth = vi.fn<(providerId: string) => Promise<{ type: 'api_key' | 'oauth'; source?: string } | undefined>>(async () => undefined);
 const modelRuntimeGetAuthStatus = vi.fn<(providerId: string) => { configured: boolean; source?: string }>(() => ({ configured: false }));
+const modelRuntimeProviders = [
+  { id: 'anthropic', name: 'Anthropic', auth: { apiKey: {}, oauth: { name: 'Anthropic (Claude Pro/Max)', isSubscription: true } } },
+  { id: 'openai', name: 'OpenAI', auth: { apiKey: {} } },
+  { id: 'openai-codex', name: 'OpenAI Codex', auth: { oauth: { name: 'OpenAI (ChatGPT Plus/Pro)', isSubscription: true } } },
+  { id: 'cloudflare-workers-ai', name: 'Cloudflare Workers AI', auth: { apiKey: {} } },
+  { id: 'opencode', name: 'OpenCode Zen', auth: { apiKey: {} } },
+  { id: 'opencode-go', name: 'OpenCode Go', auth: { apiKey: {} } },
+];
 vi.mock('@earendil-works/pi-coding-agent', () => ({
   SessionManager: {
     create: sessionManagerCreate,
@@ -132,6 +141,9 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
     create: vi.fn(async () => ({
       login: modelRuntimeLogin,
       logout: modelRuntimeLogout,
+      getProviders: () => modelRuntimeProviders,
+      getProvider: (providerId: string) => modelRuntimeProviders.find((provider) => provider.id === providerId),
+      checkAuth: modelRuntimeCheckAuth,
       getProviderAuthStatus: modelRuntimeGetAuthStatus,
       getAvailable: async () => [
         { provider: 'anthropic', id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', input: ['text', 'image'] },
@@ -178,6 +190,8 @@ describe('PiSessionService', () => {
     modelRuntimeLogin.mockResolvedValue({});
     modelRuntimeLogout.mockReset();
     modelRuntimeLogout.mockResolvedValue(undefined);
+    modelRuntimeCheckAuth.mockReset();
+    modelRuntimeCheckAuth.mockResolvedValue(undefined);
     modelRuntimeGetAuthStatus.mockReset();
     modelRuntimeGetAuthStatus.mockReturnValue({ configured: false });
     readdir.mockReset();
@@ -299,6 +313,9 @@ describe('PiSessionService', () => {
   });
 
   it('reports configured profile API keys without exposing credential values', async () => {
+    modelRuntimeCheckAuth.mockImplementation(async (providerId: string) => providerId === 'anthropic'
+      ? { type: 'api_key', source: 'ANTHROPIC_API_KEY' }
+      : undefined);
     modelRuntimeGetAuthStatus.mockImplementation((providerId: string) => ({
       configured: providerId === 'anthropic',
       source: providerId === 'anthropic' ? 'stored' : undefined,
@@ -308,11 +325,38 @@ describe('PiSessionService', () => {
     const providers = await service.listAgentProfileApiKeyProviders('default');
 
     expect(providers).toContainEqual(expect.objectContaining({
+      id: 'anthropic',
       envVar: 'ANTHROPIC_API_KEY',
       configured: true,
+      authType: 'api_key',
       source: 'stored',
     }));
     expect(providers).not.toContainEqual(expect.objectContaining({ apiKey: expect.anything() }));
+  });
+
+  it('detects OAuth subscriptions without starting a login flow', async () => {
+    modelRuntimeCheckAuth.mockImplementation(async (providerId: string) => providerId === 'openai-codex'
+      ? { type: 'oauth', source: 'OAuth' }
+      : undefined);
+    modelRuntimeGetAuthStatus.mockImplementation((providerId: string) => ({
+      configured: providerId === 'openai-codex',
+      source: providerId === 'openai-codex' ? 'stored' : undefined,
+    }));
+    const service = new PiSessionService();
+
+    const providers = await service.listAgentProfileApiKeyProviders('default');
+
+    expect(providers).toContainEqual({
+      id: 'openai-codex',
+      label: 'OpenAI Codex / ChatGPT Plus/Pro',
+      envVar: undefined,
+      configured: true,
+      authType: 'oauth',
+      source: 'stored',
+      sourceLabel: 'OAuth',
+      subscription: true,
+    });
+    expect(modelRuntimeLogin).not.toHaveBeenCalled();
   });
 
   it('hides API key providers managed by a custom provider', async () => {
@@ -339,6 +383,14 @@ describe('PiSessionService', () => {
     await service.removeAgentProfileApiKey('default', 'ANTHROPIC_API_KEY');
 
     expect(modelRuntimeLogout).toHaveBeenCalledWith('anthropic');
+  });
+
+  it('logs out an OAuth provider by provider ID', async () => {
+    const service = new PiSessionService();
+
+    await service.logoutAgentProfileProvider('default', 'openai-codex');
+
+    expect(modelRuntimeLogout).toHaveBeenCalledWith('openai-codex');
   });
 
   it('includes declared input capabilities in agent-profile model summaries', async () => {

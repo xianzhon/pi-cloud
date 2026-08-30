@@ -384,6 +384,15 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     }
   });
 
+  app.delete('/agent-profiles/:profileId/provider-auth/:providerId', async (req, reply) => {
+    try {
+      const { profileId, providerId } = req.params as { profileId: string; providerId: string };
+      return { providers: await sessionService.logoutAgentProfileProvider(profileId, providerId) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to disconnect provider' });
+    }
+  });
+
   app.get('/agent-profiles/:profileId/skills', async (req, reply) => {
     try {
       const { profileId } = req.params as { profileId: string };

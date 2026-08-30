@@ -69,6 +69,7 @@ const sessionService = {
     listAgentProfileApiKeyProviders: vi.fn(),
     saveAgentProfileApiKey: vi.fn(),
     removeAgentProfileApiKey: vi.fn(),
+    logoutAgentProfileProvider: vi.fn(),
     listAgentProfileCustomProviders: vi.fn(),
     discoverAgentProfileCustomProvider: vi.fn(),
     discoverAgentProfileCloudflareModels: vi.fn(),
@@ -257,6 +258,22 @@ describe('session routes', () => {
     }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
 
     expect(sessionService.removeAgentProfileApiKey).toHaveBeenCalledWith('work', 'OPENAI_API_KEY');
+    expect(result.providers[0].configured).toBe(false);
+  });
+
+  it('logs out provider authentication by provider ID', async () => {
+    vi.mocked(sessionService.logoutAgentProfileProvider).mockResolvedValue([
+      { id: 'openai-codex', label: 'OpenAI Codex / ChatGPT Plus/Pro', configured: false },
+    ] as any);
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+
+    const result = await handlers['DELETE /agent-profiles/:profileId/provider-auth/:providerId']({
+      params: { profileId: 'work', providerId: 'openai-codex' },
+    }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
+
+    expect(sessionService.logoutAgentProfileProvider).toHaveBeenCalledWith('work', 'openai-codex');
     expect(result.providers[0].configured).toBe(false);
   });
 

@@ -293,13 +293,32 @@ export class PiSessionService {
         : []
     )));
     const modelRuntime = await this.createProfileModelRuntime(profile.path);
-    return API_KEY_PROVIDERS
-      .filter(({ providerIds }) => !providerIds.some((providerId) => customProviderIds.has(providerId)))
-      .map(({ envVar, label, providerIds }) => {
-        const statuses = providerIds.map((providerId) => modelRuntime.getProviderAuthStatus(providerId));
-        const configuredStatus = statuses.find((status) => status.configured);
-        return { envVar, label, configured: Boolean(configuredStatus), source: configuredStatus?.source };
-      });
+    const providers = modelRuntime.getProviders().filter((provider) => !customProviderIds.has(provider.id));
+
+    return Promise.all(providers.map(async (provider) => {
+      // checkAuth only inspects local credentials and ambient configuration; it does not refresh OAuth tokens.
+      const auth = await modelRuntime.checkAuth(provider.id);
+      const status = modelRuntime.getProviderAuthStatus(provider.id);
+      const apiKeyProvider = API_KEY_PROVIDERS.find(({ providerIds }) => (
+        (providerIds as readonly string[]).includes(provider.id)
+      ));
+      const label = provider.id === 'openai'
+        ? 'OpenAI API'
+        : provider.id === 'openai-codex'
+          ? 'OpenAI Codex / ChatGPT Plus/Pro'
+          : provider.name;
+
+      return {
+        id: provider.id,
+        label,
+        envVar: apiKeyProvider?.envVar,
+        configured: Boolean(auth),
+        authType: auth?.type,
+        source: status.source,
+        sourceLabel: auth?.source,
+        subscription: auth?.type === 'oauth' && provider.auth.oauth?.isSubscription === true,
+      };
+    }));
   }
 
   async saveAgentProfileApiKey(profileId: string, envVar: string, apiKey: string) {
@@ -325,6 +344,15 @@ export class PiSessionService {
 
     const modelRuntime = await this.createProfileModelRuntime(profile.path);
     for (const providerId of provider.providerIds) await modelRuntime.logout(providerId);
+    return this.listAgentProfileApiKeyProviders(profileId);
+  }
+
+  async logoutAgentProfileProvider(profileId: string, providerId: string) {
+    const profile = await this.requireAgentProfile(profileId);
+    const modelRuntime = await this.createProfileModelRuntime(profile.path);
+    if (!modelRuntime.getProvider(providerId)) throw new Error('Unknown authentication provider');
+
+    await modelRuntime.logout(providerId);
     return this.listAgentProfileApiKeyProviders(profileId);
   }
 
@@ -1581,6 +1609,7 @@ export class PiSessionService {
     return ModelRuntime.create({
       authPath: join(profilePath, 'auth.json'),
       modelsPath: join(profilePath, 'models.json'),
+      allowModelNetwork: false,
     });
   }
 

@@ -19,20 +19,23 @@ describe('ProfileManagerDialog', () => {
       if (url.endsWith('/proxy')) return ok({ proxy: {} });
       if (url.endsWith('/api-key-providers')) {
         return ok({ providers: [
-          { envVar: 'ANTHROPIC_API_KEY', label: 'Anthropic Claude', configured: false },
-          { envVar: 'OPENAI_API_KEY', label: 'OpenAI GPT', configured: true, source: 'stored' },
+          { id: 'anthropic', envVar: 'ANTHROPIC_API_KEY', label: 'Anthropic', configured: false },
+          { id: 'openai', envVar: 'OPENAI_API_KEY', label: 'OpenAI API', configured: true, authType: 'api_key', source: 'stored' },
+          { id: 'openai-codex', label: 'OpenAI Codex / ChatGPT Plus/Pro', configured: true, authType: 'oauth', source: 'stored', subscription: true },
         ] });
       }
       if (url.endsWith('/api-key') && options?.method === 'PUT') {
         return ok({ providers: [
-          { envVar: 'ANTHROPIC_API_KEY', label: 'Anthropic Claude', configured: true, source: 'stored' },
-          { envVar: 'OPENAI_API_KEY', label: 'OpenAI GPT', configured: true, source: 'stored' },
+          { id: 'anthropic', envVar: 'ANTHROPIC_API_KEY', label: 'Anthropic', configured: true, authType: 'api_key', source: 'stored' },
+          { id: 'openai', envVar: 'OPENAI_API_KEY', label: 'OpenAI API', configured: true, authType: 'api_key', source: 'stored' },
+          { id: 'openai-codex', label: 'OpenAI Codex / ChatGPT Plus/Pro', configured: true, authType: 'oauth', source: 'stored', subscription: true },
         ] });
       }
-      if (url.includes('/api-key/') && options?.method === 'DELETE') {
+      if (url.includes('/provider-auth/') && options?.method === 'DELETE') {
         return ok({ providers: [
-          { envVar: 'ANTHROPIC_API_KEY', label: 'Anthropic Claude', configured: false },
-          { envVar: 'OPENAI_API_KEY', label: 'OpenAI GPT', configured: false },
+          { id: 'anthropic', envVar: 'ANTHROPIC_API_KEY', label: 'Anthropic', configured: false },
+          { id: 'openai', envVar: 'OPENAI_API_KEY', label: 'OpenAI API', configured: false },
+          { id: 'openai-codex', label: 'OpenAI Codex / ChatGPT Plus/Pro', configured: true, authType: 'oauth', source: 'stored', subscription: true },
         ] });
       }
       if (url.endsWith('/local-llm/discover')) return ok({ models: [{ id: 'qwen3:8b' }] });
@@ -107,14 +110,31 @@ describe('ProfileManagerDialog', () => {
     expect((sections[0].element as HTMLDetailsElement).open).toBe(true);
   });
 
-  it('selects a configured API key provider by default', async () => {
+  it('selects a configured provider by default', async () => {
     const wrapper = mount(ProfileManagerDialog, {
       props: { visible: false, profiles, selectedId: 'work' },
       global: { stubs: { Teleport: true } },
     });
     await wrapper.setProps({ visible: true });
 
-    await vi.waitFor(() => expect(wrapper.find('[aria-label="API provider key"]').text()).toContain('OPENAI_API_KEY'));
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Provider authentication"]').text()).toContain('OpenAI API'));
+  });
+
+  it('shows an existing OAuth subscription without starting browser login', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Provider authentication"]').text()).toContain('OpenAI API'));
+    await wrapper.find('[aria-label="Provider authentication"]').trigger('click');
+    await wrapper.findAll('.custom-select-option').find((option) => option.text().includes('openai-codex'))!.trigger('click');
+
+    expect(wrapper.text()).toContain('OpenAI Codex / ChatGPT Plus/Pro');
+    expect(wrapper.text()).toContain('Subscription connected');
+    expect(wrapper.findAll('details.profile-collapsible')[1].find('input[type="password"]').exists()).toBe(false);
+    expect(vi.mocked(fetch).mock.calls.every(([url]) => String(url).startsWith('/api/'))).toBe(true);
   });
 
   it('saves an API key without displaying it again', async () => {
@@ -124,9 +144,9 @@ describe('ProfileManagerDialog', () => {
     });
     await wrapper.setProps({ visible: true });
 
-    await vi.waitFor(() => expect(wrapper.find('[aria-label="API provider key"]').text()).toContain('OPENAI_API_KEY'));
-    await wrapper.find('[aria-label="API provider key"]').trigger('click');
-    await wrapper.findAll('.custom-select-option').find((option) => option.text().includes('ANTHROPIC_API_KEY'))!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Provider authentication"]').text()).toContain('OpenAI API'));
+    await wrapper.find('[aria-label="Provider authentication"]').trigger('click');
+    await wrapper.findAll('.custom-select-option').find((option) => option.text().includes('anthropic'))!.trigger('click');
 
     const keyInput = wrapper.find('input[type="password"]');
     await keyInput.setValue('secret-key');
@@ -150,14 +170,14 @@ describe('ProfileManagerDialog', () => {
     });
     await wrapper.setProps({ visible: true });
 
-    await vi.waitFor(() => expect(wrapper.findAll('button').some((button) => button.text() === 'Remove saved key')).toBe(true));
-    await wrapper.findAll('button').find((button) => button.text() === 'Remove saved key')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.findAll('button').some((button) => button.text() === 'Disconnect')).toBe(true));
+    await wrapper.findAll('button').find((button) => button.text() === 'Disconnect')!.trigger('click');
 
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
-      '/api/sessions/agent-profiles/work/api-key/OPENAI_API_KEY',
+      '/api/sessions/agent-profiles/work/provider-auth/openai',
       { method: 'DELETE' },
     ));
-    expect(wrapper.text()).toContain('Saved API key removed.');
+    expect(wrapper.text()).toContain('Provider disconnected.');
   });
 
   it('discovers, saves, and removes a local LLM without asking for authentication', async () => {
@@ -292,7 +312,7 @@ describe('ProfileManagerDialog', () => {
       global: { stubs: { Teleport: true } },
     });
     await wrapper.setProps({ visible: true });
-    await vi.waitFor(() => expect(wrapper.find('[aria-label="API provider key"]').text()).toContain('OPENAI_API_KEY'));
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Provider authentication"]').text()).toContain('OpenAI API'));
     await wrapper.vm.$nextTick();
 
     const checkButton = wrapper.find('.profile-check-button');

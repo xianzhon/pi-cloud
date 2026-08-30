@@ -88,11 +88,11 @@
               <details :key="`api-${managedProfileId}`" class="profile-collapsible">
                 <summary>
                   <span class="profile-section-heading">
-                    <strong>{{ t('components.profileManagerDialog.apiProviderKey') }}</strong>
-                    <small>{{ t('components.profileManagerDialog.apiProviderKeyHelp') }}</small>
+                    <strong>{{ t('components.profileManagerDialog.providerAuthentication') }}</strong>
+                    <small>{{ t('components.profileManagerDialog.providerAuthenticationHelp') }}</small>
                   </span>
                   <span v-if="configuredApiKeyCount" class="profile-section-status">
-                    {{ t('components.profileManagerDialog.keysConfigured', { count: configuredApiKeyCount }) }}
+                    {{ t('components.profileManagerDialog.providersAuthenticated', { count: configuredApiKeyCount }) }}
                   </span>
                   <span class="profile-section-chevron" aria-hidden="true">›</span>
                 </summary>
@@ -100,9 +100,10 @@
                   <CustomSelect
                     v-model="apiKeyProvider"
                     :options="apiKeyProviderOptions"
-                    :aria-label="t('components.profileManagerDialog.apiProviderKey')"
+                    :aria-label="t('components.profileManagerDialog.providerAuthentication')"
                   />
                   <input
+                    v-if="selectedApiKeyProvider?.envVar"
                     v-model="apiKey"
                     type="password"
                     autocomplete="new-password"
@@ -110,7 +111,7 @@
                     @keyup.enter="saveApiKey"
                   />
                   <div class="profile-key-actions">
-                    <button class="profile-secondary dialog-action" type="button" :disabled="savingApiKey || !apiKeyProvider || !apiKey.trim()" @click="saveApiKey">
+                    <button v-if="selectedApiKeyProvider?.envVar" class="profile-secondary dialog-action" type="button" :disabled="savingApiKey || !apiKey.trim()" @click="saveApiKey">
                       {{ savingApiKey ? t('components.profileManagerDialog.saving') : t('components.profileManagerDialog.saveApiKey') }}
                     </button>
                     <button
@@ -120,11 +121,13 @@
                       :disabled="removingApiKey"
                       @click="removeApiKey"
                     >
-                      {{ removingApiKey ? t('components.profileManagerDialog.removing') : t('components.profileManagerDialog.removeApiKey') }}
+                      {{ removingApiKey ? t('components.profileManagerDialog.removing') : t('components.profileManagerDialog.disconnectProvider') }}
                     </button>
-                    <span v-if="selectedApiKeyProvider?.configured" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeyConfigured') }}</span>
-                    <span v-else-if="apiKeySaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeySaved') }}</span>
-                    <span v-else-if="apiKeyRemoved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeyRemoved') }}</span>
+                    <span class="profile-auth-status" :class="{ 'profile-success': selectedApiKeyProvider?.configured }" role="status">
+                      {{ selectedApiKeyProvider ? providerAuthStatus(selectedApiKeyProvider) : '' }}
+                    </span>
+                    <span v-if="apiKeySaved" class="profile-success" role="status">{{ t('components.profileManagerDialog.apiKeySaved') }}</span>
+                    <span v-else-if="apiKeyRemoved" class="profile-success" role="status">{{ t('components.profileManagerDialog.providerDisconnected') }}</span>
                   </div>
                 </div>
               </details>
@@ -267,10 +270,14 @@ interface ModelOption {
 }
 
 interface ApiKeyProvider {
-  envVar: string;
+  id: string;
+  envVar?: string;
   label: string;
   configured: boolean;
+  authType?: 'api_key' | 'oauth';
   source?: string;
+  sourceLabel?: string;
+  subscription?: boolean;
 }
 
 interface LocalModel {
@@ -365,10 +372,10 @@ const modelOptions = computed<CustomSelectOption[]>(() => models.value.map((mode
   label: `${model.name || model.id} [${model.provider}]`,
 })));
 const apiKeyProviderOptions = computed<CustomSelectOption[]>(() => apiKeyProviders.value.map((provider) => ({
-  value: provider.envVar,
-  label: `${provider.label} (${provider.envVar})${provider.configured ? ` — ${t('components.profileManagerDialog.configured')}` : ''}`,
+  value: provider.id,
+  label: `${provider.label} [${provider.id}] — ${providerAuthStatus(provider)}`,
 })));
-const selectedApiKeyProvider = computed(() => apiKeyProviders.value.find((provider) => provider.envVar === apiKeyProvider.value));
+const selectedApiKeyProvider = computed(() => apiKeyProviders.value.find((provider) => provider.id === apiKeyProvider.value));
 const selectedCustomProvider = computed(() => customProviders.value.find((provider) => provider.id === customProviderSelection.value));
 const isCloudflareProvider = computed(() => customProviderType.value === 'cloudflare-workers-ai');
 const customProviderCanDiscover = computed(() => isCloudflareProvider.value
@@ -402,6 +409,20 @@ const localLlmPresetOptions: CustomSelectOption[] = [
   { value: 'llamaCpp', label: 'llama.cpp' },
   { value: 'custom', label: t('components.profileManagerDialog.customOpenAiCompatible') },
 ];
+
+function providerAuthStatus(provider: ApiKeyProvider): string {
+  if (!provider.configured) return t('components.profileManagerDialog.notConfigured');
+  if (provider.authType === 'oauth') {
+    return t(provider.subscription
+      ? 'components.profileManagerDialog.subscriptionConnected'
+      : 'components.profileManagerDialog.oauthConnected');
+  }
+  if (provider.source === 'environment') {
+    return t('components.profileManagerDialog.apiKeyFromEnvironment', { source: provider.sourceLabel || provider.envVar || '' });
+  }
+  if (provider.source === 'stored') return t('components.profileManagerDialog.storedApiKey');
+  return t('components.profileManagerDialog.apiKeyConfigured');
+}
 
 function profileUrl(id: string, suffix: string = ''): string {
   return `/api/sessions/agent-profiles/${encodeURIComponent(id)}${suffix}`;
@@ -519,8 +540,8 @@ async function select(id: string): Promise<void> {
   if (apiKeyProvidersResponse.ok) {
     const data = await apiKeyProvidersResponse.json() as { providers?: ApiKeyProvider[] };
     apiKeyProviders.value = data.providers || [];
-    apiKeyProvider.value = apiKeyProviders.value.find((provider) => provider.configured)?.envVar
-      || apiKeyProviders.value[0]?.envVar
+    apiKeyProvider.value = apiKeyProviders.value.find((provider) => provider.configured)?.id
+      || apiKeyProviders.value[0]?.id
       || '';
   }
   if (localLlmResponse.ok) {
@@ -750,7 +771,7 @@ async function removeCustomProvider(): Promise<void> {
 }
 
 async function saveApiKey(): Promise<void> {
-  if (!apiKeyProvider.value || !apiKey.value.trim()) return;
+  if (!selectedApiKeyProvider.value?.envVar || !apiKey.value.trim()) return;
   error.value = '';
   apiKeySaved.value = false;
   apiKeyRemoved.value = false;
@@ -760,7 +781,7 @@ async function saveApiKey(): Promise<void> {
     const response = await fetch(profileUrl(managedProfileId.value, '/api-key'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ envVar: apiKeyProvider.value, apiKey: apiKey.value }),
+      body: JSON.stringify({ envVar: selectedApiKeyProvider.value.envVar, apiKey: apiKey.value }),
     });
     if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToSaveApiKey')));
     const data = await response.json() as { providers?: ApiKeyProvider[] };
@@ -783,15 +804,15 @@ async function saveApiKey(): Promise<void> {
 }
 
 async function removeApiKey(): Promise<void> {
-  if (!apiKeyProvider.value) return;
+  if (!selectedApiKeyProvider.value) return;
   error.value = '';
   apiKeySaved.value = false;
   apiKeyRemoved.value = false;
   removingApiKey.value = true;
   try {
-    const suffix = `/api-key/${encodeURIComponent(apiKeyProvider.value)}`;
+    const suffix = `/provider-auth/${encodeURIComponent(selectedApiKeyProvider.value.id)}`;
     const response = await fetch(profileUrl(managedProfileId.value, suffix), { method: 'DELETE' });
-    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToRemoveApiKey')));
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToDisconnectProvider')));
     const data = await response.json() as { providers?: ApiKeyProvider[] };
     apiKeyProviders.value = data.providers || apiKeyProviders.value;
     apiKey.value = '';
@@ -805,7 +826,7 @@ async function removeApiKey(): Promise<void> {
     }
     emit('updated');
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToRemoveApiKey');
+    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToDisconnectProvider');
   } finally {
     removingApiKey.value = false;
   }
