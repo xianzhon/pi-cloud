@@ -284,12 +284,22 @@ export class PiSessionService {
 
   async listAgentProfileApiKeyProviders(profileId: string) {
     const profile = await this.requireAgentProfile(profileId);
+    const config = await this.readModelsJson(profile.path);
+    const customProviderIds = new Set(Object.entries(this.modelsJsonProviders(config)).flatMap(([id, value]) => (
+      id !== LOCAL_LLM_PROVIDER_ID
+        && value && typeof value === 'object' && !Array.isArray(value)
+        && typeof value.baseUrl === 'string' && Array.isArray(value.models)
+        ? [id]
+        : []
+    )));
     const modelRuntime = await this.createProfileModelRuntime(profile.path);
-    return API_KEY_PROVIDERS.map(({ envVar, label, providerIds }) => {
-      const statuses = providerIds.map((providerId) => modelRuntime.getProviderAuthStatus(providerId));
-      const configuredStatus = statuses.find((status) => status.configured);
-      return { envVar, label, configured: Boolean(configuredStatus), source: configuredStatus?.source };
-    });
+    return API_KEY_PROVIDERS
+      .filter(({ providerIds }) => !providerIds.some((providerId) => customProviderIds.has(providerId)))
+      .map(({ envVar, label, providerIds }) => {
+        const statuses = providerIds.map((providerId) => modelRuntime.getProviderAuthStatus(providerId));
+        const configuredStatus = statuses.find((status) => status.configured);
+        return { envVar, label, configured: Boolean(configuredStatus), source: configuredStatus?.source };
+      });
   }
 
   async saveAgentProfileApiKey(profileId: string, envVar: string, apiKey: string) {

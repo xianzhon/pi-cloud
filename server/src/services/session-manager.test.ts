@@ -315,6 +315,24 @@ describe('PiSessionService', () => {
     expect(providers).not.toContainEqual(expect.objectContaining({ apiKey: expect.anything() }));
   });
 
+  it('hides API key providers managed by a custom provider', async () => {
+    readFile.mockImplementation(async (path: string) => path.endsWith('/models.json')
+      ? JSON.stringify({ providers: {
+        'cloudflare-workers-ai': {
+          baseUrl: 'https://api.cloudflare.com/client/v4/accounts/account-id/ai/v1',
+          api: 'openai-completions',
+          models: [{ id: '@cf/meta/llama-3.1-8b-instruct' }],
+        },
+      } })
+      : '');
+    const service = new PiSessionService();
+
+    const providers = await service.listAgentProfileApiKeyProviders('default');
+
+    expect(providers).not.toContainEqual(expect.objectContaining({ envVar: 'CLOUDFLARE_API_KEY' }));
+    expect(providers).toContainEqual(expect.objectContaining({ envVar: 'ANTHROPIC_API_KEY' }));
+  });
+
   it('removes a stored agent-profile API key', async () => {
     const service = new PiSessionService();
 
