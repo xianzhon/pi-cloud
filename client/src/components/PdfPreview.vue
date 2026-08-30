@@ -68,6 +68,15 @@
         ><PhArrowsOutCardinal :size="19" /><span class="pdf-tool-shortcut">8</span></button>
         <button
           type="button"
+          :class="{ active: tool === 'whiteout' }"
+          :aria-pressed="tool === 'whiteout'"
+          :aria-label="t('components.editorPanel.pdfWhiteout')"
+          aria-keyshortcuts="9"
+          :data-tooltip="t('components.editorPanel.pdfWhiteout')"
+          @click="toggleTool('whiteout')"
+        ><PhRectangle :size="19" weight="fill" /><span class="pdf-tool-shortcut">9</span></button>
+        <button
+          type="button"
           :class="{ active: tool === 'eraser' }"
           :aria-pressed="tool === 'eraser'"
           :aria-label="t('components.editorPanel.pdfEraser')"
@@ -279,7 +288,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { i18n } from '../i18n';
 
 interface AnnotationPoint { x: number; y: number }
-type DrawingTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text';
+type DrawingTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'whiteout';
 interface AnnotationStroke {
   type?: DrawingTool;
   color: string;
@@ -321,7 +330,7 @@ const TOOLBAR_KEYBOARD_MOVEMENT: Record<string, ToolbarPosition> = {
   ArrowDown: { left: 0, top: 10 },
 };
 const ANNOTATION_TOOLS = new Set<AnnotationTool>([
-  'pan', 'pen', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'move', 'eraser',
+  'pan', 'pen', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'whiteout', 'move', 'eraser',
 ]);
 const shapeTools: Array<{ name: DrawingTool; label: string; icon: object; shortcut: string }> = [
   { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus, shortcut: '3' },
@@ -340,6 +349,7 @@ const toolShortcuts: Record<string, AnnotationTool> = {
   '6': 'ellipse',
   '7': 'text',
   '8': 'move',
+  '9': 'whiteout',
 };
 
 const previewEl = ref<HTMLDivElement>();
@@ -754,6 +764,10 @@ function drawAnnotation(
     if (type === 'arrow') drawArrowHead(context, startX, startY, endX, endY);
   } else if (type === 'rectangle') {
     context.rect(startX, startY, endX - startX, endY - startY);
+  } else if (type === 'whiteout') {
+    context.fillRect(startX, startY, endX - startX, endY - startY);
+    context.restore();
+    return;
   } else if (type === 'ellipse') {
     const radiusX = Math.abs(endX - startX) / 2;
     const radiusY = Math.abs(endY - startY) / 2;
@@ -1086,7 +1100,7 @@ function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoin
   const points = stroke.points.map(item => ({ x: item.x * canvas.width, y: item.y * canvas.height }));
   const type = stroke.type || 'pen';
 
-  if (type === 'rectangle' || type === 'ellipse' || type === 'text') {
+  if (type === 'rectangle' || type === 'ellipse' || type === 'text' || type === 'whiteout') {
     const start = points[0];
     const end = points.at(-1) || start;
     const textScale = scale.value * (window.devicePixelRatio || 1);
@@ -1105,7 +1119,7 @@ function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoin
 }
 
 function isResizableAnnotation(stroke: AnnotationStroke): boolean {
-  return ['line', 'arrow', 'rectangle', 'ellipse'].includes(stroke.type || '') && stroke.points.length >= 2;
+  return ['line', 'arrow', 'rectangle', 'ellipse', 'whiteout'].includes(stroke.type || '') && stroke.points.length >= 2;
 }
 
 function resizePointIndex(
@@ -1181,7 +1195,12 @@ function startAnnotation(event: PointerEvent, page: number): void {
     return;
   }
 
-  addAnnotation({ type: tool.value, color: penColor.value, width: penWidth.value, points: [point] });
+  addAnnotation({
+    type: tool.value,
+    color: tool.value === 'whiteout' ? '#ffffff' : penColor.value,
+    width: penWidth.value,
+    points: [point],
+  });
   if (tool.value === 'pen' || tool.value === 'highlighter') annotationChanged = true;
   drawAnnotations();
 }

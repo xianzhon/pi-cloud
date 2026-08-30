@@ -35,6 +35,7 @@ const context = {
   moveTo: vi.fn(),
   lineTo: vi.fn(),
   rect: vi.fn(),
+  fillRect: vi.fn(),
   ellipse: vi.fn(),
   stroke: vi.fn(),
   fillText: vi.fn(),
@@ -290,7 +291,7 @@ describe('PdfPreview', () => {
       'Export annotated PDF',
     ]);
     expect(annotationToolbar.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
-    for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text', 'Move annotation']) {
+    for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text', 'Move annotation', 'Erase PDF content with white rectangle']) {
       expect(wrapper.get(`[aria-label="${label}"]`).attributes('data-tooltip')).toBe(label);
     }
     expect(wrapper.get('[aria-label="Undo annotation"]').attributes('data-tooltip')).toBe('Undo annotation');
@@ -333,6 +334,7 @@ describe('PdfPreview', () => {
       ['6', 'Draw ellipse'],
       ['7', 'Add text'],
       ['8', 'Move annotation'],
+      ['9', 'Erase PDF content with white rectangle'],
       ['0', 'Erase PDF annotations'],
     ];
     for (const [key, label] of shortcuts) {
@@ -500,6 +502,35 @@ describe('PdfPreview', () => {
     });
     expect(context.fillText).toHaveBeenCalledWith('Review this', 240, 320);
     expect(context.fillText).toHaveBeenCalledWith('on two lines', 240, 340);
+  });
+
+  it('covers PDF content with a saved white rectangle', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).startsWith('/api/files/read')) return { ok: false, status: 404 } as Response;
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    await wrapper.get('[aria-label="Erase PDF content with white rectangle"]').trigger('click');
+
+    const canvas = wrapper.get('.pdf-annotation-canvas');
+    await canvas.trigger('pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
+    await canvas.trigger('pointermove', { pointerId: 1, clientX: 180, clientY: 240 });
+    await canvas.trigger('pointerup', { pointerId: 1, clientX: 180, clientY: 240 });
+    await flushPromises();
+
+    const writeCall = fetchMock.mock.calls.find(([url]) => url === '/api/files/write');
+    const body = JSON.parse(String(writeCall?.[1]?.body));
+    expect(JSON.parse(body.content).pages['1'][0]).toMatchObject({
+      type: 'whiteout',
+      color: '#ffffff',
+      points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 }],
+    });
+    expect(context.fillRect).toHaveBeenCalledWith(60, 80, 120, 160);
   });
 
   it('edits an existing text annotation directly on the PDF', async () => {

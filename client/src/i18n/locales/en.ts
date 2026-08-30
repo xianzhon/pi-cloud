@@ -427,6 +427,7 @@ export default {
       pdfText: 'Add text',
       pdfTextPrompt: 'Enter annotation text',
       pdfMoveAnnotation: 'Move annotation',
+      pdfWhiteout: 'Erase PDF content with white rectangle',
       pdfEraser: 'Erase PDF annotations',
       pdfPenColor: 'Annotation color',
       pdfPenWidth: 'Annotation width',

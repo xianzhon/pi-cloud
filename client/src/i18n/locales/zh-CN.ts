@@ -427,6 +427,7 @@ export default {
       pdfText: '添加文字',
       pdfTextPrompt: '输入标注文字',
       pdfMoveAnnotation: '移动标注',
+      pdfWhiteout: '使用白色矩形擦除 PDF 内容',
       pdfEraser: '擦除 PDF 标注',
       pdfPenColor: '标注颜色',
       pdfPenWidth: '标注粗细',
