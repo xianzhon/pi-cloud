@@ -97,6 +97,33 @@ describe('PdfPreview', () => {
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('110%');
   });
 
+  it('toggles between fitting the current page to the viewport width and height', async () => {
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport').element;
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 700 },
+    });
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      paddingLeft: '16px',
+      paddingRight: '16px',
+      paddingTop: '64px',
+      paddingBottom: '64px',
+    } as CSSStyleDeclaration);
+
+    await wrapper.get('[aria-label="Fit PDF to viewport width"]').trigger('click');
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('161%');
+    expect(wrapper.find('[aria-label="Fit PDF to viewport width"]').exists()).toBe(false);
+
+    await wrapper.get('[aria-label="Fit PDF to viewport height"]').trigger('click');
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('72%');
+    expect(wrapper.find('[aria-label="Fit PDF to viewport width"]').exists()).toBe(true);
+  });
+
   it('renders a newly selected PDF once after resetting a changed zoom level', async () => {
     const wrapper = mount(PdfPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
@@ -259,6 +286,7 @@ describe('PdfPreview', () => {
       'Zoom out',
       'Reset PDF zoom',
       'Zoom in',
+      'Fit PDF to viewport width',
       'Export annotated PDF',
     ]);
     expect(annotationToolbar.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');

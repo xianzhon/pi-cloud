@@ -409,6 +409,8 @@ export default {
       nextPage: '下一页',
       pdfPageStatus: '{page}/{pages}',
       resetPdfZoom: '重置 PDF 缩放',
+      fitPdfToWidth: '使 PDF 适合视口宽度',
+      fitPdfToHeight: '使 PDF 适合视口高度',
       loadingPdf: '正在加载 PDF...',
       pdfLoadFailed: 'PDF 加载失败',
       pdfRenderFailed: 'PDF 渲染失败',

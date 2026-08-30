@@ -180,6 +180,17 @@
       ><PhPlus :size="18" /></button>
       <button
         type="button"
+        :disabled="loading"
+        :aria-label="t(nextFitMode === 'width'
+          ? 'components.editorPanel.fitPdfToWidth'
+          : 'components.editorPanel.fitPdfToHeight')"
+        @click="fitPdfToViewport"
+      ><component
+        :is="nextFitMode === 'width' ? PhArrowsOutLineHorizontal : PhArrowsOutLineVertical"
+        :size="18"
+      /></button>
+      <button
+        type="button"
         :disabled="loading || exporting"
         :aria-label="t(exporting
           ? 'components.editorPanel.exportingAnnotatedPdf'
@@ -245,6 +256,8 @@ import {
   PhArrowCounterClockwise,
   PhArrowUpRight,
   PhArrowsOutCardinal,
+  PhArrowsOutLineHorizontal,
+  PhArrowsOutLineVertical,
   PhCaretLeft,
   PhCaretRight,
   PhCircle,
@@ -278,6 +291,7 @@ interface TextEditorState { page: string; point: AnnotationPoint; index?: number
 interface TooltipState { text: string; left: number; top: number }
 interface ToolbarPosition { left: number; top: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
+type PdfFitMode = 'width' | 'height';
 interface PdfViewState {
   scale?: number;
   page?: number;
@@ -338,6 +352,7 @@ const textEditorEl = ref<HTMLTextAreaElement>();
 const pageNumber = ref(1);
 const pageCount = ref(0);
 const scale = ref(1);
+const nextFitMode = ref<PdfFitMode>('width');
 const loading = ref(true);
 const error = ref('');
 const tool = ref<AnnotationTool>('pan');
@@ -580,6 +595,21 @@ function setScale(value: number): void {
   if (nextScale === scale.value) return;
   scale.value = nextScale;
   emit('scale-change', nextScale);
+}
+
+function fitPdfToViewport(): void {
+  const viewport = viewportEl.value;
+  if (!viewport) return;
+  const style = window.getComputedStyle(viewport);
+  const availableWidth = viewport.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const availableHeight = viewport.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  const pageSize = pageSizes.value[pageNumber.value] || defaultPageSize.value;
+  const fitMode = nextFitMode.value;
+  const fittedScale = fitMode === 'width'
+    ? availableWidth / pageSize.width
+    : availableHeight / pageSize.height;
+  setScale(fittedScale);
+  nextFitMode.value = fitMode === 'width' ? 'height' : 'width';
 }
 
 function currentViewState(): PdfViewState {

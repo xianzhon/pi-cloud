@@ -409,6 +409,8 @@ export default {
       nextPage: 'Next page',
       pdfPageStatus: '{page}/{pages}',
       resetPdfZoom: 'Reset PDF zoom',
+      fitPdfToWidth: 'Fit PDF to viewport width',
+      fitPdfToHeight: 'Fit PDF to viewport height',
       loadingPdf: 'Loading PDF...',
       pdfLoadFailed: 'Failed to load PDF',
       pdfRenderFailed: 'Failed to render PDF',
