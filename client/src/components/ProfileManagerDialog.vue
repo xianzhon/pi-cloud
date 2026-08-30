@@ -160,6 +160,7 @@
                   <button class="profile-secondary dialog-action" type="button" :disabled="discoveringCustomModels || !customProviderCanDiscover" @click="discoverCustomModels">
                     {{ discoveringCustomModels ? t('components.profileManagerDialog.connecting') : t('components.profileManagerDialog.connectAndDiscover') }}
                   </button>
+                  <p v-if="customProviderError" class="profile-error custom-provider-error" role="alert">{{ customProviderError }}</p>
                   <fieldset v-if="customModels.length" class="local-model-list custom-model-list">
                     <legend>{{ t('components.profileManagerDialog.discoveredModels') }}</legend>
                     <input v-model="customModelSearch" class="custom-model-search" type="search" :aria-label="t('components.profileManagerDialog.searchModels')" :placeholder="t('components.profileManagerDialog.searchModels')" />
@@ -347,6 +348,7 @@ const discoveringCustomModels = ref(false);
 const savingCustomProvider = ref(false);
 const removingCustomProvider = ref(false);
 const customProviderSaved = ref(false);
+const customProviderError = ref('');
 const proxy = reactive<ProxySettings>({ ALL_PROXY: '', HTTP_PROXY: '', HTTPS_PROXY: '', NO_PROXY: '' });
 
 const authenticationCommand = computed(() => (
@@ -449,6 +451,7 @@ function resetSaveState(): void {
   savingCustomProvider.value = false;
   removingCustomProvider.value = false;
   customProviderSaved.value = false;
+  customProviderError.value = '';
   error.value = '';
 }
 
@@ -661,6 +664,7 @@ function updateCloudflareBaseUrl(): void {
 async function discoverCustomModels(): Promise<void> {
   if (!customProviderCanDiscover.value) return;
   error.value = '';
+  customProviderError.value = '';
   customProviderSaved.value = false;
   discoveringCustomModels.value = true;
   try {
@@ -682,7 +686,7 @@ async function discoverCustomModels(): Promise<void> {
     selectedCustomModelIds.value = customModels.value.map((model) => model.id);
     imageCustomModelIds.value = customModels.value.filter((model) => model.supportsImages).map((model) => model.id);
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToDiscoverCustomModels');
+    customProviderError.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToDiscoverCustomModels');
   } finally {
     discoveringCustomModels.value = false;
   }

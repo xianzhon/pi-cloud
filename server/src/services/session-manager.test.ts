@@ -377,22 +377,27 @@ describe('PiSessionService', () => {
     fetchMock.mockRestore();
   });
 
-  it('discovers chat-compatible models from the paginated Cloudflare catalog', async () => {
+  it('discovers chat-compatible models from the current paginated Cloudflare catalog', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({
         success: true,
         result: [
-          { id: '@cf/meta/llama-3.2-3b-instruct', task: { name: 'Text Generation' } },
-          { id: '@cf/baai/bge-m3', task: { name: 'Text Embeddings' } },
+          { id: 'model-uuid-1', name: '@cf/meta/llama-3.2-3b-instruct', task: { name: 'Text Generation' }, properties: [] },
+          { id: 'embedding-uuid', name: '@cf/baai/bge-m3', task: { name: 'Text Embeddings' }, properties: [] },
         ],
-        result_info: { total_pages: 2 },
+        result_info: { page: 1, per_page: 1, total_count: 2 },
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         success: true,
         result: [
-          { id: '@cf/meta/llama-3.2-11b-vision-instruct', task: { name: 'Text Generation' } },
+          {
+            id: 'model-uuid-2',
+            name: '@cf/example/multimodal-instruct',
+            task: { name: 'Text Generation' },
+            properties: [{ property_id: 'vision', value: 'true' }],
+          },
         ],
-        result_info: { total_pages: 2 },
+        result_info: { page: 2, per_page: 1, total_count: 2 },
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     const service = new PiSessionService();
 
@@ -400,7 +405,7 @@ describe('PiSessionService', () => {
       await expect(service.discoverAgentProfileCloudflareModels(
         'default', '0123456789abcdef0123456789abcdef', 'cloudflare-token',
       )).resolves.toEqual([
-        { id: '@cf/meta/llama-3.2-11b-vision-instruct', supportsImages: true },
+        { id: '@cf/example/multimodal-instruct', supportsImages: true },
         { id: '@cf/meta/llama-3.2-3b-instruct', supportsImages: false },
       ]);
       expect(fetchMock).toHaveBeenNthCalledWith(1,
@@ -408,6 +413,23 @@ describe('PiSessionService', () => {
         expect.objectContaining({ headers: { Authorization: 'Bearer cloudflare-token' }, redirect: 'manual' }),
       );
       expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringContaining('page=2&per_page=50'), expect.any(Object));
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('surfaces Cloudflare catalog authentication errors', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      success: false,
+      errors: [{ code: 9106, message: 'Authentication failed' }],
+      result: null,
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } }));
+    const service = new PiSessionService();
+
+    try {
+      await expect(service.discoverAgentProfileCloudflareModels(
+        'default', '0123456789abcdef0123456789abcdef', 'invalid-token',
+      )).rejects.toThrow('Cloudflare: Authentication failed');
     } finally {
       fetchMock.mockRestore();
     }

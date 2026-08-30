@@ -219,6 +219,24 @@ describe('ProfileManagerDialog', () => {
     expect(wrapper.text()).not.toContain('agnes-secret');
   });
 
+  it('shows custom model discovery errors beside the discovery action', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Provider ID"]').exists()).toBe(true));
+
+    await wrapper.find('[aria-label="Custom provider URL"]').setValue('https://api.example.test/v1');
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: 'Cloudflare: Authentication failed' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    await wrapper.findAll('button').filter((button) => button.text() === 'Connect & discover models')[1].trigger('click');
+
+    await vi.waitFor(() => expect(wrapper.find('.custom-provider-error').text()).toBe('Cloudflare: Authentication failed'));
+  });
+
   it('loads and saves Cloudflare Workers AI models from an account ID', async () => {
     const wrapper = mount(ProfileManagerDialog, {
       props: { visible: false, profiles, selectedId: 'work' },

@@ -377,28 +377,53 @@ export class PiSessionService {
         redirect: 'manual',
         signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS),
       });
-      if (!response.ok) throw new Error(`Cloudflare returned HTTP ${response.status}`);
-      const body = await response.json() as {
+      const body = await response.json().catch(() => null) as {
         success?: boolean;
+        errors?: Array<{ message?: unknown }>;
         result?: unknown;
-        result_info?: { total_pages?: unknown };
-      };
-      if (body.success === false) throw new Error('Cloudflare rejected the model catalog request');
+        result_info?: { total_pages?: unknown; total_count?: unknown; per_page?: unknown };
+      } | null;
+      if (!response.ok || body?.success === false) {
+        const cloudflareMessage = body?.errors
+          ?.map((error) => typeof error.message === 'string' ? error.message.trim() : '')
+          .filter(Boolean)
+          .join('; ');
+        throw new Error(cloudflareMessage
+          ? `Cloudflare: ${cloudflareMessage}`
+          : `Cloudflare returned HTTP ${response.status}`);
+      }
+      if (!body) throw new Error('Cloudflare returned an invalid model catalog response');
       const candidates = Array.isArray(body.result) ? body.result : [];
       for (const model of candidates) {
         if (!model || typeof model !== 'object') continue;
-        const candidate = model as { id?: unknown; task?: { name?: unknown } };
-        if (typeof candidate.id !== 'string' || !/^@(cf|hf)\//.test(candidate.id)) continue;
+        const candidate = model as {
+          id?: unknown;
+          name?: unknown;
+          task?: { name?: unknown };
+          properties?: Array<{ property_id?: unknown; value?: unknown }>;
+        };
+        const modelId = [candidate.name, candidate.id]
+          .find((value) => typeof value === 'string' && /^@(cf|hf)\//.test(value)) as string | undefined;
+        if (!modelId) continue;
         const taskName = typeof candidate.task?.name === 'string' ? candidate.task.name : '';
         if (!/(text generation|text-to-text|image-to-text|vision)/i.test(taskName)) continue;
-        const supportsImages = /(image|vision)/i.test(taskName)
-          || /(vision|llava|moondream|uform)/i.test(candidate.id);
-        models.set(candidate.id, (models.get(candidate.id) || false) || supportsImages);
+        const hasVisionProperty = candidate.properties?.some((property) => property.property_id === 'vision'
+          && (property.value === true || property.value === 'true')) || false;
+        const supportsImages = hasVisionProperty
+          || /(image|vision)/i.test(taskName)
+          || /(vision|llava|moondream|uform)/i.test(modelId);
+        models.set(modelId, (models.get(modelId) || false) || supportsImages);
       }
-      const reportedTotalPages = body.result_info?.total_pages;
+      const resultInfo = body.result_info;
+      const reportedTotalPages = resultInfo?.total_pages;
+      const calculatedTotalPages = typeof resultInfo?.total_count === 'number'
+        && typeof resultInfo.per_page === 'number'
+        && resultInfo.per_page > 0
+        ? Math.ceil(resultInfo.total_count / resultInfo.per_page)
+        : 1;
       totalPages = typeof reportedTotalPages === 'number' && Number.isSafeInteger(reportedTotalPages)
         ? Math.max(1, Math.min(reportedTotalPages, 100))
-        : 1;
+        : Math.max(1, Math.min(calculatedTotalPages, 100));
       page += 1;
     } while (page <= totalPages);
 
