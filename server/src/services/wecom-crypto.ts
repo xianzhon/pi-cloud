@@ -39,7 +39,7 @@ export function decryptWecomPayload(encrypted: string, encodingAesKey: string, e
 }
 
 function parseEncodingAesKey(value: string): Buffer {
-  if (!/^[A-Za-z0-9+/]{43}$/.test(value)) throw new Error('WeCom EncodingAESKey must contain 43 base64 characters');
+  if (!/^[A-Za-z0-9]{43}$/.test(value)) throw new Error('WeCom EncodingAESKey must contain 43 letters or digits');
   const key = Buffer.from(`${value}=`, 'base64');
   if (key.length !== 32) throw new Error('Invalid WeCom EncodingAESKey');
   return key;

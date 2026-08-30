@@ -30,4 +30,9 @@ describe('WeCom callback crypto', () => {
 
     expect(() => decryptWecomPayload(ENCRYPTED_TEXT_MESSAGE, ENCODING_AES_KEY, 'other-corp')).toThrow('receive ID');
   });
+
+  it('rejects EncodingAESKeys containing non-alphanumeric base64 characters', () => {
+    expect(() => decryptWecomPayload(ENCRYPTED_TEXT_MESSAGE, `${ENCODING_AES_KEY.slice(0, 42)}+`, 'corp-test'))
+      .toThrow('43 letters or digits');
+  });
 });

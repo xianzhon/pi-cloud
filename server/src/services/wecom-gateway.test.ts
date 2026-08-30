@@ -30,7 +30,12 @@ describe('WecomGatewayService', () => {
     });
 
     expect(saved.callbackToken).toMatch(/^[0-9a-f]{32}$/);
-    expect(saved.encodingAesKey).toMatch(/^[A-Za-z0-9+/]{43}$/);
+    expect(saved.encodingAesKey).toMatch(/^[A-Za-z0-9]{43}$/);
+    const regenerated = service.regenerateCallbackSecrets();
+    expect(regenerated.callbackToken).toMatch(/^[0-9a-f]{32}$/);
+    expect(regenerated.encodingAesKey).toMatch(/^[A-Za-z0-9]{43}$/);
+    expect(regenerated.callbackToken).not.toBe(saved.callbackToken);
+    expect(regenerated.encodingAesKey).not.toBe(saved.encodingAesKey);
     expect(saved.status).toEqual({
       configured: true,
       managedBy: 'database',

@@ -80,6 +80,12 @@ const WECOM_API_BASE_URL = 'https://qyapi.weixin.qq.com';
 const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000;
 const DEDUP_TTL_MS = 5 * 60 * 1000;
 const TEXT_CHUNK_MAX_BYTES = 1900;
+function generateEncodingAesKey(): string {
+  while (true) {
+    const key = randomBytes(32).toString('base64').slice(0, 43);
+    if (/^[A-Za-z0-9]+$/.test(key)) return key;
+  }
+}
 
 export class WecomGatewayService {
   private readonly gatewaySettings: GatewaySettingsStore;
@@ -120,7 +126,7 @@ export class WecomGatewayService {
     const allowedUsers = normalizeList(input.allowedUsers);
     const existing = this.loadSavedCredentials();
     const callbackToken = existing?.callbackToken || randomBytes(16).toString('hex');
-    const encodingAesKey = existing?.encodingAesKey || randomBytes(32).toString('base64').slice(0, 43);
+    const encodingAesKey = existing?.encodingAesKey || generateEncodingAesKey();
     const now = new Date().toISOString();
     this.db.prepare(`
       INSERT INTO wecom_gateway_credentials (
@@ -146,7 +152,7 @@ export class WecomGatewayService {
     const saved = this.loadSavedCredentials();
     if (!saved) throw new Error('Save the WeCom configuration first');
     const callbackToken = randomBytes(16).toString('hex');
-    const encodingAesKey = randomBytes(32).toString('base64').slice(0, 43);
+    const encodingAesKey = generateEncodingAesKey();
     this.db.prepare(`
       UPDATE wecom_gateway_credentials
       SET callback_token = ?, encoding_aes_key = ?, callback_verified_at = NULL, updated_at = ?
