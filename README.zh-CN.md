@@ -31,13 +31,18 @@
 
 - Node.js 22 或更高版本
 - pnpm 9 或更高版本（仅从源码开发时需要）
-- 已安装的 [Pi 编程智能体](http://pi.dev)：
 
-  ```bash
-  npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-  ```
+Pi WebUI 已包含 [Pi 编程智能体](http://pi.dev)，因此使用 API 密钥进行身份验证时无需单独安装 `pi`。API 密钥可以在 Agent 配置对话框中设置。
 
-  启动 Pi WebUI 后，可以在智能体配置文件对话框中完成身份验证。
+WebUI 目前尚不支持 OAuth 订阅登录；原生 OAuth 支持已列为未来改进计划。现阶段若要使用 OAuth，请安装独立的 Pi CLI，并以运行 Pi WebUI 的同一操作系统用户在终端中完成 `/login`：
+
+```bash
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+pi
+# 输入 /login 并选择提供商
+```
+
+之后，Pi WebUI 会检测默认 `~/.pi/agent` 配置中存储的 OAuth 凭据。
 
 ### 无需安装直接运行
 

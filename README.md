@@ -31,13 +31,18 @@ A web-based, mobile-friendly interface for the [Pi coding agent](http://pi.dev).
 
 - Node.js 22 or newer
 - pnpm 9 or newer (source development only)
-- The [Pi coding agent](http://pi.dev), installed:
 
-  ```bash
-  npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-  ```
+Pi WebUI includes the [Pi coding agent](http://pi.dev), so a separate `pi` installation is not required when using API-key authentication. API keys can be configured from the agent profile dialog.
 
-  After starting Pi WebUI, authenticate from the agent profile dialog.
+OAuth subscription sign-in is not currently available in the WebUI; native OAuth support is a planned future improvement. For now, install the standalone Pi CLI and complete `/login` in the terminal as the same OS user that runs Pi WebUI:
+
+```bash
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+pi
+# Enter /login and select a provider
+```
+
+Pi WebUI then detects the OAuth credentials stored in the default `~/.pi/agent` profile.
 
 ### Run without installing
 
