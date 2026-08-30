@@ -195,8 +195,10 @@ describe('FolderPickerModal', () => {
 
   it('shows recent projects with access time and session count, and removes their session history', async () => {
     const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
-      if (input === '/api/sessions/project-history-summary') {
-        return { ok: true, json: async () => ({ projects: [{ path: '/workspace/cloned', sessionCount: 0 }] }) };
+      if (input === '/api/sessions/project-history?clientId=client-1') {
+        return { ok: true, json: async () => ({
+          projects: [{ path: '/workspace/cloned', lastAccessed: Date.now() - 4 * 60_000, sessionCount: 0 }],
+        }) };
       }
       if (input === '/api/sessions/project-history') {
         expect(init).toMatchObject({
@@ -215,7 +217,6 @@ describe('FolderPickerModal', () => {
         initialPath: '/workspace',
         currentProjectPath: '/workspace',
         clientId: 'client-1',
-        projectHistory: [{ path: '/workspace/cloned', lastAccessed: Date.now() - 4 * 60_000 }],
       },
       global: { stubs: { Teleport: true } },
     });

@@ -38,6 +38,7 @@ describe('openPiuiDatabase', () => {
       'memory_fts',
       'memory_projects',
       'memory_recall_events',
+      'project_history',
       'project_tasks',
       'review_sources',
       'schema_migrations',
@@ -232,10 +233,11 @@ describe('openPiuiDatabase', () => {
     expect(db.prepare('SELECT version, name FROM schema_migrations ORDER BY version').all()).toEqual([
       { version: 1, name: 'application-schema' },
       { version: 2, name: 'gateway-schema' },
+      { version: 3, name: 'project-history-schema' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 2 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 3 });
     db.close();
   });
 

@@ -6,7 +6,7 @@ import SessionSidebar from './SessionSidebar.vue';
 vi.mock('./FolderPickerModal.vue', () => ({
   default: {
     name: 'FolderPickerModal',
-    props: ['visible', 'initialPath', 'currentProjectPath', 'clientId', 'title', 'showClone', 'projectHistory'],
+    props: ['visible', 'initialPath', 'currentProjectPath', 'clientId', 'title', 'showClone'],
     emits: ['close', 'select', 'historyRemoved'],
     template: '<div data-testid="folder-picker" />',
   },
@@ -505,7 +505,7 @@ describe('SessionSidebar', () => {
     expect(document.body.textContent).toContain(longPath);
   });
 
-  it('orders recent project paths by per-profile MRU', async () => {
+  it('records project access in the database and ignores legacy local MRU data', async () => {
     localStorage.setItem('pi-webui-project-path-mru:default', JSON.stringify({
       updatedAt: Date.now(),
       paths: ['/workspace/api'],
@@ -515,51 +515,14 @@ describe('SessionSidebar', () => {
     const wrapper = mountSidebar();
     await vi.waitFor(() => expect(wrapper.find('.project-path-input').exists()).toBe(true));
 
-    await wrapper.find('.project-path-input').trigger('focus');
-    await vi.waitFor(() => expect(wrapper.findAll('.recent-project-option')).toHaveLength(2));
-
-    const options = wrapper.findAll('.recent-project-option');
-    expect(options[0].text()).toBe('/workspace/api');
-    expect(options[1].text()).toBe('~/work/app');
-  });
-
-  it('uses separate project MRU lists for each agent profile', async () => {
-    localStorage.setItem('pi-webui-project-path-mru:default', JSON.stringify({
-      updatedAt: Date.now(),
-      paths: ['/workspace/api'],
-    }));
-    localStorage.setItem('pi-webui-project-path-mru:work', JSON.stringify({
-      updatedAt: Date.now(),
-      paths: ['/home/alice/work/app'],
-    }));
-    mockFetchWithNoSessions(['/workspace/api', '/home/alice/work/app']);
-
-    const wrapper = mountSidebar();
-    await vi.waitFor(() => expect(wrapper.find('.agent-profile-input').exists()).toBe(true));
-
-    await wrapper.find('.agent-profile-input').trigger('focus');
-    await vi.waitFor(() => expect(wrapper.findAll('.agent-profile-option')).toHaveLength(3));
-    await wrapper.findAll('.agent-profile-option')[1].trigger('mousedown');
-    await vi.waitFor(() => expect(wrapper.emitted('agentProfileChanged')?.at(-1)).toEqual(['work']));
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/sessions/project-history', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ clientId: 'client-1', projectPath: '/home/alice/work/app' }),
+    })));
+    expect(localStorage.getItem('pi-webui-project-path-mru:default')).toContain('/workspace/api');
 
     await wrapper.find('.project-path-input').trigger('focus');
     await vi.waitFor(() => expect(wrapper.findAll('.recent-project-option')[0].text()).toBe('~/work/app'));
-  });
-
-  it('updates project MRU from another tab for the active profile', async () => {
-    mockFetchWithNoSessions(['/workspace/api', '/workspace/web']);
-
-    const wrapper = mountSidebar();
-    await vi.waitFor(() => expect(wrapper.find('.project-path-input').exists()).toBe(true));
-
-    localStorage.setItem('pi-webui-project-path-mru:default', JSON.stringify({
-      updatedAt: Date.now(),
-      paths: ['/workspace/web'],
-    }));
-    window.dispatchEvent(new StorageEvent('storage', { key: 'pi-webui-project-path-mru:default' }));
-
-    await wrapper.find('.project-path-input').trigger('focus');
-    await vi.waitFor(() => expect(wrapper.findAll('.recent-project-option')[0].text()).toBe('/workspace/web'));
   });
 
   it('switches to a selected recent project path from the input dropdown', async () => {
@@ -1189,11 +1152,11 @@ describe('SessionSidebar', () => {
       expect(wrapper.emitted('projectPathChanged')?.at(-1)).toEqual(['/Users/test/git/github/acme/tool']);
     });
     expect(wrapper.emitted('createSessionWithSameSettings')).toBeUndefined();
-    const stored = JSON.parse(localStorage.getItem('pi-webui-project-path-mru:default') || '{}');
-    expect(stored.entries[0]).toMatchObject({ path: '/Users/test/git/github/acme/tool' });
-    expect(stored.entries[0].lastAccessed).toEqual(expect.any(Number));
-    expect(wrapper.findComponent({ name: 'FolderPickerModal' }).props('projectHistory'))
-      .toEqual(expect.arrayContaining([expect.objectContaining({ path: '/Users/test/git/github/acme/tool' })]));
+    expect(fetch).toHaveBeenCalledWith('/api/sessions/project-history', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ clientId: 'client-1', projectPath: '/Users/test/git/github/acme/tool' }),
+    }));
+    expect(localStorage.getItem('pi-webui-project-path-mru:default')).toBeNull();
   });
 
   it('renders pinned sessions in collapsible groups and creates groups', async () => {

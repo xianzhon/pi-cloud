@@ -7,6 +7,7 @@ import { sessionFileRelocator } from '../services/session-file-relocator.js';
 import type { PiSessionService } from '../services/session-manager.js';
 import type { WorktreeMetadataStore } from '../services/worktree-metadata-store.js';
 import { expandHomePath } from '../utils/paths.js';
+import type { ProjectHistoryStore } from '../services/project-history-store.js';
 import type { ProjectTaskStore } from '../services/project-task-store.js';
 import type { RepositoryCloner } from '../services/repository-cloner.js';
 import type { PullRequestStatus, SessionActivityRecord, SessionActivityStore } from '../services/session-activity-store.js';
@@ -167,6 +168,7 @@ function sanitizeSessionTree(tree: any[]): any[] {
 
 interface SessionRouteOptions {
   projectTaskStore?: Pick<ProjectTaskStore, 'listProjectPaths' | 'replaceProjectPath'>;
+  projectHistoryStore?: Pick<ProjectHistoryStore, 'list' | 'touch' | 'remove'>;
   pinStore?: Pick<SessionPinStore, 'listGroups' | 'createGroup' | 'pinSession' | 'unpinSession' | 'listSessionIdsByGroup'>;
   activityStore?: Pick<SessionActivityStore, 'listForSession'> & Partial<Pick<SessionActivityStore, 'listLatestPrForSessions' | 'updatePrStatus'>>;
   refreshPrStatus?: (activity: SessionActivityRecord) => Promise<PullRequestStatus>;
@@ -677,21 +679,31 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     return { projectPaths };
   });
 
-  app.post('/project-history-summary', async (req, reply) => {
-    const { clientId, projectPaths } = req.body as { clientId?: string; projectPaths?: unknown[] };
-    if (!clientId || !Array.isArray(projectPaths)) {
-      return reply.status(400).send({ error: 'clientId and projectPaths are required' });
-    }
+  app.get('/project-history', async (req, reply) => {
+    const { clientId } = req.query as { clientId?: string };
+    if (!clientId) return reply.status(400).send({ error: 'clientId is required' });
+    if (!options.projectHistoryStore) return reply.status(503).send({ error: 'Project history is not configured' });
 
-    const paths = Array.from(new Set(projectPaths
-      .filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
-      .map((path) => path.trim())))
-      .slice(0, 100);
-    const projects = await Promise.all(paths.map(async (path) => ({
-      path,
-      sessionCount: (await listSessionsForRoute(sessionService, worktreeMetadata, clientId, 'project', expandHomePath(path))).length,
+    const { id: profileId } = await sessionService.getClientAgentProfile(clientId);
+    const entries = options.projectHistoryStore.list(profileId);
+    const projects = await Promise.all(entries.map(async (entry) => ({
+      path: entry.path,
+      lastAccessed: Date.parse(entry.lastAccessed),
+      sessionCount: (await listSessionsForRoute(sessionService, worktreeMetadata, clientId, 'project', expandHomePath(entry.path))).length,
     })));
     return { projects };
+  });
+
+  app.post('/project-history', async (req, reply) => {
+    const { clientId, projectPath } = req.body as { clientId?: string; projectPath?: string };
+    if (!clientId || !projectPath?.trim()) {
+      return reply.status(400).send({ error: 'clientId and projectPath are required' });
+    }
+    if (!options.projectHistoryStore) return reply.status(503).send({ error: 'Project history is not configured' });
+
+    const { id: profileId } = await sessionService.getClientAgentProfile(clientId);
+    options.projectHistoryStore.touch(profileId, projectPath.trim());
+    return { success: true };
   });
 
   app.delete('/project-history', async (req, reply) => {
@@ -700,7 +712,9 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       return reply.status(400).send({ error: 'clientId and projectPath are required' });
     }
 
-    const cwd = expandHomePath(projectPath.trim());
+    const normalizedProjectPath = projectPath.trim();
+    const cwd = expandHomePath(normalizedProjectPath);
+    const { id: profileId } = await sessionService.getClientAgentProfile(clientId);
     const sessions = await sessionService.listSessions(clientId, cwd);
     if (sessions.some((session) => sessionService.isSessionStreaming(session.id))) {
       return reply.status(409).send({ error: 'Cannot remove history with a streaming session' });
@@ -713,6 +727,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       sessionService.deleteSkillPolicy(session.id);
       sessionService.deleteSessionMetadata(session.id);
     }
+    options.projectHistoryStore?.remove(profileId, normalizedProjectPath);
     return { success: true, removedSessions: sessions.length };
   });
 

@@ -1,11 +1,13 @@
 import type { PiuiDatabase } from '../database.js';
 import { applicationSchemaMigration } from './001-application-schema.js';
 import { gatewaySchemaMigration } from './002-gateway-schema.js';
+import { projectHistorySchemaMigration } from './003-project-history-schema.js';
 import type { DatabaseMigration } from './migration.js';
 
 const migrations: DatabaseMigration[] = [
   applicationSchemaMigration,
   gatewaySchemaMigration,
+  projectHistorySchemaMigration,
 ];
 
 export function runDatabaseMigrations(db: PiuiDatabase): void {

@@ -50,6 +50,7 @@ import { GiteaSettingsStore } from './services/gitea-settings-store.js';
 import { GithubClient } from './services/github-client.js';
 import { GatewaySettingsStore } from './services/gateway-settings-store.js';
 import { GithubSettingsStore } from './services/github-settings-store.js';
+import { ProjectHistoryStore } from './services/project-history-store.js';
 import { ProjectTaskStore } from './services/project-task-store.js';
 import { SkillPresetStore } from './services/skill-preset-store.js';
 import { CommitMessagePromptStore } from './services/commit-message-prompt-store.js';
@@ -242,6 +243,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   memoryRuntime.start();
   const projectTaskStore = new ProjectTaskStore(db);
+  const projectHistoryStore = new ProjectHistoryStore(db);
   const skillPresetStore = new SkillPresetStore(db);
   const reviewSourceStore = new ReviewSourceStore(db);
   const reviewSourceService = new ReviewSourceService(reviewSourceStore);
@@ -353,6 +355,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(sessionRoutes, {
     prefix: '/api/sessions',
     projectTaskStore,
+    projectHistoryStore,
     pinStore: sessionPinStore,
     activityStore: sessionActivityStore,
     refreshPrStatus: (activity: SessionActivityRecord) => refreshPullRequestStatus(activity, { giteaSettings, githubSettings }),

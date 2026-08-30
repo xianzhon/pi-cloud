@@ -181,8 +181,8 @@
               <span class="project-history-details">
                 <span class="project-history-heading">
                   <strong>{{ basenamePath(entry.path) }}</strong>
-                  <span v-if="historyCounts[entry.path] !== undefined" class="project-history-session-count">
-                    {{ t('components.folderPickerModal.sessionCount', { count: historyCounts[entry.path] }) }}
+                  <span class="project-history-session-count">
+                    {{ t('components.folderPickerModal.sessionCount', { count: entry.sessionCount }) }}
                   </span>
                 </span>
                 <span class="project-history-meta">
@@ -252,6 +252,7 @@ interface DirectoryNode {
 interface ProjectHistoryEntry {
   path: string;
   lastAccessed: number;
+  sessionCount: number;
 }
 
 const props = withDefaults(defineProps<{
@@ -261,12 +262,10 @@ const props = withDefaults(defineProps<{
   clientId?: string;
   title?: string;
   showClone?: boolean;
-  projectHistory?: ProjectHistoryEntry[];
 }>(), {
   clientId: '',
   title: undefined,
   showClone: true,
-  projectHistory: () => [],
 });
 
 type MoveMode = 'rename' | 'move-project' | 'move-sessions';
@@ -290,7 +289,7 @@ const directorySort = ref<'name' | 'modified'>('modified');
 const searchQuery = ref('');
 const activeTab = ref<'browse' | 'history' | 'clone'>('browse');
 const newFolderDialogVisible = ref(false);
-const historyCounts = ref<Record<string, number>>({});
+const projectHistory = ref<ProjectHistoryEntry[]>([]);
 const historyLoading = ref(false);
 const historyError = ref('');
 const removingHistoryPath = ref('');
@@ -330,6 +329,7 @@ watch(
       activeTab.value = 'browse';
       newFolderDialogVisible.value = false;
       historyPathToRemove.value = '';
+      projectHistory.value = [];
       browse(props.initialPath || '~');
     }
   },
@@ -399,18 +399,14 @@ function selectClonedProject(payload: { projectPath: string }) {
 async function openHistory() {
   activeTab.value = 'history';
   historyError.value = '';
-  if (!props.clientId || props.projectHistory.length === 0) return;
+  if (!props.clientId) return;
 
   historyLoading.value = true;
   try {
-    const response = await fetch('/api/sessions/project-history-summary', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId: props.clientId, projectPaths: props.projectHistory.map((entry) => entry.path) }),
-    });
+    const response = await fetch(`/api/sessions/project-history?clientId=${encodeURIComponent(props.clientId)}`);
     if (!response.ok) throw new Error(t('components.folderPickerModal.failedToLoadHistory'));
-    const data = await response.json() as { projects?: Array<{ path: string; sessionCount: number }> };
-    historyCounts.value = Object.fromEntries((data.projects || []).map((project) => [project.path, project.sessionCount]));
+    const data = await response.json() as { projects?: ProjectHistoryEntry[] };
+    projectHistory.value = Array.isArray(data.projects) ? data.projects : [];
   } catch (err) {
     historyError.value = err instanceof Error ? err.message : t('components.folderPickerModal.failedToLoadHistory');
   } finally {
@@ -436,6 +432,7 @@ async function removeHistory() {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || t('components.folderPickerModal.failedToRemoveHistory'));
+    projectHistory.value = projectHistory.value.filter((entry) => entry.path !== path);
     emit('historyRemoved', path);
   } catch (err) {
     historyError.value = err instanceof Error ? err.message : t('components.folderPickerModal.failedToRemoveHistory');

@@ -376,7 +376,6 @@
       :initialPath="projectPath"
       :currentProjectPath="projectPath"
       :client-id="clientId"
-      :project-history="readProjectPathHistory()"
       @close="showFolderPicker = false"
       @select="setProjectPath"
       @history-removed="removeProjectPathHistory"
@@ -477,11 +476,6 @@ interface AgentProfile {
   defaultModel?: string;
 }
 
-interface ProjectPathHistoryEntry {
-  path: string;
-  lastAccessed: number;
-}
-
 const DEFAULT_SESSION_TITLE = t('components.sessionSidebar.newSession');
 
 const props = withDefaults(defineProps<{
@@ -573,9 +567,6 @@ const minSidebarWidth = 220;
 const maxSidebarWidth = 420;
 const storageKey = 'pi-webui-project-path';
 const agentProfileStorageKey = 'pi-webui-agent-profile';
-const projectPathMruStoragePrefix = 'pi-webui-project-path-mru';
-const projectPathMruTtlMs = 180 * 24 * 60 * 60 * 1000;
-const projectPathMruLimit = 100;
 const version = import.meta.env.VITE_APP_VERSION || 'dev';
 const projectPathDisplay = computed(() => formatProjectPath(projectPath.value));
 const filteredProjectPathOptions = computed(() => {
@@ -681,72 +672,21 @@ async function loadDefaultProjectPath(): Promise<string> {
   }
 }
 
-function projectPathMruStorageKey(profileId = selectedAgentProfile.value): string {
-  return `${projectPathMruStoragePrefix}:${profileId || 'default'}`;
-}
-
-function readProjectPathHistory(profileId = selectedAgentProfile.value): ProjectPathHistoryEntry[] {
+async function rememberProjectPath(path: string): Promise<void> {
+  const normalizedPath = path.trim();
+  if (!normalizedPath) return;
   try {
-    const data = JSON.parse(localStorage.getItem(projectPathMruStorageKey(profileId)) || 'null') as {
-      updatedAt?: number;
-      paths?: unknown[];
-      entries?: Array<{ path?: unknown; lastAccessed?: unknown }>;
-    } | null;
-    if (!data?.updatedAt || Date.now() - data.updatedAt > projectPathMruTtlMs) return [];
-    const entries = Array.isArray(data.entries)
-      ? data.entries
-      : (Array.isArray(data.paths) ? data.paths.map((path) => ({ path, lastAccessed: data.updatedAt })) : []);
-    return entries
-      .filter((entry): entry is { path: string; lastAccessed: number } => (
-        typeof entry.path === 'string' && entry.path.trim().length > 0 && typeof entry.lastAccessed === 'number'
-      ))
-      .slice(0, projectPathMruLimit);
+    await fetch('/api/sessions/project-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: props.clientId, projectPath: normalizedPath }),
+    });
   } catch {
-    return [];
+    // Project switching remains available if recording recent access fails.
   }
-}
-
-function readProjectPathMru(profileId = selectedAgentProfile.value): string[] {
-  return readProjectPathHistory(profileId).map((entry) => entry.path);
-}
-
-function writeProjectPathMru(paths: string[], profileId = selectedAgentProfile.value, accessedPath: string | null = paths[0] || null): void {
-  try {
-    const now = Date.now();
-    const previousAccess = new Map(readProjectPathHistory(profileId).map((entry) => [entry.path, entry.lastAccessed]));
-    const uniquePaths = Array.from(new Set(paths.filter((path) => path.trim()))).slice(0, projectPathMruLimit);
-    localStorage.setItem(projectPathMruStorageKey(profileId), JSON.stringify({
-      updatedAt: now,
-      paths: uniquePaths,
-      entries: uniquePaths.map((path) => ({ path, lastAccessed: path === accessedPath ? now : previousAccess.get(path) || now })),
-    }));
-  } catch {
-    // MRU ordering is a convenience; project switching should still work if storage is unavailable.
-  }
-}
-
-function sortProjectPathsByMru(paths: string[], profileId = selectedAgentProfile.value): string[] {
-  const mruPaths = readProjectPathMru(profileId);
-  const mruIndex = new Map(mruPaths.map((path, index) => [path, index]));
-  return [...paths].sort((left, right) => {
-    const leftIndex = mruIndex.get(left);
-    const rightIndex = mruIndex.get(right);
-    if (leftIndex === undefined && rightIndex === undefined) return 0;
-    if (leftIndex === undefined) return 1;
-    if (rightIndex === undefined) return -1;
-    return leftIndex - rightIndex;
-  });
-}
-
-function rememberProjectPath(path: string, profileId = selectedAgentProfile.value): void {
-  const trimmed = path.trim();
-  if (!trimmed) return;
-  writeProjectPathMru([trimmed, ...readProjectPathMru(profileId).filter((entry) => entry !== trimmed)], profileId, trimmed);
-  projectPathOptions.value = sortProjectPathsByMru(projectPathOptions.value, profileId);
 }
 
 async function removeProjectPathHistory(path: string): Promise<void> {
-  writeProjectPathMru(readProjectPathMru().filter((entry) => entry !== path), selectedAgentProfile.value, null);
   projectPathOptions.value = projectPathOptions.value.filter((entry) => entry !== path);
   if (projectPath.value === path) {
     if (props.activeSessionId) emit('sessionDeleted', props.activeSessionId);
@@ -765,7 +705,7 @@ async function refreshProjectPath(options: { preferSaved: boolean; initial?: boo
 
   projectPath.value = nextPath;
   sessionStorage.setItem(storageKey, nextPath);
-  rememberProjectPath(nextPath);
+  await rememberProjectPath(nextPath);
   emit('projectPathChanged', projectPath.value, options.initial ? { initial: true } : undefined);
 }
 
@@ -779,9 +719,9 @@ async function loadProjectPathOptions(sourceId?: string) {
       const data = await response.json() as { projectPaths?: unknown[] };
       paths = (data.projectPaths || []) as string[];
     }
-    projectPathOptions.value = sortProjectPathsByMru(Array.from(new Set(
+    projectPathOptions.value = Array.from(new Set(
       paths.filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
-    )));
+    ));
   } catch (error) {
     console.error(t('components.sessionSidebar.failedToLoadProjectPathOptions'), error);
     projectPathOptions.value = [];
@@ -985,7 +925,7 @@ async function setProjectPath(selection: string | { path: string; moveMode?: 're
 
     projectPath.value = nextPath;
     sessionStorage.setItem(storageKey, projectPath.value);
-    rememberProjectPath(projectPath.value);
+    await rememberProjectPath(projectPath.value);
     showFolderPicker.value = false;
     emit('projectPathChanged', projectPath.value);
     await loadSessions();
@@ -1028,7 +968,7 @@ async function chooseReviewSource(sourceId: string) {
   if (projectPath.value === '~' && projectPathOptions.value.length > 0) {
     projectPath.value = projectPathOptions.value[0];
     sessionStorage.setItem(storageKey, projectPath.value);
-    rememberProjectPath(projectPath.value);
+    await rememberProjectPath(projectPath.value);
     emit('projectPathChanged', projectPath.value);
   }
   await loadSessions();
@@ -1068,7 +1008,7 @@ async function switchToProjectPath(path: string): Promise<void> {
 
   projectPath.value = path || '~';
   sessionStorage.setItem(storageKey, projectPath.value);
-  rememberProjectPath(projectPath.value);
+  await rememberProjectPath(projectPath.value);
   emit('projectPathChanged', projectPath.value, { keepSession: true });
   await loadSessions();
 }
@@ -1597,16 +1537,11 @@ onMounted(async () => {
 
 // Listen for session list events
 const refreshHandler = () => loadSessions();
-const projectPathMruStorageHandler = (event: StorageEvent) => {
-  if (event.key !== projectPathMruStorageKey()) return;
-  projectPathOptions.value = sortProjectPathsByMru(projectPathOptions.value);
-};
 onMounted(() => {
   window.addEventListener('refresh-sessions', refreshHandler);
   window.addEventListener('session-created', addCreatedSession);
   window.addEventListener('session-first-message', updateFirstMessage);
   window.addEventListener('session-streaming-state', updateStreamingState);
-  window.addEventListener('storage', projectPathMruStorageHandler);
 });
 
 // Cleanup
@@ -1616,7 +1551,6 @@ onUnmounted(() => {
   window.removeEventListener('session-created', addCreatedSession);
   window.removeEventListener('session-first-message', updateFirstMessage);
   window.removeEventListener('session-streaming-state', updateStreamingState);
-  window.removeEventListener('storage', projectPathMruStorageHandler);
   stopSidebarResize();
 });
 

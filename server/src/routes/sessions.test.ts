@@ -20,6 +20,11 @@ const cloneStart = vi.fn();
 const cloneGetJob = vi.fn();
 const cloneSubscribe = vi.fn();
 const cloneCancel = vi.fn();
+const projectHistoryStore = {
+  list: vi.fn(),
+  touch: vi.fn(),
+  remove: vi.fn(),
+};
 
 function cloneRouteOptions() {
   return {
@@ -171,6 +176,10 @@ describe('session routes', () => {
     cloneGetJob.mockReset();
     cloneSubscribe.mockReset();
     cloneCancel.mockReset();
+    projectHistoryStore.list.mockReset();
+    projectHistoryStore.list.mockReturnValue([]);
+    projectHistoryStore.touch.mockReset();
+    projectHistoryStore.remove.mockReset();
     vi.mocked(sessionService.getClientAgentProfile).mockResolvedValue({
       id: 'default', label: 'default', path: '/Users/test/.pi/agent', isDefault: true,
     });
@@ -573,31 +582,49 @@ describe('session routes', () => {
     expect(result).toEqual({ projectPaths: ['/workspace/app', '/workspace/api', '/session/storage/4'] });
   });
 
-  it('summarizes session counts for recent projects, including projects without sessions', async () => {
+  it('loads database-backed project history for the active agent profile', async () => {
+    projectHistoryStore.list.mockReturnValue([
+      { path: '/repo/with-sessions', lastAccessed: '2026-08-30T02:00:00.000Z' },
+      { path: '/repo/cloned', lastAccessed: '2026-08-30T01:00:00.000Z' },
+    ]);
     vi.mocked(sessionService.listSessions).mockImplementation(async (_clientId: string, path?: string) => (
       path === '/repo/with-sessions' ? [{ id: 'session-1' }] as any : []
     ));
     const { sessionRoutes } = await import('./sessions.js');
     const { app, handlers } = createMockApp();
-    await sessionRoutes(app as any);
+    await sessionRoutes(app as any, { projectHistoryStore });
 
-    const result = await handlers['POST /project-history-summary']({
-      body: { clientId: 'client-1', projectPaths: ['/repo/with-sessions', '/repo/cloned'] },
+    const result = await handlers['GET /project-history']({
+      query: { clientId: 'client-1' },
     }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
 
+    expect(projectHistoryStore.list).toHaveBeenCalledWith('default');
     expect(result).toEqual({ projects: [
-      { path: '/repo/with-sessions', sessionCount: 1 },
-      { path: '/repo/cloned', sessionCount: 0 },
+      { path: '/repo/with-sessions', lastAccessed: Date.parse('2026-08-30T02:00:00.000Z'), sessionCount: 1 },
+      { path: '/repo/cloned', lastAccessed: Date.parse('2026-08-30T01:00:00.000Z'), sessionCount: 0 },
     ] });
   });
 
-  it('removes all session history files for a recent project without deleting the project', async () => {
+  it('records project access for the active agent profile', async () => {
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any, { projectHistoryStore });
+
+    const result = await handlers['POST /project-history']({
+      body: { clientId: 'client-1', projectPath: '/repo/project' },
+    }, { status: vi.fn().mockReturnThis(), send: vi.fn() });
+
+    expect(projectHistoryStore.touch).toHaveBeenCalledWith('default', '/repo/project');
+    expect(result).toEqual({ success: true });
+  });
+
+  it('removes all session history files and the database history entry without deleting the project', async () => {
     vi.mocked(sessionService.listSessions).mockResolvedValue([{ id: 'session-1' }, { id: 'session-2' }] as any);
     vi.mocked(sessionService.getClientAgentDirForRoutes).mockResolvedValue('/profiles/default');
     vi.mocked(sessionService.getProjectSessionDirForPath).mockReturnValue('/profiles/default/sessions/project');
     const { sessionRoutes } = await import('./sessions.js');
     const { app, handlers } = createMockApp();
-    await sessionRoutes(app as any);
+    await sessionRoutes(app as any, { projectHistoryStore });
 
     const result = await handlers['DELETE /project-history']({
       body: { clientId: 'client-1', projectPath: '/repo/cloned' },
@@ -606,6 +633,7 @@ describe('session routes', () => {
     expect(sessionService.forceDisposeByCwd).toHaveBeenCalledWith('/repo/cloned');
     expect(sessionService.deleteSessionFiles).toHaveBeenCalledWith('/profiles/default/sessions/project');
     expect(sessionService.deleteSessionMetadata).toHaveBeenCalledTimes(2);
+    expect(projectHistoryStore.remove).toHaveBeenCalledWith('default', '/repo/cloned');
     expect(result).toEqual({ success: true, removedSessions: 2 });
   });
 
