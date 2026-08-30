@@ -334,6 +334,7 @@
     >
       <button @click="addContextTabToReference">{{ t('components.editorPanel.addToReference') }}</button>
       <button @click="copyContextTabRelativePath">{{ t('components.editorPanel.copyRelativePath') }}</button>
+      <button @click="copyContextTabFullPath">{{ t('components.editorPanel.copyFullPath') }}</button>
       <button @click="downloadContextTab">{{ t('components.editorPanel.download') }}</button>
       <button
         v-if="canOpenWithSystemTool && !contextTab.virtual"
@@ -2763,6 +2764,12 @@ async function copyContextTabRelativePath() {
   const tabPath = tabContextMenu.value.tabPath;
   closeTabContextMenu();
   if (tabPath) await copyPath(relativePathFromCwd(tabPath));
+}
+
+async function copyContextTabFullPath() {
+  const tabPath = tabContextMenu.value.tabPath;
+  closeTabContextMenu();
+  if (tabPath) await copyPath(tabPath);
 }
 
 async function renameContextTab() {

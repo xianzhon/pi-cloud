@@ -901,7 +901,7 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.editor-tab-tooltip').exists()).toBe(false);
   });
 
-  it('adds an open tab as a workspace-relative chat reference and copies its relative path', async () => {
+  it('adds an open tab as a workspace-relative chat reference and copies its paths', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -917,12 +917,21 @@ describe('EditorPanel', () => {
     await wrapper.find('.editor-tabs .tab').trigger('contextmenu', { clientX: 10, clientY: 20 });
     expect(wrapper.find('.tab-context-menu').text()).toContain('Rename');
     expect(wrapper.find('.tab-context-menu').text()).toContain('Copy relative path');
+    expect(wrapper.find('.tab-context-menu').text()).toContain('Copy full path');
     await wrapper.find('.tab-context-menu button').trigger('click');
     expect(wrapper.emitted('addReference')).toEqual([['src/demo.ts']]);
 
     await wrapper.find('.editor-tabs .tab').trigger('contextmenu', { clientX: 10, clientY: 20 });
-    await wrapper.findAll('.tab-context-menu button')[1].trigger('click');
+    const copyRelativePath = wrapper.findAll('.tab-context-menu button')
+      .find(button => button.text() === 'Copy relative path');
+    await copyRelativePath!.trigger('click');
     expect(writeText).toHaveBeenCalledWith('src/demo.ts');
+
+    await wrapper.find('.editor-tabs .tab').trigger('contextmenu', { clientX: 10, clientY: 20 });
+    const copyFullPath = wrapper.findAll('.tab-context-menu button')
+      .find(button => button.text() === 'Copy full path');
+    await copyFullPath!.trigger('click');
+    expect(writeText).toHaveBeenCalledWith('/project/src/demo.ts');
   });
 
   it('opens a file with the system tool from the tab context menu', async () => {
