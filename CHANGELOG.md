@@ -2,6 +2,32 @@
 
 All notable changes to Pi Cloud are documented here.
 
+## [2.0.0] - 2026-08-30
+
+### Added
+
+- Added persistent PDF annotations with drawing, highlighting, shapes, text, moving, erasing, undo/redo, automatic sidecar saving, and annotated PDF export.
+- Added Markdown-to-PDF downloads and creation of workspace PDF copies that can be annotated.
+- Added custom OpenAI-compatible API providers and Cloudflare Workers AI support, including model discovery and image-capability selection.
+- Added provider authentication status and disconnect controls for locally detected API keys, OAuth sessions, and subscriptions.
+- Added Markdown preview outlines, HTML rendering in Markdown previews, archive content previews, file-type icons, and full-path copying from editor tabs.
+- Added light/dark theme toggle controls and PDF viewport fit controls.
+- Added split diff views, collapsible files, per-file statistics, and expand/collapse controls to commit previews and Git history.
+- Added WeChat account unbinding and country reporting for successful proxy checks.
+- Added a preference to delete sessions without confirmation and reload recovery for stale frontend assets after updates.
+
+### Changed
+
+- Renamed Pi WebUI to Pi Cloud, changing the npm package and executable to `pi-cloud`, environment variables to the `PI_CLOUD_` prefix, and default configuration, database, and service names and paths.
+- Recent project history is now stored per agent profile in the server database instead of browser storage.
+- PDF previews now render only nearby pages for improved performance.
+
+### Fixed
+
+- Fixed PDF annotation resize handles so dragging them resizes annotations correctly.
+- Hid built-in API-key providers when a custom provider with the same ID overrides them.
+- Fixed session sidebar message counts and stale-asset reload errors.
+
 ## [1.0.6] - 2026-08-27
 
 ### Added
