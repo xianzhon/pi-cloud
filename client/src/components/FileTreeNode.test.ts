@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import FileTreeNode, { type TreeNodeData } from './FileTreeNode.vue';
-import { PhFolder, PhCaretRight, PhCaretDown } from '@phosphor-icons/vue';
+import { PhFolder, PhFolderOpen, PhFileTs, PhFileVue, PhPackage, PhCaretRight, PhCaretDown } from '@phosphor-icons/vue';
 
 const tree: TreeNodeData = {
   name: 'src',
@@ -64,6 +64,28 @@ describe('FileTreeNode', () => {
 
     expect(wrapper.find('.tree-node').classes()).toContain('active');
     expect(wrapper.find('.tree-node').attributes('data-tree-current')).toBe('true');
+  });
+
+  it.each([
+    ['main.ts', PhFileTs, 'icon-typescript'],
+    ['App.vue', PhFileVue, 'icon-vue'],
+    ['package.json', PhPackage, 'icon-archive'],
+  ])('renders a file-type icon for %s', (name, icon, colorClass) => {
+    const file: TreeNodeData = { name, path: `/project/${name}`, type: 'file' };
+    const wrapper = mount(FileTreeNode, {
+      props: { node: file, level: 0, expandedPaths: new Set<string>() },
+    });
+
+    expect(wrapper.findComponent(icon).exists()).toBe(true);
+    expect(wrapper.find('.node-icon').classes()).toContain(colorClass);
+  });
+
+  it('uses an open folder icon for expanded directories', () => {
+    const wrapper = mount(FileTreeNode, {
+      props: { node: tree, level: 0, expandedPaths: new Set(['/project/src']) },
+    });
+
+    expect(wrapper.findComponent(PhFolderOpen).exists()).toBe(true);
   });
 
   it('renders symlink nodes with a link indicator and target in the title', () => {
