@@ -3,6 +3,10 @@ export interface ExportMarkdownPdfOptions {
   html: string;
 }
 
+const A4_WIDTH = 595.28;
+const A4_HEIGHT = 841.89;
+const PDF_MARGIN = 51.02; // 18 mm, matching the existing print export.
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -16,6 +20,24 @@ export function getMarkdownPdfFilename(filePath: string): string {
   const filename = filePath.split(/[\\/]/).pop() || 'document.md';
   const basename = filename.replace(/\.(?:md|markdown|mdown|mkdn|mdx)$/i, '') || 'document';
   return `${basename.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')}.pdf`;
+}
+
+export function getMarkdownPdfPath(filePath: string): string {
+  const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  return `${filePath.slice(0, separatorIndex + 1)}${getMarkdownPdfFilename(filePath)}`;
+}
+
+export function getCanvasPageSlices(canvasWidth: number, canvasHeight: number): Array<{ sourceY: number; sourceHeight: number }> {
+  const contentWidth = A4_WIDTH - PDF_MARGIN * 2;
+  const contentHeight = A4_HEIGHT - PDF_MARGIN * 2;
+  const pageHeight = contentHeight * canvasWidth / contentWidth;
+  const pageCount = Math.max(1, Math.ceil(canvasHeight / pageHeight));
+
+  return Array.from({ length: pageCount }, (_, pageIndex) => {
+    const sourceY = Math.round(pageIndex * pageHeight);
+    const sourceEnd = Math.min(canvasHeight, Math.round((pageIndex + 1) * pageHeight));
+    return { sourceY, sourceHeight: sourceEnd - sourceY };
+  });
 }
 
 export function buildMarkdownPrintDocument(options: ExportMarkdownPdfOptions): string {
@@ -57,6 +79,87 @@ async function waitForImages(printDocument: Document): Promise<void> {
       image.addEventListener('error', () => resolve(), { once: true });
     });
   }));
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+export async function createMarkdownPdfCopy(options: ExportMarkdownPdfOptions): Promise<string> {
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;left:-10000px;bottom:0;width:658px;border:0;opacity:0;pointer-events:none';
+  iframe.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(iframe);
+
+  try {
+    const renderDocument = iframe.contentDocument;
+    if (!renderDocument) throw new Error('Could not create Markdown PDF render frame.');
+    renderDocument.open();
+    renderDocument.write(buildMarkdownPrintDocument(options));
+    renderDocument.close();
+    await waitForImages(renderDocument);
+    await renderDocument.fonts?.ready;
+
+    const [{ default: html2canvas }, { PDFDocument }] = await Promise.all([
+      import('html2canvas'),
+      import('pdf-lib'),
+    ]);
+    const canvas = await html2canvas(renderDocument.body, {
+      backgroundColor: '#ffffff',
+      logging: false,
+      scale: Math.min(window.devicePixelRatio || 1, 2),
+      useCORS: true,
+    });
+    const pdf = await PDFDocument.create();
+    const contentWidth = A4_WIDTH - PDF_MARGIN * 2;
+
+    for (const slice of getCanvasPageSlices(canvas.width, canvas.height)) {
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = slice.sourceHeight;
+      const context = pageCanvas.getContext('2d');
+      if (!context) throw new Error('Could not create Markdown PDF page canvas.');
+      context.drawImage(
+        canvas,
+        0,
+        slice.sourceY,
+        canvas.width,
+        slice.sourceHeight,
+        0,
+        0,
+        canvas.width,
+        slice.sourceHeight,
+      );
+
+      const image = await pdf.embedPng(pageCanvas.toDataURL('image/png'));
+      const imageHeight = slice.sourceHeight * contentWidth / canvas.width;
+      const page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
+      page.drawImage(image, {
+        x: PDF_MARGIN,
+        y: A4_HEIGHT - PDF_MARGIN - imageHeight,
+        width: contentWidth,
+        height: imageHeight,
+      });
+    }
+
+    const path = getMarkdownPdfPath(options.filePath);
+    const response = await fetch('/api/files/create-binary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, content: bytesToBase64(await pdf.save()) }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    return path;
+  } finally {
+    iframe.remove();
+  }
 }
 
 export async function exportMarkdownPdf(options: ExportMarkdownPdfOptions): Promise<void> {

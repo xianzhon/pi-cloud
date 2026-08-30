@@ -9,9 +9,13 @@ const mermaidMock = vi.hoisted(() => ({
   render: vi.fn(),
 }));
 const markdownPdfExportMock = vi.hoisted(() => vi.fn());
+const markdownPdfCopyMock = vi.hoisted(() => vi.fn());
 
 vi.mock('mermaid', () => ({ default: mermaidMock }));
-vi.mock('../utils/markdownPdfExport', () => ({ exportMarkdownPdf: markdownPdfExportMock }));
+vi.mock('../utils/markdownPdfExport', () => ({
+  createMarkdownPdfCopy: markdownPdfCopyMock,
+  exportMarkdownPdf: markdownPdfExportMock,
+}));
 vi.mock('./PdfPreview.vue', () => ({
   default: {
     name: 'PdfPreviewStub',
@@ -336,12 +340,46 @@ describe('EditorPanel', () => {
     const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
     await wrapper.vm.openFile('/project/README.md');
     await flushPromises();
-    await wrapper.get('[aria-label="Export Markdown as PDF"]').trigger('click');
+    await wrapper.get('[aria-label="Download Markdown as PDF"]').trigger('click');
 
     expect(markdownPdfExportMock).toHaveBeenCalledWith({
       filePath: '/project/README.md',
       html: expect.stringContaining('<h1 id="export-me">Export me</h1>'),
     });
+  });
+
+  it('creates and opens a PDF copy while keeping the Markdown file open', async () => {
+    const markdown = '# Annotate me';
+    markdownPdfCopyMock.mockResolvedValue('/project/README.pdf');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const value = String(url);
+      if (value.startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (value.includes('README.pdf')) return { ok: false, status: 415, json: async () => ({ kind: 'pdf', mtime: 2 }) };
+      if (value.startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: markdown, mtime: 1 }) };
+      if (value.startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => markdown),
+      dispose: vi.fn(),
+    } as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/README.md');
+    await flushPromises();
+    await wrapper.get('[aria-label="Create PDF copy for annotation"]').trigger('click');
+    await flushPromises();
+
+    expect(markdownPdfCopyMock).toHaveBeenCalledWith({
+      filePath: '/project/README.md',
+      html: expect.stringContaining('<h1 id="annotate-me">Annotate me</h1>'),
+    });
+    expect(wrapper.find('.pdf-preview-test').attributes('data-file-path')).toBe('/project/README.pdf');
+    expect((wrapper.vm as any).tabs.map((tab: { path: string }) => tab.path)).toEqual([
+      '/project/README.md',
+      '/project/README.pdf',
+    ]);
   });
 
   it('shows a markdown heading outline and scrolls to the selected section', async () => {

@@ -341,6 +341,27 @@ describe('fileRoutes', () => {
     await expect(fs.readFile(filePath, 'utf8')).resolves.toBe('updated');
   });
 
+  it('creates a binary file from base64 without overwriting it', async () => {
+    const filePath = path.join(tempDir, 'document.pdf');
+    const content = Buffer.from('%PDF-1.7\n\0binary');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/files/create-binary',
+      payload: { path: filePath, content: content.toString('base64') },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await expect(fs.readFile(filePath)).resolves.toEqual(content);
+
+    const overwriteResponse = await app.inject({
+      method: 'POST',
+      url: '/api/files/create-binary',
+      payload: { path: filePath, content: Buffer.from('replacement').toString('base64') },
+    });
+    expect(overwriteResponse.statusCode).toBe(409);
+    await expect(fs.readFile(filePath)).resolves.toEqual(content);
+  });
+
   it('creates a new file without overwriting existing files', async () => {
     const filePath = path.join(tempDir, 'nested', 'new-file.txt');
     const response = await app.inject({

@@ -428,6 +428,32 @@ export async function fileRoutes(app: FastifyInstance) {
     return { success: true, mtime: stats.mtimeMs };
   });
 
+  app.post('/create-binary', { bodyLimit: 50 * 1024 * 1024 }, async (req, reply) => {
+    const { path: filePath, content } = req.body as { path?: string; content?: string };
+    if (!filePath?.trim() || typeof content !== 'string') {
+      return reply.code(400).send({ error: 'File path and base64 content are required' });
+    }
+
+    const resolvedPath = await resolveAllowedPath(filePath);
+    await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+    try {
+      await fs.writeFile(resolvedPath, Buffer.from(content, 'base64'), { flag: 'wx' });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        return reply.code(409).send({ error: 'File already exists' });
+      }
+      throw error;
+    }
+
+    const stats = await fs.stat(resolvedPath);
+    app.authServices?.audit.record({
+      type: 'file_create',
+      status: 'success',
+      metadata: { path: resolvedPath },
+    });
+    return { success: true, path: resolvedPath, mtime: stats.mtimeMs };
+  });
+
   app.post('/create', async (req, reply) => {
     const { path: filePath, content = '' } = req.body as { path?: string; content?: string };
     if (!filePath?.trim()) {
