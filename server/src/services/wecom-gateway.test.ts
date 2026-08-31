@@ -224,6 +224,26 @@ describe('WecomGatewayService', () => {
     });
   });
 
+  it('converts unordered Markdown list markers to readable Unicode bullets', async () => {
+    configureEnvironment();
+    const service = createService();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ errcode: 0, errmsg: 'ok', access_token: 'access-1', expires_in: 7200 }))
+      .mockResolvedValueOnce(jsonResponse({ errcode: 0, errmsg: 'ok' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await (service as any).sendReply(
+      (service as any).loadConfig(),
+      'user-1',
+      '- First item\n* Second item\n  + Nested item\n1. Ordered item',
+    );
+
+    const sendRequest = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(JSON.parse(String(sendRequest.body)).markdown.content).toBe(
+      '• First item\n• Second item\n  ◦ Nested item\n1. Ordered item',
+    );
+  });
+
   it('refreshes an expired access token once before retrying a message', async () => {
     configureEnvironment();
     const service = createService();

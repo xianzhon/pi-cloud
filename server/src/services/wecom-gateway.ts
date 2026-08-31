@@ -590,7 +590,7 @@ export class WecomGatewayService {
   }
 
   private async sendReply(config: WecomGatewayConfig, userId: string, text: string): Promise<void> {
-    for (const chunk of splitUtf8Text(text, TEXT_CHUNK_MAX_BYTES)) {
+    for (const chunk of splitUtf8Text(formatWecomMarkdown(text), TEXT_CHUNK_MAX_BYTES)) {
       let token = await this.getAccessToken(config);
       let data = await this.sendApplicationMarkdown(config, token, userId, chunk);
       if ([40014, 42001].includes(Number(data.errcode))) {
@@ -757,6 +757,10 @@ function extractLastAssistantText(messages: any[]): string | undefined {
     if (text) return text;
   }
   return undefined;
+}
+
+function formatWecomMarkdown(text: string): string {
+  return text.replace(/^([ \t]*)[-+*][ \t]+/gm, (_match, indentation: string) => `${indentation}${indentation ? '◦' : '•'} `);
 }
 
 function splitUtf8Text(text: string, maxBytes: number): string[] {
