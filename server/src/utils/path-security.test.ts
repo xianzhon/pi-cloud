@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveAllowedPath } from './path-security.js';
+import { resolveAllowedExistingPath, resolveAllowedPath } from './path-security.js';
 
 describe('path security', () => {
   afterEach(() => {
@@ -23,6 +23,38 @@ describe('path security', () => {
 
     try {
       await expect(resolveAllowedPath(outsideDir)).rejects.toThrow('Path is outside the configured allowed roots');
+    } finally {
+      await fs.rm(allowedDir, { recursive: true, force: true });
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns the canonical path for existing symlinks within an allowed root', async () => {
+    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-allowed-'));
+    const targetDir = path.join(allowedDir, 'target');
+    const linkedDir = path.join(allowedDir, 'link');
+    await fs.mkdir(targetDir);
+    await fs.symlink(targetDir, linkedDir);
+    process.env.PI_CLOUD_ALLOWED_ROOTS = allowedDir;
+    process.env.PI_CLOUD_DISABLE_PATH_CHECK = 'false';
+
+    try {
+      await expect(resolveAllowedExistingPath(linkedDir)).resolves.toBe(await fs.realpath(targetDir));
+    } finally {
+      await fs.rm(allowedDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects existing symlinks that resolve outside an allowed root', async () => {
+    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-allowed-'));
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-outside-'));
+    const linkedDir = path.join(allowedDir, 'link');
+    await fs.symlink(outsideDir, linkedDir);
+    process.env.PI_CLOUD_ALLOWED_ROOTS = allowedDir;
+    process.env.PI_CLOUD_DISABLE_PATH_CHECK = 'false';
+
+    try {
+      await expect(resolveAllowedExistingPath(linkedDir)).rejects.toThrow('Path is outside the configured allowed roots');
     } finally {
       await fs.rm(allowedDir, { recursive: true, force: true });
       await fs.rm(outsideDir, { recursive: true, force: true });

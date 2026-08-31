@@ -3,13 +3,13 @@ import type { FastifyInstance } from 'fastify';
 import type { Dirent, Stats } from 'fs';
 import { spawn } from 'child_process';
 import { isUtf8 } from 'buffer';
-import { createReadStream } from 'fs';
+import { constants as fsConstants, createReadStream } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { ZipArchive } from 'archiver';
 import { globIterate } from 'glob';
 import { archivePreview, isArchivePath } from '../utils/archive-preview.js';
-import { resolveAllowedPath } from '../utils/path-security.js';
+import { resolveAllowedExistingPath, resolveAllowedPath } from '../utils/path-security.js';
 
 interface TreeNode {
   name: string;
@@ -160,7 +160,7 @@ async function createTreeNode(dirPath: string, entry: Dirent): Promise<TreeNode>
     linkTarget = path.isAbsolute(rawTarget) ? rawTarget : path.resolve(dirPath, rawTarget);
 
     try {
-      const targetStats = await fs.stat(fullPath);
+      const targetStats = await fs.stat(await resolveAllowedExistingPath(fullPath));
       if (targetStats.isDirectory()) {
         isDirectory = true;
         targetType = 'directory';
@@ -199,7 +199,8 @@ async function buildFileTree(
   if (currentDepth >= depth) return [];
 
   const nodes: TreeNode[] = [];
-  const directory = await fs.opendir(dirPath);
+  const accessDirPath = await resolveAllowedExistingPath(dirPath);
+  const directory = await fs.opendir(accessDirPath);
   try {
     let entry = await directory.read();
     while (entry !== null) {
@@ -218,7 +219,7 @@ async function buildFileTree(
 
       const node = await createTreeNode(dirPath, entry);
       if (options.sort === 'modified') {
-        node.mtime = (await fs.lstat(node.path)).mtimeMs;
+        node.mtime = (await fs.lstat(path.join(accessDirPath, entry.name))).mtimeMs;
       }
 
       if (options.filterType === 'all' || options.filterType === node.type) {
@@ -342,9 +343,11 @@ export async function fileRoutes(app: FastifyInstance) {
   app.get('/read', async (req, reply) => {
     const { path: filePath } = req.query as { path: string };
     const resolvedPath = await resolveAllowedPath(filePath);
+    let accessPath: string;
     let stats: Stats;
     try {
-      stats = await fs.stat(resolvedPath);
+      accessPath = await resolveAllowedExistingPath(resolvedPath);
+      stats = await fs.stat(accessPath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return reply.code(404).send({ error: 'File not found', path: resolvedPath });
@@ -358,7 +361,7 @@ export async function fileRoutes(app: FastifyInstance) {
       try {
         return {
           path: resolvedPath,
-          content: await archivePreview(resolvedPath),
+          content: await archivePreview(accessPath),
           kind: 'archive',
           mtime: stats.mtimeMs,
         };
@@ -395,7 +398,7 @@ export async function fileRoutes(app: FastifyInstance) {
 
     let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
     try {
-      handle = await fs.open(resolvedPath, 'r');
+      handle = await fs.open(accessPath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
       const openedStats = await handle.stat();
       if (openedStats.size > MAX_TEXT_FILE_BYTES) {
         return reply.code(413).send({
@@ -487,16 +490,26 @@ export async function fileRoutes(app: FastifyInstance) {
       return reply.code(415).send({ error: 'Unsupported file type' });
     }
 
-    if (isPdf) {
-      return reply.type('application/pdf').send(createReadStream(resolvedPath));
-    }
+    let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
+    try {
+      const accessPath = await resolveAllowedExistingPath(resolvedPath);
+      handle = await fs.open(accessPath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+      const stream = handle.createReadStream();
+      handle = undefined;
 
-    if (imageMimeType === 'image/svg+xml') {
-      // SVG can contain active script when navigated to directly. A sandboxed
-      // response preserves image previewing without granting the WebUI origin.
-      reply.header('Content-Security-Policy', "sandbox; default-src 'none'");
+      if (isPdf) {
+        return reply.type('application/pdf').send(stream);
+      }
+
+      if (imageMimeType === 'image/svg+xml') {
+        // SVG can contain active script when navigated to directly. A sandboxed
+        // response preserves image previewing without granting the WebUI origin.
+        reply.header('Content-Security-Policy', "sandbox; default-src 'none'");
+      }
+      return reply.type(imageMimeType!).send(stream);
+    } finally {
+      await handle?.close();
     }
-    return reply.type(imageMimeType!).send(createReadStream(resolvedPath));
   });
 
   app.post('/write', async (req) => {

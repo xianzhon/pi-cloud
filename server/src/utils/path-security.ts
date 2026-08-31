@@ -89,3 +89,16 @@ export async function resolveAllowedPath(requestedPath: string | undefined): Pro
 
   return resolvedPath;
 }
+
+export async function resolveAllowedExistingPath(requestedPath: string | undefined): Promise<string> {
+  const resolvedPath = path.resolve(expandHomePath(requestedPath));
+  const realPath = await fs.realpath(resolvedPath);
+  if (isPathCheckDisabled()) return realPath;
+
+  const roots = await allowedRoots();
+  if (!roots.some(root => isInsideRoot(realPath, root))) {
+    throw new PathAccessError(resolvedPath);
+  }
+
+  return realPath;
+}
