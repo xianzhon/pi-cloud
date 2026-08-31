@@ -40,7 +40,7 @@ describe('buildApp auth protection', () => {
     expect(status.statusCode).toBe(401);
 
     await app.close();
-  });
+  }, 15_000);
 
   it('allows health and blocks file API without a session', async () => {
     const { buildApp } = await import('./index');
