@@ -592,25 +592,25 @@ export class WecomGatewayService {
   private async sendReply(config: WecomGatewayConfig, userId: string, text: string): Promise<void> {
     for (const chunk of splitUtf8Text(text, TEXT_CHUNK_MAX_BYTES)) {
       let token = await this.getAccessToken(config);
-      let data = await this.sendApplicationText(config, token, userId, chunk);
+      let data = await this.sendApplicationMarkdown(config, token, userId, chunk);
       if ([40014, 42001].includes(Number(data.errcode))) {
         this.tokenCache = undefined;
         token = await this.getAccessToken(config);
-        data = await this.sendApplicationText(config, token, userId, chunk);
+        data = await this.sendApplicationMarkdown(config, token, userId, chunk);
       }
       if (Number(data.errcode) !== 0) throw new Error(`WeCom send message failed: ${stringValue(data.errmsg) || `errcode=${data.errcode}`}`);
     }
   }
 
-  private async sendApplicationText(config: WecomGatewayConfig, token: string, userId: string, text: string): Promise<Record<string, unknown>> {
+  private async sendApplicationMarkdown(config: WecomGatewayConfig, token: string, userId: string, text: string): Promise<Record<string, unknown>> {
     const response = await fetch(`${WECOM_API_BASE_URL}/cgi-bin/message/send?access_token=${encodeURIComponent(token)}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         touser: userId,
-        msgtype: 'text',
+        msgtype: 'markdown',
         agentid: Number(config.agentId),
-        text: { content: text },
+        markdown: { content: text },
         safe: 0,
         enable_duplicate_check: 1,
         duplicate_check_interval: 1800,

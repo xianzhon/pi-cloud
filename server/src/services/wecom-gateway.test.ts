@@ -199,7 +199,7 @@ describe('WecomGatewayService', () => {
     expect(enqueue).not.toHaveBeenCalled();
   });
 
-  it('caches an access token and sends an application text message to the member', async () => {
+  it('caches an access token and sends an application markdown message to the member', async () => {
     configureEnvironment();
     const service = createService();
     const fetchMock = vi.fn()
@@ -207,7 +207,7 @@ describe('WecomGatewayService', () => {
       .mockImplementation(async () => new Response(JSON.stringify({ errcode: 0, errmsg: 'ok', invaliduser: '' })));
     vi.stubGlobal('fetch', fetchMock);
 
-    await (service as any).sendReply((service as any).loadConfig(), 'user-1', 'hello');
+    await (service as any).sendReply((service as any).loadConfig(), 'user-1', '## hello\n\n**world**');
     await (service as any).sendReply((service as any).loadConfig(), 'user-1', 'again');
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -215,9 +215,9 @@ describe('WecomGatewayService', () => {
     const sendRequest = fetchMock.mock.calls[1][1] as RequestInit;
     expect(JSON.parse(String(sendRequest.body))).toEqual({
       touser: 'user-1',
-      msgtype: 'text',
+      msgtype: 'markdown',
       agentid: 1000002,
-      text: { content: 'hello' },
+      markdown: { content: '## hello\n\n**world**' },
       safe: 0,
       enable_duplicate_check: 1,
       duplicate_check_interval: 1800,
@@ -254,7 +254,7 @@ describe('WecomGatewayService', () => {
 
     const sentChunks = fetchMock.mock.calls.slice(1).map((call) => {
       const request = call[1] as RequestInit;
-      return JSON.parse(String(request.body)).text.content as string;
+      return JSON.parse(String(request.body)).markdown.content as string;
     });
     expect(sentChunks.length).toBeGreaterThan(1);
     expect(sentChunks.join('')).toBe(reply);
