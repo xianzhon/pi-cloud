@@ -94,7 +94,7 @@ function macServicePath() {
 function installLinuxService() {
   const servicePath = linuxServicePath();
   mkdirSync(join(servicePath, '..'), { recursive: true });
-  writeFileSync(servicePath, `[Unit]\nDescription=Pi Cloud\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart="${process.execPath}" "${scriptPath}" --no-open\nWorkingDirectory=${homedir()}\nEnvironment=HOME=${homedir()}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n`);
+  writeFileSync(servicePath, `[Unit]\nDescription=Pi Cloud\nAfter=network-online.target\nStartLimitIntervalSec=60\nStartLimitBurst=3\n\n[Service]\nType=simple\nExecStart="${process.execPath}" "${scriptPath}" --no-open\nWorkingDirectory=${homedir()}\nEnvironment=HOME=${homedir()}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n`);
   runCommand('systemctl', ['--user', 'daemon-reload']);
   runCommand('systemctl', ['--user', 'enable', '--now', SERVICE_NAME]);
   console.log(`Installed Linux service at ${servicePath}`);
