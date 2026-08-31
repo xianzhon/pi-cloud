@@ -29,6 +29,21 @@ describe('path security', () => {
     }
   });
 
+  it('rejects outside paths before checking whether they exist', async () => {
+    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-allowed-'));
+    const outsidePath = path.join(os.tmpdir(), 'pi-cloud-missing', 'file.txt');
+    process.env.PI_CLOUD_ALLOWED_ROOTS = allowedDir;
+    process.env.PI_CLOUD_DISABLE_PATH_CHECK = 'false';
+
+    try {
+      await expect(resolveAllowedExistingPath(outsidePath)).rejects.toThrow(
+        'Path is outside the configured allowed roots',
+      );
+    } finally {
+      await fs.rm(allowedDir, { recursive: true, force: true });
+    }
+  });
+
   it('returns the canonical path for existing symlinks within an allowed root', async () => {
     const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-allowed-'));
     const targetDir = path.join(allowedDir, 'target');

@@ -92,9 +92,19 @@ export async function resolveAllowedPath(requestedPath: string | undefined): Pro
 
 export async function resolveAllowedExistingPath(requestedPath: string | undefined): Promise<string> {
   const resolvedPath = path.resolve(expandHomePath(requestedPath));
-  const realPath = await fs.realpath(resolvedPath);
-  if (isPathCheckDisabled()) return realPath;
+  if (isPathCheckDisabled()) return fs.realpath(resolvedPath);
 
+  const configuredRoots = configuredAllowedRoots().map(root => path.resolve(expandHomePath(root)));
+  const matchedRoot = configuredRoots.find(root => isInsideRoot(resolvedPath, root));
+  if (!matchedRoot) throw new PathAccessError(resolvedPath);
+
+  // Validate the user-controlled path before passing it to the filesystem.
+  const relativePath = path.relative(matchedRoot, resolvedPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new PathAccessError(resolvedPath);
+  }
+
+  const realPath = await fs.realpath(resolvedPath);
   const roots = await allowedRoots();
   if (!roots.some(root => isInsideRoot(realPath, root))) {
     throw new PathAccessError(resolvedPath);
