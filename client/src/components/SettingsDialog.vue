@@ -560,6 +560,74 @@
                   </div>
                 </section>
 
+                <section class="settings-card gateway-settings wecom-settings" aria-labelledby="wecom-settings-title">
+                  <div class="wecom-header">
+                    <div class="settings-card-copy">
+                      <h4 id="wecom-settings-title">{{ t('components.settingsDialog.wecomApp') }}</h4>
+                      <p>{{ t('components.settingsDialog.connectWecomSelfBuiltApp') }}</p>
+                    </div>
+                    <div class="wecom-actions">
+                      <span class="wecom-status-badge" :class="{ paired: wecomGatewayStatus.configured }">
+                        {{ wecomGatewayStatus.configured ? t('components.settingsDialog.configured') : t('components.settingsDialog.notConfigured') }}
+                      </span>
+                      <button v-if="wecomGatewayStatus.configured" type="button" class="settings-action-btn compact-action wecom-test-action" :disabled="wecomBusy" @click="testWecomConnection">
+                        {{ t('components.settingsDialog.testConnection') }}
+                      </button>
+                      <button v-if="wecomGatewayStatus.configured && !wecomEnvironmentManaged" type="button" class="settings-action-btn compact-action wecom-disconnect-action" :disabled="wecomBusy" @click="showWecomDisconnectConfirm = true">
+                        {{ t('components.settingsDialog.disconnect') }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p v-if="wecomEnvironmentManaged" class="settings-inline-note">
+                    {{ t('components.settingsDialog.wecomManagedByEnvironment') }}
+                  </p>
+                  <div class="wecom-form-grid">
+                    <label class="git-settings-field">{{ t('components.settingsDialog.wecomCorpId') }}
+                      <input v-model="wecomCorpId" class="settings-input wecom-corp-id" :disabled="wecomEnvironmentManaged" autocomplete="off" />
+                    </label>
+                    <label class="git-settings-field">{{ t('components.settingsDialog.wecomAgentId') }}
+                      <input v-model="wecomAgentId" class="settings-input wecom-agent-id" :disabled="wecomEnvironmentManaged" inputmode="numeric" autocomplete="off" />
+                    </label>
+                    <label class="git-settings-field">{{ t('components.settingsDialog.wecomAppSecret') }}
+                      <input v-model="wecomCorpSecret" class="settings-input wecom-corp-secret" :disabled="wecomEnvironmentManaged" type="password" :placeholder="wecomGatewayStatus.configured ? t('components.settingsDialog.enterToReplaceSavedSecret') : ''" autocomplete="new-password" />
+                    </label>
+                    <label class="git-settings-field">{{ t('components.settingsDialog.wecomAllowedUsers') }}
+                      <input v-model="wecomAllowedUsers" class="settings-input wecom-allowed-users" :disabled="wecomEnvironmentManaged" :placeholder="t('components.settingsDialog.wecomAllowedUsersPlaceholder')" autocomplete="off" />
+                    </label>
+                  </div>
+                  <div v-if="!wecomEnvironmentManaged" class="wecom-actions">
+                    <button type="button" class="settings-action-btn wecom-save-action" :disabled="wecomBusy || !wecomCorpId.trim() || !wecomAgentId.trim() || !wecomCorpSecret.trim()" @click="saveWecomConfiguration">
+                      {{ wecomBusy ? t('components.settingsDialog.saving') : t('components.settingsDialog.saveAndGenerateCallback') }}
+                    </button>
+                    <button v-if="wecomGatewayStatus.configured" type="button" class="settings-action-btn compact-action" :disabled="wecomBusy" @click="regenerateWecomSecrets">
+                      {{ t('components.settingsDialog.regenerateCallbackSecrets') }}
+                    </button>
+                  </div>
+
+                  <div v-if="wecomGatewayStatus.configured" class="wecom-callback-panel">
+                    <div class="wecom-callback-heading">
+                      <strong>{{ t('components.settingsDialog.wecomCallbackConfiguration') }}</strong>
+                      <span>{{ wecomGatewayStatus.callbackVerified ? t('components.settingsDialog.callbackVerified') : t('components.settingsDialog.waitingForCallbackVerification') }}</span>
+                    </div>
+                    <label class="git-settings-field">{{ t('components.settingsDialog.callbackUrl') }}
+                      <span class="wecom-copy-row">
+                        <input :value="wecomCallbackUrl" class="settings-input wecom-callback-url" readonly />
+                        <button type="button" class="settings-action-btn compact-action" @click="copyWecomValue(wecomCallbackUrl)">{{ t('components.settingsDialog.copy') }}</button>
+                      </span>
+                    </label>
+                    <div v-if="wecomGeneratedSecrets" class="wecom-generated-secrets" role="status">
+                      <p>{{ t('components.settingsDialog.copyCallbackSecretsNow') }}</p>
+                      <div><strong>Token</strong><code>{{ wecomGeneratedSecrets.callbackToken }}</code><button type="button" class="settings-action-btn compact-action" @click="copyWecomValue(wecomGeneratedSecrets.callbackToken)">{{ t('components.settingsDialog.copy') }}</button></div>
+                      <div><strong>EncodingAESKey</strong><code>{{ wecomGeneratedSecrets.encodingAesKey }}</code><button type="button" class="settings-action-btn compact-action" @click="copyWecomValue(wecomGeneratedSecrets.encodingAesKey)">{{ t('components.settingsDialog.copy') }}</button></div>
+                    </div>
+                    <p v-else class="settings-inline-note">{{ t('components.settingsDialog.wecomUseConfiguredCallbackSecrets') }}</p>
+                  </div>
+                  <p v-if="wecomNotice" class="git-save-success" role="status">{{ wecomNotice }}</p>
+                  <p v-if="wecomError" class="settings-error-text" role="alert">{{ wecomError }}</p>
+                  <p class="settings-inline-note">{{ t('components.settingsDialog.wecomTextOnlyNotice') }}</p>
+                </section>
+
                 <section class="settings-card gateway-settings weixin-pairing-settings" aria-labelledby="weixin-pairing-title">
                   <div class="weixin-pairing-header">
                     <div class="settings-card-copy">
@@ -692,6 +760,16 @@
   >
     <template #title>{{ t('components.settingsDialog.unbindWechatAccount') }}</template>
     <template #message>{{ t('components.settingsDialog.confirmUnbindWechat') }}</template>
+  </ConfirmModal>
+  <ConfirmModal
+    :visible="showWecomDisconnectConfirm"
+    variant="danger"
+    :confirm-text="t('components.settingsDialog.disconnect')"
+    @confirm="disconnectWecom"
+    @cancel="showWecomDisconnectConfirm = false"
+  >
+    <template #title>{{ t('components.settingsDialog.disconnectWecomApp') }}</template>
+    <template #message>{{ t('components.settingsDialog.confirmDisconnectWecom') }}</template>
   </ConfirmModal>
 </template>
 
@@ -902,6 +980,21 @@ interface WeixinGatewayStatus {
   baseUrl?: string;
 }
 
+interface WecomGatewayStatus {
+  configured: boolean;
+  managedBy: 'database' | 'environment' | 'none';
+  corpId?: string;
+  agentId?: string;
+  allowedUsers: string[];
+  callbackVerified: boolean;
+}
+
+interface WecomConfigurationResponse {
+  status: WecomGatewayStatus;
+  callbackToken: string;
+  encodingAesKey: string;
+}
+
 const weixinPairing = ref<WeixinPairingState>({ status: 'idle' });
 const weixinGatewayStatus = ref<WeixinGatewayStatus>({ enabled: false, running: false });
 const weixinPairingLoading = ref(false);
@@ -909,6 +1002,16 @@ const weixinUnpairing = ref(false);
 const showWeixinUnpairConfirm = ref(false);
 const weixinPairingError = ref('');
 let weixinPairingPoll: number | undefined;
+const wecomGatewayStatus = ref<WecomGatewayStatus>({ configured: false, managedBy: 'none', allowedUsers: [], callbackVerified: false });
+const wecomCorpId = ref('');
+const wecomAgentId = ref('');
+const wecomCorpSecret = ref('');
+const wecomAllowedUsers = ref('');
+const wecomGeneratedSecrets = ref<{ callbackToken: string; encodingAesKey: string }>();
+const wecomBusy = ref(false);
+const wecomError = ref('');
+const wecomNotice = ref('');
+const showWecomDisconnectConfirm = ref(false);
 
 const giteaDirty = computed(() => draftGiteaServerUrl.value !== props.giteaServerUrl || Boolean(draftGiteaToken.value));
 const githubDirty = computed(() => draftGithubServerUrl.value !== props.githubServerUrl || Boolean(draftGithubToken.value));
@@ -960,6 +1063,8 @@ const weixinStatusText = computed(() => {
   if (weixinGatewayStatus.value.paired) return t('components.settingsDialog.pairedAs', { account: weixinGatewayStatus.value.accountId || t('components.settingsDialog.savedAccount') });
   return t('components.settingsDialog.noPairedWechatAccountSavedYet');
 });
+const wecomEnvironmentManaged = computed(() => wecomGatewayStatus.value.managedBy === 'environment');
+const wecomCallbackUrl = computed(() => `${window.location.origin}/api/gateways/wecom/callback`);
 
 function resetGitDrafts() {
   draftGiteaServerUrl.value = props.giteaServerUrl;
@@ -1149,9 +1254,106 @@ function startWeixinPairingPoll() {
   }, 1500);
 }
 
-function gatewayRequest<T>(url: string, method = 'GET'): Promise<T> {
-  return apiRequest<T>(url, {
+function applyWecomStatus(status: WecomGatewayStatus): void {
+  wecomGatewayStatus.value = status;
+  wecomCorpId.value = status.corpId || '';
+  wecomAgentId.value = status.agentId || '';
+  wecomAllowedUsers.value = status.allowedUsers.join(', ');
+}
+
+async function loadWecomStatus(): Promise<void> {
+  const data = await gatewayRequest<{ status: WecomGatewayStatus }>('/api/gateways/wecom/status');
+  applyWecomStatus(data.status);
+}
+
+async function saveWecomConfiguration(): Promise<void> {
+  wecomBusy.value = true;
+  wecomError.value = '';
+  wecomNotice.value = '';
+  try {
+    const data = await gatewayRequest<WecomConfigurationResponse, {
+      corpId: string;
+      corpSecret: string;
+      agentId: string;
+      allowedUsers: string[];
+    }>('/api/gateways/wecom/configuration', 'PUT', {
+      corpId: wecomCorpId.value.trim(),
+      corpSecret: wecomCorpSecret.value.trim(),
+      agentId: wecomAgentId.value.trim(),
+      allowedUsers: wecomAllowedUsers.value.split(',').map((user) => user.trim()).filter(Boolean),
+    });
+    applyWecomStatus(data.status);
+    wecomCorpSecret.value = '';
+    wecomGeneratedSecrets.value = { callbackToken: data.callbackToken, encodingAesKey: data.encodingAesKey };
+    wecomNotice.value = t('components.settingsDialog.wecomConfigurationSaved');
+  } catch (error) {
+    wecomError.value = error instanceof Error ? error.message : t('components.settingsDialog.wecomRequestFailed');
+  } finally {
+    wecomBusy.value = false;
+  }
+}
+
+async function regenerateWecomSecrets(): Promise<void> {
+  wecomBusy.value = true;
+  wecomError.value = '';
+  wecomNotice.value = '';
+  try {
+    const data = await gatewayRequest<WecomConfigurationResponse>('/api/gateways/wecom/callback-secrets', 'POST');
+    applyWecomStatus(data.status);
+    wecomGeneratedSecrets.value = { callbackToken: data.callbackToken, encodingAesKey: data.encodingAesKey };
+    wecomNotice.value = t('components.settingsDialog.wecomCallbackSecretsRegenerated');
+  } catch (error) {
+    wecomError.value = error instanceof Error ? error.message : t('components.settingsDialog.wecomRequestFailed');
+  } finally {
+    wecomBusy.value = false;
+  }
+}
+
+async function testWecomConnection(): Promise<void> {
+  wecomBusy.value = true;
+  wecomError.value = '';
+  wecomNotice.value = '';
+  try {
+    const data = await gatewayRequest<{ status: WecomGatewayStatus }>('/api/gateways/wecom/test', 'POST');
+    applyWecomStatus(data.status);
+    wecomNotice.value = t('components.settingsDialog.wecomConnectionSucceeded');
+  } catch (error) {
+    wecomError.value = error instanceof Error ? error.message : t('components.settingsDialog.wecomRequestFailed');
+  } finally {
+    wecomBusy.value = false;
+  }
+}
+
+async function disconnectWecom(): Promise<void> {
+  showWecomDisconnectConfirm.value = false;
+  wecomBusy.value = true;
+  wecomError.value = '';
+  wecomNotice.value = '';
+  try {
+    const data = await gatewayRequest<{ status: WecomGatewayStatus }>('/api/gateways/wecom/configuration', 'DELETE');
+    applyWecomStatus(data.status);
+    wecomCorpSecret.value = '';
+    wecomGeneratedSecrets.value = undefined;
+  } catch (error) {
+    wecomError.value = error instanceof Error ? error.message : t('components.settingsDialog.wecomRequestFailed');
+  } finally {
+    wecomBusy.value = false;
+  }
+}
+
+async function copyWecomValue(value: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(value);
+    wecomNotice.value = t('components.settingsDialog.copied');
+  } catch {
+    wecomError.value = t('components.settingsDialog.copyFailed');
+  }
+}
+
+function gatewayRequest<T, TRequest = never>(url: string, method = 'GET', body?: TRequest): Promise<T> {
+  return apiRequest<T, TRequest>(url, {
     method,
+    ...(body === undefined ? {} : { body }),
     fallbackMessage: (status) => t('components.settingsDialog.gatewayRequestFailed', { status }),
   });
 }
@@ -1233,6 +1435,7 @@ watch(() => props.visible, (visible) => {
     if (activeSection.value === 'gateway') {
       void loadGatewayProfiles().catch(() => undefined);
       void loadGatewayModels().catch(() => undefined);
+      void loadWecomStatus().catch(() => undefined);
     }
   } else {
     window.clearInterval(weixinPairingPoll);
@@ -1247,6 +1450,7 @@ watch(activeSection, (section) => {
   void loadGatewayProfiles().catch(() => undefined);
   void loadGatewayModels().catch(() => undefined);
   void loadWeixinState().catch(() => undefined);
+  void loadWecomStatus().catch(() => undefined);
 });
 
 watch(() => props.projectPath, () => {
@@ -1934,6 +2138,88 @@ const emit = defineEmits<{
   white-space: nowrap;
 }
 
+.wecom-settings {
+  gap: 0.9rem;
+}
+
+.wecom-header,
+.wecom-actions,
+.wecom-copy-row,
+.wecom-callback-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.wecom-header,
+.wecom-callback-heading {
+  justify-content: space-between;
+}
+
+.wecom-header {
+  align-items: flex-start;
+}
+
+.wecom-actions {
+  flex-wrap: wrap;
+}
+
+.wecom-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.wecom-callback-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.wecom-callback-heading span {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.wecom-copy-row input {
+  min-width: 0;
+}
+
+.wecom-copy-row .settings-action-btn {
+  flex: 0 0 auto;
+}
+
+.wecom-generated-secrets {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--radius-md);
+}
+
+.wecom-generated-secrets p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.wecom-generated-secrets div {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.wecom-generated-secrets code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
 .weixin-pairing-settings {
   gap: 0.9rem;
 }
@@ -1972,7 +2258,8 @@ const emit = defineEmits<{
   color: var(--text-primary);
 }
 
-.weixin-status-badge {
+.weixin-status-badge,
+.wecom-status-badge {
   display: inline-flex;
   align-items: center;
   padding: 0.2rem 0.55rem;
@@ -1984,7 +2271,8 @@ const emit = defineEmits<{
   font-weight: 700;
 }
 
-.weixin-status-badge.paired {
+.weixin-status-badge.paired,
+.wecom-status-badge.paired {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
@@ -2229,6 +2517,25 @@ const emit = defineEmits<{
   .weixin-pairing-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .wecom-header,
+  .wecom-callback-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wecom-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wecom-generated-secrets div {
+    grid-template-columns: 1fr auto;
+  }
+
+  .wecom-generated-secrets code {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .weixin-pairing-actions {

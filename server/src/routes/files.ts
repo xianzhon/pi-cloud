@@ -3,13 +3,13 @@ import type { FastifyInstance } from 'fastify';
 import type { Dirent, Stats } from 'fs';
 import { spawn } from 'child_process';
 import { isUtf8 } from 'buffer';
-import { createReadStream } from 'fs';
+import { constants as fsConstants, createReadStream } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { ZipArchive } from 'archiver';
-import { glob } from 'glob';
+import { globIterate } from 'glob';
 import { archivePreview, isArchivePath } from '../utils/archive-preview.js';
-import { resolveAllowedPath } from '../utils/path-security.js';
+import { resolveAllowedExistingPath, resolveAllowedPath } from '../utils/path-security.js';
 
 interface TreeNode {
   name: string;
@@ -24,6 +24,14 @@ interface TreeNode {
 
 type TreeFilterType = 'all' | 'file' | 'directory';
 type TreeSort = 'name' | 'modified';
+
+const MAX_FILE_TREE_DEPTH = 10;
+const MAX_FILE_TREE_NODES = 5_000;
+const FILE_TREE_TIMEOUT_MS = 5_000;
+const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILE_SEARCH_RESULTS = 5_000;
+const FILE_SEARCH_TIMEOUT_MS = 5_000;
+const FILE_SEARCH_IGNORES = ['**/.git/**', '**/node_modules/**'];
 
 const imageMimeTypes = new Map<string, string>([
   ['.apng', 'image/apng'],
@@ -57,6 +65,12 @@ interface BuildFileTreeOptions {
   excludeNames: Set<string>;
   filterType: TreeFilterType;
   sort: TreeSort;
+}
+
+interface FileTreeBudget {
+  remainingNodes: number;
+  deadline: number;
+  truncated: boolean;
 }
 
 function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
@@ -146,7 +160,7 @@ async function createTreeNode(dirPath: string, entry: Dirent): Promise<TreeNode>
     linkTarget = path.isAbsolute(rawTarget) ? rawTarget : path.resolve(dirPath, rawTarget);
 
     try {
-      const targetStats = await fs.stat(fullPath);
+      const targetStats = await fs.stat(await resolveAllowedExistingPath(fullPath));
       if (targetStats.isDirectory()) {
         isDirectory = true;
         targetType = 'directory';
@@ -178,37 +192,49 @@ async function createTreeNode(dirPath: string, entry: Dirent): Promise<TreeNode>
 async function buildFileTree(
   dirPath: string,
   depth: number,
-  currentDepth: number = 0,
-  options: BuildFileTreeOptions = {
-    includeHidden: false,
-    excludeNames: new Set(['node_modules']),
-    filterType: 'all',
-    sort: 'name',
-  }
+  currentDepth: number,
+  options: BuildFileTreeOptions,
+  budget: FileTreeBudget,
 ): Promise<TreeNode[]> {
   if (currentDepth >= depth) return [];
 
-  const entries = await fs.readdir(dirPath, { withFileTypes: true });
   const nodes: TreeNode[] = [];
+  const accessDirPath = await resolveAllowedExistingPath(dirPath);
+  const directory = await fs.opendir(accessDirPath);
+  try {
+    let entry = await directory.read();
+    while (entry !== null) {
+      if (budget.remainingNodes <= 0 || Date.now() >= budget.deadline) {
+        budget.truncated = true;
+        break;
+      }
+      if (!options.includeHidden && entry.name.startsWith('.')) {
+        entry = await directory.read();
+        continue;
+      }
+      if (options.excludeNames.has(entry.name)) {
+        entry = await directory.read();
+        continue;
+      }
 
-  for (const entry of entries) {
-    if (!options.includeHidden && entry.name.startsWith('.')) continue;
-    if (options.excludeNames.has(entry.name)) continue;
+      const node = await createTreeNode(dirPath, entry);
+      if (options.sort === 'modified') {
+        node.mtime = (await fs.lstat(path.join(accessDirPath, entry.name))).mtimeMs;
+      }
 
-    const node = await createTreeNode(dirPath, entry);
-    if (options.sort === 'modified') {
-      node.mtime = (await fs.lstat(node.path)).mtimeMs;
+      if (options.filterType === 'all' || options.filterType === node.type) {
+        budget.remainingNodes--;
+
+        if (node.type === 'directory' && !node.isSymlink) {
+          node.children = await buildFileTree(node.path, depth, currentDepth + 1, options, budget);
+        }
+
+        nodes.push(node);
+      }
+      entry = await directory.read();
     }
-
-    if (options.filterType !== 'all' && options.filterType !== node.type) {
-      continue;
-    }
-
-    if (node.type === 'directory' && !node.isSymlink) {
-      node.children = await buildFileTree(node.path, depth, currentDepth + 1, options);
-    }
-
-    nodes.push(node);
+  } finally {
+    await directory.close();
   }
 
   return nodes.sort((a, b) => {
@@ -221,7 +247,7 @@ async function buildFileTree(
 }
 
 export async function fileRoutes(app: FastifyInstance) {
-  app.get('/tree', async (req) => {
+  app.get('/tree', async (req, reply) => {
     const {
       path: dirPath,
       depth,
@@ -238,6 +264,11 @@ export async function fileRoutes(app: FastifyInstance) {
       sort?: string;
     };
 
+    const requestedDepth = depth === undefined ? 3 : Number(depth);
+    if (!Number.isInteger(requestedDepth) || requestedDepth < 1 || requestedDepth > MAX_FILE_TREE_DEPTH) {
+      return reply.code(400).send({ error: `depth must be an integer between 1 and ${MAX_FILE_TREE_DEPTH}` });
+    }
+
     const resolvedPath = await resolveAllowedPath(dirPath);
     const excludeNames = new Set(
       (exclude === undefined ? 'node_modules' : exclude)
@@ -246,18 +277,24 @@ export async function fileRoutes(app: FastifyInstance) {
         .filter(Boolean)
     );
 
-    const tree = await buildFileTree(resolvedPath, parseInt(depth || '3'), 0, {
+    const budget: FileTreeBudget = {
+      remainingNodes: MAX_FILE_TREE_NODES,
+      deadline: Date.now() + FILE_TREE_TIMEOUT_MS,
+      truncated: false,
+    };
+    const tree = await buildFileTree(resolvedPath, requestedDepth, 0, {
       includeHidden: parseBoolean(hidden, false),
       excludeNames,
       filterType: parseFilterType(type),
       sort: parseTreeSort(sort),
-    });
+    }, budget);
 
     const parentPath = path.dirname(resolvedPath);
     return {
       path: resolvedPath,
       parentPath: parentPath === resolvedPath ? null : parentPath,
       tree,
+      truncated: budget.truncated,
     };
   });
 
@@ -306,9 +343,11 @@ export async function fileRoutes(app: FastifyInstance) {
   app.get('/read', async (req, reply) => {
     const { path: filePath } = req.query as { path: string };
     const resolvedPath = await resolveAllowedPath(filePath);
+    let accessPath: string;
     let stats: Stats;
     try {
-      stats = await fs.stat(resolvedPath);
+      accessPath = await resolveAllowedExistingPath(resolvedPath);
+      stats = await fs.stat(accessPath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return reply.code(404).send({ error: 'File not found', path: resolvedPath });
@@ -322,7 +361,7 @@ export async function fileRoutes(app: FastifyInstance) {
       try {
         return {
           path: resolvedPath,
-          content: await archivePreview(resolvedPath),
+          content: await archivePreview(accessPath),
           kind: 'archive',
           mtime: stats.mtimeMs,
         };
@@ -357,26 +396,55 @@ export async function fileRoutes(app: FastifyInstance) {
       });
     }
 
-    let content: Buffer;
+    let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
     try {
-      content = await fs.readFile(resolvedPath);
+      handle = await fs.open(accessPath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+      const openedStats = await handle.stat();
+      if (openedStats.size > MAX_TEXT_FILE_BYTES) {
+        return reply.code(413).send({
+          error: 'File is too large to open as text',
+          maxBytes: MAX_TEXT_FILE_BYTES,
+          path: resolvedPath,
+        });
+      }
+
+      const chunks: Buffer[] = [];
+      let totalBytes = 0;
+      while (true) {
+        const remainingBytes = MAX_TEXT_FILE_BYTES + 1 - totalBytes;
+        const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, remainingBytes));
+        const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, null);
+        if (bytesRead === 0) break;
+        totalBytes += bytesRead;
+        if (totalBytes > MAX_TEXT_FILE_BYTES) {
+          return reply.code(413).send({
+            error: 'File is too large to open as text',
+            maxBytes: MAX_TEXT_FILE_BYTES,
+            path: resolvedPath,
+          });
+        }
+        chunks.push(buffer.subarray(0, bytesRead));
+      }
+      const content = Buffer.concat(chunks, totalBytes);
+
+      if (isBinaryFile(resolvedPath, content)) {
+        return reply.code(415).send({
+          error: 'Unsupported file type',
+          kind: 'binary',
+          path: resolvedPath,
+          mtime: openedStats.mtimeMs,
+        });
+      }
+
+      return { path: resolvedPath, content: content.toString('utf-8'), mtime: openedStats.mtimeMs };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return reply.code(404).send({ error: 'File not found', path: resolvedPath });
       }
       throw error;
+    } finally {
+      await handle?.close();
     }
-
-    if (isBinaryFile(resolvedPath, content)) {
-      return reply.code(415).send({
-        error: 'Unsupported file type',
-        kind: 'binary',
-        path: resolvedPath,
-        mtime: stats.mtimeMs,
-      });
-    }
-
-    return { path: resolvedPath, content: content.toString('utf-8'), mtime: stats.mtimeMs };
   });
 
   app.get('/preview-asset', async (req, reply) => {
@@ -422,17 +490,26 @@ export async function fileRoutes(app: FastifyInstance) {
       return reply.code(415).send({ error: 'Unsupported file type' });
     }
 
-    if (isPdf) {
-      return reply.type('application/pdf').send(createReadStream(resolvedPath));
-    }
+    let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
+    try {
+      const accessPath = await resolveAllowedExistingPath(resolvedPath);
+      handle = await fs.open(accessPath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+      const stream = handle.createReadStream();
+      handle = undefined;
 
-    const content = await fs.readFile(resolvedPath);
-    if (imageMimeType === 'image/svg+xml') {
-      // SVG can contain active script when navigated to directly. A sandboxed
-      // response preserves image previewing without granting the WebUI origin.
-      reply.header('Content-Security-Policy', "sandbox; default-src 'none'");
+      if (isPdf) {
+        return reply.type('application/pdf').send(stream);
+      }
+
+      if (imageMimeType === 'image/svg+xml') {
+        // SVG can contain active script when navigated to directly. A sandboxed
+        // response preserves image previewing without granting the WebUI origin.
+        reply.header('Content-Security-Policy', "sandbox; default-src 'none'");
+      }
+      return reply.type(imageMimeType!).send(stream);
+    } finally {
+      await handle?.close();
     }
-    return reply.type(imageMimeType!).send(content);
   });
 
   app.post('/write', async (req) => {
@@ -609,10 +686,48 @@ export async function fileRoutes(app: FastifyInstance) {
     return { success: true };
   });
 
-  app.get('/search', async (req) => {
+  app.get('/search', async (req, reply) => {
     const { pattern, path: searchPath } = req.query as { pattern: string; path?: string };
+    if (!pattern?.trim()) {
+      return reply.code(400).send({ error: 'Search pattern is required' });
+    }
+    const normalizedPattern = pattern.replace(/\\/g, '/');
+    const patternSegments = normalizedPattern.split('/');
+    const unsafeMagic = ['{', '}', '[', ']'].some((character) => normalizedPattern.includes(character))
+      || /[?*+@!]\(/.test(normalizedPattern);
+    const unsafeDotSegment = patternSegments.some((segment) => (
+      segment === '..' || (segment.includes('.') && /^[.*?]+$/.test(segment))
+    ));
+    if (path.isAbsolute(pattern) || unsafeMagic || unsafeDotSegment) {
+      return reply.code(400).send({ error: 'Search pattern must stay within the requested path' });
+    }
+
     const resolvedSearchPath = await resolveAllowedPath(searchPath || '.');
-    const files = await glob(pattern, { cwd: resolvedSearchPath });
-    return { files };
+    const files: string[] = [];
+    const signal = AbortSignal.timeout(FILE_SEARCH_TIMEOUT_MS);
+    try {
+      for await (const file of globIterate(normalizedPattern, {
+        cwd: resolvedSearchPath,
+        root: resolvedSearchPath,
+        ignore: FILE_SEARCH_IGNORES,
+        nodir: true,
+        signal,
+      })) {
+        const relativePath = path.relative(resolvedSearchPath, path.resolve(resolvedSearchPath, file));
+        if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+          return reply.code(400).send({ error: 'Search pattern must stay within the requested path' });
+        }
+        if (files.length === MAX_FILE_SEARCH_RESULTS) {
+          return { files, truncated: true };
+        }
+        files.push(file);
+      }
+    } catch (error) {
+      if (signal.aborted) {
+        return reply.code(408).send({ error: 'File search timed out' });
+      }
+      throw error;
+    }
+    return { files, truncated: false };
   });
 }

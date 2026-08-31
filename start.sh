@@ -54,6 +54,72 @@ is_running() {
     kill -0 "$pid" 2>/dev/null
 }
 
+process_start_time() {
+    local pid=$1
+    ps -p "$pid" -o lstart= 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+process_cwd() {
+    local pid=$1
+    if [ -L "/proc/$pid/cwd" ]; then
+        readlink "/proc/$pid/cwd" 2>/dev/null
+        return
+    fi
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1
+    fi
+}
+
+process_matches_project() {
+    local pid=$1
+    local name=$2
+    local expected_dir command cwd
+    command=$(ps -p "$pid" -o command= 2>/dev/null || true)
+    cwd=$(process_cwd "$pid")
+
+    if [ "$name" = "server" ]; then
+        expected_dir=$(cd "$SERVER_DIR" && pwd -P)
+        [[ "$command" == *"src/index.ts"* || "$command" == *"dist/index.js"* ]] || return 1
+    elif [ "$name" = "client" ]; then
+        expected_dir=$(cd "$CLIENT_DIR" && pwd -P)
+        [[ "$command" == *"vite"* ]] || return 1
+    else
+        return 1
+    fi
+
+    [ -n "$cwd" ] && [ "$cwd" = "$expected_dir" ]
+}
+
+validate_or_migrate_process_identity() {
+    local name=$1
+    local pid=$2
+    local identity_file="$PID_DIR/$name.start"
+    local recorded_start current_start
+    process_matches_project "$pid" "$name" || return 1
+    current_start=$(process_start_time "$pid")
+    [ -n "$current_start" ] || return 1
+
+    if [ -f "$identity_file" ]; then
+        recorded_start=$(cat "$identity_file")
+        [ "$recorded_start" = "$current_start" ]
+        return
+    fi
+
+    printf '%s\n' "$current_start" > "$identity_file"
+}
+
+record_process_identity() {
+    local name=$1
+    local pid=$2
+    local started
+    started=$(process_start_time "$pid")
+    if [ -z "$started" ]; then
+        echo -e "${RED}Unable to record $name process identity${NC}"
+        return 1
+    fi
+    printf '%s\n' "$started" > "$PID_DIR/$name.start"
+}
+
 # Function to ensure native Node modules match the current Node.js runtime
 check_native_modules() {
     echo -e "${YELLOW}Checking native Node modules...${NC}"
@@ -86,11 +152,11 @@ start_server() {
     # Check if already running
     if [ -f "$PID_DIR/server.pid" ]; then
         local pid=$(cat "$PID_DIR/server.pid")
-        if is_running "$pid"; then
+        if is_running "$pid" && validate_or_migrate_process_identity "server" "$pid"; then
             echo -e "${YELLOW}Server already running (PID: $pid)${NC}"
             return 0
         fi
-        rm "$PID_DIR/server.pid"
+        rm -f "$PID_DIR/server.pid" "$PID_DIR/server.start"
     fi
     
     # Check if server port is in use
@@ -106,6 +172,11 @@ start_server() {
     nohup pnpm exec tsx src/index.ts > "$LOG_DIR/server.log" 2>&1 &
     local pid=$!
     echo $pid > "$PID_DIR/server.pid"
+    if ! record_process_identity "server" "$pid"; then
+        kill "$pid" 2>/dev/null || true
+        rm -f "$PID_DIR/server.pid" "$PID_DIR/server.start"
+        return 1
+    fi
     
     # Wait for server to start
     echo -n "Waiting for server to start"
@@ -132,11 +203,11 @@ start_client() {
     # Check if already running
     if [ -f "$PID_DIR/client.pid" ]; then
         local pid=$(cat "$PID_DIR/client.pid")
-        if is_running "$pid"; then
+        if is_running "$pid" && validate_or_migrate_process_identity "client" "$pid"; then
             echo -e "${YELLOW}Client already running (PID: $pid)${NC}"
             return 0
         fi
-        rm "$PID_DIR/client.pid"
+        rm -f "$PID_DIR/client.pid" "$PID_DIR/client.start"
     fi
     
     # Check if client port is in use
@@ -151,6 +222,11 @@ start_client() {
     nohup pnpm exec vite --port "$CLIENT_PORT" --strictPort > "$LOG_DIR/client.log" 2>&1 &
     local pid=$!
     echo $pid > "$PID_DIR/client.pid"
+    if ! record_process_identity "client" "$pid"; then
+        kill "$pid" 2>/dev/null || true
+        rm -f "$PID_DIR/client.pid" "$PID_DIR/client.start"
+        return 1
+    fi
     
     # Wait for client to start
     echo -n "Waiting for client to start"

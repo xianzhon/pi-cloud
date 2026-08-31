@@ -21,7 +21,7 @@ A web-based, mobile-friendly interface for the [Pi coding agent](http://pi.dev).
 - **Git workflows** — use `/branch`, `/commit`, `/push`, and related commands from the WebUI.
 - **GitHub and Gitea integration** — review changes and create pull requests with `/pr`.
 - **Memory support** — maintain project and global memories with optional automatic extraction and adaptive recall.
-- **Messaging gateways** — connect Feishu and WeChat through a focused setup.
+- **Messaging gateways** — connect Feishu, WeCom, and WeChat through a focused setup.
 - **Workspace tools** — browse and search files, edit code, and use an embedded terminal alongside the conversation.
 - **Secure access** — protect the WebUI with password and optional TOTP authentication.
 

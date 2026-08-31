@@ -55,10 +55,12 @@ describe('fileRoutes', () => {
     app = await buildApp();
     await fs.mkdir(path.join(tempDir, 'src'));
     await fs.mkdir(path.join(tempDir, 'node_modules'));
+    await fs.mkdir(path.join(tempDir, '.git'));
     await fs.writeFile(path.join(tempDir, 'README.md'), 'readme', 'utf8');
     await fs.writeFile(path.join(tempDir, '.hidden'), 'hidden', 'utf8');
     await fs.writeFile(path.join(tempDir, 'src', 'main.ts'), 'console.log("hi");', 'utf8');
     await fs.writeFile(path.join(tempDir, 'node_modules', 'ignored.js'), 'ignored', 'utf8');
+    await fs.writeFile(path.join(tempDir, '.git', 'ignored.js'), 'ignored', 'utf8');
   });
 
   afterEach(async () => {
@@ -83,6 +85,33 @@ describe('fileRoutes', () => {
     expect(body.tree[0].children).toEqual([
       expect.objectContaining({ name: 'main.ts', type: 'file' }),
     ]);
+  });
+
+  it('rejects tree depths above the bounded traversal limit', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/tree?path=${encodeURIComponent(tempDir)}&depth=11`,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: 'depth must be an integer between 1 and 10' });
+  });
+
+  it('caps wide file trees and reports truncation', async () => {
+    const generatedDir = path.join(tempDir, 'wide-tree');
+    await fs.mkdir(generatedDir);
+    await Promise.all(Array.from({ length: 5_001 }, (_, index) => (
+      fs.writeFile(path.join(generatedDir, `file-${String(index).padStart(4, '0')}.txt`), '')
+    )));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/tree?path=${encodeURIComponent(generatedDir)}&depth=1`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().tree).toHaveLength(5_000);
+    expect(response.json().truncated).toBe(true);
   });
 
   it('sorts by modified time from newest to oldest like ls -t', async () => {
@@ -116,6 +145,7 @@ describe('fileRoutes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().tree.map((node: { name: string }) => node.name)).toEqual([
+      '.git',
       'node_modules',
       'src',
       '.hidden',
@@ -212,6 +242,24 @@ describe('fileRoutes', () => {
     expect(body.path).toBe(filePath);
     expect(body.content).toBe('readme');
     expect(typeof body.mtime).toBe('number');
+  });
+
+  it('rejects oversized text files before loading them into memory', async () => {
+    const filePath = path.join(tempDir, 'large.txt');
+    await fs.writeFile(filePath, '');
+    await fs.truncate(filePath, 10 * 1024 * 1024 + 1);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/read?path=${encodeURIComponent(filePath)}`,
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(response.json()).toEqual({
+      error: 'File is too large to open as text',
+      maxBytes: 10 * 1024 * 1024,
+      path: filePath,
+    });
   });
 
   it.each(['zip', 'jar'])('previews entries in a .%s archive', async (extension) => {
@@ -575,6 +623,64 @@ describe('fileRoutes', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().files).toEqual(['src/main.ts']);
+    expect(response.json()).toEqual({ files: ['src/main.ts'], truncated: false });
+  });
+
+  it('rejects search patterns that can escape the allowed search root', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/search?path=${encodeURIComponent(tempDir)}&pattern=${encodeURIComponent('../**/*')}`,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: 'Search pattern must stay within the requested path' });
+  });
+
+  it.each([
+    '[.][.]/%OUTSIDE%/secret.ts',
+    '{[.][.]/%OUTSIDE%,src}/secret.ts',
+  ])('rejects glob-magic traversal pattern %s', async (patternTemplate) => {
+    const outsideDir = await fs.mkdtemp(path.join(path.dirname(tempDir), 'pi-cloud-glob-outside-'));
+    await fs.writeFile(path.join(outsideDir, 'secret.ts'), 'secret');
+    const pattern = patternTemplate.replace('%OUTSIDE%', path.basename(outsideDir));
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/files/search?path=${encodeURIComponent(tempDir)}&pattern=${encodeURIComponent(pattern)}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: 'Search pattern must stay within the requested path' });
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('excludes dependency and Git metadata directories from file search', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/search?path=${encodeURIComponent(tempDir)}&pattern=**/*.js`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ files: [], truncated: false });
+  });
+
+  it('caps file search results and reports truncation', async () => {
+    const generatedDir = path.join(tempDir, 'generated');
+    await fs.mkdir(generatedDir);
+    await Promise.all(Array.from({ length: 5_001 }, (_, index) => (
+      fs.writeFile(path.join(generatedDir, `file-${String(index).padStart(4, '0')}.ts`), '')
+    )));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/search?path=${encodeURIComponent(tempDir)}&pattern=**/*.ts`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().files).toHaveLength(5_000);
+    expect(response.json().truncated).toBe(true);
   });
 });

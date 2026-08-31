@@ -21,6 +21,7 @@ import { gitRoutes } from './routes/git.js';
 import { taskRoutes } from './routes/tasks.js';
 import { feishuGatewayRoutes } from './routes/feishu-gateway.js';
 import { gatewayRoutes } from './routes/gateways.js';
+import { wecomGatewayRoutes } from './routes/wecom-gateway.js';
 import { gitHostingRoutes, type GitHostingRouteOptions } from './routes/git-hosting.js';
 import { reviewSourceRoutes } from './routes/review-sources.js';
 import { authRoutes } from './routes/auth.js';
@@ -58,6 +59,7 @@ import { ProjectTaskStarter } from './services/project-task-starter.js';
 import { RepositoryCloner } from './services/repository-cloner.js';
 import { FeishuGatewayService } from './services/feishu-gateway.js';
 import { WeixinGatewayService } from './services/weixin-gateway.js';
+import { WecomGatewayService } from './services/wecom-gateway.js';
 import { ReviewSourceStore } from './services/review-source-store.js';
 import { ReviewSourceService } from './services/review-source-service.js';
 
@@ -169,6 +171,7 @@ function isPublicRoute(req: { method: string; url: string }): boolean {
   if (url === '/api/health') return true;
   if (url.startsWith('/api/auth')) return true;
   if (url === '/api/gateways/feishu/events') return true;
+  if (url === '/api/gateways/wecom/callback') return true;
   if (req.method === 'GET' && !url.startsWith('/api/')) return true;
   return false;
 }
@@ -255,6 +258,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const githubSettings = new GithubSettingsStore(db);
   const feishuGateway = new FeishuGatewayService(db, gatewaySettings, piSessionService);
   const weixinGateway = new WeixinGatewayService(db, gatewaySettings, piSessionService);
+  const wecomGateway = new WecomGatewayService(db, gatewaySettings, piSessionService);
   weixinGateway.start();
   const repositoryCloner = new RepositoryCloner({
     spawnGit: (args, options) => spawn('git', args, options),
@@ -365,6 +369,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(taskRoutes, { prefix: '/api/tasks', store: projectTaskStore, starter: projectTaskStarter, activityStore: sessionActivityStore });
   await app.register(gatewayRoutes, { prefix: '/api/gateways', settings: gatewaySettings, weixin: weixinGateway });
   await app.register(feishuGatewayRoutes, { prefix: '/api/gateways/feishu', service: feishuGateway });
+  await app.register(wecomGatewayRoutes, { prefix: '/api/gateways/wecom', service: wecomGateway });
   const gitHostingRouteOptions: GitHostingRouteOptions = {
     settings: giteaSettings,
     githubSettings,
