@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
+import type { ImageContent } from '@earendil-works/pi-ai';
 import type { PiCloudDatabase } from '../db/database.js';
 import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
+import { MAX_IMAGE_BYTES, sniffImageMimeType, validateImages } from './image-input.js';
 import type { PiSessionService } from './session-manager.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
 import { decryptWecomPayload, verifyWecomSignature } from './wecom-crypto.js';
@@ -43,6 +45,8 @@ interface WecomMessagePayload {
   userId: string;
   text: string;
   messageType: string;
+  mediaId?: string;
+  picUrl?: string;
 }
 
 interface WecomTokenCache {
@@ -197,8 +201,8 @@ export class WecomGatewayService {
     if (config.allowedUsers.length && !config.allowedUsers.includes(message.userId)) return 'success';
     if (this.markDuplicate(message.messageId)) return 'success';
 
-    if (message.messageType !== 'text') {
-      void this.sendReply(config, message.userId, 'This WeCom gateway currently supports text messages only. Image support is planned.').catch((error) => {
+    if (message.messageType !== 'text' && message.messageType !== 'image') {
+      void this.sendReply(config, message.userId, 'This WeCom gateway supports text and image messages only.').catch((error) => {
         console.warn('[wecom-gateway] unsupported-message reply failed:', error instanceof Error ? error.message : error);
       });
       return 'success';
@@ -209,6 +213,8 @@ export class WecomGatewayService {
       userId: message.userId,
       text: message.text,
       messageType: message.messageType,
+      mediaId: message.mediaId,
+      picUrl: message.picUrl,
     }, config);
     return 'success';
   }
@@ -333,13 +339,36 @@ export class WecomGatewayService {
     }
 
     const session = await this.ensureSession(clientId, effectiveConfig);
+    let images: ImageContent[] = [];
+    if (message.messageType === 'image') {
+      if (!message.mediaId) {
+        await this.sendReply(config, message.userId, 'The WeCom image message did not include downloadable media. Try sending it again.');
+        return;
+      }
+      try {
+        images = [await this.downloadImage(config, message.mediaId)];
+      } catch (error) {
+        console.warn('[wecom-gateway] failed to download inbound image:', error instanceof Error ? error.message : error);
+        await this.sendReply(config, message.userId, 'The image could not be downloaded from WeCom. Try sending it again.');
+        return;
+      }
+    }
+    const imageResult = validateImages(images, session.model);
+    if (!imageResult.ok) {
+      await this.sendReply(config, message.userId, imageResult.message);
+      return;
+    }
+
+    const promptText = message.text || (imageResult.images.length ? 'Please analyze the attached image.' : '');
     const chunks: string[] = [];
     const unsubscribe = session.subscribe((event: any) => {
       const update = event?.type === 'message_update' ? event.assistantMessageEvent : undefined;
       if (update?.type === 'text_delta' && typeof update.delta === 'string') chunks.push(update.delta);
     });
     try {
-      await this.sessionService.runForegroundWithClientProfileProxy(clientId, () => session.prompt(message.text));
+      await this.sessionService.runForegroundWithClientProfileProxy(clientId, () => (
+        session.prompt(promptText, imageResult.images.length ? { images: imageResult.images } : undefined)
+      ));
     } finally {
       unsubscribe();
     }
@@ -590,6 +619,30 @@ export class WecomGatewayService {
     return parseWecomResponse(response);
   }
 
+  private async downloadImage(config: WecomGatewayConfig, mediaId: string): Promise<ImageContent> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const token = await this.getAccessToken(config);
+      const response = await fetch(`${WECOM_API_BASE_URL}/cgi-bin/media/get?access_token=${encodeURIComponent(token)}&media_id=${encodeURIComponent(mediaId)}`);
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.toLowerCase().includes('application/json')) {
+        const data = await parseWecomResponse(response);
+        const errorCode = Number(data.errcode);
+        if (attempt === 0 && [40014, 42001].includes(errorCode)) {
+          this.tokenCache = undefined;
+          continue;
+        }
+        throw new Error(`WeCom media download failed: ${stringValue(data.errmsg) || `errcode=${data.errcode}`}`);
+      }
+      if (!response.ok) throw new Error(`WeCom media download failed: HTTP ${response.status}`);
+
+      const bytes = await readResponseBytes(response, MAX_IMAGE_BYTES);
+      const mimeType = sniffImageMimeType(bytes);
+      if (!mimeType) throw new Error('WeCom media response was not a supported image');
+      return { type: 'image', data: bytes.toString('base64'), mimeType };
+    }
+    throw new Error('WeCom media download failed after refreshing the access token');
+  }
+
   private async getAccessToken(config: WecomGatewayConfig): Promise<string> {
     const now = Date.now();
     if (this.tokenCache && this.tokenCache.expiresAt - TOKEN_REFRESH_SKEW_MS > now) return this.tokenCache.token;
@@ -602,13 +655,49 @@ export class WecomGatewayService {
   }
 }
 
+async function readResponseBytes(response: Response, maxBytes: number): Promise<Buffer> {
+  const contentLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    await response.body?.cancel();
+    throw new Error('An image is larger than 10 MB.');
+  }
+  if (!response.body) return Buffer.alloc(0);
+
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel();
+        throw new Error('An image is larger than 10 MB.');
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, totalBytes);
+}
+
 function parseWecomMessage(xml: string): (WecomMessagePayload & { agentId: string }) | null {
   const messageType = xmlValue(xml, 'MsgType');
   const userId = xmlValue(xml, 'FromUserName');
   const messageId = xmlValue(xml, 'MsgId');
   const agentId = xmlValue(xml, 'AgentID');
   if (!messageType || !userId || !messageId || !agentId) return null;
-  return { messageType, userId, messageId, agentId, text: xmlValue(xml, 'Content').trim() };
+  return {
+    messageType,
+    userId,
+    messageId,
+    agentId,
+    text: xmlValue(xml, 'Content').trim(),
+    mediaId: xmlValue(xml, 'MediaId') || undefined,
+    picUrl: xmlValue(xml, 'PicUrl') || undefined,
+  };
 }
 
 function xmlValue(xml: string, tag: string): string {

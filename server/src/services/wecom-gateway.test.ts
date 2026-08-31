@@ -15,6 +15,7 @@ const AES_KEY = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8';
 afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('WecomGatewayService', () => {
@@ -81,6 +82,110 @@ describe('WecomGatewayService', () => {
       userId: 'user-1',
       text: 'hello & welcome',
     }), expect.objectContaining({ corpId: CORP_ID, agentId: AGENT_ID }));
+  });
+
+  it('acknowledges an encrypted image callback and queues its media reference', () => {
+    configureEnvironment();
+    const service = createService();
+    const enqueue = vi.spyOn(service as any, 'enqueue').mockImplementation(() => undefined);
+    const messageXml = '<xml><ToUserName><![CDATA[corp-test]]></ToUserName><FromUserName><![CDATA[user-1]]></FromUserName><CreateTime>1788100000</CreateTime><MsgType><![CDATA[image]]></MsgType><PicUrl><![CDATA[https://example.test/image.png]]></PicUrl><MediaId><![CDATA[media-123]]></MediaId><MsgId>image-message-1</MsgId><AgentID>1000002</AgentID></xml>';
+    const encrypted = encryptWecomPayload(messageXml, AES_KEY, CORP_ID);
+
+    expect(service.handleCallback(signedQuery(encrypted), `<xml><Encrypt><![CDATA[${encrypted}]]></Encrypt></xml>`)).toBe('success');
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      messageId: 'image-message-1',
+      userId: 'user-1',
+      messageType: 'image',
+      mediaId: 'media-123',
+      picUrl: 'https://example.test/image.png',
+    }), expect.objectContaining({ corpId: CORP_ID, agentId: AGENT_ID }));
+  });
+
+  it('downloads an image callback and prompts an image-capable session with it', async () => {
+    configureEnvironment();
+    const prompts: Array<{ text: string; options?: unknown }> = [];
+    const session = {
+      model: { input: ['text', 'image'] },
+      messages: [{ role: 'assistant', content: 'image understood' }],
+      subscribe: () => () => undefined,
+      prompt: async (text: string, options?: unknown) => {
+        prompts.push({ text, options });
+      },
+    };
+    const sessions = {
+      setClientAgentProfile: async () => undefined,
+      getSession: () => session,
+      runForegroundWithClientProfileProxy: async (_clientId: string, operation: () => Promise<unknown>) => operation(),
+    } as unknown as PiSessionService;
+    const db = openPiCloudDatabase(':memory:');
+    const settings = new GatewaySettingsStore(db);
+    settings.save({ cwds: ['/tmp/wecom-image-project'] });
+    const service = new WecomGatewayService(db, settings, sessions);
+    const replies: string[] = [];
+    (service as any).sendReply = async (_config: unknown, _userId: string, text: string) => {
+      replies.push(text);
+    };
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+      const url = String(input);
+      requests.push(url);
+      if (url.includes('/cgi-bin/gettoken')) {
+        return jsonResponse({ errcode: 0, errmsg: 'ok', access_token: 'access-image', expires_in: 7200 });
+      }
+      if (url.includes('/cgi-bin/media/get')) {
+        return new Response(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), {
+          headers: { 'content-type': 'image/png' },
+        });
+      }
+      throw new Error(`Unexpected WeCom request: ${url}`);
+    });
+    const messageXml = '<xml><ToUserName>corp-test</ToUserName><FromUserName>user-1</FromUserName><MsgType>image</MsgType><PicUrl>https://example.test/image.png</PicUrl><MediaId>media-123</MediaId><MsgId>image-message-1</MsgId><AgentID>1000002</AgentID></xml>';
+    const encrypted = encryptWecomPayload(messageXml, AES_KEY, CORP_ID);
+
+    expect(service.handleCallback(signedQuery(encrypted), `<xml><Encrypt>${encrypted}</Encrypt></xml>`)).toBe('success');
+    await vi.waitFor(() => expect(replies).toEqual(['image understood']));
+
+    expect(requests).toEqual([
+      'https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=corp-test&corpsecret=secret-test',
+      'https://qyapi.weixin.qq.com/cgi-bin/media/get?access_token=access-image&media_id=media-123',
+    ]);
+    expect(prompts).toEqual([{
+      text: 'Please analyze the attached image.',
+      options: { images: [{ type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' }] },
+    }]);
+  });
+
+  it('stops reading WeCom media as soon as it exceeds the image size limit', async () => {
+    configureEnvironment();
+    const service = createService();
+    const firstChunk = new Uint8Array(5 * 1024 * 1024);
+    firstChunk.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const chunks = [
+      firstChunk,
+      new Uint8Array(5 * 1024 * 1024),
+      new Uint8Array(1),
+      ...Array.from({ length: 8 }, () => new Uint8Array(1)),
+    ];
+    let nextChunk = 0;
+    let canceled = false;
+    const media = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks[nextChunk];
+        nextChunk += 1;
+        if (chunk) controller.enqueue(chunk);
+        else controller.close();
+      },
+      cancel() {
+        canceled = true;
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ errcode: 0, errmsg: 'ok', access_token: 'access-image', expires_in: 7200 }))
+      .mockResolvedValueOnce(new Response(media, { headers: { 'content-type': 'application/octet-stream' } })));
+
+    await expect((service as any).downloadImage((service as any).loadConfig(), 'oversized-media'))
+      .rejects.toThrow('larger than 10 MB');
+    expect(canceled).toBe(true);
   });
 
   it('rejects members outside the configured allowlist without queueing work', () => {
