@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build",
+    "build": "node scripts/build.mjs",
+    "build:bundle": "vite build",
+    "typecheck": "vue-tsc --noEmit",
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview",
     "test": "vitest",
