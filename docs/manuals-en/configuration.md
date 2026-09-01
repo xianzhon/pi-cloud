@@ -76,6 +76,19 @@ Model discovery depends on the provider's `GET /models` response. Most OpenAI-co
 
 For Cloudflare Workers AI, choose **Cloudflare Workers AI** as the provider type and enter the Cloudflare Account ID and an API token with Workers AI read access. Pi Cloud generates the fixed `https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1` endpoint and loads chat-compatible models from Cloudflare's model catalog. Select the models to expose and mark image support as needed. AI Gateway is not enabled and no gateway ID is required.
 
+## Voice Dictation
+
+Voice dictation is an independent speech-to-text layer; the coding agent receives only the resulting text. Configure an OpenAI-compatible `/audio/transcriptions` endpoint, then restart the server:
+
+```env
+PI_CLOUD_STT_API_KEY=sk-...
+PI_CLOUD_STT_BASE_URL=https://api.openai.com/v1
+PI_CLOUD_STT_MODEL=gpt-4o-mini-transcribe
+PI_CLOUD_STT_LANGUAGE=zh
+```
+
+`PI_CLOUD_STT_API_KEY` falls back to `OPENAI_API_KEY`. The base URL and model default to the values above. `PI_CLOUD_STT_LANGUAGE` is optional; omit it to let the provider detect the language. Once configured, the microphone button records in the browser, sends the completed audio to the server for transcription, and inserts the returned text into the message input without sending it automatically. The same service transcribes inbound WeCom voice messages. The STT provider must accept AMR audio for WeCom support. Browser microphone access requires HTTPS or localhost.
+
 ## Provider and Gateway Variables
 
 Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are optional because the server uses the Pi agent's own authentication by default.

@@ -1,6 +1,6 @@
 # WeCom Gateway
 
-The WeCom gateway connects Pi Cloud to organization members through a self-built WeCom application. This version supports text messages, image messages, and slash commands. WeCom does not include accompanying text with voice messages, so Pi Cloud does not currently support voice messages.
+The WeCom gateway connects Pi Cloud to organization members through a self-built WeCom application. This version supports text messages, image messages, voice messages, and slash commands. Voice messages require Pi Cloud's speech-to-text service to be configured.
 
 ## Setup
 
@@ -13,6 +13,8 @@ The WeCom gateway connects Pi Cloud to organization members through a self-built
 Pi Cloud must be reachable from WeCom over public HTTPS. The callback endpoint is `/api/gateways/wecom/callback`. Callback requests are signature-checked and AES-decrypted before processing. An empty member allowlist permits every member who can access the application.
 
 The gateway uses the profile, model, skillset, and allowed folders configured under **Gateway defaults**. In WeCom, send `/help` to list commands such as `/new`, `/status`, `/profile`, `/cwd`, and `/skillset`.
+
+For a voice message, Pi Cloud downloads the AMR media from WeCom, sends it to the configured OpenAI-compatible speech-to-text endpoint, and sends only the resulting text to the coding agent. Configure the `PI_CLOUD_STT_*` variables described in [Configuration](configuration.md#voice-dictation). If transcription is unavailable or fails, the gateway replies with an error instead of sending an empty prompt.
 
 ## Environment-managed setup
 
