@@ -61,6 +61,63 @@ describe('speechRoutes', () => {
     expect(form.get('language')).toBe('zh');
   });
 
+  it('retries a transient provider failure', async () => {
+    process.env.PI_CLOUD_STT_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'Busy' } }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ text: 'Ready' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    const app = Fastify();
+    await app.register(speechRoutes, {
+      prefix: '/api/speech',
+      fetch: fetchMock as typeof fetch,
+      retryDelayMs: 0,
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/speech/transcribe',
+      headers: { 'content-type': 'audio/webm' },
+      payload: Buffer.from('audio'),
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ text: 'Ready' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a permanent provider failure', async () => {
+    process.env.PI_CLOUD_STT_API_KEY = 'test-key';
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: { message: 'Invalid audio' } }), {
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+    }));
+    const app = Fastify();
+    await app.register(speechRoutes, {
+      prefix: '/api/speech',
+      fetch: fetchMock as typeof fetch,
+      retryDelayMs: 0,
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/speech/transcribe',
+      headers: { 'content-type': 'audio/webm' },
+      payload: Buffer.from('audio'),
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({ error: 'Invalid audio' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects empty audio', async () => {
     process.env.PI_CLOUD_STT_API_KEY = 'test-key';
     const app = Fastify();
