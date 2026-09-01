@@ -94,18 +94,18 @@ PI_CLOUD_STT_LANGUAGE=zh
 Pi Cloud 可以通过兼容 OpenAI `/audio/speech` 的服务生成音频。使用本地 MLX Audio 服务时可配置：
 
 ```env
-PI_CLOUD_TTS_BASE_URL=http://127.0.0.1:8000/v1
-PI_CLOUD_TTS_MODEL=mlx-community/Kokoro-82M-bf16
-PI_CLOUD_TTS_VOICE=af_heart
-PI_CLOUD_TTS_LANGUAGE=zh
+PI_CLOUD_TTS_BASE_URL=http://127.0.0.1:28081/v1
+PI_CLOUD_TTS_MODEL=mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit
+PI_CLOUD_TTS_VOICE=Vivian
+PI_CLOUD_TTS_LANGUAGE=Chinese
 PI_CLOUD_TTS_FORMAT=wav
 ```
 
-只需设置 `PI_CLOUD_TTS_BASE_URL` 即可启用控件。本地服务不需要 API 密钥；如果提供商要求 Bearer 认证，可设置 `PI_CLOUD_TTS_API_KEY`。模型默认使用 Kokoro 82M，声音默认使用 `af_heart`，格式默认使用 WAV。`PI_CLOUD_TTS_LANGUAGE` 可选。修改这些变量后需重启 Pi Cloud。
+只需设置 `PI_CLOUD_TTS_BASE_URL` 即可启用控件。本地服务不需要 API 密钥；如果提供商要求 Bearer 认证，可设置 `PI_CLOUD_TTS_API_KEY`。对于中英文混合回复，推荐使用 Qwen3-TTS 0.6B CustomVoice 和 `Vivian` 声音。格式默认使用 WAV。`PI_CLOUD_TTS_LANGUAGE` 可选。修改这些变量后需重启 Pi Cloud。
 
 已完成的助手文本回复会显示播放、停止和重播控件。可在**设置 → 聊天 → 朗读助手回复**中开启自动朗读；Pi Cloud 只会在收到 `agent_end` 完成事件后合成语音，不会对每个流式文本增量调用服务。该偏好默认关闭，避免较长的编程回复意外自动播放。
 
-可使用 Python 3.12 和 `uv pip install "mlx-audio[tts,server]" "misaki[zh]"` 安装本地 MLX Audio 服务，然后通过 `mlx_audio.server --host 127.0.0.1 --port 8000` 启动。使用 WAV 可避免 MLX Audio 的压缩输出格式依赖 `ffmpeg`。
+可使用 Python 3.12 和 `uv pip install "mlx-audio[tts,server]" "misaki[zh]"` 安装本地 MLX Audio 服务，然后通过 `make -C local-tts start` 在 `28081` 端口启动。使用 WAV 可避免 MLX Audio 的压缩输出格式依赖 `ffmpeg`。
 
 ## 提供商和网关变量
 

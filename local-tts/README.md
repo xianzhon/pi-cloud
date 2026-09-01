@@ -4,22 +4,22 @@ This directory runs a local OpenAI-compatible text-to-speech service for Pi Clou
 
 ## Recommended model
 
-Start with Kokoro:
+Start with Qwen3-TTS for replies that mix Chinese and English:
 
 ```text
-mlx-community/Kokoro-82M-bf16
+mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit
 ```
 
-It is small, fast, and includes English and Mandarin voices. Useful voices include:
+It supports Chinese and English in the same reply and provides preset Chinese speakers. Useful voices include:
 
 | Voice | Language |
 | --- | --- |
-| `af_heart` | American English |
-| `am_adam` | American English |
-| `zf_xiaobei` | Mandarin Chinese |
-| `zm_yunxi` | Mandarin Chinese |
+| `Vivian` | Mandarin Chinese |
+| `Serena` | Mandarin Chinese |
+| `Ryan` | English |
+| `Aiden` | English |
 
-For better Chinese quality or voice cloning, try a Qwen3-TTS 1.7B MLX model after the basic setup works. It will use more memory and have higher latency than Kokoro.
+The 1.7B 6-bit Qwen3-TTS model can provide higher quality but uses more memory. Kokoro remains a smaller and faster option when each request is predominantly one language.
 
 ## Install MLX Audio
 
@@ -68,9 +68,9 @@ Add these values to the local, uncommitted environment file used by Pi Cloud:
 
 ```env
 PI_CLOUD_TTS_BASE_URL=http://127.0.0.1:28081/v1
-PI_CLOUD_TTS_MODEL=mlx-community/Kokoro-82M-bf16
-PI_CLOUD_TTS_VOICE=zf_xiaobei
-PI_CLOUD_TTS_LANGUAGE=zh
+PI_CLOUD_TTS_MODEL=mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit
+PI_CLOUD_TTS_VOICE=Vivian
+PI_CLOUD_TTS_LANGUAGE=Chinese
 PI_CLOUD_TTS_FORMAT=wav
 ```
 
@@ -85,11 +85,11 @@ curl --noproxy '*' -sS \
   -X POST http://127.0.0.1:28081/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "mlx-community/Kokoro-82M-bf16",
-    "input": "你好，这是 Pi Cloud 的本地语音测试。",
-    "voice": "zf_xiaobei",
+    "model": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
+    "input": "你好，这是 Pi Cloud 的本地语音测试。 The API is ready.",
+    "voice": "Vivian",
     "response_format": "wav",
-    "lang_code": "z"
+    "lang_code": "Chinese"
   }' \
   --output test.wav
 
@@ -135,4 +135,4 @@ Then verify that `PI_CLOUD_TTS_BASE_URL` includes `/v1` and that Pi Cloud was re
 
 ### Generation fails or is too slow
 
-Inspect `mlx-audio.log`. First test with Kokoro and short text. Avoid loading a large TTS model simultaneously with a memory-heavy local LLM on a 16 GB Mac; stop one service or use a smaller/quantized model if memory pressure occurs.
+Inspect `mlx-audio.log`. First test with Qwen3-TTS and short text. Avoid loading a large TTS model simultaneously with a memory-heavy local LLM on a 16 GB Mac; stop one service or use a smaller/quantized model if memory pressure occurs.
