@@ -7,7 +7,7 @@ This guide describes a private, local speech-to-text setup for Pi Cloud on an Ap
 For Chinese and English dictation on an M2 Pro with 16 GB of memory, use:
 
 ```text
-ggml-large-v3-turbo-q5_0.bin 
+ggml-large-v3-turbo-q5_0.bin
 ```
 
 Why:

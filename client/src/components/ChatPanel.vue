@@ -253,7 +253,7 @@
             type="button"
             class="dictation-btn composer-dictation-btn tooltip tooltip-above"
             :class="{ recording: isRecording }"
-            :disabled="isTranscribing"
+            :disabled="isStartingRecording || isTranscribing"
             :aria-label="dictationButtonLabel"
             :data-tooltip="dictationButtonLabel"
             @click="toggleDictation"
@@ -329,7 +329,7 @@
           type="button"
           class="trigger-btn dictation-btn"
           :class="{ recording: isRecording }"
-          :disabled="isTranscribing"
+          :disabled="isStartingRecording || isTranscribing"
           :aria-label="dictationButtonLabel"
           :title="dictationButtonLabel"
           @click="toggleDictation"
@@ -920,9 +920,11 @@ const {
 const isPolishingPrompt = ref(false);
 const promptPolishError = ref('');
 const dictationAvailable = ref(false);
+const isStartingRecording = ref(false);
 const isRecording = ref(false);
 const isTranscribing = ref(false);
 const dictationError = ref('');
+let recordingRequestId = 0;
 let mediaRecorder: MediaRecorder | null = null;
 let microphoneStream: MediaStream | null = null;
 let recordedAudioChunks: Blob[] = [];
@@ -1627,6 +1629,9 @@ async function loadDictationAvailability(): Promise<void> {
 }
 
 function releaseMicrophone(): void {
+  // Invalidate a pending getUserMedia request so its stream is discarded when it resolves.
+  recordingRequestId++;
+  isStartingRecording.value = false;
   const recorder = mediaRecorder;
   if (recorder) {
     recorder.onstop = null;
@@ -1645,15 +1650,23 @@ async function toggleDictation(): Promise<void> {
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
     return;
   }
+  if (isStartingRecording.value) return;
 
+  const requestId = ++recordingRequestId;
+  isStartingRecording.value = true;
   dictationError.value = '';
   try {
-    microphoneStream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
     });
+    if (requestId !== recordingRequestId) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    microphoneStream = stream;
     const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm']
       .find((type) => MediaRecorder.isTypeSupported(type));
-    const recorder = new MediaRecorder(microphoneStream, mimeType ? { mimeType } : undefined);
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     mediaRecorder = recorder;
     recordedAudioChunks = [];
     recorder.ondataavailable = (event) => {
@@ -1661,8 +1674,8 @@ async function toggleDictation(): Promise<void> {
     };
     recorder.onstop = () => {
       const audio = new Blob(recordedAudioChunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
-      microphoneStream?.getTracks().forEach((track) => track.stop());
-      microphoneStream = null;
+      stream.getTracks().forEach((track) => track.stop());
+      if (microphoneStream === stream) microphoneStream = null;
       if (mediaRecorder === recorder) mediaRecorder = null;
       recordedAudioChunks = [];
       isRecording.value = false;
@@ -1671,8 +1684,11 @@ async function toggleDictation(): Promise<void> {
     recorder.start(1000);
     isRecording.value = true;
   } catch (error) {
+    if (requestId !== recordingRequestId) return;
     releaseMicrophone();
     dictationError.value = error instanceof Error ? error.message : t('components.chatPanel.microphoneAccessFailed');
+  } finally {
+    if (requestId === recordingRequestId) isStartingRecording.value = false;
   }
 }
 

@@ -61,10 +61,46 @@ vi.mock('./SlashCommandMenu.vue', () => ({
   },
 }));
 
+class MockMediaRecorder {
+  static instances: MockMediaRecorder[] = [];
+  static isTypeSupported = vi.fn((type: string) => type === 'audio/webm;codecs=opus');
+
+  state: RecordingState = 'inactive';
+  mimeType = 'audio/webm;codecs=opus';
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  constructor() {
+    MockMediaRecorder.instances.push(this);
+  }
+
+  start(): void {
+    this.state = 'recording';
+  }
+
+  stop(): void {
+    this.state = 'inactive';
+    this.onstop?.();
+  }
+
+  emitAudio(data = new Blob(['audio'], { type: this.mimeType })): void {
+    this.ondataavailable?.({ data });
+  }
+}
+
+function installDictationBrowser(getUserMedia: () => Promise<MediaStream>): void {
+  vi.stubGlobal('navigator', {
+    ...navigator,
+    mediaDevices: { getUserMedia: vi.fn(getUserMedia) },
+  });
+  vi.stubGlobal('MediaRecorder', MockMediaRecorder);
+}
+
 describe('ChatPanel', () => {
   beforeEach(() => {
     chatMessages.value = [];
     chatIsStreaming.value = false;
+    MockMediaRecorder.instances = [];
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
     localStorage.clear();
     sessionStorage.removeItem('pi-cloud-message-input-height');
@@ -128,6 +164,99 @@ describe('ChatPanel', () => {
     await wrapper.find('.composer-skill-selector').trigger('click');
 
     expect(configureNewSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows dictation only when both the browser and server support it', async () => {
+    const stream = { getTracks: () => [] } as unknown as MediaStream;
+    installDictationBrowser(async () => stream);
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ available: false }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const unavailableWrapper = mount(ChatPanel);
+    await flushPromises();
+    expect(unavailableWrapper.find('.dictation-btn').exists()).toBe(false);
+    unavailableWrapper.unmount();
+
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ available: true }), { status: 200 }));
+    const availableWrapper = mount(ChatPanel);
+    await vi.waitFor(() => expect(availableWrapper.find('.dictation-btn').exists()).toBe(true));
+  });
+
+  it('ignores repeated recording starts and cleans up a stream resolved after unmount', async () => {
+    let resolveStream: ((stream: MediaStream) => void) | undefined;
+    const track = { stop: vi.fn() };
+    const stream = { getTracks: () => [track] } as unknown as MediaStream;
+    const getUserMedia = vi.fn(() => new Promise<MediaStream>((resolve) => { resolveStream = resolve; }));
+    installDictationBrowser(getUserMedia);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ available: true }), { status: 200 })));
+    const wrapper = mount(ChatPanel);
+    await vi.waitFor(() => expect(wrapper.find('.dictation-btn').exists()).toBe(true));
+
+    const firstStart = (wrapper.vm as any).toggleDictation();
+    const secondStart = (wrapper.vm as any).toggleDictation();
+    expect(getUserMedia).toHaveBeenCalledOnce();
+
+    wrapper.unmount();
+    resolveStream?.(stream);
+    await Promise.all([firstStart, secondStart]);
+
+    expect(track.stop).toHaveBeenCalledOnce();
+    expect(MockMediaRecorder.instances).toHaveLength(0);
+  });
+
+  it('stops the microphone and inserts a transcript at the caret', async () => {
+    const track = { stop: vi.fn() };
+    const stream = { getTracks: () => [track] } as unknown as MediaStream;
+    installDictationBrowser(async () => stream);
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const body = String(input).includes('/transcribe') ? { text: 'world' } : { available: true };
+      return new Response(JSON.stringify(body), { status: 200 });
+    }));
+    const wrapper = mount(ChatPanel);
+    await vi.waitFor(() => expect(wrapper.find('.dictation-btn').exists()).toBe(true));
+    const textarea = wrapper.find('textarea');
+    await textarea.setValue('hello');
+    (textarea.element as HTMLTextAreaElement).setSelectionRange(5, 5);
+
+    await (wrapper.vm as any).toggleDictation();
+    const recorder = MockMediaRecorder.instances[0];
+    recorder.emitAudio();
+    await (wrapper.vm as any).toggleDictation();
+    await flushPromises();
+
+    expect(track.stop).toHaveBeenCalledOnce();
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('hello world');
+    expect((textarea.element as HTMLTextAreaElement).selectionStart).toBe(11);
+  });
+
+  it('reports microphone and transcription failures', async () => {
+    installDictationBrowser(async () => { throw new Error('Microphone denied'); });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ available: true }), { status: 200 })));
+    const microphoneWrapper = mount(ChatPanel);
+    await vi.waitFor(() => expect(microphoneWrapper.find('.dictation-btn').exists()).toBe(true));
+
+    await (microphoneWrapper.vm as any).toggleDictation();
+    await nextTick();
+    expect(microphoneWrapper.find('.dictation-error').text()).toBe('Microphone denied');
+    microphoneWrapper.unmount();
+
+    const stream = { getTracks: () => [{ stop: vi.fn() }] } as unknown as MediaStream;
+    installDictationBrowser(async () => stream);
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes('/transcribe')) {
+        return new Response(JSON.stringify({ error: 'Whisper unavailable' }), { status: 502 });
+      }
+      return new Response(JSON.stringify({ available: true }), { status: 200 });
+    }));
+    const transcriptionWrapper = mount(ChatPanel);
+    await vi.waitFor(() => expect(transcriptionWrapper.find('.dictation-btn').exists()).toBe(true));
+
+    await (transcriptionWrapper.vm as any).toggleDictation();
+    MockMediaRecorder.instances.at(-1)?.emitAudio();
+    await (transcriptionWrapper.vm as any).toggleDictation();
+    await flushPromises();
+
+    expect(transcriptionWrapper.find('.dictation-error').text()).toBe('Whisper unavailable');
   });
 
   it('attaches valid picker images, rejects invalid files, and sends an image-only message after acceptance', async () => {

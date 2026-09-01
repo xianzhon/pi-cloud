@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=${0:A:h}
 PID_FILE="$SCRIPT_DIR/whisper-server.pid"
-PORT="${PI_CLOUD_LOCAL_STT_PORT:-8080}"
+PORT="${PI_CLOUD_LOCAL_STT_PORT:-28080}"
 
 if [[ -f "$PID_FILE" ]] && kill -0 "$(<"$PID_FILE")" 2>/dev/null; then
   if curl --noproxy '*' -sf "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
