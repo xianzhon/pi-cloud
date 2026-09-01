@@ -425,6 +425,17 @@ export function useChat() {
     }));
   }
 
+  function emitAssistantResponseCompleted(targetSessionId?: string | null) {
+    const message = [...ensureSessionState(targetSessionId).messages]
+      .reverse()
+      .find((item) => item.role === 'assistant' && item.kind !== 'status' && item.content.trim());
+    if (!message) return;
+
+    window.dispatchEvent(new CustomEvent('assistant-response-completed', {
+      detail: { sessionId: targetSessionId, messageId: message.id, content: message.content.trim() },
+    }));
+  }
+
   function finishStreaming(targetSessionId?: string | null, completed = false) {
     removeEmptyCurrentMessage(targetSessionId);
     stopStreaming(targetSessionId, completed);
@@ -705,6 +716,7 @@ export function useChat() {
       case 'agent_end':
         finishStreaming(targetSessionId, true);
         emitSummaryGenerated(targetSessionId);
+        emitAssistantResponseCompleted(targetSessionId);
         // One completion refresh covers edits from any tool without continuous Git polling.
         window.dispatchEvent(new CustomEvent('refresh-git-status'));
         break;

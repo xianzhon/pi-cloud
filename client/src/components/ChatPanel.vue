@@ -28,6 +28,31 @@
             @annotate="handleAnnotateImage"
             @openGitCommit="handleOpenGitCommit"
           />
+          <div v-if="canSpeakMessage(msg)" class="tts-message-controls">
+            <button
+              type="button"
+              class="tts-control-btn"
+              :disabled="ttsLoadingMessageId === msg.id"
+              :aria-label="ttsPlayLabel(msg.id)"
+              :title="ttsPlayLabel(msg.id)"
+              @click="speakMessage(msg)"
+            >
+              <PhSpeakerHigh :size="15" />
+              <span>{{ ttsLoadingMessageId === msg.id ? t('components.chatPanel.generatingSpeech') : ttsPlayLabel(msg.id) }}</span>
+            </button>
+            <button
+              v-if="ttsMessageId === msg.id && (ttsIsPlaying || ttsLoadingMessageId === msg.id)"
+              type="button"
+              class="tts-control-btn"
+              :aria-label="t('components.chatPanel.stopSpeech')"
+              :title="t('components.chatPanel.stopSpeech')"
+              @click="stopSpeech"
+            >
+              <PhStop :size="14" weight="fill" />
+              <span>{{ t('components.chatPanel.stopSpeech') }}</span>
+            </button>
+            <span v-if="ttsErrorMessageId === msg.id" class="tts-error" role="alert">{{ ttsError }}</span>
+          </div>
         </div>
         <div v-if="isStreaming" class="streaming-indicator" role="status" aria-live="polite">
           <span class="streaming-spinner" aria-hidden="true">
@@ -727,7 +752,7 @@ import { replaceSlashToken, useSlashCommands } from '../composables/useSlashComm
 import { useFileSearch, replaceFileToken } from '../composables/useFileSearch';
 import type { SlashCommandItem } from '../types/slashCommands';
 import type { FileSearchResult } from '../types/fileSearch';
-import { PhArrowUp, PhCamera, PhCaretDown, PhCornersIn, PhCornersOut, PhDownloadSimple, PhEye, PhImage, PhLightbulb, PhListChecks, PhListDashes, PhMagicWand, PhMicrophone, PhRobot, PhStop, PhX } from '@phosphor-icons/vue';
+import { PhArrowUp, PhCamera, PhCaretDown, PhCornersIn, PhCornersOut, PhDownloadSimple, PhEye, PhImage, PhLightbulb, PhListChecks, PhListDashes, PhMagicWand, PhMicrophone, PhRobot, PhSpeakerHigh, PhStop, PhX } from '@phosphor-icons/vue';
 import MessageBubble from './MessageBubble.vue';
 import SlashCommandMenu from './SlashCommandMenu.vue';
 import FileSearchMenu from './FileSearchMenu.vue';
@@ -745,9 +770,11 @@ import { formatFileSize, useChatAttachments, type PendingAttachment } from '../c
 import { useSessionRuntime } from '../composables/useSessionRuntime';
 import { useChatPullRequests } from '../composables/useChatPullRequests';
 import { createGitOperations } from '../services/gitOperations';
+import { usePreferences } from '../composables/usePreferences';
 
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
+const { autoSpeakAssistant } = usePreferences();
 
 const {
   messages,
@@ -875,6 +902,19 @@ interface SummaryGeneratedDetail {
   content?: string;
 }
 
+interface AssistantResponseCompletedDetail {
+  sessionId?: string | null;
+  messageId?: string;
+  content?: string;
+}
+
+interface SpeakableMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  kind?: string;
+}
+
 interface SessionCommandInfo {
   name?: string;
   workDir?: string;
@@ -920,6 +960,15 @@ const {
 const isPolishingPrompt = ref(false);
 const promptPolishError = ref('');
 const dictationAvailable = ref(false);
+const ttsAvailable = ref(false);
+const ttsLoadingMessageId = ref<string | null>(null);
+const ttsMessageId = ref<string | null>(null);
+const ttsErrorMessageId = ref<string | null>(null);
+const ttsError = ref('');
+const ttsIsPlaying = ref(false);
+let ttsAudio: HTMLAudioElement | null = null;
+let ttsAudioUrl: string | null = null;
+let ttsAbortController: AbortController | null = null;
 const isStartingRecording = ref(false);
 const isRecording = ref(false);
 const isTranscribing = ref(false);
@@ -1527,16 +1576,19 @@ function runWhenIdle(callback: () => void): void {
 
 onMounted(async () => {
   window.addEventListener('summary-generated', handleSummaryGenerated as EventListener);
-  await Promise.all([resizeInputAfterDomUpdate(), loadDictationAvailability()]);
+  window.addEventListener('assistant-response-completed', handleAssistantResponseCompleted as EventListener);
+  await Promise.all([resizeInputAfterDomUpdate(), loadSpeechAvailability()]);
   if (selectedMessageIndex.value === 0) focusInput();
 });
 
 onBeforeUnmount(() => {
   isUnmounted = true;
   window.removeEventListener('summary-generated', handleSummaryGenerated as EventListener);
+  window.removeEventListener('assistant-response-completed', handleAssistantResponseCompleted as EventListener);
   stopInputResize();
   stopStreamingElapsedTimer();
   releaseMicrophone();
+  clearSpeechAudio();
 });
 
 watch(
@@ -1573,6 +1625,7 @@ watch(commitPreview, async (preview) => {
 
 // Watch for session changes and load history
 watch(() => props.sessionId, async (newSessionId) => {
+  clearSpeechAudio();
   if (newSessionId) {
     await loadSessionHistory(newSessionId);
     return;
@@ -1617,15 +1670,129 @@ const dictationButtonLabel = computed(() => {
   return t('components.chatPanel.startDictation');
 });
 
-async function loadDictationAvailability(): Promise<void> {
-  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') return;
+async function loadSpeechAvailability(): Promise<void> {
   try {
     const response = await fetch('/api/speech/status');
-    const result = await response.json().catch(() => ({})) as { available?: boolean };
-    dictationAvailable.value = response.ok && result.available === true;
+    const result = await response.json().catch(() => ({})) as { available?: boolean; ttsAvailable?: boolean };
+    dictationAvailable.value = response.ok
+      && result.available === true
+      && Boolean(navigator.mediaDevices?.getUserMedia)
+      && typeof MediaRecorder !== 'undefined';
+    ttsAvailable.value = response.ok && result.ttsAvailable === true;
   } catch {
     dictationAvailable.value = false;
+    ttsAvailable.value = false;
   }
+}
+
+function canSpeakMessage(message: SpeakableMessage): boolean {
+  return ttsAvailable.value
+    && !isReviewMode.value
+    && !isStreaming.value
+    && message.role === 'assistant'
+    && message.kind !== 'status'
+    && message.kind !== 'thinking'
+    && message.kind !== 'tool_call'
+    && message.kind !== 'tool_result'
+    && Boolean(message.content.trim());
+}
+
+function ttsPlayLabel(messageId: string): string {
+  return ttsMessageId.value === messageId && ttsAudio
+    ? t('components.chatPanel.replaySpeech')
+    : t('components.chatPanel.playSpeech');
+}
+
+function clearSpeechAudio(): void {
+  ttsAbortController?.abort();
+  ttsAbortController = null;
+  ttsAudio?.pause();
+  ttsAudio = null;
+  if (ttsAudioUrl) URL.revokeObjectURL(ttsAudioUrl);
+  ttsAudioUrl = null;
+  ttsLoadingMessageId.value = null;
+  ttsMessageId.value = null;
+  ttsIsPlaying.value = false;
+}
+
+function stopSpeech(): void {
+  ttsAbortController?.abort();
+  ttsAbortController = null;
+  ttsLoadingMessageId.value = null;
+  if (ttsAudio) {
+    ttsAudio.pause();
+    ttsAudio.currentTime = 0;
+  }
+  ttsIsPlaying.value = false;
+}
+
+async function playSpeechAudio(): Promise<void> {
+  if (!ttsAudio) return;
+  ttsAudio.currentTime = 0;
+  ttsAudio.onended = () => { ttsIsPlaying.value = false; };
+  ttsAudio.onerror = () => {
+    ttsIsPlaying.value = false;
+    ttsError.value = t('components.chatPanel.speechPlaybackFailed');
+    ttsErrorMessageId.value = ttsMessageId.value;
+  };
+  try {
+    await ttsAudio.play();
+    ttsIsPlaying.value = true;
+  } catch {
+    ttsError.value = t('components.chatPanel.speechPlaybackFailed');
+    ttsErrorMessageId.value = ttsMessageId.value;
+  }
+}
+
+async function speakMessage(message: SpeakableMessage): Promise<void> {
+  if (ttsMessageId.value === message.id && ttsAudio) {
+    await playSpeechAudio();
+    return;
+  }
+
+  clearSpeechAudio();
+  ttsMessageId.value = message.id;
+  ttsLoadingMessageId.value = message.id;
+  ttsError.value = '';
+  ttsErrorMessageId.value = null;
+  const controller = new AbortController();
+  ttsAbortController = controller;
+
+  try {
+    const response = await fetch('/api/speech/synthesize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: message.content }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as { error?: unknown };
+      throw new Error(typeof result.error === 'string' ? result.error : t('components.chatPanel.speechSynthesisFailed'));
+    }
+
+    const blob = await response.blob();
+    if (controller.signal.aborted) return;
+    ttsAudioUrl = URL.createObjectURL(blob);
+    ttsAudio = new Audio(ttsAudioUrl);
+    await playSpeechAudio();
+  } catch (error) {
+    if (controller.signal.aborted) return;
+    ttsError.value = error instanceof Error ? error.message : t('components.chatPanel.speechSynthesisFailed');
+    ttsErrorMessageId.value = message.id;
+  } finally {
+    if (ttsAbortController === controller) ttsAbortController = null;
+    if (ttsLoadingMessageId.value === message.id) ttsLoadingMessageId.value = null;
+  }
+}
+
+function handleAssistantResponseCompleted(event: CustomEvent<AssistantResponseCompletedDetail>): void {
+  const detail = event.detail;
+  if (!autoSpeakAssistant.value
+    || !ttsAvailable.value
+    || detail.sessionId !== props.sessionId
+    || !detail.messageId
+    || !detail.content?.trim()) return;
+  void speakMessage({ id: detail.messageId, role: 'assistant', content: detail.content, kind: 'text' });
 }
 
 function releaseMicrophone(): void {
@@ -3301,6 +3468,42 @@ function handleInputKeydown(event: KeyboardEvent) {
 .message-block.is-selected :deep(.message-bubble),
 .message-block.is-selected :deep(.chat-event-row) {
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+.tts-message-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  margin: 0.25rem 0.25rem 0.15rem;
+}
+
+.tts-control-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.tts-control-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.tts-control-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.tts-error {
+  color: var(--error);
+  font-size: 0.72rem;
 }
 
 .floating-chat-controls {

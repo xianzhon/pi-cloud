@@ -24,7 +24,7 @@ describe('speechRoutes', () => {
     });
     await app.close();
 
-    expect(status.json()).toEqual({ available: false });
+    expect(status.json()).toEqual({ available: false, ttsAvailable: false });
     expect(transcription.statusCode).toBe(503);
   });
 
@@ -116,6 +116,67 @@ describe('speechRoutes', () => {
     expect(response.statusCode).toBe(502);
     expect(response.json()).toEqual({ error: 'Invalid audio' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('synthesizes speech through a local provider without an API key', async () => {
+    process.env.PI_CLOUD_TTS_BASE_URL = 'http://127.0.0.1:8000/v1/';
+    process.env.PI_CLOUD_TTS_MODEL = 'mlx-community/Kokoro-82M-bf16';
+    process.env.PI_CLOUD_TTS_VOICE = 'zf_xiaobei';
+    process.env.PI_CLOUD_TTS_LANGUAGE = 'zh';
+    process.env.PI_CLOUD_TTS_FORMAT = 'wav';
+    delete process.env.PI_CLOUD_TTS_API_KEY;
+    const fetchMock = vi.fn(async () => new Response(new Uint8Array([82, 73, 70, 70]), {
+      status: 200,
+      headers: { 'content-type': 'audio/wav' },
+    }));
+    const app = Fastify();
+    await app.register(speechRoutes, { prefix: '/api/speech', fetch: fetchMock as typeof fetch });
+
+    const status = await app.inject({ method: 'GET', url: '/api/speech/status' });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/speech/synthesize',
+      payload: { text: '你好，世界' },
+    });
+    await app.close();
+
+    expect(status.json()).toMatchObject({ ttsAvailable: true });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toBe('audio/wav');
+    expect(response.rawPayload).toEqual(Buffer.from([82, 73, 70, 70]));
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:8000/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'mlx-community/Kokoro-82M-bf16',
+        input: '你好，世界',
+        voice: 'zf_xiaobei',
+        response_format: 'wav',
+        language: 'zh',
+      }),
+    });
+  });
+
+  it('rejects synthesis when TTS is unavailable or text is empty', async () => {
+    delete process.env.PI_CLOUD_TTS_BASE_URL;
+    const app = Fastify();
+    await app.register(speechRoutes, { prefix: '/api/speech' });
+
+    const unavailable = await app.inject({
+      method: 'POST',
+      url: '/api/speech/synthesize',
+      payload: { text: 'Hello' },
+    });
+    process.env.PI_CLOUD_TTS_BASE_URL = 'http://127.0.0.1:8000/v1';
+    const empty = await app.inject({
+      method: 'POST',
+      url: '/api/speech/synthesize',
+      payload: { text: '  ' },
+    });
+    await app.close();
+
+    expect(unavailable.statusCode).toBe(503);
+    expect(empty.statusCode).toBe(400);
   });
 
   it('rejects empty audio', async () => {

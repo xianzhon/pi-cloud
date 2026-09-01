@@ -272,6 +272,23 @@
                   </label>
                 </section>
 
+                <section class="settings-card" aria-labelledby="tts-auto-speak-title">
+                  <div class="settings-card-copy">
+                    <h4 id="tts-auto-speak-title">{{ t('settings.chat.ttsTitle') }}</h4>
+                    <p>{{ t('settings.chat.ttsDescription') }}</p>
+                  </div>
+                  <label class="settings-switch">
+                    <input
+                      class="tts-auto-speak-toggle"
+                      type="checkbox"
+                      :checked="autoSpeakAssistant"
+                      @change="emit('update:autoSpeakAssistant', ($event.target as HTMLInputElement).checked)"
+                    />
+                    <span class="settings-switch-track" aria-hidden="true"></span>
+                    <span class="settings-switch-text">{{ t(autoSpeakAssistant ? 'settings.state.enabled' : 'settings.state.disabled') }}</span>
+                  </label>
+                </section>
+
                 <section class="settings-card sound-notification-settings" aria-labelledby="sound-notification-title">
                   <div class="settings-card-copy">
                     <h4 id="sound-notification-title">{{ t('settings.chat.soundTitle') }}</h4>
@@ -812,6 +829,7 @@ const props = withDefaults(defineProps<{
   theme?: ThemePreference;
   language?: LanguagePreference;
   soundNotification?: SoundNotificationPreference;
+  autoSpeakAssistant?: boolean;
   availableSkills?: AvailableSkill[];
   skillPresets?: SkillPreset[];
   giteaServerUrl?: string;
@@ -842,6 +860,7 @@ const props = withDefaults(defineProps<{
   theme: 'system',
   language: 'en',
   soundNotification: 'beep',
+  autoSpeakAssistant: false,
   availableSkills: () => [],
   skillPresets: () => [],
   giteaServerUrl: '',
@@ -1533,6 +1552,7 @@ const emit = defineEmits<{
   'update:theme': [value: ThemePreference];
   'update:language': [value: LanguagePreference];
   'update:soundNotification': [value: SoundNotificationPreference];
+  'update:autoSpeakAssistant': [value: boolean];
   'update:gitCloneParentPath': [value: string];
   createSkillPreset: [payload: SkillPresetInput];
   updateSkillPreset: [payload: { id: string; changes: SkillPresetInput }];

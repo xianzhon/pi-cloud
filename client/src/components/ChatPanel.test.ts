@@ -150,7 +150,8 @@ describe('ChatPanel', () => {
     wrapper.unmount();
     idleCallback?.({ didTimeout: false, timeRemaining: () => 50 });
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/speech/status');
   });
 
   it('opens new-session configuration from draft model and skill controls', async () => {

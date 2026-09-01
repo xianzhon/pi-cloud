@@ -13,6 +13,7 @@ const AUTO_EXTRACT_MEMORY_KEY = 'pi-cloud.autoExtractMemory';
 const THEME_KEY = 'pi-cloud.theme';
 const LANGUAGE_KEY = 'pi-cloud.language';
 const SOUND_NOTIFICATION_KEY = 'pi-cloud.soundNotification';
+const AUTO_SPEAK_ASSISTANT_KEY = 'pi-cloud.autoSpeakAssistant';
 const GIT_CLONE_PARENT_PATH_KEY = 'pi-cloud.gitCloneParentPath';
 
 export type StreamingMessageBehavior = 'steer' | 'followUp';
@@ -36,6 +37,7 @@ type PreferencePayload = {
   theme?: unknown;
   language?: unknown;
   soundNotification?: unknown;
+  autoSpeakAssistant?: unknown;
   gitCloneParentPath?: unknown;
 };
 
@@ -164,6 +166,7 @@ const autoExtractMemory = ref(readCachedBoolean(AUTO_EXTRACT_MEMORY_KEY, false))
 const theme = ref<ThemePreference>(readCachedTheme());
 const language = ref<LanguagePreference>(readCachedLanguage());
 const soundNotification = ref<SoundNotificationPreference>(readCachedSoundNotification());
+const autoSpeakAssistant = ref(readCachedBoolean(AUTO_SPEAK_ASSISTANT_KEY, false));
 const gitCloneParentPath = ref(readCachedString(GIT_CLONE_PARENT_PATH_KEY, '~/git/github'));
 
 function applyPreferences(data: PreferencePayload) {
@@ -218,6 +221,10 @@ function applyPreferences(data: PreferencePayload) {
   if (isSoundNotificationPreference(data.soundNotification)) {
     soundNotification.value = data.soundNotification;
     cacheSoundNotification(data.soundNotification);
+  }
+  if (typeof data.autoSpeakAssistant === 'boolean') {
+    autoSpeakAssistant.value = data.autoSpeakAssistant;
+    cacheBoolean(AUTO_SPEAK_ASSISTANT_KEY, data.autoSpeakAssistant);
   }
   if (typeof data.gitCloneParentPath === 'string' && data.gitCloneParentPath.trim()) {
     gitCloneParentPath.value = data.gitCloneParentPath;
@@ -331,6 +338,12 @@ async function setSoundNotification(value: SoundNotificationPreference): Promise
   await patchPreferences({ soundNotification: value });
 }
 
+async function setAutoSpeakAssistant(value: boolean): Promise<void> {
+  autoSpeakAssistant.value = value;
+  cacheBoolean(AUTO_SPEAK_ASSISTANT_KEY, value);
+  await patchPreferences({ autoSpeakAssistant: value });
+}
+
 async function setGitCloneParentPath(value: string): Promise<void> {
   const next = value.trim() || '~/git/github';
   gitCloneParentPath.value = next;
@@ -352,6 +365,7 @@ function resetPreferenceRefsFromCache(): void {
   theme.value = readCachedTheme();
   language.value = readCachedLanguage();
   soundNotification.value = readCachedSoundNotification();
+  autoSpeakAssistant.value = readCachedBoolean(AUTO_SPEAK_ASSISTANT_KEY, false);
   gitCloneParentPath.value = readCachedString(GIT_CLONE_PARENT_PATH_KEY, '~/git/github');
 }
 
@@ -372,6 +386,7 @@ export function usePreferences() {
     theme,
     language,
     soundNotification,
+    autoSpeakAssistant,
     gitCloneParentPath,
     loadPreferences,
     setShowHintInfo,
@@ -387,6 +402,7 @@ export function usePreferences() {
     setTheme,
     setLanguage,
     setSoundNotification,
+    setAutoSpeakAssistant,
     setGitCloneParentPath,
   };
 }

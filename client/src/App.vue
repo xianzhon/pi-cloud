@@ -495,6 +495,7 @@
       :theme="theme"
       :language="language"
       :sound-notification="soundNotification"
+      :auto-speak-assistant="autoSpeakAssistant"
       :available-skills="availableSkills"
       :skill-presets="skillPresets"
       :gitea-server-url="gitHosting.settings.value.serverUrl"
@@ -528,6 +529,7 @@
       @update:theme="setTheme"
       @update:language="setLanguage"
       @update:sound-notification="setSoundNotification"
+      @update:auto-speak-assistant="setAutoSpeakAssistant"
       @update:git-clone-parent-path="setGitCloneParentPath"
       @create-skill-preset="handleCreateSkillPreset"
       @update-skill-preset="handleUpdateSkillPreset"
@@ -681,6 +683,7 @@ const {
   theme,
   language,
   soundNotification,
+  autoSpeakAssistant,
   gitCloneParentPath,
   loadPreferences,
   setShowHintInfo,
@@ -696,6 +699,7 @@ const {
   setTheme,
   setLanguage,
   setSoundNotification,
+  setAutoSpeakAssistant,
   setGitCloneParentPath,
 } = usePreferences();
 const t = i18n.global.t;
