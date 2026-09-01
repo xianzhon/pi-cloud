@@ -251,7 +251,7 @@
           <button
             v-if="dictationAvailable"
             type="button"
-            class="dictation-btn tooltip tooltip-above"
+            class="dictation-btn composer-dictation-btn tooltip tooltip-above"
             :class="{ recording: isRecording }"
             :disabled="isTranscribing"
             :aria-label="dictationButtonLabel"
@@ -323,6 +323,19 @@
         >
           <PhCornersIn v-if="fullscreen" :size="18" weight="bold" />
           <PhCornersOut v-else :size="18" weight="bold" />
+        </button>
+        <button
+          v-if="dictationAvailable"
+          type="button"
+          class="trigger-btn dictation-btn"
+          :class="{ recording: isRecording }"
+          :disabled="isTranscribing"
+          :aria-label="dictationButtonLabel"
+          :title="dictationButtonLabel"
+          @click="toggleDictation"
+        >
+          <PhStop v-if="isRecording" :size="20" weight="fill" />
+          <PhMicrophone v-else :size="20" :weight="isTranscribing ? 'fill' : 'regular'" />
         </button>
         <button class="trigger-btn trigger-btn-clear" :disabled="!inputText" @click="inputText = ''; resizeInput()" type="button">✕</button>
       </div>
@@ -4359,6 +4372,10 @@ function handleInputKeydown(event: KeyboardEvent) {
 
   .mobile-camera-btn {
     display: inline-flex;
+  }
+
+  .composer-dictation-btn {
+    display: none;
   }
 
   .composer-skill-selector,
