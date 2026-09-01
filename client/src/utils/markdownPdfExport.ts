@@ -6,6 +6,11 @@ export interface ExportMarkdownPdfOptions {
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
 const PDF_MARGIN = 51.02; // 18 mm, matching the existing print export.
+const PDF_RENDER_WIDTH = 658;
+const MAX_PDF_RENDER_WIDTH = 1600;
+const MAX_PDF_CANVAS_DIMENSION = 16_384;
+const MAX_PDF_CANVAS_PIXELS = 16_777_216;
+const IMAGE_LOAD_TIMEOUT_MS = 10_000;
 
 function escapeHtml(value: string): string {
   return value
@@ -27,6 +32,103 @@ export function getMarkdownPdfPath(filePath: string): string {
   return `${filePath.slice(0, separatorIndex + 1)}${getMarkdownPdfFilename(filePath)}`;
 }
 
+function markdownFileDirectory(filePath: string): string {
+  const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  return separatorIndex === -1 ? '' : filePath.slice(0, separatorIndex + 1);
+}
+
+function ignoreImage(image: HTMLImageElement): void {
+  image.removeAttribute('src');
+  image.setAttribute('data-html2canvas-ignore', 'true');
+}
+
+function splitLocalImageSource(source: string): { path: string; fragment: string } {
+  const fragmentIndex = source.indexOf('#');
+  const fragment = fragmentIndex === -1 ? '' : source.slice(fragmentIndex);
+  const pathAndQuery = fragmentIndex === -1 ? source : source.slice(0, fragmentIndex);
+  const queryIndex = pathAndQuery.indexOf('?');
+  const encodedPath = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
+  try {
+    return { path: decodeURIComponent(encodedPath), fragment };
+  } catch {
+    return { path: encodedPath, fragment };
+  }
+}
+
+function workspaceImageSource(source: string): { path: string; fragment: string } | undefined {
+  const prefix = '/api/files/raw?path=';
+  return source.startsWith(prefix) ? splitLocalImageSource(source.slice(prefix.length)) : undefined;
+}
+
+function normalizeImageSource(source: string, directory: string): string | undefined {
+  if (source.startsWith('data:') || source.startsWith('#')) return source;
+
+  const workspaceSource = workspaceImageSource(source);
+  if (workspaceSource) {
+    return `/api/files/raw?path=${encodeURIComponent(workspaceSource.path)}${workspaceSource.fragment}`;
+  }
+
+  const windowsAbsolutePath = /^[a-z]:[\\/]/i.test(source);
+  if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(source) && !windowsAbsolutePath) return undefined;
+
+  const localSource = splitLocalImageSource(source);
+  const resolvedPath = source.startsWith('/') || windowsAbsolutePath
+    ? localSource.path
+    : `${directory}${localSource.path.replace(/^\.\//, '')}`;
+  return `/api/files/raw?path=${encodeURIComponent(resolvedPath)}${localSource.fragment}`;
+}
+
+export function normalizeMarkdownPdfHtml(html: string, filePath: string): string {
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const directory = markdownFileDirectory(filePath);
+
+  for (const image of Array.from(template.content.querySelectorAll<HTMLImageElement>('img[src]'))) {
+    const source = image.getAttribute('src')?.trim();
+    if (!source) continue;
+    const normalizedSource = normalizeImageSource(source, directory);
+    if (normalizedSource) image.setAttribute('src', normalizedSource);
+    else ignoreImage(image);
+  }
+
+  for (const element of Array.from(template.content.querySelectorAll(
+    'svg image[href], svg use[href], svg image[xlink\\:href], svg use[xlink\\:href]',
+  ))) {
+    const attribute = element.hasAttribute('href') ? 'href' : 'xlink:href';
+    const source = element.getAttribute(attribute)?.trim();
+    if (!source) continue;
+    const normalizedSource = normalizeImageSource(source, directory);
+    if (normalizedSource) element.setAttribute(attribute, normalizedSource);
+    else element.removeAttribute(attribute);
+  }
+
+  for (const element of Array.from(template.content.querySelectorAll<HTMLElement>('[style]'))) {
+    const backgroundImage = element.style.backgroundImage;
+    const references = Array.from(backgroundImage.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/gi));
+    let normalizedBackground = backgroundImage;
+    for (const reference of references) {
+      const normalizedSource = normalizeImageSource(reference[2].trim(), directory);
+      if (!normalizedSource) {
+        element.style.removeProperty('background-image');
+        normalizedBackground = '';
+        break;
+      }
+      normalizedBackground = normalizedBackground.replace(reference[0], `url("${normalizedSource}")`);
+    }
+    if (normalizedBackground) element.style.backgroundImage = normalizedBackground;
+  }
+
+  for (const source of Array.from(template.content.querySelectorAll<HTMLElement>('[srcset]'))) {
+    source.removeAttribute('srcset');
+  }
+
+  return template.innerHTML;
+}
+
+export function getMarkdownPdfRenderWidth(documentWidth: number, bodyWidth: number): number {
+  return Math.min(MAX_PDF_RENDER_WIDTH, Math.max(PDF_RENDER_WIDTH, documentWidth, bodyWidth));
+}
+
 export function getCanvasPageSlices(canvasWidth: number, canvasHeight: number): Array<{ sourceY: number; sourceHeight: number }> {
   const contentWidth = A4_WIDTH - PDF_MARGIN * 2;
   const contentHeight = A4_HEIGHT - PDF_MARGIN * 2;
@@ -38,6 +140,38 @@ export function getCanvasPageSlices(canvasWidth: number, canvasHeight: number): 
     const sourceEnd = Math.min(canvasHeight, Math.round((pageIndex + 1) * pageHeight));
     return { sourceY, sourceHeight: sourceEnd - sourceY };
   });
+}
+
+export function getMarkdownPdfRenderChunks(
+  width: number,
+  height: number,
+  scale: number,
+): Array<{
+  sourceY: number;
+  sourceHeight: number;
+  pages: Array<{ sourceY: number; sourceHeight: number }>;
+}> {
+  const maxHeight = Math.floor(Math.min(
+    MAX_PDF_CANVAS_DIMENSION / scale,
+    MAX_PDF_CANVAS_PIXELS / (width * scale * scale),
+  ));
+  const chunks: Array<{
+    sourceY: number;
+    sourceHeight: number;
+    pages: Array<{ sourceY: number; sourceHeight: number }>;
+  }> = [];
+
+  for (const page of getCanvasPageSlices(width, height)) {
+    const chunk = chunks.at(-1);
+    if (!chunk || page.sourceY + page.sourceHeight - chunk.sourceY > maxHeight) {
+      chunks.push({ sourceY: page.sourceY, sourceHeight: page.sourceHeight, pages: [page] });
+    } else {
+      chunk.sourceHeight = page.sourceY + page.sourceHeight - chunk.sourceY;
+      chunk.pages.push(page);
+    }
+  }
+
+  return chunks;
 }
 
 export function buildMarkdownPrintDocument(options: ExportMarkdownPdfOptions): string {
@@ -71,14 +205,29 @@ export function buildMarkdownPrintDocument(options: ExportMarkdownPdfOptions): s
 </html>`;
 }
 
-async function waitForImages(printDocument: Document): Promise<void> {
-  await Promise.all(Array.from(printDocument.images, image => {
+export async function waitForMarkdownPdfImages(
+  printDocument: Document,
+  timeoutMs = IMAGE_LOAD_TIMEOUT_MS,
+): Promise<void> {
+  const images = Array.from(printDocument.querySelectorAll('img'));
+  await Promise.all(images.map(image => {
     if (image.complete) return Promise.resolve();
     return new Promise<void>(resolve => {
-      image.addEventListener('load', () => resolve(), { once: true });
-      image.addEventListener('error', () => resolve(), { once: true });
+      const finish = () => {
+        clearTimeout(timeout);
+        image.removeEventListener('load', finish);
+        image.removeEventListener('error', finish);
+        resolve();
+      };
+      const timeout = setTimeout(finish, timeoutMs);
+      image.addEventListener('load', finish, { once: true });
+      image.addEventListener('error', finish, { once: true });
     });
   }));
+
+  for (const image of images) {
+    if (image.naturalWidth === 0) image.setAttribute('data-html2canvas-ignore', 'true');
+  }
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -87,6 +236,33 @@ function bytesToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
   }
   return btoa(binary);
+}
+
+async function inlineMarkdownPdfImages(renderDocument: Document): Promise<void> {
+  const images = Array.from(renderDocument.querySelectorAll<HTMLImageElement>('img[src]'));
+  const sources = new Map<string, Promise<string | undefined>>();
+
+  for (const image of images) {
+    const source = image.getAttribute('src');
+    if (!source || source.startsWith('data:')) continue;
+    const fragmentIndex = source.indexOf('#');
+    const requestSource = fragmentIndex === -1 ? source : source.slice(0, fragmentIndex);
+    const fragment = fragmentIndex === -1 ? '' : source.slice(fragmentIndex);
+    let encodedSource = sources.get(source);
+    if (!encodedSource) {
+      encodedSource = fetch(requestSource)
+        .then(async response => {
+          if (!response.ok) return undefined;
+          const contentType = response.headers.get('content-type') || 'application/octet-stream';
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          return `data:${contentType};base64,${bytesToBase64(bytes)}${fragment}`;
+        })
+        .catch(() => undefined);
+      sources.set(source, encodedSource);
+    }
+    const dataSource = await encodedSource;
+    if (dataSource) image.src = dataSource;
+  }
 }
 
 export async function createMarkdownPdfCopy(options: ExportMarkdownPdfOptions): Promise<string> {
@@ -99,51 +275,79 @@ export async function createMarkdownPdfCopy(options: ExportMarkdownPdfOptions): 
     const renderDocument = iframe.contentDocument;
     if (!renderDocument) throw new Error('Could not create Markdown PDF render frame.');
     renderDocument.open();
-    renderDocument.write(buildMarkdownPrintDocument(options));
+    renderDocument.write(buildMarkdownPrintDocument({
+      ...options,
+      html: normalizeMarkdownPdfHtml(options.html, options.filePath),
+    }));
     renderDocument.close();
-    await waitForImages(renderDocument);
+    await inlineMarkdownPdfImages(renderDocument);
+    await waitForMarkdownPdfImages(renderDocument);
     await renderDocument.fonts?.ready;
 
     const [{ default: html2canvas }, { PDFDocument }] = await Promise.all([
       import('html2canvas'),
       import('pdf-lib'),
     ]);
-    const canvas = await html2canvas(renderDocument.body, {
-      backgroundColor: '#ffffff',
-      logging: false,
-      scale: Math.min(window.devicePixelRatio || 1, 2),
-      useCORS: true,
-    });
     const pdf = await PDFDocument.create();
     const contentWidth = A4_WIDTH - PDF_MARGIN * 2;
+    const renderWidth = getMarkdownPdfRenderWidth(
+      renderDocument.documentElement.scrollWidth,
+      renderDocument.body.scrollWidth,
+    );
+    const renderHeight = Math.max(
+      renderDocument.documentElement.scrollHeight,
+      renderDocument.body.scrollHeight,
+      1,
+    );
 
-    for (const slice of getCanvasPageSlices(canvas.width, canvas.height)) {
-      const pageCanvas = document.createElement('canvas');
-      pageCanvas.width = canvas.width;
-      pageCanvas.height = slice.sourceHeight;
-      const context = pageCanvas.getContext('2d');
-      if (!context) throw new Error('Could not create Markdown PDF page canvas.');
-      context.drawImage(
-        canvas,
-        0,
-        slice.sourceY,
-        canvas.width,
-        slice.sourceHeight,
-        0,
-        0,
-        canvas.width,
-        slice.sourceHeight,
-      );
-
-      const image = await pdf.embedPng(pageCanvas.toDataURL('image/png'));
-      const imageHeight = slice.sourceHeight * contentWidth / canvas.width;
-      const page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
-      page.drawImage(image, {
-        x: PDF_MARGIN,
-        y: A4_HEIGHT - PDF_MARGIN - imageHeight,
-        width: contentWidth,
-        height: imageHeight,
+    const scale = Math.min(window.devicePixelRatio || 1, 2);
+    for (const chunk of getMarkdownPdfRenderChunks(renderWidth, renderHeight, scale)) {
+      const canvas = await html2canvas(renderDocument.body, {
+        backgroundColor: '#ffffff',
+        height: chunk.sourceHeight,
+        logging: false,
+        scale,
+        useCORS: true,
+        width: renderWidth,
+        windowHeight: chunk.sourceHeight,
+        windowWidth: renderWidth,
+        x: 0,
+        y: chunk.sourceY,
       });
+      const renderedScale = canvas.height / chunk.sourceHeight;
+
+      for (const pageSlice of chunk.pages) {
+        const sourceY = Math.round((pageSlice.sourceY - chunk.sourceY) * renderedScale);
+        const sourceEnd = Math.round(
+          (pageSlice.sourceY + pageSlice.sourceHeight - chunk.sourceY) * renderedScale,
+        );
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sourceEnd - sourceY;
+        const context = pageCanvas.getContext('2d');
+        if (!context) throw new Error('Could not create Markdown PDF page canvas.');
+        context.drawImage(
+          canvas,
+          0,
+          sourceY,
+          canvas.width,
+          pageCanvas.height,
+          0,
+          0,
+          canvas.width,
+          pageCanvas.height,
+        );
+
+        const image = await pdf.embedPng(pageCanvas.toDataURL('image/png'));
+        const imageHeight = pageCanvas.height * contentWidth / pageCanvas.width;
+        const page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
+        page.drawImage(image, {
+          x: PDF_MARGIN,
+          y: A4_HEIGHT - PDF_MARGIN - imageHeight,
+          width: contentWidth,
+          height: imageHeight,
+        });
+      }
     }
 
     const path = getMarkdownPdfPath(options.filePath);
@@ -176,9 +380,12 @@ export async function exportMarkdownPdf(options: ExportMarkdownPdfOptions): Prom
   }
 
   printDocument.open();
-  printDocument.write(buildMarkdownPrintDocument(options));
+  printDocument.write(buildMarkdownPrintDocument({
+    ...options,
+    html: normalizeMarkdownPdfHtml(options.html, options.filePath),
+  }));
   printDocument.close();
-  await waitForImages(printDocument);
+  await waitForMarkdownPdfImages(printDocument);
 
   // Chromium derives an iframe print job's suggested filename from the parent
   // tab title, so expose the Markdown filename until the print job finishes.
