@@ -87,7 +87,7 @@ PI_CLOUD_STT_MODEL=gpt-4o-mini-transcribe
 PI_CLOUD_STT_LANGUAGE=zh
 ```
 
-未设置 `PI_CLOUD_STT_API_KEY` 时会使用 `OPENAI_API_KEY`。服务地址和模型默认使用上面的值。`PI_CLOUD_STT_LANGUAGE` 可选；不设置时由 STT 服务自动检测语言。配置后，输入框中的麦克风按钮会在浏览器中录音，将完整音频发送到服务器转写，并把结果插入输入框，不会自动发送。浏览器只允许通过 HTTPS 或 localhost 访问麦克风。
+未设置 `PI_CLOUD_STT_API_KEY` 时会使用 `OPENAI_API_KEY`。服务地址和模型默认使用上面的值。`PI_CLOUD_STT_LANGUAGE` 可选；不设置时由 STT 服务自动检测语言。配置后，输入框中的麦克风按钮会在浏览器中录音，将完整音频发送到服务器转写，并把结果插入输入框，不会自动发送。同一个服务也会转写企业微信收到的语音消息；要支持企业微信，STT 提供商必须能够接收 AMR 音频。浏览器只允许通过 HTTPS 或 localhost 访问麦克风。
 
 ## 提供商和网关变量
 

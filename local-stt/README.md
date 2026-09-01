@@ -4,31 +4,37 @@ This guide describes a private, local speech-to-text setup for Pi Cloud on an Ap
 
 ## Recommended model
 
-For English dictation on an M2 Pro, use:
+For Chinese and English dictation on an M2 Pro with 16 GB of memory, use:
 
 ```text
-ggml-medium.en-q5_0.bin
+ggml-large-v3-turbo-q5_0.bin 
 ```
 
 Why:
 
-- `medium.en` is optimized for English.
-- It is accurate with technical and coding vocabulary.
-- Q5 quantization provides a good accuracy, memory, and speed balance.
-- It is lighter and faster than `large-v3`.
+- `large-v3-turbo` supports both Chinese and English, including code-switching within a recording.
+- It provides better multilingual accuracy than the English-only `.en` models.
+- The turbo architecture is faster than `large-v3` while retaining strong transcription quality.
+- Q5 quantization keeps memory and storage requirements comfortable on a 16 GB Mac.
 - whisper.cpp has native Apple Silicon and Metal support.
 
 Alternatives:
 
 | Model | Choose it when |
 | --- | --- |
-| `small.en-q5_1` | Lowest latency is more important than accuracy |
-| `medium.en-q5_0` | Best general default for English dictation |
-| `medium.en` FP16 | You want slightly better quality and have extra memory |
-| `large-v3-turbo-q5_0` | You need multilingual or higher general accuracy |
-| `large-v3` | You specifically need maximum accuracy and accept high resource use |
+| `small-q5_1` | Lowest multilingual latency is more important than accuracy |
+| `medium-q5_0` | You want a lighter multilingual model |
+| `medium.en-q5_0` | You only need English dictation (514MB) |
+| `large-v3-turbo-q5_0` | Best Chinese and English balance on an M2 Pro  (547MB) |
+| `large-v3` | You specifically need maximum accuracy and accept higher resource use |
 
-For short English voice input, `large-v3` is normally unnecessary.
+For English-only dictation, keep using the previous model:
+
+```text
+ggml-medium.en-q5_0.bin
+```
+
+It remains a suitable choice for technical and coding vocabulary and is lighter than the multilingual recommendation. Keep both model files installed and select the one that matches the languages required. Models ending in `.en` are English-only and are not suitable for Chinese transcription.
 
 ## Architecture
 
@@ -67,7 +73,15 @@ Choose a model directory outside the Git repository:
 mkdir -p "$HOME/.local/share/whisper.cpp/models"
 ```
 
-Download the recommended model:
+Download the recommended Chinese and English model:
+
+```bash
+curl -L --fail --retry 2 \
+  -o "$HOME/.local/share/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin" \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+```
+
+For English-only use, retain or download the previous model as well:
 
 ```bash
 curl -L --fail --retry 2 \
@@ -75,7 +89,7 @@ curl -L --fail --retry 2 \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en-q5_0.bin
 ```
 
-The file is several hundred megabytes. Do not commit it to the application repository.
+The files are several hundred megabytes each and can coexist in the model directory. Do not commit them to the application repository.
 
 ## Configure Pi Cloud
 
@@ -84,11 +98,12 @@ Add these variables to Pi Cloud's local, uncommitted environment file. Replace t
 ```env
 PI_CLOUD_STT_API_KEY=local
 PI_CLOUD_STT_BASE_URL=http://127.0.0.1:PORT
-PI_CLOUD_STT_MODEL=medium.en
-PI_CLOUD_STT_LANGUAGE=en
+PI_CLOUD_STT_MODEL=large-v3-turbo
 ```
 
 The `local` API key is only a compatibility value for the Bearer header. Use a real secret if the STT endpoint is exposed beyond the local machine.
+
+Leave `PI_CLOUD_STT_LANGUAGE` unset to let whisper.cpp detect Chinese or English for each recording. If almost every recording is primarily Chinese with occasional English terms, setting it to `zh` can make Chinese output more consistent.
 
 The backend must load these variables when it starts. Do not put credentials or private runtime configuration in Git.
 
@@ -98,13 +113,13 @@ The equivalent server command is:
 
 ```bash
 whisper-server \
-  --model "$HOME/.local/share/whisper.cpp/models/ggml-medium.en-q5_0.bin" \
+  --model "$HOME/.local/share/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin" \
   --host 127.0.0.1 \
   --port PORT \
   --inference-path /audio/transcriptions \
   --convert \
   --tmp-dir "${TMPDIR:-/tmp}/whisper-stt" \
-  --language en
+  --language auto
 ```
 
 Create the temporary directory first:
@@ -125,8 +140,7 @@ curl --noproxy '*' -sS \
   http://127.0.0.1:PORT/audio/transcriptions \
   -H 'Authorization: Bearer local' \
   -F 'file=@sample.wav' \
-  -F 'model=medium.en' \
-  -F 'language=en'
+  -F 'model=large-v3-turbo'
 ```
 
 Expected response:
@@ -142,8 +156,7 @@ curl --noproxy '*' -sS \
   http://127.0.0.1:PORT/audio/transcriptions \
   -H 'Authorization: Bearer local' \
   -F 'file=@recording.webm' \
-  -F 'model=medium.en' \
-  -F 'language=en'
+  -F 'model=large-v3-turbo'
 ```
 
 A successful WebM request confirms that FFmpeg conversion and the browser audio format are compatible.
@@ -212,8 +225,8 @@ mkdir -p "${TMPDIR:-/tmp}/whisper-stt"
 Check that the model exists and is a binary file:
 
 ```bash
-ls -lh "$HOME/.local/share/whisper.cpp/models/ggml-medium.en-q5_0.bin"
-file "$HOME/.local/share/whisper.cpp/models/ggml-medium.en-q5_0.bin"
+ls -lh "$HOME/.local/share/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin"
+file "$HOME/.local/share/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin"
 ```
 
 ### Busy or intermittent 502 errors

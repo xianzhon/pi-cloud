@@ -87,7 +87,7 @@ PI_CLOUD_STT_MODEL=gpt-4o-mini-transcribe
 PI_CLOUD_STT_LANGUAGE=zh
 ```
 
-`PI_CLOUD_STT_API_KEY` falls back to `OPENAI_API_KEY`. The base URL and model default to the values above. `PI_CLOUD_STT_LANGUAGE` is optional; omit it to let the provider detect the language. Once configured, the microphone button records in the browser, sends the completed audio to the server for transcription, and inserts the returned text into the message input without sending it automatically. Browser microphone access requires HTTPS or localhost.
+`PI_CLOUD_STT_API_KEY` falls back to `OPENAI_API_KEY`. The base URL and model default to the values above. `PI_CLOUD_STT_LANGUAGE` is optional; omit it to let the provider detect the language. Once configured, the microphone button records in the browser, sends the completed audio to the server for transcription, and inserts the returned text into the message input without sending it automatically. The same service transcribes inbound WeCom voice messages. The STT provider must accept AMR audio for WeCom support. Browser microphone access requires HTTPS or localhost.
 
 ## Provider and Gateway Variables
 

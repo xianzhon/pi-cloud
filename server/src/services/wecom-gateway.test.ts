@@ -155,6 +155,56 @@ describe('WecomGatewayService', () => {
     }]);
   });
 
+  it('downloads and transcribes a voice callback before prompting the session', async () => {
+    configureEnvironment();
+    process.env.PI_CLOUD_STT_API_KEY = 'local';
+    process.env.PI_CLOUD_STT_BASE_URL = 'http://127.0.0.1:8080';
+    process.env.PI_CLOUD_STT_MODEL = 'whisper-local';
+    const prompts: string[] = [];
+    const session = {
+      model: { input: ['text'] },
+      messages: [{ role: 'assistant', content: 'voice understood' }],
+      subscribe: () => () => undefined,
+      prompt: async (text: string) => { prompts.push(text); },
+    };
+    const sessions = {
+      setClientAgentProfile: async () => undefined,
+      getSession: () => session,
+      runForegroundWithClientProfileProxy: async (_clientId: string, operation: () => Promise<unknown>) => operation(),
+    } as unknown as PiSessionService;
+    const db = openPiCloudDatabase(':memory:');
+    const settings = new GatewaySettingsStore(db);
+    settings.save({ cwds: ['/tmp/wecom-voice-project'] });
+    const service = new WecomGatewayService(db, settings, sessions);
+    const replies: string[] = [];
+    (service as any).sendReply = async (_config: unknown, _userId: string, text: string) => { replies.push(text); };
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/cgi-bin/gettoken')) {
+        return jsonResponse({ errcode: 0, errmsg: 'ok', access_token: 'access-voice', expires_in: 7200 });
+      }
+      if (url.includes('/cgi-bin/media/get')) {
+        return new Response(Buffer.from('#!AMR\nvoice-data'), { headers: { 'content-type': 'application/octet-stream' } });
+      }
+      if (url === 'http://127.0.0.1:8080/audio/transcriptions') {
+        const form = init?.body as FormData;
+        expect(form.get('model')).toBe('whisper-local');
+        expect((form.get('file') as File).name).toBe('recording.amr');
+        return jsonResponse({ text: 'Please inspect the current changes.' });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const messageXml = '<xml><ToUserName>corp-test</ToUserName><FromUserName>user-1</FromUserName><MsgType>voice</MsgType><MediaId>voice-123</MediaId><Format>amr</Format><MsgId>voice-message-1</MsgId><AgentID>1000002</AgentID></xml>';
+    const encrypted = encryptWecomPayload(messageXml, AES_KEY, CORP_ID);
+
+    expect(service.handleCallback(signedQuery(encrypted), `<xml><Encrypt>${encrypted}</Encrypt></xml>`)).toBe('success');
+    await vi.waitFor(() => expect(replies).toEqual(['voice understood']));
+
+    expect(prompts).toEqual(['Please inspect the current changes.']);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('stops reading WeCom media as soon as it exceeds the image size limit', async () => {
     configureEnvironment();
     const service = createService();

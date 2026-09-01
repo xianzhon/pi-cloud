@@ -7,6 +7,7 @@ import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gatewa
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_BYTES, sniffImageMimeType, validateImages } from './image-input.js';
 import type { PiSessionService } from './session-manager.js';
+import { MAX_AUDIO_BYTES, transcribeAudio } from './speech-to-text.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
 import { decryptWecomPayload, verifyWecomSignature } from './wecom-crypto.js';
 
@@ -201,8 +202,8 @@ export class WecomGatewayService {
     if (config.allowedUsers.length && !config.allowedUsers.includes(message.userId)) return 'success';
     if (this.markDuplicate(message.messageId)) return 'success';
 
-    if (message.messageType !== 'text' && message.messageType !== 'image') {
-      void this.sendReply(config, message.userId, 'This WeCom gateway supports text and image messages only.').catch((error) => {
+    if (!['text', 'image', 'voice'].includes(message.messageType)) {
+      void this.sendReply(config, message.userId, 'This WeCom gateway supports text, image, and voice messages only.').catch((error) => {
         console.warn('[wecom-gateway] unsupported-message reply failed:', error instanceof Error ? error.message : error);
       });
       return 'success';
@@ -338,6 +339,25 @@ export class WecomGatewayService {
       return;
     }
 
+    let promptText = message.text;
+    if (message.messageType === 'voice') {
+      if (!message.mediaId) {
+        await this.sendReply(config, message.userId, 'The WeCom voice message did not include downloadable media. Try sending it again.');
+        return;
+      }
+      try {
+        promptText = (await transcribeAudio(await this.downloadVoice(config, message.mediaId), 'audio/amr')).trim();
+      } catch (error) {
+        console.warn('[wecom-gateway] failed to transcribe inbound voice:', error instanceof Error ? error.message : error);
+        await this.sendReply(config, message.userId, 'The voice message could not be transcribed. Check the speech-to-text configuration and try again.');
+        return;
+      }
+      if (!promptText) {
+        await this.sendReply(config, message.userId, 'The voice message did not contain recognizable speech. Try sending it again.');
+        return;
+      }
+    }
+
     const session = await this.ensureSession(clientId, effectiveConfig);
     let images: ImageContent[] = [];
     if (message.messageType === 'image') {
@@ -359,7 +379,7 @@ export class WecomGatewayService {
       return;
     }
 
-    const promptText = message.text || (imageResult.images.length ? 'Please analyze the attached image.' : '');
+    promptText ||= imageResult.images.length ? 'Please analyze the attached image.' : '';
     const chunks: string[] = [];
     const unsubscribe = session.subscribe((event: any) => {
       const update = event?.type === 'message_update' ? event.assistantMessageEvent : undefined;
@@ -620,6 +640,17 @@ export class WecomGatewayService {
   }
 
   private async downloadImage(config: WecomGatewayConfig, mediaId: string): Promise<ImageContent> {
+    const bytes = await this.downloadMedia(config, mediaId, MAX_IMAGE_BYTES, 'An image is larger than 10 MB.');
+    const mimeType = sniffImageMimeType(bytes);
+    if (!mimeType) throw new Error('WeCom media response was not a supported image');
+    return { type: 'image', data: bytes.toString('base64'), mimeType };
+  }
+
+  private downloadVoice(config: WecomGatewayConfig, mediaId: string): Promise<Buffer> {
+    return this.downloadMedia(config, mediaId, MAX_AUDIO_BYTES, 'A voice message is larger than 25 MB.');
+  }
+
+  private async downloadMedia(config: WecomGatewayConfig, mediaId: string, maxBytes: number, tooLargeMessage: string): Promise<Buffer> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const token = await this.getAccessToken(config);
       const response = await fetch(`${WECOM_API_BASE_URL}/cgi-bin/media/get?access_token=${encodeURIComponent(token)}&media_id=${encodeURIComponent(mediaId)}`);
@@ -634,11 +665,7 @@ export class WecomGatewayService {
         throw new Error(`WeCom media download failed: ${stringValue(data.errmsg) || `errcode=${data.errcode}`}`);
       }
       if (!response.ok) throw new Error(`WeCom media download failed: HTTP ${response.status}`);
-
-      const bytes = await readResponseBytes(response, MAX_IMAGE_BYTES);
-      const mimeType = sniffImageMimeType(bytes);
-      if (!mimeType) throw new Error('WeCom media response was not a supported image');
-      return { type: 'image', data: bytes.toString('base64'), mimeType };
+      return readResponseBytes(response, maxBytes, tooLargeMessage);
     }
     throw new Error('WeCom media download failed after refreshing the access token');
   }
@@ -655,11 +682,11 @@ export class WecomGatewayService {
   }
 }
 
-async function readResponseBytes(response: Response, maxBytes: number): Promise<Buffer> {
+async function readResponseBytes(response: Response, maxBytes: number, tooLargeMessage: string): Promise<Buffer> {
   const contentLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     await response.body?.cancel();
-    throw new Error('An image is larger than 10 MB.');
+    throw new Error(tooLargeMessage);
   }
   if (!response.body) return Buffer.alloc(0);
 
@@ -673,7 +700,7 @@ async function readResponseBytes(response: Response, maxBytes: number): Promise<
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
         await reader.cancel();
-        throw new Error('An image is larger than 10 MB.');
+        throw new Error(tooLargeMessage);
       }
       chunks.push(Buffer.from(value));
     }
