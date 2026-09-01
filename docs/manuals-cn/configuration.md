@@ -105,7 +105,7 @@ PI_CLOUD_TTS_FORMAT=wav
 
 已完成的助手文本回复会显示播放、停止和重播控件。可在**设置 → 聊天 → 朗读助手回复**中开启自动朗读；Pi Cloud 只会在收到 `agent_end` 完成事件后合成语音，不会对每个流式文本增量调用服务。该偏好默认关闭，避免较长的编程回复意外自动播放。
 
-可使用 Python 3.12 和 `uv pip install "mlx-audio[tts,server]"` 安装本地 MLX Audio 服务，然后通过 `mlx_audio.server --host 127.0.0.1 --port 8000` 启动。使用 WAV 可避免 MLX Audio 的压缩输出格式依赖 `ffmpeg`。
+可使用 Python 3.12 和 `uv pip install "mlx-audio[tts,server]" "misaki[zh]"` 安装本地 MLX Audio 服务，然后通过 `mlx_audio.server --host 127.0.0.1 --port 8000` 启动。使用 WAV 可避免 MLX Audio 的压缩输出格式依赖 `ffmpeg`。
 
 ## 提供商和网关变量
 

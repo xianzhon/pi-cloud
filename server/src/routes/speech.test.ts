@@ -153,6 +153,7 @@ describe('speechRoutes', () => {
         voice: 'zf_xiaobei',
         response_format: 'wav',
         language: 'zh',
+        lang_code: 'z',
       }),
     });
   });

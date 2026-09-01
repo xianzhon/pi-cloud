@@ -105,7 +105,7 @@ Only `PI_CLOUD_TTS_BASE_URL` is required to enable the controls. Local endpoints
 
 Completed assistant text replies provide play, stop, and replay controls. **Settings → Chat → Read assistant replies aloud** can automatically synthesize a reply after its `agent_end` completion event; this preference is disabled by default so long coding responses are not spoken unexpectedly. Pi Cloud sends the completed text only once, never individual streaming deltas.
 
-A local MLX Audio service can be installed with Python 3.12 and `uv pip install "mlx-audio[tts,server]"`, then started with `mlx_audio.server --host 127.0.0.1 --port 8000`. WAV avoids MLX Audio's `ffmpeg` requirement for compressed output formats.
+A local MLX Audio service can be installed with Python 3.12 and `uv pip install "mlx-audio[tts,server]" "misaki[zh]"`, then started with `mlx_audio.server --host 127.0.0.1 --port 8000`. WAV avoids MLX Audio's `ffmpeg` requirement for compressed output formats.
 
 ## Provider and Gateway Variables
 

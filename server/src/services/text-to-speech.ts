@@ -34,6 +34,12 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function languageCode(language: string): string {
+  if (language === 'zh') return 'z';
+  if (language === 'en') return 'a';
+  return language;
+}
+
 async function providerError(response: Response): Promise<string> {
   const result = await response.json().catch(() => ({})) as { error?: { message?: unknown }; detail?: unknown };
   if (typeof result.error?.message === 'string') return result.error.message;
@@ -62,6 +68,7 @@ export async function synthesizeSpeech(text: string, options: TextToSpeechOption
     voice,
     response_format: format,
     ...(language ? { language } : {}),
+    ...(language ? { lang_code: languageCode(language) } : {}),
   };
 
   for (let attempt = 1; attempt <= MAX_SYNTHESIS_ATTEMPTS; attempt += 1) {
