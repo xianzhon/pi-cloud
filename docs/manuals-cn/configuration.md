@@ -76,6 +76,19 @@ PI_CLOUD_MEMORY_POLICY=legacy
 
 如需使用 Cloudflare Workers AI，请将提供商类型选择为 **Cloudflare Workers AI**，然后输入 Cloudflare 账户 ID 和具有 Workers AI 读取权限的 API Token。Pi Cloud 会自动生成固定地址 `https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1`，并从 Cloudflare 模型目录加载兼容聊天的模型。选择需要使用的模型，并按需标记图片支持。此配置不会启用 AI Gateway，也不需要网关 ID。
 
+## 语音输入
+
+语音输入是独立的语音转文本层；coding agent 最终只会收到转写后的文本。配置一个兼容 OpenAI `/audio/transcriptions` 的服务，然后重启服务器：
+
+```env
+PI_CLOUD_STT_API_KEY=sk-...
+PI_CLOUD_STT_BASE_URL=https://api.openai.com/v1
+PI_CLOUD_STT_MODEL=gpt-4o-mini-transcribe
+PI_CLOUD_STT_LANGUAGE=zh
+```
+
+未设置 `PI_CLOUD_STT_API_KEY` 时会使用 `OPENAI_API_KEY`。服务地址和模型默认使用上面的值。`PI_CLOUD_STT_LANGUAGE` 可选；不设置时由 STT 服务自动检测语言。配置后，输入框中的麦克风按钮会在浏览器中录音，将完整音频发送到服务器转写，并把结果插入输入框，不会自动发送。浏览器只允许通过 HTTPS 或 localhost 访问麦克风。
+
 ## 提供商和网关变量
 
 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等提供商 API 密钥是可选的，因为服务器默认使用 Pi 智能体自身的身份验证。

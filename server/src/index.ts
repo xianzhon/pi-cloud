@@ -17,6 +17,7 @@ import { memoryRoutes } from './routes/memories.js';
 import { fileRoutes } from './routes/files.js';
 import { slashCommandRoutes } from './routes/slash-commands.js';
 import { changelogRoutes } from './routes/changelog.js';
+import { speechRoutes } from './routes/speech.js';
 import { gitRoutes } from './routes/git.js';
 import { taskRoutes } from './routes/tasks.js';
 import { feishuGatewayRoutes } from './routes/feishu-gateway.js';
@@ -313,7 +314,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Referrer-Policy', 'no-referrer');
-    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    reply.header('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
     if (authConfig.cookieSecure) {
       reply.header('Strict-Transport-Security', 'max-age=31536000');
     }
@@ -390,6 +391,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   await app.register(slashCommandRoutes, { prefix: '/api/slash-commands' });
   await app.register(changelogRoutes, { prefix: '/api/changelog' });
+  await app.register(speechRoutes, { prefix: '/api/speech' });
   await app.register(reviewSourceRoutes, { prefix: '/api/review-sources', reviewSourceService, pinStore: sessionPinStore });
   await app.register(chatWebSocket);
   await app.register(terminalWebSocket);

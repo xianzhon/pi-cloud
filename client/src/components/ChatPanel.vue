@@ -210,6 +210,7 @@
         </div>
         <p v-if="attachmentError" class="attachment-error" role="alert">{{ attachmentError }}</p>
         <p v-if="promptPolishError" class="prompt-polish-error" role="alert">{{ promptPolishError }}</p>
+        <p v-if="dictationError" class="dictation-error" role="alert">{{ dictationError }}</p>
         <p v-if="imagesBlocked" class="attachment-model-warning" role="alert">
           {{ t('components.chatPanel.thisModelCanTReadImagesSwitch') }}
           <button type="button" class="switch-model-btn" @click="openModelSelector()">{{ t('components.chatPanel.switchModel') }}</button>
@@ -246,6 +247,19 @@
           </button>
           <button type="button" class="attach-image-btn mobile-camera-btn tooltip tooltip-above" :aria-label="t('components.chatPanel.takePhoto')" :data-tooltip="t('components.chatPanel.takePhoto')" @click="cameraInputRef?.click()">
             <PhCamera :size="16" />
+          </button>
+          <button
+            v-if="dictationAvailable"
+            type="button"
+            class="dictation-btn tooltip tooltip-above"
+            :class="{ recording: isRecording }"
+            :disabled="isTranscribing"
+            :aria-label="dictationButtonLabel"
+            :data-tooltip="dictationButtonLabel"
+            @click="toggleDictation"
+          >
+            <PhStop v-if="isRecording" :size="16" weight="fill" />
+            <PhMicrophone v-else :size="16" :weight="isTranscribing ? 'fill' : 'regular'" />
           </button>
           <input
             ref="imageInputRef"
@@ -700,7 +714,7 @@ import { replaceSlashToken, useSlashCommands } from '../composables/useSlashComm
 import { useFileSearch, replaceFileToken } from '../composables/useFileSearch';
 import type { SlashCommandItem } from '../types/slashCommands';
 import type { FileSearchResult } from '../types/fileSearch';
-import { PhArrowUp, PhCamera, PhCaretDown, PhCornersIn, PhCornersOut, PhDownloadSimple, PhEye, PhImage, PhLightbulb, PhListChecks, PhListDashes, PhMagicWand, PhRobot, PhX } from '@phosphor-icons/vue';
+import { PhArrowUp, PhCamera, PhCaretDown, PhCornersIn, PhCornersOut, PhDownloadSimple, PhEye, PhImage, PhLightbulb, PhListChecks, PhListDashes, PhMagicWand, PhMicrophone, PhRobot, PhStop, PhX } from '@phosphor-icons/vue';
 import MessageBubble from './MessageBubble.vue';
 import SlashCommandMenu from './SlashCommandMenu.vue';
 import FileSearchMenu from './FileSearchMenu.vue';
@@ -892,6 +906,13 @@ const {
 } = useChatAttachments((key, params) => t(key, params || {}));
 const isPolishingPrompt = ref(false);
 const promptPolishError = ref('');
+const dictationAvailable = ref(false);
+const isRecording = ref(false);
+const isTranscribing = ref(false);
+const dictationError = ref('');
+let mediaRecorder: MediaRecorder | null = null;
+let microphoneStream: MediaStream | null = null;
+let recordedAudioChunks: Blob[] = [];
 const selectedMessageIndex = ref(0);
 const reviewTranscript = ref<ReviewSessionTranscript | null>(null);
 let reviewTranscriptRequestId = 0;
@@ -1491,7 +1512,7 @@ function runWhenIdle(callback: () => void): void {
 
 onMounted(async () => {
   window.addEventListener('summary-generated', handleSummaryGenerated as EventListener);
-  await resizeInputAfterDomUpdate();
+  await Promise.all([resizeInputAfterDomUpdate(), loadDictationAvailability()]);
   if (selectedMessageIndex.value === 0) focusInput();
 });
 
@@ -1500,6 +1521,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('summary-generated', handleSummaryGenerated as EventListener);
   stopInputResize();
   stopStreamingElapsedTimer();
+  releaseMicrophone();
 });
 
 watch(
@@ -1573,6 +1595,105 @@ watch(visibleMessages, async () => {
     messagesRef.value.scrollTop = messagesRef.value.scrollHeight;
   }
 }, { deep: true });
+
+const dictationButtonLabel = computed(() => {
+  if (isRecording.value) return t('components.chatPanel.stopDictation');
+  if (isTranscribing.value) return t('components.chatPanel.transcribing');
+  return t('components.chatPanel.startDictation');
+});
+
+async function loadDictationAvailability(): Promise<void> {
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') return;
+  try {
+    const response = await fetch('/api/speech/status');
+    const result = await response.json().catch(() => ({})) as { available?: boolean };
+    dictationAvailable.value = response.ok && result.available === true;
+  } catch {
+    dictationAvailable.value = false;
+  }
+}
+
+function releaseMicrophone(): void {
+  const recorder = mediaRecorder;
+  if (recorder) {
+    recorder.onstop = null;
+    recorder.ondataavailable = null;
+    if (recorder.state === 'recording') recorder.stop();
+  }
+  mediaRecorder = null;
+  microphoneStream?.getTracks().forEach((track) => track.stop());
+  microphoneStream = null;
+  recordedAudioChunks = [];
+  isRecording.value = false;
+}
+
+async function toggleDictation(): Promise<void> {
+  if (isRecording.value) {
+    if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
+    return;
+  }
+
+  dictationError.value = '';
+  try {
+    microphoneStream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+    });
+    const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm']
+      .find((type) => MediaRecorder.isTypeSupported(type));
+    const recorder = new MediaRecorder(microphoneStream, mimeType ? { mimeType } : undefined);
+    mediaRecorder = recorder;
+    recordedAudioChunks = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recordedAudioChunks.push(event.data);
+    };
+    recorder.onstop = () => {
+      const audio = new Blob(recordedAudioChunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+      microphoneStream?.getTracks().forEach((track) => track.stop());
+      microphoneStream = null;
+      if (mediaRecorder === recorder) mediaRecorder = null;
+      recordedAudioChunks = [];
+      isRecording.value = false;
+      void transcribeRecording(audio);
+    };
+    recorder.start(1000);
+    isRecording.value = true;
+  } catch (error) {
+    releaseMicrophone();
+    dictationError.value = error instanceof Error ? error.message : t('components.chatPanel.microphoneAccessFailed');
+  }
+}
+
+async function transcribeRecording(audio: Blob): Promise<void> {
+  if (audio.size === 0) return;
+  isTranscribing.value = true;
+  try {
+    const response = await fetch('/api/speech/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': audio.type || 'audio/webm' },
+      body: audio,
+    });
+    const result = await response.json().catch(() => ({})) as { text?: string; error?: string };
+    if (!response.ok || typeof result.text !== 'string') {
+      throw new Error(result.error || t('components.chatPanel.transcriptionFailed'));
+    }
+    const transcript = result.text.trim();
+    if (!transcript) return;
+    const input = inputRef.value;
+    const start = input?.selectionStart ?? inputText.value.length;
+    const end = input?.selectionEnd ?? start;
+    const prefix = start > 0 && !/\s$/.test(inputText.value.slice(0, start)) ? ' ' : '';
+    const suffix = end < inputText.value.length && !/^\s/.test(inputText.value.slice(end)) ? ' ' : '';
+    const insertion = `${prefix}${transcript}${suffix}`;
+    inputText.value = inputText.value.slice(0, start) + insertion + inputText.value.slice(end);
+    await resizeInputAfterDomUpdate();
+    inputRef.value?.focus();
+    inputRef.value?.setSelectionRange(start + insertion.length, start + insertion.length);
+  } catch (error) {
+    dictationError.value = error instanceof Error ? error.message : t('components.chatPanel.transcriptionFailed');
+  } finally {
+    isTranscribing.value = false;
+  }
+}
 
 async function polishPrompt(): Promise<void> {
   if (!canPolishPrompt.value) return;
@@ -3506,13 +3627,15 @@ function handleInputKeydown(event: KeyboardEvent) {
 .attachment-remove,
 .attach-image-btn,
 .prompt-polish-btn,
+.dictation-btn,
 .switch-model-btn {
   color: var(--text-secondary);
 }
 
 .attachment-remove,
 .attach-image-btn,
-.prompt-polish-btn {
+.prompt-polish-btn,
+.dictation-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3522,9 +3645,20 @@ function handleInputKeydown(event: KeyboardEvent) {
 
 .attachment-remove:hover,
 .attach-image-btn:hover,
-.prompt-polish-btn:hover:not(:disabled) {
+.prompt-polish-btn:hover:not(:disabled),
+.dictation-btn:hover:not(:disabled) {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+.dictation-btn.recording {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+}
+
+.dictation-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .mobile-camera-btn {
@@ -3538,6 +3672,7 @@ function handleInputKeydown(event: KeyboardEvent) {
 
 .attachment-error,
 .prompt-polish-error,
+.dictation-error,
 .attachment-model-warning {
   margin: 0 0 0.5rem;
   color: var(--error);
