@@ -6,7 +6,7 @@ MODEL_PATH="${WHISPER_MODEL_PATH:-$HOME/.local/share/whisper.cpp/models/ggml-lar
 PID_FILE="$SCRIPT_DIR/whisper-server.pid"
 LOG_FILE="$SCRIPT_DIR/whisper-server.log"
 TMP_DIR="${TMPDIR:-/tmp}/pi-cloud-whisper"
-PORT="${PI_CLOUD_LOCAL_STT_PORT:-8080}"
+PORT="${PI_CLOUD_LOCAL_STT_PORT:-28080}"
 
 if [[ ! -f "$MODEL_PATH" ]]; then
   print -u2 "Model not found: $MODEL_PATH"
