@@ -187,6 +187,19 @@
         :aria-label="t('components.editorPanel.zoomIn')"
         @click="setScale(scale + SCALE_STEP)"
       ><PhPlus :size="18" /></button>
+      <label class="pdf-tone-control">
+        <span class="pdf-tone-swatch" :class="`tone-${pageTone}`" aria-hidden="true" />
+        <select
+          v-model="pageTone"
+          :disabled="loading"
+          :aria-label="t('components.editorPanel.pdfPageTone')"
+          @change="savePageTone"
+        >
+          <option v-for="option in pageToneOptions" :key="option.value" :value="option.value">
+            {{ t(option.label) }}
+          </option>
+        </select>
+      </label>
       <button
         type="button"
         :disabled="loading"
@@ -221,7 +234,7 @@
     >
       <div v-if="loading" class="pdf-message" role="status">{{ t('components.editorPanel.loadingPdf') }}</div>
       <div v-else-if="error" class="pdf-message pdf-error" role="alert">{{ error }}</div>
-      <div v-show="!loading && !error" class="pdf-pages continuous">
+      <div v-show="!loading && !error" class="pdf-pages continuous" :class="`tone-${pageTone}`">
         <div
           v-for="page in pagesToDisplay"
           :key="page"
@@ -301,12 +314,14 @@ interface TooltipState { text: string; left: number; top: number }
 interface ToolbarPosition { left: number; top: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
 type PdfFitMode = 'width' | 'height';
+type PdfPageTone = 'original' | 'warm' | 'gray' | 'dark';
 interface PdfViewState {
   scale?: number;
   page?: number;
   tool?: AnnotationTool;
   penColor?: string;
   penWidth?: number;
+  pageTone?: PdfPageTone;
   toolbarVertical?: boolean;
   toolbarPosition?: ToolbarPosition;
 }
@@ -332,6 +347,13 @@ const TOOLBAR_KEYBOARD_MOVEMENT: Record<string, ToolbarPosition> = {
 const ANNOTATION_TOOLS = new Set<AnnotationTool>([
   'pan', 'pen', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'whiteout', 'move', 'eraser',
 ]);
+const PDF_PAGE_TONES = new Set<PdfPageTone>(['original', 'warm', 'gray', 'dark']);
+const pageToneOptions: Array<{ value: PdfPageTone; label: string }> = [
+  { value: 'original', label: 'components.editorPanel.pdfPageToneOriginal' },
+  { value: 'warm', label: 'components.editorPanel.pdfPageToneWarm' },
+  { value: 'gray', label: 'components.editorPanel.pdfPageToneGray' },
+  { value: 'dark', label: 'components.editorPanel.pdfPageToneDark' },
+];
 const shapeTools: Array<{ name: DrawingTool; label: string; icon: object; shortcut: string }> = [
   { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus, shortcut: '3' },
   { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight, shortcut: '4' },
@@ -368,6 +390,7 @@ const error = ref('');
 const tool = ref<AnnotationTool>('pan');
 const penColor = ref('#ef4444');
 const penWidth = ref(1);
+const pageTone = ref<PdfPageTone>('original');
 const annotations = ref<AnnotationDocument>({ version: 1, pages: {} });
 const undoStack = ref<AnnotationDocument[]>([]);
 const redoStack = ref<AnnotationDocument[]>([]);
@@ -629,6 +652,7 @@ function currentViewState(): PdfViewState {
     tool: tool.value,
     penColor: penColor.value,
     penWidth: penWidth.value,
+    pageTone: pageTone.value,
     toolbarVertical: toolbarVertical.value,
     toolbarPosition: toolbarPosition.value ? { ...toolbarPosition.value } : undefined,
   };
@@ -644,6 +668,7 @@ function restoreViewState(view?: PdfViewState): void {
   penWidth.value = typeof view?.penWidth === 'number' && Number.isFinite(view.penWidth)
     ? Math.min(12, Math.max(1, Math.round(view.penWidth)))
     : 1;
+  pageTone.value = view?.pageTone && PDF_PAGE_TONES.has(view.pageTone) ? view.pageTone : 'original';
   toolbarVertical.value = view?.toolbarVertical === true;
   const position = view?.toolbarPosition;
   toolbarPosition.value = position && Number.isFinite(position.left) && Number.isFinite(position.top)
@@ -655,6 +680,10 @@ function scheduleViewSave(): void {
   clearTimeout(viewSaveTimer);
   if (loading.value || !annotationSidecarExists) return;
   viewSaveTimer = setTimeout(() => void saveAnnotations(), VIEW_SAVE_DELAY);
+}
+
+function savePageTone(): void {
+  void saveAnnotations();
 }
 
 function handleZoomWheel(event: WheelEvent): void {
@@ -1573,6 +1602,44 @@ onUnmounted(() => {
 
 .pdf-zoom-level { min-width: 58px !important; }
 
+.pdf-tone-control {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  border-left: 1px solid var(--border-color);
+}
+
+.pdf-tone-control select {
+  width: 78px;
+  height: 34px;
+  padding: 0 1.25rem 0 0.25rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.pdf-tone-control select:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pdf-tone-control select:disabled { cursor: default; opacity: 0.45; }
+.pdf-tone-control option { background: var(--bg-secondary); color: var(--text-primary); }
+
+.pdf-tone-swatch {
+  width: 12px;
+  height: 12px;
+  margin-left: 0.45rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background: #fff;
+}
+
+.pdf-tone-swatch.tone-warm { background: #eadfbe; }
+.pdf-tone-swatch.tone-gray { background: #a9aaad; }
+.pdf-tone-swatch.tone-dark { background: #202329; }
+
 .pdf-control-label,
 .pdf-width-control {
   display: inline-flex;
@@ -1737,7 +1804,15 @@ onUnmounted(() => {
   display: block;
   width: 100%;
   height: 100%;
+  transition: filter 120ms ease;
 }
+
+.pdf-pages.tone-warm .pdf-page canvas { filter: sepia(0.18) saturate(0.9) brightness(0.94); }
+.pdf-pages.tone-gray .pdf-page canvas { filter: grayscale(1) brightness(0.78) contrast(0.95); }
+.pdf-pages.tone-dark .pdf-page canvas { filter: invert(0.88) hue-rotate(180deg) brightness(0.82) contrast(0.92); }
+.pdf-pages.tone-warm .pdf-page { background: #eadfbe; }
+.pdf-pages.tone-gray .pdf-page { background: #a9aaad; }
+.pdf-pages.tone-dark .pdf-page { background: #202329; }
 
 .pdf-annotation-canvas {
   position: absolute;

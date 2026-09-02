@@ -23,6 +23,10 @@ Press `1` through `8` to select the tools in toolbar order, or `0` for the erase
 
 Annotations use page-relative coordinates, so they stay aligned with the page when the PDF zoom changes.
 
+## Page Color
+
+Use the page-color selector in the PDF navigation toolbar to choose **Original**, **Warm**, **Gray**, or **Dark**. The setting is saved with the PDF view state. It only changes the on-screen preview; the original PDF and exported copies keep their original colors.
+
 ## Saving and Status
 
 Annotations save automatically after drawing, erasing, undoing, redoing, or clearing a page. The fixed status indicator at the end of the annotation toolbar shows:
