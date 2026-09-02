@@ -8,10 +8,23 @@ const pdfjsMock = vi.hoisted(() => {
     getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }),
     render,
   }));
-  const document = { numPages: 2, getPage };
+  const getOutline = vi.fn<() => Promise<unknown[]>>(async () => []);
+  const getDestination = vi.fn<(id: string) => Promise<unknown[] | null>>(async () => null);
+  const getPageIndex = vi.fn<(ref: unknown) => Promise<number>>(async () => 0);
+  const document = { numPages: 2, getPage, getOutline, getDestination, getPageIndex };
   const destroy = vi.fn(async () => undefined);
   const getDocument = vi.fn(() => ({ promise: Promise.resolve(document), destroy }));
-  return { GlobalWorkerOptions: { workerSrc: '' }, getDocument, getPage, render, destroy, document };
+  return {
+    GlobalWorkerOptions: { workerSrc: '' },
+    getDocument,
+    getPage,
+    getOutline,
+    getDestination,
+    getPageIndex,
+    render,
+    destroy,
+    document,
+  };
 });
 
 const pdfLibMock = vi.hoisted(() => {
@@ -54,6 +67,7 @@ const context = {
 describe('PdfPreview', () => {
   beforeEach(() => {
     pdfjsMock.document.numPages = 2;
+    pdfjsMock.getOutline.mockResolvedValue([]);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
     vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
       left: 0, top: 0, width: 600, height: 800, right: 600, bottom: 800, x: 0, y: 0, toJSON: () => ({}),
@@ -68,6 +82,9 @@ describe('PdfPreview', () => {
     vi.unstubAllGlobals();
     pdfjsMock.getDocument.mockClear();
     pdfjsMock.getPage.mockClear();
+    pdfjsMock.getOutline.mockClear();
+    pdfjsMock.getDestination.mockClear();
+    pdfjsMock.getPageIndex.mockClear();
     pdfjsMock.render.mockClear();
     pdfjsMock.destroy.mockClear();
     pdfLibMock.load.mockClear();
@@ -100,6 +117,37 @@ describe('PdfPreview', () => {
     await wrapper.find('[aria-label="Zoom in"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('110%');
+  });
+
+  it('shows the embedded PDF outline and navigates named destinations', async () => {
+    pdfjsMock.getOutline.mockResolvedValueOnce([
+      {
+        title: 'Introduction',
+        dest: [0],
+        items: [{ title: 'Details', dest: 'details', items: [] }],
+      },
+    ]);
+    pdfjsMock.getDestination.mockResolvedValueOnce([{ num: 4, gen: 0 }]);
+    pdfjsMock.getPageIndex.mockResolvedValueOnce(1);
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    const items = wrapper.findAll('.pdf-outline-items button');
+    expect(items.map(item => item.text())).toEqual(['Introduction', 'Details']);
+    expect(items[1].attributes('style')).toContain('padding-left: 1.5rem');
+
+    await items[1].trigger('click');
+    await flushPromises();
+    expect(pdfjsMock.getDestination).toHaveBeenCalledWith('details');
+    expect(pdfjsMock.getPageIndex).toHaveBeenCalledWith({ num: 4, gen: 0 });
+    expect(wrapper.find('.pdf-page-status').text()).toBe('2/2');
+
+    await wrapper.get('[aria-label="Hide PDF outline"]').trigger('click');
+    expect(wrapper.find('.pdf-outline').exists()).toBe(false);
+    await wrapper.get('[aria-label="Show PDF outline"]').trigger('click');
+    expect(wrapper.find('.pdf-outline').exists()).toBe(true);
   });
 
   it('toggles between fitting the current page to the viewport width and height', async () => {

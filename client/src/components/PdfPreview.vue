@@ -167,6 +167,16 @@
         @click="goToPage(pageNumber + 1)"
       ><PhCaretRight :size="18" weight="bold" /></button>
       <button
+        v-if="outline.length"
+        type="button"
+        :class="{ active: showOutline }"
+        :aria-pressed="showOutline"
+        :aria-label="t(showOutline
+          ? 'components.editorPanel.hidePdfOutline'
+          : 'components.editorPanel.showPdfOutline')"
+        @click="showOutline = !showOutline"
+      ><PhList :size="18" /></button>
+      <button
         type="button"
         :disabled="loading || scale <= MIN_SCALE"
         :aria-label="t('components.editorPanel.zoomOut')"
@@ -224,7 +234,7 @@
     <div
       ref="viewportEl"
       class="pdf-viewport"
-      :class="{ pannable: tool === 'pan', panning: isPanning }"
+      :class="{ pannable: tool === 'pan', panning: isPanning, 'has-outline': showOutline && outline.length }"
       @pointerdown="startPan"
       @pointermove="continuePan"
       @pointerup="finishPan"
@@ -268,6 +278,33 @@
         </div>
       </div>
     </div>
+    <nav
+      v-if="showOutline && outline.length"
+      class="pdf-outline"
+      :aria-label="t('components.editorPanel.pdfOutline')"
+    >
+      <div class="pdf-outline-header">
+        <div class="pdf-outline-title">{{ t('components.editorPanel.outline') }}</div>
+        <button
+          type="button"
+          class="pdf-outline-close"
+          :title="t('components.editorPanel.hidePdfOutline')"
+          :aria-label="t('components.editorPanel.hidePdfOutline')"
+          @click="showOutline = false"
+        ><PhX :size="14" /></button>
+      </div>
+      <div class="pdf-outline-items">
+        <button
+          v-for="(item, index) in outline"
+          :key="`${index}-${item.title}`"
+          type="button"
+          :disabled="!item.dest"
+          :style="{ paddingLeft: `${0.75 + item.level * 0.75}rem` }"
+          :title="item.title"
+          @click="openOutlineItem(item)"
+        >{{ item.title }}</button>
+      </div>
+    </nav>
   </div>
 </template>
 
@@ -288,6 +325,7 @@ import {
   PhDownloadSimple,
   PhEraser,
   PhHighlighter,
+  PhList,
   PhMinus,
   PhPencilSimple,
   PhPlus,
@@ -295,6 +333,7 @@ import {
   PhRows,
   PhTextT,
   PhTrash,
+  PhX,
 } from '@phosphor-icons/vue';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -326,6 +365,16 @@ interface PdfViewState {
   toolbarPosition?: ToolbarPosition;
 }
 interface AnnotationDocument { version: 1; pages: Record<string, AnnotationStroke[]>; view?: PdfViewState }
+interface PdfOutlineSource {
+  title: string;
+  dest: string | unknown[] | null;
+  items: PdfOutlineSource[];
+}
+interface PdfOutlineItem {
+  title: string;
+  dest: string | unknown[] | null;
+  level: number;
+}
 
 const props = defineProps<{ src: string; filePath: string; initialScale?: number }>();
 const emit = defineEmits<{ 'scale-change': [scale: number] }>();
@@ -387,6 +436,8 @@ const scale = ref(1);
 const nextFitMode = ref<PdfFitMode>('width');
 const loading = ref(true);
 const error = ref('');
+const outline = ref<PdfOutlineItem[]>([]);
+const showOutline = ref(true);
 const tool = ref<AnnotationTool>('pan');
 const penColor = ref('#ef4444');
 const penWidth = ref(1);
@@ -628,6 +679,26 @@ function setScale(value: number): void {
   if (nextScale === scale.value) return;
   scale.value = nextScale;
   emit('scale-change', nextScale);
+}
+
+function flattenOutline(items: PdfOutlineSource[], level = 0): PdfOutlineItem[] {
+  return items.flatMap(item => [
+    { title: item.title, dest: item.dest, level },
+    ...flattenOutline(item.items || [], level + 1),
+  ]);
+}
+
+async function openOutlineItem(item: PdfOutlineItem): Promise<void> {
+  const pdf = document;
+  if (!pdf || !item.dest) return;
+  const destination = typeof item.dest === 'string'
+    ? await pdf.getDestination(item.dest)
+    : item.dest;
+  if (!destination?.length) return;
+  const pageIndex = typeof destination[0] === 'number'
+    ? destination[0]
+    : await pdf.getPageIndex(destination[0]);
+  await goToPage(pageIndex + 1);
 }
 
 function fitPdfToViewport(): void {
@@ -1023,6 +1094,7 @@ async function loadPdf(): Promise<void> {
   renderTasks.clear();
   visiblePages.clear();
   pageSizes.value = {};
+  outline.value = [];
   const previousLoadingTask = loadingTask;
   loadingTask = undefined;
   await previousLoadingTask?.destroy();
@@ -1047,8 +1119,12 @@ async function loadPdf(): Promise<void> {
 
     document = loadedDocument;
     pageCount.value = loadedDocument.numPages;
-    const firstPage = await loadedDocument.getPage(1);
+    const [firstPage, loadedOutline] = await Promise.all([
+      loadedDocument.getPage(1),
+      loadedDocument.getOutline(),
+    ]);
     if (version !== loadVersion) return;
+    outline.value = flattenOutline(loadedOutline as PdfOutlineSource[]);
     const firstPageViewport = firstPage.getViewport({ scale: 1 });
     defaultPageSize.value = { width: firstPageViewport.width, height: firstPageViewport.height };
     restoreViewState(annotations.value.view);
@@ -1573,7 +1649,8 @@ onUnmounted(() => {
 
 .pdf-toolbar button:hover:not(:disabled),
 .pdf-toolbar button.active,
-.pdf-navigation-toolbar button:hover:not(:disabled) { background: var(--bg-hover); }
+.pdf-navigation-toolbar button:hover:not(:disabled),
+.pdf-navigation-toolbar button.active { background: var(--bg-hover); }
 
 .pdf-toolbar button:has(.pdf-tool-shortcut) { position: relative; }
 
@@ -1773,6 +1850,75 @@ onUnmounted(() => {
   padding: 4rem 1rem;
   text-align: center;
 }
+
+.pdf-viewport.has-outline { right: 220px; }
+
+.pdf-outline {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 1;
+  display: flex;
+  width: 220px;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 1rem 0;
+  border-left: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.pdf-outline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.5rem 0.6rem 0.75rem;
+}
+
+.pdf-outline-title {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pdf-outline-close {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.pdf-outline-close:hover { color: var(--text-primary); background: var(--bg-hover); }
+.pdf-outline-items { overflow: auto; }
+
+.pdf-outline-items button {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding-top: 0.35rem;
+  padding-right: 0.75rem;
+  padding-bottom: 0.35rem;
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pdf-outline-items button:hover:not(:disabled),
+.pdf-outline-items button:focus-visible { color: var(--text-primary); background: var(--bg-hover); }
+.pdf-outline-items button:disabled { cursor: default; opacity: 0.6; }
 
 .pdf-viewport.pannable {
   cursor: grab;
