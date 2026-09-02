@@ -1003,7 +1003,11 @@ async function loadPdf(): Promise<void> {
     const annotationPromise = loadAnnotations(version);
     const pdfjs = await import('pdfjs-dist');
     pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-    const task = pdfjs.getDocument({ url: props.src });
+    const task = pdfjs.getDocument({
+      url: props.src,
+      cMapUrl: '/pdfjs/cmaps/',
+      cMapPacked: true,
+    });
     loadingTask = task;
     const loadedDocument = await task.promise;
     await annotationPromise;

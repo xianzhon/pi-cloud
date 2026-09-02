@@ -83,7 +83,11 @@ describe('PdfPreview', () => {
     await flushPromises();
 
     expect(pdfjsMock.GlobalWorkerOptions.workerSrc).toBe('/pdf.worker.mjs');
-    expect(pdfjsMock.getDocument).toHaveBeenCalledWith({ url: '/api/files/raw?path=document.pdf' });
+    expect(pdfjsMock.getDocument).toHaveBeenCalledWith({
+      url: '/api/files/raw?path=document.pdf',
+      cMapUrl: '/pdfjs/cmaps/',
+      cMapPacked: true,
+    });
     expect(fetch).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.document.pdf.annotations.json');
     expect(pdfjsMock.getPage).toHaveBeenCalledWith(1);
     expect(wrapper.find('.pdf-page-status').text()).toBe('1/2');
