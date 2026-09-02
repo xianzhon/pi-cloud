@@ -681,8 +681,8 @@ function setScale(value: number): void {
   emit('scale-change', nextScale);
 }
 
-function flattenOutline(items: PdfOutlineSource[], level = 0): PdfOutlineItem[] {
-  return items.flatMap(item => [
+function flattenOutline(items: PdfOutlineSource[] | null, level = 0): PdfOutlineItem[] {
+  return (items || []).flatMap(item => [
     { title: item.title, dest: item.dest, level },
     ...flattenOutline(item.items || [], level + 1),
   ]);
@@ -1124,7 +1124,7 @@ async function loadPdf(): Promise<void> {
       loadedDocument.getOutline(),
     ]);
     if (version !== loadVersion) return;
-    outline.value = flattenOutline(loadedOutline as PdfOutlineSource[]);
+    outline.value = flattenOutline(loadedOutline as PdfOutlineSource[] | null);
     const firstPageViewport = firstPage.getViewport({ scale: 1 });
     defaultPageSize.value = { width: firstPageViewport.width, height: firstPageViewport.height };
     restoreViewState(annotations.value.view);

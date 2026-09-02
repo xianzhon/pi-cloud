@@ -8,7 +8,7 @@ const pdfjsMock = vi.hoisted(() => {
     getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }),
     render,
   }));
-  const getOutline = vi.fn<() => Promise<unknown[]>>(async () => []);
+  const getOutline = vi.fn<() => Promise<unknown[] | null>>(async () => []);
   const getDestination = vi.fn<(id: string) => Promise<unknown[] | null>>(async () => null);
   const getPageIndex = vi.fn<(ref: unknown) => Promise<number>>(async () => 0);
   const document = { numPages: 2, getPage, getOutline, getDestination, getPageIndex };
@@ -117,6 +117,18 @@ describe('PdfPreview', () => {
     await wrapper.find('[aria-label="Zoom in"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('110%');
+  });
+
+  it('loads a PDF without an outline', async () => {
+    pdfjsMock.getOutline.mockResolvedValueOnce(null);
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    expect(wrapper.find('.pdf-error').exists()).toBe(false);
+    expect(wrapper.find('.pdf-page-status').text()).toBe('1/2');
+    expect(pdfjsMock.getPage).toHaveBeenCalledWith(1);
   });
 
   it('shows the embedded PDF outline and navigates named destinations', async () => {
