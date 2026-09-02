@@ -966,6 +966,13 @@ const ttsMessageId = ref<string | null>(null);
 const ttsErrorMessageId = ref<string | null>(null);
 const ttsError = ref('');
 const ttsIsPlaying = ref(false);
+const MAX_TTS_CACHE_ENTRIES = 8;
+interface CachedTtsAudio {
+  audio: HTMLAudioElement;
+  url: string;
+}
+
+const ttsAudioCache = new Map<string, CachedTtsAudio>();
 let ttsAudio: HTMLAudioElement | null = null;
 let ttsAudioUrl: string | null = null;
 let ttsAbortController: AbortController | null = null;
@@ -1703,12 +1710,18 @@ function ttsPlayLabel(messageId: string): string {
     : t('components.chatPanel.playSpeech');
 }
 
-function clearSpeechAudio(): void {
+function clearSpeechAudio(clearCache = true): void {
   ttsAbortController?.abort();
   ttsAbortController = null;
   ttsAudio?.pause();
+  if (clearCache) {
+    for (const cached of ttsAudioCache.values()) {
+      cached.audio.pause();
+      URL.revokeObjectURL(cached.url);
+    }
+    ttsAudioCache.clear();
+  }
   ttsAudio = null;
-  if (ttsAudioUrl) URL.revokeObjectURL(ttsAudioUrl);
   ttsAudioUrl = null;
   ttsLoadingMessageId.value = null;
   ttsMessageId.value = null;
@@ -1750,11 +1763,20 @@ async function speakMessage(message: SpeakableMessage): Promise<void> {
     return;
   }
 
-  clearSpeechAudio();
+  clearSpeechAudio(false);
   ttsMessageId.value = message.id;
-  ttsLoadingMessageId.value = message.id;
   ttsError.value = '';
   ttsErrorMessageId.value = null;
+
+  const cached = ttsAudioCache.get(message.id);
+  if (cached) {
+    ttsAudio = cached.audio;
+    ttsAudioUrl = cached.url;
+    await playSpeechAudio();
+    return;
+  }
+
+  ttsLoadingMessageId.value = message.id;
   const controller = new AbortController();
   ttsAbortController = controller;
 
@@ -1772,8 +1794,21 @@ async function speakMessage(message: SpeakableMessage): Promise<void> {
 
     const blob = await response.blob();
     if (controller.signal.aborted) return;
-    ttsAudioUrl = URL.createObjectURL(blob);
-    ttsAudio = new Audio(ttsAudioUrl);
+    const audioUrl = URL.createObjectURL(blob);
+    const audio = new Audio(audioUrl);
+    ttsAudioCache.set(message.id, { audio, url: audioUrl });
+    while (ttsAudioCache.size > MAX_TTS_CACHE_ENTRIES) {
+      const oldestMessageId = ttsAudioCache.keys().next().value;
+      if (typeof oldestMessageId !== 'string') break;
+      const oldest = ttsAudioCache.get(oldestMessageId);
+      if (oldest) {
+        oldest.audio.pause();
+        URL.revokeObjectURL(oldest.url);
+      }
+      ttsAudioCache.delete(oldestMessageId);
+    }
+    ttsAudioUrl = audioUrl;
+    ttsAudio = audio;
     await playSpeechAudio();
   } catch (error) {
     if (controller.signal.aborted) return;
