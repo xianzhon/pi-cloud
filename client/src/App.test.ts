@@ -707,6 +707,34 @@ describe('App routing', () => {
     expect(wrapper.find('.new-session-dialog-stub').exists()).toBe(true);
   });
 
+  it('does not handle plain chat focus shortcuts typed inside the Monaco editor', async () => {
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    const monacoEditor = document.createElement('div');
+    monacoEditor.className = 'monaco-editor';
+    const editorInput = document.createElement('div');
+    monacoEditor.appendChild(editorInput);
+    document.body.appendChild(monacoEditor);
+
+    const event = new KeyboardEvent('keydown', { key: 'i', bubbles: true, cancelable: true });
+    editorInput.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+
+    monacoEditor.remove();
+    wrapper.unmount();
+  });
+
   it('keeps the active session route when the sidebar loads the initial project path', async () => {
     mount(App, {
       global: {

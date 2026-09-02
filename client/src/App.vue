@@ -1836,7 +1836,7 @@ async function handleSearchSelect(sessionId: string) {
 
 function isEditableKeyboardTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .xterm'));
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .monaco-editor, .xterm'));
 }
 
 function isTerminalKeyboardTarget(target: EventTarget | null): boolean {
