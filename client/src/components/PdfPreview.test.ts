@@ -497,6 +497,7 @@ describe('PdfPreview', () => {
       tool: 'eraser',
       penColor: '#123456',
       penWidth: 7,
+      pageTone: 'original',
       toolbarVertical: true,
       toolbarPosition: { left: 0, top: 0 },
     });
