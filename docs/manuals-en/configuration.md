@@ -89,6 +89,24 @@ PI_CLOUD_STT_LANGUAGE=zh
 
 `PI_CLOUD_STT_API_KEY` falls back to `OPENAI_API_KEY`. The base URL and model default to the values above. `PI_CLOUD_STT_LANGUAGE` is optional; omit it to let the provider detect the language. Once configured, the microphone button records in the browser, sends the completed audio to the server for transcription, and inserts the returned text into the message input without sending it automatically. The same service transcribes inbound WeCom voice messages. The STT provider must accept AMR audio for WeCom support. Browser microphone access requires HTTPS or localhost.
 
+## Text-to-Speech
+
+Pi Cloud can generate audio through an OpenAI-compatible `/audio/speech` service. For a local MLX Audio server, configure:
+
+```env
+PI_CLOUD_TTS_BASE_URL=http://127.0.0.1:28081/v1
+PI_CLOUD_TTS_MODEL=mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit
+PI_CLOUD_TTS_VOICE=Vivian
+PI_CLOUD_TTS_LANGUAGE=Chinese
+PI_CLOUD_TTS_FORMAT=wav
+```
+
+Only `PI_CLOUD_TTS_BASE_URL` is required to enable the controls. Local endpoints do not require a key; set `PI_CLOUD_TTS_API_KEY` when the provider requires bearer authentication. For mixed Chinese/English replies, Qwen3-TTS 0.6B CustomVoice with `Vivian` is recommended. The format defaults to WAV. `PI_CLOUD_TTS_LANGUAGE` is optional. Restart Pi Cloud after changing these variables.
+
+Completed assistant text replies provide play, stop, and replay controls. **Settings → Chat → Read assistant replies aloud** can automatically synthesize a reply after its `agent_end` completion event; this preference is disabled by default so long coding responses are not spoken unexpectedly. Pi Cloud sends the completed text only once, never individual streaming deltas.
+
+A local MLX Audio service can be installed with Python 3.12 and `uv pip install "mlx-audio[tts,server]" "misaki[zh]"`, then started with `make -C local-tts start` on port `28081`. WAV avoids MLX Audio's `ffmpeg` requirement for compressed output formats.
+
 ## Provider and Gateway Variables
 
 Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are optional because the server uses the Pi agent's own authentication by default.

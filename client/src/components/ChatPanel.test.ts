@@ -150,7 +150,47 @@ describe('ChatPanel', () => {
     wrapper.unmount();
     idleCallback?.({ didTimeout: false, timeRemaining: () => 50 });
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/speech/status');
+  });
+
+  it('reuses generated speech when replaying a previously synthesized message', async () => {
+    class MockAudio {
+      currentTime = 0;
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      play = vi.fn(async () => undefined);
+      pause = vi.fn();
+    }
+    vi.stubGlobal('Audio', MockAudio);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === '/api/speech/status') {
+        return new Response(JSON.stringify({ ttsAvailable: true }), { status: 200 });
+      }
+      return new Response(new Uint8Array([82, 73, 70, 70]), {
+        status: 200,
+        headers: { 'content-type': 'audio/wav' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    chatMessages.value = [
+      { id: 'assistant-1', role: 'assistant', content: 'First reply', kind: 'text' },
+    ];
+    const wrapper = mount(ChatPanel, { props: { sessionId: 'session-1' } });
+    await flushPromises();
+
+    await wrapper.find('.tts-control-btn').trigger('click');
+    await flushPromises();
+    chatMessages.value.push({ id: 'assistant-2', role: 'assistant', content: 'Second reply', kind: 'text' });
+    await nextTick();
+    await wrapper.findAll('.message-block')[1].find('.tts-control-btn').trigger('click');
+    await flushPromises();
+    await wrapper.findAll('.message-block')[0].find('.tts-control-btn').trigger('click');
+    await flushPromises();
+
+    expect(fetchMock.mock.calls.filter(([input]) => String(input) === '/api/speech/synthesize')).toHaveLength(2);
   });
 
   it('opens new-session configuration from draft model and skill controls', async () => {

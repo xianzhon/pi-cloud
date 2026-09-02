@@ -23,6 +23,7 @@ describe('usePreferences', () => {
     expect(preferences.theme.value).toBe('system');
     expect(preferences.language.value).toBe('en');
     expect(preferences.soundNotification.value).toBe('beep');
+    expect(preferences.autoSpeakAssistant.value).toBe(false);
   });
 
   it('initializes display preferences from localStorage cache', () => {
@@ -38,6 +39,7 @@ describe('usePreferences', () => {
     localStorage.setItem('pi-cloud.theme', 'light');
     localStorage.setItem('pi-cloud.language', 'zh-CN');
     localStorage.setItem('pi-cloud.soundNotification', 'chime');
+    localStorage.setItem('pi-cloud.autoSpeakAssistant', 'true');
 
     const preferences = usePreferences();
 
@@ -53,12 +55,13 @@ describe('usePreferences', () => {
     expect(preferences.theme.value).toBe('light');
     expect(preferences.language.value).toBe('zh-CN');
     expect(preferences.soundNotification.value).toBe('chime');
+    expect(preferences.autoSpeakAssistant.value).toBe(true);
   });
 
   it('loads backend preferences and refreshes the local cache', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
-      json: async () => ({ showHintInfo: false, showCodeBlockLanguageHeaders: false, streamingMessageBehavior: 'followUp', editorAutoRefresh: false, confirmSessionDelete: false, newSessionShortcut: 'disabled', fullscreenShortcut: 'ctrlShiftF', showGoToTopButton: false, showChatViewOptionsButton: false, theme: 'dark', language: 'zh-CN', soundNotification: 'ding' }),
+      json: async () => ({ showHintInfo: false, showCodeBlockLanguageHeaders: false, streamingMessageBehavior: 'followUp', editorAutoRefresh: false, confirmSessionDelete: false, newSessionShortcut: 'disabled', fullscreenShortcut: 'ctrlShiftF', showGoToTopButton: false, showChatViewOptionsButton: false, theme: 'dark', language: 'zh-CN', soundNotification: 'ding', autoSpeakAssistant: true }),
     })));
     const preferences = usePreferences();
 
@@ -76,6 +79,7 @@ describe('usePreferences', () => {
     expect(preferences.theme.value).toBe('dark');
     expect(preferences.language.value).toBe('zh-CN');
     expect(preferences.soundNotification.value).toBe('ding');
+    expect(preferences.autoSpeakAssistant.value).toBe(true);
     expect(localStorage.getItem('pi-cloud.showHintInfo')).toBe('false');
     expect(localStorage.getItem('pi-cloud.showCodeBlockLanguageHeaders')).toBe('false');
     expect(localStorage.getItem('pi-cloud.streamingMessageBehavior')).toBe('followUp');
@@ -88,6 +92,7 @@ describe('usePreferences', () => {
     expect(localStorage.getItem('pi-cloud.theme')).toBe('dark');
     expect(localStorage.getItem('pi-cloud.language')).toBe('zh-CN');
     expect(localStorage.getItem('pi-cloud.soundNotification')).toBe('ding');
+    expect(localStorage.getItem('pi-cloud.autoSpeakAssistant')).toBe('true');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences');
   });
 
@@ -292,6 +297,24 @@ describe('usePreferences', () => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ language: 'zh-CN' }),
+    });
+  });
+
+  it('saves automatic speech preference to cache immediately and persists to backend', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ autoSpeakAssistant: true }),
+    })));
+    const preferences = usePreferences();
+
+    await preferences.setAutoSpeakAssistant(true);
+
+    expect(preferences.autoSpeakAssistant.value).toBe(true);
+    expect(localStorage.getItem('pi-cloud.autoSpeakAssistant')).toBe('true');
+    expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoSpeakAssistant: true }),
     });
   });
 

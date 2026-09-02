@@ -142,7 +142,9 @@ describe('useChat', () => {
     const { chat } = mountChat();
     chat.sessionId.value = 'session-1';
     const summaryHandler = vi.fn();
+    const speechHandler = vi.fn();
     window.addEventListener('summary-generated', summaryHandler);
+    window.addEventListener('assistant-response-completed', speechHandler);
 
     chat.sendMessage('summarize the session', 'session-1', {
       displayText: '/summary',
@@ -170,13 +172,19 @@ describe('useChat', () => {
         assistantMessageEvent: { type: 'text_delta', delta: 'Session summary' },
       },
     });
+    expect(speechHandler).not.toHaveBeenCalled();
     handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_end' } });
 
     expect(summaryHandler).toHaveBeenCalledWith(expect.objectContaining({
       type: 'summary-generated',
       detail: { sessionId: 'session-1', content: 'Session summary' },
     }));
+    expect(speechHandler).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'assistant-response-completed',
+      detail: { sessionId: 'session-1', messageId: 'assistant-1', content: 'Session summary' },
+    }));
     window.removeEventListener('summary-generated', summaryHandler);
+    window.removeEventListener('assistant-response-completed', speechHandler);
   });
 
   it('sends steering messages while the agent is streaming by default', () => {

@@ -33,6 +33,7 @@ type PreferencePatchBody = {
   theme?: unknown;
   language?: unknown;
   soundNotification?: unknown;
+  autoSpeakAssistant?: unknown;
   gitCloneParentPath?: unknown;
 };
 
@@ -105,6 +106,7 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
       theme: getTheme(),
       language: getLanguage(),
       soundNotification: getSoundNotification(),
+      autoSpeakAssistant: getPreferenceValue('ui.autoSpeakAssistant') === 'true',
     };
   }
 
@@ -235,9 +237,10 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     const hasTheme = hasPreference(body, 'theme');
     const hasLanguage = hasPreference(body, 'language');
     const hasSoundNotification = hasPreference(body, 'soundNotification');
+    const hasAutoSpeakAssistant = hasPreference(body, 'autoSpeakAssistant');
     const hasGitCloneParentPath = hasPreference(body, 'gitCloneParentPath');
 
-    if (!hasShowHintInfo && !hasShowCodeBlockLanguageHeaders && !hasStreamingMessageBehavior && !hasEditorAutoRefresh && !hasConfirmSessionDelete && !hasNewSessionShortcut && !hasFullscreenShortcut && !hasShowGoToTopButton && !hasShowChatViewOptionsButton && !hasAutoExtractMemory && !hasTheme && !hasLanguage && !hasSoundNotification && !hasGitCloneParentPath) {
+    if (!hasShowHintInfo && !hasShowCodeBlockLanguageHeaders && !hasStreamingMessageBehavior && !hasEditorAutoRefresh && !hasConfirmSessionDelete && !hasNewSessionShortcut && !hasFullscreenShortcut && !hasShowGoToTopButton && !hasShowChatViewOptionsButton && !hasAutoExtractMemory && !hasTheme && !hasLanguage && !hasSoundNotification && !hasAutoSpeakAssistant && !hasGitCloneParentPath) {
       return reply.status(400).send({ error: 'At least one preference must be provided' });
     }
     if (hasShowHintInfo && typeof body.showHintInfo !== 'boolean') {
@@ -279,6 +282,9 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     if (hasSoundNotification && body.soundNotification !== 'off' && body.soundNotification !== 'beep' && body.soundNotification !== 'chime' && body.soundNotification !== 'ding') {
       return reply.status(400).send({ error: 'soundNotification must be off, beep, chime, or ding' });
     }
+    if (hasAutoSpeakAssistant && typeof body.autoSpeakAssistant !== 'boolean') {
+      return reply.status(400).send({ error: 'autoSpeakAssistant must be a boolean' });
+    }
     if (hasGitCloneParentPath && (typeof body.gitCloneParentPath !== 'string' || !body.gitCloneParentPath.trim())) {
       return reply.status(400).send({ error: 'gitCloneParentPath must be a non-empty string' });
     }
@@ -296,6 +302,7 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     if (hasTheme) setPreferenceValue('ui.theme', String(body.theme));
     if (hasLanguage) setPreferenceValue('ui.language', String(body.language));
     if (hasSoundNotification) setPreferenceValue('ui.soundNotification', String(body.soundNotification));
+    if (hasAutoSpeakAssistant) setPreferenceValue('ui.autoSpeakAssistant', String(body.autoSpeakAssistant));
     if (hasGitCloneParentPath) setPreferenceValue('ui.gitCloneParentPath', String(body.gitCloneParentPath).trim());
     return getPreferences();
   });

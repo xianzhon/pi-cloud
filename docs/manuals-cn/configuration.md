@@ -89,6 +89,24 @@ PI_CLOUD_STT_LANGUAGE=zh
 
 未设置 `PI_CLOUD_STT_API_KEY` 时会使用 `OPENAI_API_KEY`。服务地址和模型默认使用上面的值。`PI_CLOUD_STT_LANGUAGE` 可选；不设置时由 STT 服务自动检测语言。配置后，输入框中的麦克风按钮会在浏览器中录音，将完整音频发送到服务器转写，并把结果插入输入框，不会自动发送。同一个服务也会转写企业微信收到的语音消息；要支持企业微信，STT 提供商必须能够接收 AMR 音频。浏览器只允许通过 HTTPS 或 localhost 访问麦克风。
 
+## 文本转语音
+
+Pi Cloud 可以通过兼容 OpenAI `/audio/speech` 的服务生成音频。使用本地 MLX Audio 服务时可配置：
+
+```env
+PI_CLOUD_TTS_BASE_URL=http://127.0.0.1:28081/v1
+PI_CLOUD_TTS_MODEL=mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit
+PI_CLOUD_TTS_VOICE=Vivian
+PI_CLOUD_TTS_LANGUAGE=Chinese
+PI_CLOUD_TTS_FORMAT=wav
+```
+
+只需设置 `PI_CLOUD_TTS_BASE_URL` 即可启用控件。本地服务不需要 API 密钥；如果提供商要求 Bearer 认证，可设置 `PI_CLOUD_TTS_API_KEY`。对于中英文混合回复，推荐使用 Qwen3-TTS 0.6B CustomVoice 和 `Vivian` 声音。格式默认使用 WAV。`PI_CLOUD_TTS_LANGUAGE` 可选。修改这些变量后需重启 Pi Cloud。
+
+已完成的助手文本回复会显示播放、停止和重播控件。可在**设置 → 聊天 → 朗读助手回复**中开启自动朗读；Pi Cloud 只会在收到 `agent_end` 完成事件后合成语音，不会对每个流式文本增量调用服务。该偏好默认关闭，避免较长的编程回复意外自动播放。
+
+可使用 Python 3.12 和 `uv pip install "mlx-audio[tts,server]" "misaki[zh]"` 安装本地 MLX Audio 服务，然后通过 `make -C local-tts start` 在 `28081` 端口启动。使用 WAV 可避免 MLX Audio 的压缩输出格式依赖 `ffmpeg`。
+
 ## 提供商和网关变量
 
 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等提供商 API 密钥是可选的，因为服务器默认使用 Pi 智能体自身的身份验证。
