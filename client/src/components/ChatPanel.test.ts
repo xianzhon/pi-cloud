@@ -831,8 +831,9 @@ describe('ChatPanel', () => {
         const stagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -1 +1 @@\n-old\n+staged change';
         const unstagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -2,3 +2,2 @@\n  indented first line\n-old\n-older\n+all changes';
         const binaryDiff = 'diff --git a/image.png b/image.png\nBinary files a/image.png and b/image.png differ';
+        const untrackedDiff = 'diff --git a/unstaged.ts b/unstaged.ts\nnew file mode 100644\n--- /dev/null\n+++ b/unstaged.ts\n@@ -0,0 +1 @@\n+new file';
         return new Response(JSON.stringify({
-          diff: url.includes('scope=staged') ? stagedDiff : `${unstagedDiff}\n\n${stagedDiff}\n\n${binaryDiff}`,
+          diff: url.includes('scope=staged') ? stagedDiff : `${unstagedDiff}\n\n${stagedDiff}\n\n${binaryDiff}\n\n${untrackedDiff}`,
         }), { status: 200 });
       }
       if (url.includes('/api/git/commit-message')) {
@@ -851,13 +852,15 @@ describe('ChatPanel', () => {
     expect(checkbox?.checked).toBe(false);
     expect(document.querySelector('.commit-diff-toggle')).toBeNull();
     expect(document.querySelector('.commit-diff-panel')).not.toBeNull();
-    expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=all');
+    expect(fetchMock).toHaveBeenCalledWith('/api/git/diff?cwd=%2Frepo&scope=all&includeUntracked=true');
     expect(document.querySelector('.commit-file-list')).toBeNull();
-    expect(document.querySelector('.commit-diff-summary')?.textContent).toBe('2 files changed, 2 insertions(+), 3 deletions(-)');
+    expect(document.querySelector('.commit-diff-summary')?.textContent).toBe('3 files changed, 3 insertions(+), 3 deletions(-)');
     expect(document.querySelector('.commit-file-stats')?.textContent).toContain('+2');
     expect(document.querySelector('.commit-file-stats')?.textContent).toContain('-3');
-    expect(document.querySelectorAll('.commit-diff-file')).toHaveLength(2);
+    expect(document.querySelectorAll('.commit-diff-file')).toHaveLength(3);
     expect(document.querySelector('.commit-diff-file h4')?.textContent).toContain('staged.ts');
+    expect(document.querySelector('.commit-diff-panel')?.textContent).toContain('unstaged.ts');
+    expect(document.querySelector('.commit-diff-panel')?.textContent).toContain('+new file');
     expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+all changes');
     expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+staged change');
     const indentedLine = Array.from(document.querySelectorAll('.commit-diff-line'))
@@ -878,11 +881,11 @@ describe('ChatPanel', () => {
     expect(collapseAll?.textContent?.trim()).toBe('Collapse all');
     collapseAll?.click();
     await nextTick();
-    expect(document.querySelectorAll('.commit-diff-file h4 button[aria-expanded="false"]')).toHaveLength(2);
+    expect(document.querySelectorAll('.commit-diff-file h4 button[aria-expanded="false"]')).toHaveLength(3);
     expect(collapseAll?.textContent?.trim()).toBe('Expand all');
     collapseAll?.click();
     await nextTick();
-    expect(document.querySelectorAll('.commit-diff-file h4 button[aria-expanded="true"]')).toHaveLength(2);
+    expect(document.querySelectorAll('.commit-diff-file h4 button[aria-expanded="true"]')).toHaveLength(3);
 
     const unifiedButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.commit-diff-view-toggle button'))
       .find((button) => button.textContent?.trim() === 'Unified');

@@ -26,7 +26,7 @@ export function createGitOperations() {
     getHistory(options: { cwd: string; page: number }) {
       return requestJson(`/api/git/history?${queryString(options)}`);
     },
-    getDiff(options: { cwd: string; commit?: string; scope?: string; path?: string }) {
+    getDiff(options: { cwd: string; commit?: string; scope?: string; path?: string; includeUntracked?: boolean }) {
       return requestJson(`/api/git/diff?${queryString(options)}`);
     },
     getStatus(options: { cwd: string; message?: string; stagedOnly?: boolean }) {

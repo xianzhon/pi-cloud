@@ -214,6 +214,27 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('includes untracked files in git diff output when requested', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'untracked.txt'), 'new content\n');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/git/diff?cwd=${encodeURIComponent(cwd)}&includeUntracked=true`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().diff).toContain('diff --git a/untracked.txt b/untracked.txt');
+      expect(response.json().diff).toContain('+new content');
+      expect(response.json().stat).toContain('untracked.txt');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('returns the change introduced by a specific abbreviated commit ID', async () => {
     const cwd = await createRepo();
     const app = await buildApp();

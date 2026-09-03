@@ -2953,7 +2953,11 @@ async function loadCommitDiff() {
   collapsedCommitDiffFiles.value = new Set();
   try {
     const scope = preview.mode === 'commit' && commitStagedOnly.value ? 'staged' : 'all';
-    const data = await gitOperations.getDiff({ cwd: preview.cwd, scope });
+    const data = await gitOperations.getDiff({
+      cwd: preview.cwd,
+      scope,
+      includeUntracked: scope === 'all',
+    });
     if (requestId !== commitDiffRequestId) return;
     if (data.oversized) {
       commitDiffError.value = String(data.message || t('components.gitHistory.diffFailed'));

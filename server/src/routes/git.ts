@@ -50,6 +50,18 @@ async function runGit(cwd: string, args: string[], maxBuffer = MAX_SLASH_COMMAND
   }
 }
 
+async function runGitNoIndex(cwd: string, args: string[], maxBuffer: number) {
+  try {
+    const { stdout } = await execFileAsync('git', ['diff', '--no-index', ...args], { cwd, maxBuffer });
+    return stdout;
+  } catch (error) {
+    if (isMaxBufferError(error)) throw new OversizedGitOutputError();
+    const result = error as { code?: number | string; stdout?: string };
+    if (result.code === 1) return result.stdout || '';
+    throw error;
+  }
+}
+
 async function isGitRepository(cwd: string) {
   try {
     return (await runGit(cwd, ['rev-parse', '--is-inside-work-tree'])).trim() === 'true';
@@ -171,6 +183,23 @@ function joinGitOutput(...parts: string[]) {
     .map((part) => part.replace(/^(?:\r?\n)+|(?:\r?\n)+$/g, ''))
     .filter((part) => part.trim())
     .join('\n\n');
+}
+
+async function appendUntrackedDiff(cwd: string, diff: string, args: string[], path: string | undefined, maxBytes: number) {
+  const pathArgs = path ? ['--', path] : [];
+  const untracked = await runGit(cwd, ['ls-files', '--others', '--exclude-standard', '-z', ...pathArgs]);
+  const files = untracked.split('\0').filter(Boolean);
+  let output = diff;
+
+  for (const file of files) {
+    const separatorBytes = output.trim() ? 2 : 0;
+    const remainingBytes = maxBytes - Buffer.byteLength(output) - separatorBytes;
+    if (remainingBytes <= 0) throw new OversizedGitOutputError();
+    const fileDiff = await runGitNoIndex(cwd, [...args, '--', '/dev/null', file], remainingBytes);
+    output = joinGitOutput(output, fileDiff);
+  }
+
+  return output;
 }
 
 async function getCombinedDiff(cwd: string, args: string[], maxBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES) {
@@ -752,7 +781,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
   });
 
   app.get('/diff', async (req, reply) => {
-    const { cwd, scope: rawScope, commit: rawCommit, path } = req.query as { cwd?: string; scope?: string; commit?: string; path?: string };
+    const { cwd, scope: rawScope, commit: rawCommit, path, includeUntracked } = req.query as { cwd?: string; scope?: string; commit?: string; path?: string; includeUntracked?: string };
     const resolvedCwd = await resolveGitCwd(cwd);
 
     try {
@@ -770,9 +799,15 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
 
       const scope = parseDiffScope(rawScope);
       const pathArgs = path ? ['--', path] : [];
-      const diff = await getDiff(resolvedCwd, pathArgs, scope);
+      let diff = await getDiff(resolvedCwd, pathArgs, scope);
+      if (includeUntracked === 'true' && scope !== 'staged') {
+        diff = await appendUntrackedDiff(resolvedCwd, diff, [], path, MAX_SLASH_COMMAND_OUTPUT_BYTES);
+      }
       const remainingBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES - Buffer.byteLength(diff);
-      const stat = remainingBytes > 0 ? await getDiff(resolvedCwd, ['--stat', ...pathArgs], scope, remainingBytes) : '';
+      let stat = remainingBytes > 0 ? await getDiff(resolvedCwd, ['--stat', ...pathArgs], scope, remainingBytes) : '';
+      if (includeUntracked === 'true' && scope !== 'staged' && remainingBytes > 0) {
+        stat = await appendUntrackedDiff(resolvedCwd, stat, ['--stat'], path, remainingBytes);
+      }
       return { cwd: resolvedCwd, scope, path, stat, diff };
     } catch (error) {
       if (error instanceof OversizedGitOutputError) {
