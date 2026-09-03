@@ -7,7 +7,10 @@ import vue from '@vitejs/plugin-vue';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
-const pdfJsCMapDirectory = path.resolve(__dirname, 'node_modules/pdfjs-dist/cmaps');
+const pdfJsCMapDirectory = path.resolve(
+  __dirname,
+  'node_modules/pdfjs-dist/cmaps',
+);
 const pdfJsCMapUrlPrefix = '/pdfjs/cmaps/';
 
 function pdfJsCMaps(): Plugin {
@@ -18,7 +21,9 @@ function pdfJsCMaps(): Plugin {
         const requestPath = request.url?.split('?')[0];
         if (!requestPath?.startsWith(pdfJsCMapUrlPrefix)) return next();
 
-        const fileName = decodeURIComponent(requestPath.slice(pdfJsCMapUrlPrefix.length));
+        const fileName = decodeURIComponent(
+          requestPath.slice(pdfJsCMapUrlPrefix.length),
+        );
         if (!fileName || path.basename(fileName) !== fileName) return next();
 
         fs.readFile(path.join(pdfJsCMapDirectory, fileName), (error, data) => {
