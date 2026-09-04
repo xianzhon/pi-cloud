@@ -2,6 +2,28 @@
 
 All notable changes to Pi Cloud are documented here.
 
+## [2.0.1] - 2026-09-04
+
+### Added
+
+- Added a WeCom self-built application gateway with guided or environment-managed setup, member allowlists, callback verification, and support for text, image, voice, and slash-command messages.
+- Added browser voice dictation through OpenAI-compatible speech-to-text services, with optional language hints and transcription support for WeCom voice messages.
+- Added manual and automatic text-to-speech playback for completed assistant replies, including cached replay and local MLX Audio setup.
+- Added PDF outline navigation and persistent Original, Warm, Gray, and Dark page-color preview modes.
+
+### Changed
+
+- Git change previews now include untracked files when showing all changes.
+- File browsing, search, and preview operations now use bounded traversal, result, time, and text-size limits; stream image and PDF assets; and report truncated trees.
+- Source start and stop scripts now verify process ownership before signaling processes, and Linux services limit restart bursts.
+
+### Fixed
+
+- Fixed Markdown-to-PDF exports with local, stalled, unsupported, or oversized images and documents that exceed browser canvas limits.
+- Fixed PDF rendering for documents that require character maps or do not provide an outline.
+- Prevented application shortcuts from firing while editing in Monaco.
+- Prevented viewport overscroll on mobile devices.
+
 ## [2.0.0] - 2026-08-30
 
 ### Added
