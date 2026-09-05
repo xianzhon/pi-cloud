@@ -16,16 +16,21 @@
     />
 
     <nav class="app-utility-rail" :aria-label="t('app.toggleSidebar')">
-      <span
-        class="sidebar-logo"
+      <button
+        class="sidebar-logo tooltip"
         :class="{ connected: isConnected }"
-        :title="isConnected ? t('app.connected') : t('app.disconnected')"
-        :aria-label="isConnected ? t('app.connected') : t('app.disconnected')"
-        role="status"
+        type="button"
+        :data-tooltip="t('app.openCurrentWorkspaceInNewTab')"
+        :aria-label="t('app.openCurrentWorkspaceInNewTab')"
+        @click="openCurrentWorkspaceInNewTab"
       >
         <img src="/icon.svg" alt="" />
-        <span class="connection-badge" aria-hidden="true"></span>
-      </span>
+        <span
+          class="connection-badge"
+          :aria-label="isConnected ? t('app.connected') : t('app.disconnected')"
+          role="status"
+        ></span>
+      </button>
 
       <div class="utility-rail-group utility-rail-primary">
         <button v-if="!isReviewMode" class="utility-rail-btn tooltip" type="button" data-rail-action="new-session" :data-tooltip="newSessionTooltip" :aria-label="t('app.newSession')" @click="openTitleBarNew">
@@ -810,6 +815,17 @@ let gitStatusRequestId = 0;
 const selectedAgentProfileLabel = ref('default (~/.pi/agent)');
 const selectedAgentProfileId = ref('default');
 const selectedReviewSourceLabel = ref('');
+function openCurrentWorkspaceInNewTab(): void {
+  const url = new URL('/', window.location.origin);
+  if (selectedAgentProfileId.value && selectedAgentProfileId.value !== 'default') {
+    url.searchParams.set('profile', selectedAgentProfileId.value);
+  }
+  if (selectedProjectPath.value && selectedProjectPath.value !== '~') {
+    url.searchParams.set('project', selectedProjectPath.value);
+  }
+  window.open(url.toString(), '_blank', 'noopener');
+}
+
 function sessionRouteLocation(sessionId: string, cwd?: string) {
   const query: Record<string, string> = {};
   if (selectedAgentProfileId.value && selectedAgentProfileId.value !== 'default') {
@@ -2259,6 +2275,7 @@ onUnmounted(() => {
 .sidebar-logo {
   position: relative;
   width: 36px;
+  padding: 0;
   height: 36px;
   display: inline-flex;
   align-items: center;

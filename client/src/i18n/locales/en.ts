@@ -6,6 +6,7 @@ export default {
     reload: 'Reload',
     connected: 'Connected',
     disconnected: 'Disconnected',
+    openCurrentWorkspaceInNewTab: 'Open current workspace in a new tab',
     switchProject: 'Switch',
     switchProjectTitle: 'Switch sidebar project to {path}',
     newSession: 'New Session',

@@ -6,6 +6,7 @@ export default {
     reload: '重新加载',
     connected: '已连接',
     disconnected: '未连接',
+    openCurrentWorkspaceInNewTab: '在新标签页中打开当前工作区',
     switchProject: '切换',
     switchProjectTitle: '将侧边栏项目切换到 {path}',
     newSession: '新建会话',

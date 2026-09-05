@@ -516,6 +516,45 @@ describe('App routing', () => {
     expect(wrapper.get('.stub-ensure').attributes('data-session-id')).toBe('');
   });
 
+  it('opens the current workspace in a new tab from the logo banner', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => {
+      if (String(url).startsWith('/api/sessions/agent-profile?')) {
+        return { json: async () => ({ profile: { id: 'work', label: 'Work' } }) } as Response;
+      }
+      return { json: async () => ({ sessions: [] }) } as Response;
+    });
+
+    const sidebar = wrapper.findComponent({ name: 'SessionSidebar' });
+    sidebar.vm.$emit('projectPathChanged', '/workspace/current');
+    sidebar.vm.$emit('agentProfileChanged', 'work');
+    await flushPromises();
+
+    const banner = wrapper.get('.app-utility-rail .sidebar-logo');
+    expect(banner.attributes('data-tooltip')).toBe('Open current workspace in a new tab');
+    await banner.trigger('click');
+
+    expect(openSpy).toHaveBeenCalledWith(
+      `${window.location.origin}/?profile=work&project=%2Fworkspace%2Fcurrent`,
+      '_blank',
+      'noopener',
+    );
+    openSpy.mockRestore();
+  });
+
   it('keeps global actions in a permanent desktop utility rail beside the session panel', async () => {
     localStorage.setItem('pi-cloud-sidebar-collapsed', 'false');
     const wrapper = mount(App, {
