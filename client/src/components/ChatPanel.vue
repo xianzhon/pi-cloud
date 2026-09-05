@@ -1959,6 +1959,15 @@ function addFileReference(path: string) {
 }
 
 async function submitExternalPrompt(text: string, options?: { hideCommandMessage?: boolean }): Promise<boolean> {
+  if (options?.hideCommandMessage) {
+    const draft = inputText.value;
+    inputText.value = text;
+    const result = handleSend(options);
+    inputText.value = draft;
+    void resizeInputAfterDomUpdate();
+    return result;
+  }
+
   inputText.value = text;
   await nextTick();
   return handleSend(options);

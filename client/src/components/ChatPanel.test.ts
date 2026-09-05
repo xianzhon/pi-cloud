@@ -489,6 +489,24 @@ describe('ChatPanel', () => {
     expect(chatMessages.value.some(message => message.role === 'assistant' && message.content.includes('On branch main'))).toBe(true);
   });
 
+  it('preserves the composer draft after cancelling a commit opened from the Git panel', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const payload = String(input).includes('/api/git/status')
+        ? { cwd: '/repo', message: 'Update changes', files: [{ status: 'M', path: 'changed.ts' }] }
+        : { diff: 'diff --git a/changed.ts b/changed.ts\n-old\n+new' };
+      return new Response(JSON.stringify(payload), { status: 200 });
+    }));
+    const wrapper = mount(ChatPanel, { props: { projectPath: '/repo' } });
+    await wrapper.find('textarea').setValue('Keep this draft');
+
+    await wrapper.vm.submitExternalPrompt('/commit', { hideCommandMessage: true });
+    await flushPromises();
+    document.querySelector<HTMLButtonElement>('.btn-cancel')?.click();
+    await nextTick();
+
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('Keep this draft');
+  });
+
   it('preserves an external prompt when the socket cannot send', async () => {
     sendMessage.mockReturnValueOnce(false);
     const wrapper = mount(ChatPanel, { props: { sessionId: 'session-1' } });
