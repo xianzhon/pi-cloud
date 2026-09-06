@@ -191,14 +191,14 @@ describe('SettingsDialog', () => {
     }));
   });
 
-  it('lists the task queue keyboard shortcut', async () => {
+  it('lists the task inbox keyboard shortcut', async () => {
     const wrapper = mountSettingsDialog();
 
     const keyboardButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Keyboard'))!;
     await keyboardButton.trigger('click');
 
     expect(wrapper.find('.keyboard-shortcut-list').text()).toContain('Ctrl + Q');
-    expect(wrapper.find('.keyboard-shortcut-list').text()).toContain('Toggle the task queue.');
+    expect(wrapper.find('.keyboard-shortcut-list').text()).toContain('Toggle the task inbox.');
   });
 
   it('renders general settings and emits hint info changes', async () => {

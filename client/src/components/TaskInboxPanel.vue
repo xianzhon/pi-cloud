@@ -1,33 +1,33 @@
 <template>
-  <section class="task-queue-panel" :class="{ visible: visible !== false }" :style="panelStyle">
+  <section class="task-inbox-panel" :class="{ visible: visible !== false }" :style="panelStyle">
     <div
-      class="task-queue-resize-handle"
+      class="task-inbox-resize-handle"
       :class="{ 'is-resizing': isPanelResizing }"
-      :title="t('components.taskQueuePanel.resizeTaskQueue')"
+      :title="t('components.taskInboxPanel.resizeTaskInbox')"
       @mousedown="startPanelResize"
     />
-    <header class="task-queue-header">
+    <header class="task-inbox-header">
       <div>
-        <h2>{{ t('components.taskQueuePanel.taskQueue') }}</h2>
-        <p>{{ t('components.taskQueuePanel.captureWorkNowAndStartInNew') }}</p>
+        <h2>{{ t('components.taskInboxPanel.taskInbox') }}</h2>
+        <p>{{ t('components.taskInboxPanel.captureWorkNowAndStartInNew') }}</p>
       </div>
-      <div class="task-queue-actions">
-        <button class="new-task" type="button" @click="openNewTask">{{ t('components.taskQueuePanel.newTask') }}</button>
-        <button class="close-task-queue" type="button" :aria-label="t('components.taskQueuePanel.closeTaskQueue')" @click="emit('close')">×</button>
+      <div class="task-inbox-actions">
+        <button class="new-task" type="button" @click="openNewTask">{{ t('components.taskInboxPanel.newTask') }}</button>
+        <button class="close-task-inbox" type="button" :aria-label="t('components.taskInboxPanel.closeTaskInbox')" @click="emit('close')">×</button>
       </div>
     </header>
 
-    <div class="task-queue-toolbar">
+    <div class="task-inbox-toolbar">
       <div class="task-filter-group">
-        <span class="task-filter-label">{{ t('components.taskQueuePanel.scope') }}</span>
-        <div class="task-scope" role="group" :aria-label="t('components.taskQueuePanel.taskProjectScope')">
-          <button class="scope-project" :class="{ active: scope === 'project' }" type="button" @click="scope = 'project'">{{ t('components.taskQueuePanel.currentProject') }}</button>
-          <button class="scope-all" :class="{ active: scope === 'all' }" type="button" @click="scope = 'all'">{{ t('components.taskQueuePanel.allProjects') }}</button>
+        <span class="task-filter-label">{{ t('components.taskInboxPanel.scope') }}</span>
+        <div class="task-scope" role="group" :aria-label="t('components.taskInboxPanel.taskProjectScope')">
+          <button class="scope-project" :class="{ active: scope === 'project' }" type="button" @click="scope = 'project'">{{ t('components.taskInboxPanel.currentProject') }}</button>
+          <button class="scope-all" :class="{ active: scope === 'all' }" type="button" @click="scope = 'all'">{{ t('components.taskInboxPanel.allProjects') }}</button>
         </div>
       </div>
       <div class="task-filter-group task-filter-group-status">
-        <span class="task-filter-label">{{ t('components.taskQueuePanel.status') }}</span>
-        <div class="task-status-tabs" role="group" :aria-label="t('components.taskQueuePanel.taskStatus')">
+        <span class="task-filter-label">{{ t('components.taskInboxPanel.status') }}</span>
+        <div class="task-status-tabs" role="group" :aria-label="t('components.taskInboxPanel.taskStatus')">
           <button v-for="option in statusOptions" :key="option.value" :class="{ active: status === option.value }" type="button" @click="status = option.value">{{ option.label }}</button>
         </div>
       </div>
@@ -37,15 +37,15 @@
     <div v-if="taskToast" class="task-toast" :class="taskToast.type" role="status" aria-live="polite">
       {{ taskToast.message }}
     </div>
-    <div v-if="loading" class="task-empty">{{ t('components.taskQueuePanel.loadingTasks') }}</div>
+    <div v-if="loading" class="task-empty">{{ t('components.taskInboxPanel.loadingTasks') }}</div>
     <div v-else-if="tasks.length === 0" class="task-empty">
       <div class="task-empty-card">
         <div class="task-empty-icon" aria-hidden="true">
           <PhTray :size="28" weight="duotone" />
         </div>
-        <h3>{{ t('components.taskQueuePanel.noStatusTasks', { status: t(`components.taskQueuePanel.statuses.${status}`) }) }}</h3>
-        <p v-if="status === 'waiting'">{{ t('components.taskQueuePanel.captureYourNextIdeaWithoutInterruptingYour') }}</p>
-        <button v-if="status === 'waiting'" class="task-empty-action" type="button" @click="openNewTask">{{ t('components.taskQueuePanel.newTask') }}</button>
+        <h3>{{ t('components.taskInboxPanel.noStatusTasks', { status: t(`components.taskInboxPanel.statuses.${status}`) }) }}</h3>
+        <p v-if="status === 'waiting'">{{ t('components.taskInboxPanel.captureYourNextIdeaWithoutInterruptingYour') }}</p>
+        <button v-if="status === 'waiting'" class="task-empty-action" type="button" @click="openNewTask">{{ t('components.taskInboxPanel.newTask') }}</button>
       </div>
     </div>
     <div v-else class="task-list">
@@ -54,12 +54,12 @@
           <div class="task-copy">
             <div class="task-title-line">
               <h3>{{ task.title }}</h3>
-              <span class="task-status" :class="`status-${task.status}`">{{ t(`components.taskQueuePanel.statuses.${task.status}`) }}</span>
+              <span class="task-status" :class="`status-${task.status}`">{{ t(`components.taskInboxPanel.statuses.${task.status}`) }}</span>
               <div class="task-title-actions">
-                <button v-if="task.status === 'waiting'" class="task-icon-btn" type="button" :aria-label="t('components.taskQueuePanel.editTask')" :title="t('components.taskQueuePanel.edit')" @click="openEditTask(task)">
+                <button v-if="task.status === 'waiting'" class="task-icon-btn" type="button" :aria-label="t('components.taskInboxPanel.editTask')" :title="t('components.taskInboxPanel.edit')" @click="openEditTask(task)">
                   <PhPencilSimple :size="15" weight="bold" />
                 </button>
-                <button class="task-icon-btn danger" type="button" :aria-label="t('components.taskQueuePanel.deleteTask')" :title="t('components.taskQueuePanel.delete')" @click="requestDelete(task)">
+                <button class="task-icon-btn danger" type="button" :aria-label="t('components.taskInboxPanel.deleteTask')" :title="t('components.taskInboxPanel.delete')" @click="requestDelete(task)">
                   <PhTrash :size="15" weight="bold" />
                 </button>
               </div>
@@ -77,18 +77,18 @@
               type="button"
               :aria-expanded="isPromptExpanded(task.id)"
               @click="togglePrompt(task.id)"
-            >{{ isPromptExpanded(task.id) ? t('components.taskQueuePanel.showLess') : t('components.taskQueuePanel.showMore') }}</button>
-            <p v-if="task.notes" class="task-notes"><strong>{{ t('components.taskQueuePanel.notes') }}</strong> {{ task.notes }}</p>
+            >{{ isPromptExpanded(task.id) ? t('components.taskInboxPanel.showLess') : t('components.taskInboxPanel.showMore') }}</button>
+            <p v-if="task.notes" class="task-notes"><strong>{{ t('components.taskInboxPanel.notes') }}</strong> {{ task.notes }}</p>
           </div>
         </div>
         <div class="task-row-actions task-actions">
           <div class="task-primary-actions">
-            <button v-if="task.status === 'waiting'" class="task-start primary" type="button" :disabled="startingTaskId === task.id" @click="startTask(task)">{{ startingTaskId === task.id ? t('components.taskQueuePanel.starting') : t('components.taskQueuePanel.start') }}</button>
-            <button v-if="task.status !== 'waiting' && task.sessionId" class="task-open-session primary" type="button" @click="emit('openSession', task.sessionId)">{{ t('components.taskQueuePanel.openSession') }}</button>
+            <button v-if="task.status === 'waiting'" class="task-start primary" type="button" :disabled="startingTaskId === task.id" @click="startTask(task)">{{ startingTaskId === task.id ? t('components.taskInboxPanel.starting') : t('components.taskInboxPanel.start') }}</button>
+            <button v-if="task.status !== 'waiting' && task.sessionId" class="task-open-session primary" type="button" @click="emit('openSession', task.sessionId)">{{ t('components.taskInboxPanel.openSession') }}</button>
           </div>
           <div class="task-secondary-actions">
-            <button v-if="task.status === 'waiting'" class="task-start-new-tab" type="button" :disabled="startingTaskId === task.id" @click="startTaskInNewTab(task)">{{ t('components.taskQueuePanel.startInNewTab') }}</button>
-            <button v-if="task.status === 'started'" class="task-complete" type="button" @click="completeTask(task)">{{ t('components.taskQueuePanel.complete') }}</button>
+            <button v-if="task.status === 'waiting'" class="task-start-new-tab" type="button" :disabled="startingTaskId === task.id" @click="startTaskInNewTab(task)">{{ t('components.taskInboxPanel.startInNewTab') }}</button>
+            <button v-if="task.status === 'started'" class="task-complete" type="button" @click="completeTask(task)">{{ t('components.taskInboxPanel.complete') }}</button>
             <a
               v-if="task.giteaIssue"
               class="task-open-issue"
@@ -96,7 +96,7 @@
               target="_blank"
               rel="noopener noreferrer"
             >Issue #{{ task.giteaIssue.number }}</a>
-            <button v-else class="task-create-issue" type="button" @click="openIssueDialog(task)">{{ t('components.taskQueuePanel.createIssue') }}</button>
+            <button v-else class="task-create-issue" type="button" @click="openIssueDialog(task)">{{ t('components.taskInboxPanel.createIssue') }}</button>
             <a
               v-if="task.pullRequest"
               class="task-pr-status"
@@ -104,8 +104,8 @@
               :href="task.pullRequest.url"
               target="_blank"
               rel="noopener noreferrer"
-              :title="task.pullRequest.status === 'merged' ? t('components.taskQueuePanel.pullRequestMerged') : t('components.taskQueuePanel.pullRequestReady')"
-              :aria-label="task.pullRequest.status === 'merged' ? t('components.taskQueuePanel.pullRequestMerged') : t('components.taskQueuePanel.pullRequestReady')"
+              :title="task.pullRequest.status === 'merged' ? t('components.taskInboxPanel.pullRequestMerged') : t('components.taskInboxPanel.pullRequestReady')"
+              :aria-label="task.pullRequest.status === 'merged' ? t('components.taskInboxPanel.pullRequestMerged') : t('components.taskInboxPanel.pullRequestReady')"
             >
               <PhGitMerge v-if="task.pullRequest.status === 'merged'" :size="13" weight="bold" aria-hidden="true" />
               <PhGitPullRequest v-else :size="13" weight="bold" aria-hidden="true" />
@@ -129,28 +129,28 @@
       @save="saveTask"
     />
 
-    <ConfirmModal :visible="Boolean(deletingTask)" variant="danger" :confirm-text="t('components.taskQueuePanel.delete')" @confirm="confirmDelete" @cancel="deletingTask = null">
-      <template #title>{{ t('components.taskQueuePanel.deleteTask') }}</template>
-      <template #message>{{ t('components.taskQueuePanel.deleteThisTaskRecordAnyLinkedPi') }}</template>
+    <ConfirmModal :visible="Boolean(deletingTask)" variant="danger" :confirm-text="t('components.taskInboxPanel.delete')" @confirm="confirmDelete" @cancel="deletingTask = null">
+      <template #title>{{ t('components.taskInboxPanel.deleteTask') }}</template>
+      <template #message>{{ t('components.taskInboxPanel.deleteThisTaskRecordAnyLinkedPi') }}</template>
     </ConfirmModal>
 
-    <ConfirmModal :visible="Boolean(issueDialogTask)" :confirm-text="t('components.taskQueuePanel.createIssue')" @confirm="confirmCreateIssue" @cancel="issueDialogTask = null">
-      <template #title>{{ t('components.taskQueuePanel.createIssue') }}</template>
+    <ConfirmModal :visible="Boolean(issueDialogTask)" :confirm-text="t('components.taskInboxPanel.createIssue')" @confirm="confirmCreateIssue" @cancel="issueDialogTask = null">
+      <template #title>{{ t('components.taskInboxPanel.createIssue') }}</template>
       <template #message>
         <div class="issue-preview-form">
-          <label>{{ t('components.taskQueuePanel.repository') }} <input :value="issueRepositoryName" readonly :aria-label="t('components.taskQueuePanel.issueRepository')" /></label>
-          <label>{{ t('components.taskQueuePanel.title') }} <input v-model="issuePreview.title" /></label>
+          <label>{{ t('components.taskInboxPanel.repository') }} <input :value="issueRepositoryName" readonly :aria-label="t('components.taskInboxPanel.issueRepository')" /></label>
+          <label>{{ t('components.taskInboxPanel.title') }} <input v-model="issuePreview.title" /></label>
           <div class="issue-ai-row">
-            <span>{{ t('components.taskQueuePanel.body') }}</span>
+            <span>{{ t('components.taskInboxPanel.body') }}</span>
             <button
               type="button"
               class="issue-ai-generate"
               :disabled="generatingIssueContent"
-              :title="clientId ? t('components.taskQueuePanel.polishIssueTitleAndBodyWithAi') : t('components.taskQueuePanel.openASessionToPolishIssueContentWith')"
+              :title="clientId ? t('components.taskInboxPanel.polishIssueTitleAndBodyWithAi') : t('components.taskInboxPanel.openASessionToPolishIssueContentWith')"
               @click="generateIssueContent"
             >
               <PhRobot :size="16" weight="bold" aria-hidden="true" />
-              <span>{{ generatingIssueContent ? t('components.taskQueuePanel.generating') : t('components.taskQueuePanel.aiPolish') }}</span>
+              <span>{{ generatingIssueContent ? t('components.taskInboxPanel.generating') : t('components.taskInboxPanel.aiPolish') }}</span>
             </button>
           </div>
           <label><textarea v-model="issuePreview.body" rows="8"></textarea></label>
@@ -211,7 +211,7 @@ let toastTimer: number | undefined;
 const defaultPanelWidth = 480;
 const panelWidthPx = ref<number>();
 const panelStyle = computed<CSSProperties>(() => ({
-  '--task-queue-panel-width': `${panelWidthPx.value || defaultPanelWidth}px`,
+  '--task-inbox-panel-width': `${panelWidthPx.value || defaultPanelWidth}px`,
 }));
 const minPanelWidth = 360;
 const maxPanelWidthRatio = 0.85;
@@ -219,9 +219,9 @@ let resizeStartX = 0;
 let resizeStartWidth = 0;
 const isPanelResizing = ref(false);
 const statusOptions: Array<{ value: ProjectTaskVisibleStatus; label: string }> = [
-  { value: 'waiting', label: t('components.taskQueuePanel.waiting') },
-  { value: 'started', label: t('components.taskQueuePanel.started') },
-  { value: 'completed', label: t('components.taskQueuePanel.completed') },
+  { value: 'waiting', label: t('components.taskInboxPanel.waiting') },
+  { value: 'started', label: t('components.taskInboxPanel.started') },
+  { value: 'completed', label: t('components.taskInboxPanel.completed') },
 ];
 
 watch([() => props.currentProjectPath, scope, status], () => void load(props.currentProjectPath), { immediate: true });
@@ -345,7 +345,7 @@ async function confirmCreateIssue() {
     const task = await gitHosting.createIssue(issueDialogTask.value.id, { ...issuePreview });
     issueDialogTask.value = null;
     await load(props.currentProjectPath);
-    showToast(task.giteaIssue ? t('components.taskQueuePanel.issueNumberCreated', { number: task.giteaIssue.number }) : t('components.taskQueuePanel.issueCreated'), 'success');
+    showToast(task.giteaIssue ? t('components.taskInboxPanel.issueNumberCreated', { number: task.giteaIssue.number }) : t('components.taskInboxPanel.issueCreated'), 'success');
   } catch (exception) {
     actionError.value = messageOf(exception);
     showToast(actionError.value, 'error');
@@ -355,7 +355,7 @@ async function confirmCreateIssue() {
 }
 
 function workLocation(task: ProjectTask): string {
-  return task.worktree.mode === 'managed' ? t('components.taskQueuePanel.worktreeBranch', { branch: task.worktree.branchName }) : '';
+  return task.worktree.mode === 'managed' ? t('components.taskInboxPanel.worktreeBranch', { branch: task.worktree.branchName }) : '';
 }
 
 function formatDate(value: string): string {
@@ -365,7 +365,7 @@ function formatDate(value: string): string {
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffMins < 1) return t('components.taskQueuePanel.justNow');
+  if (diffMins < 1) return t('components.taskInboxPanel.justNow');
   if (diffMins < 60) return formatRelativeUnit(diffMins, 'minute');
   if (diffHours < 24) return formatRelativeUnit(diffHours, 'hour');
   if (diffDays < 7) return formatRelativeUnit(diffDays, 'day');
@@ -407,7 +407,7 @@ function togglePrompt(taskId: string): void {
 }
 
 function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : t('components.taskQueuePanel.taskActionFailed');
+  return error instanceof Error ? error.message : t('components.taskInboxPanel.taskActionFailed');
 }
 
 function showToast(message: string, type: TaskToast['type']): void {
@@ -462,12 +462,12 @@ defineExpose({ openNewTask });
 </script>
 
 <style scoped>
-.task-queue-panel {
+.task-inbox-panel {
   --accent-color: var(--accent);
   --border-color: var(--border);
   position: relative;
-  flex: 0 0 var(--task-queue-panel-width);
-  width: var(--task-queue-panel-width);
+  flex: 0 0 var(--task-inbox-panel-width);
+  width: var(--task-inbox-panel-width);
   min-width: 360px;
   height: 100vh;
   color: var(--text-primary);
@@ -478,10 +478,10 @@ defineExpose({ openNewTask });
   overflow: hidden;
   container-type: inline-size;
 }
-.task-queue-panel.visible {
+.task-inbox-panel.visible {
   display: flex;
 }
-.task-queue-resize-handle {
+.task-inbox-resize-handle {
   position: absolute;
   top: 0;
   left: -5px;
@@ -490,7 +490,7 @@ defineExpose({ openNewTask });
   cursor: col-resize;
   z-index: 2;
 }
-.task-queue-resize-handle::after {
+.task-inbox-resize-handle::after {
   content: "";
   position: absolute;
   top: 0;
@@ -500,19 +500,19 @@ defineExpose({ openNewTask });
   background: transparent;
   transition: background 0.15s;
 }
-.task-queue-resize-handle:hover::after,
-.task-queue-resize-handle.is-resizing::after {
+.task-inbox-resize-handle:hover::after,
+.task-inbox-resize-handle.is-resizing::after {
   background: var(--accent);
 }
-.task-queue-header,
-.task-queue-toolbar {
+.task-inbox-header,
+.task-inbox-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-shrink: 0;
 }
-.task-queue-header {
+.task-inbox-header {
   position: relative;
   padding: 18px;
   background:
@@ -523,7 +523,7 @@ defineExpose({ openNewTask });
     inset 0 1px 0 rgba(255, 255, 255, 0.055),
     0 1px 0 rgba(0, 0, 0, 0.28);
 }
-.task-queue-header::before {
+.task-inbox-header::before {
   content: "";
   position: absolute;
   left: 0;
@@ -533,17 +533,17 @@ defineExpose({ openNewTask });
   background: var(--accent);
   opacity: 0.85;
 }
-.task-queue-header h2 {
+.task-inbox-header h2 {
   margin: 0;
   font-size: 18px;
   letter-spacing: -0.015em;
 }
-.task-queue-header p {
+.task-inbox-header p {
   margin: 4px 0 0;
   color: var(--text-secondary);
   font-size: 12px;
 }
-.task-queue-actions {
+.task-inbox-actions {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -566,7 +566,7 @@ defineExpose({ openNewTask });
     border-color 120ms ease,
     transform 120ms ease;
 }
-.close-task-queue {
+.close-task-inbox {
   width: 32px;
   height: 32px;
   border: 1px solid var(--border-color);
@@ -577,11 +577,11 @@ defineExpose({ openNewTask });
   font-size: 18px;
   line-height: 1;
 }
-.close-task-queue:hover {
+.close-task-inbox:hover {
   color: var(--text-primary);
   background: var(--bg-tertiary);
 }
-.task-queue-toolbar {
+.task-inbox-toolbar {
   align-items: flex-end;
   margin: 0;
   padding: 14px 18px;
@@ -1109,18 +1109,18 @@ button:focus-visible {
   font-size: 12px;
 }
 @media (max-width: 768px) {
-  .task-queue-panel {
+  .task-inbox-panel {
     min-width: 0;
   }
-  .task-queue-header,
-  .task-queue-toolbar {
+  .task-inbox-header,
+  .task-inbox-toolbar {
     align-items: stretch;
     flex-direction: column;
   }
-  .task-queue-header {
+  .task-inbox-header {
     gap: 12px;
   }
-  .task-queue-actions {
+  .task-inbox-actions {
     justify-content: space-between;
   }
   .task-filter-group-status {

@@ -397,7 +397,7 @@
                       </div>
                       <div>
                         <dt><kbd>Ctrl</kbd> + <kbd>{{ t('components.settingsDialog.q') }}</kbd></dt>
-                        <dd>{{ t('components.settingsDialog.toggleTheTaskQueue') }}</dd>
+                        <dd>{{ t('components.settingsDialog.toggleTheTaskInbox') }}</dd>
                       </div>
                       <div>
                         <dt><kbd>⌘/Ctrl</kbd> + <kbd>{{ t('components.settingsDialog.b') }}</kbd></dt>

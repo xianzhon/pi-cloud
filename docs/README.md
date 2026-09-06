@@ -10,7 +10,7 @@ User manuals are available in English and Simplified Chinese. Choose the guide f
 
 | Topic / 主题 | English | 简体中文 |
 | --- | --- | --- |
-| Task queue / 任务队列 | [Task Queue](manuals-en/01-task-queue.md) | [任务队列](manuals-cn/01-task-queue.md) |
+| Task inbox / 任务收件箱 | [Task Inbox](manuals-en/01-task-inbox.md) | [任务收件箱](manuals-cn/01-task-inbox.md) |
 | Managed worktrees / 托管工作树 | [Managed Worktrees](manuals-en/02-worktree.md) | [托管工作树](manuals-cn/02-worktree.md) |
 | Memory system / 记忆系统 | [Memory System](manuals-en/03-memory-system.md) | [记忆系统](manuals-cn/03-memory-system.md) |
 | PDF annotations / PDF 标注 | [PDF Annotations](manuals-en/04-pdf-annotations.md) | [PDF 标注](manuals-cn/04-pdf-annotations.md) |

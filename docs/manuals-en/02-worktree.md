@@ -10,7 +10,7 @@ The Worktree feature lets Pi Cloud prepare an isolated Git worktree when you cre
 - **Develop in parallel**: Run multiple Pi sessions on separate branches at the same time.
 - **Experiment safely**: Put prototypes, refactors, or model experiments in disposable worktrees.
 - **Protect the current workspace**: Keep its uncommitted changes separate from Pi's changes.
-- **Integrate with Task Queue**: Save worktree settings with a task and create or reuse the worktree when it starts.
+- **Integrate with Task Inbox**: Save worktree settings with a task and create or reuse the worktree when it starts.
 - **Use standard Git workflows**: Commit, push, review, and merge the branch after Pi finishes.
 
 ## Common Use Cases

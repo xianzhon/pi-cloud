@@ -79,7 +79,7 @@ All notable changes to Pi Cloud are documented here.
 ### Changed
 
 - Reduced the initial session page from 30 sessions to 10 and limited pull request status refreshes to the visible page for faster session loading.
-- Lazy-load heavy interface features such as the editor, terminal, settings, memory center, and task queue.
+- Lazy-load heavy interface features such as the editor, terminal, settings, memory center, and task inbox.
 - Local LLM endpoints outside the loopback interface must now be explicitly allowed with `PI_CLOUD_LOCAL_LLM_ALLOWED_ORIGINS`; endpoint credentials and redirects are rejected.
 - Database schema updates now use tracked, transactional versioned migrations.
 
@@ -194,6 +194,6 @@ All notable changes to Pi Cloud are documented here.
 - **Worktree development** — create inherited worktree sessions for isolated implementation work while preserving the source session context.
 - **Skill preset management** — configure enabled and disabled skills per session, refresh slash-command suggestions after changes, and use `skill:<name>` commands directly from chat.
 - **Memory system** — manage project and global memories with automatic extraction, adaptive recall, recall details, and reusable remembered context.
-- **Task queue and notifications** — queue project tasks, edit tasks, start pending work, track task state, and configure sound notifications.
+- **Task inbox and notifications** — collect project tasks, edit tasks, start pending work, track task state, and configure sound notifications.
 - **Gateway integrations** — add Feishu and WeChat gateway support, including pairing, messaging, command aliases, centralized gateway settings, and WeChat image ingestion/decryption.
 - **Agent proxy configuration** — configure proxy environment variables per Pi profile for model/agent traffic.

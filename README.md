@@ -15,7 +15,7 @@ A web-based, mobile-friendly interface for the [Pi coding agent](http://pi.dev).
 - **Mobile-friendly access** — use Pi from a desktop, phone, or tablet without needing a local terminal.
 - **Skill control** — configure presets and enable or disable skills per session.
 - **Session management** — search, resume, rename, branch, and run independent sessions in separate tabs.
-- **Task queue** — save and configure tasks, then start them when ready.
+- **Task inbox** — save and configure tasks, then start them when ready.
 - **Completion notifications** — receive a sound alert and see a bell indicator in the browser tab when a task finishes.
 - **AI-assisted writing** — generate or polish prompts, commit messages, pull request content, and other workflow text.
 - **Git workflows** — use `/branch`, `/commit`, `/push`, and related commands from the WebUI.

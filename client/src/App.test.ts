@@ -193,9 +193,9 @@ vi.mock('./components/EditorPanel.vue', () => ({
     };
   })(),
 }));
-vi.mock('./components/TaskQueuePanel.vue', () => {
+vi.mock('./components/TaskInboxPanel.vue', () => {
   heavyModuleLoads.tasks += 1;
-  return { __esModule: true, default: { props: ['visible'], template: '<div class="task-queue-panel" :class="{ visible }" />' } };
+  return { __esModule: true, default: { props: ['visible'], template: '<div class="task-inbox-panel" :class="{ visible }" />' } };
 });
 vi.mock('./components/NewSessionDialog.vue', () => ({
   default: {
@@ -718,7 +718,7 @@ describe('App routing', () => {
     expect(wrapper.find('.stub-ensure').attributes('data-client-id')).toBe('client-1');
   });
 
-  it('toggles the task queue with Ctrl+Q while keeping the title plus button for new sessions', async () => {
+  it('toggles the task inbox with Ctrl+Q while keeping the title plus button for new sessions', async () => {
     const wrapper = mount(App, {
       global: {
         stubs: {
@@ -732,7 +732,7 @@ describe('App routing', () => {
     });
 
     await flushPromises();
-    expect(wrapper.find('.task-queue-panel').exists()).toBe(false);
+    expect(wrapper.find('.task-inbox-panel').exists()).toBe(false);
 
     window.dispatchEvent(new KeyboardEvent('keydown', { ctrlKey: true, code: 'KeyQ', key: 'q', cancelable: true }));
     await flushPromises();

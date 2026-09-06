@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
-import TaskQueuePanel from './TaskQueuePanel.vue';
+import TaskInboxPanel from './TaskInboxPanel.vue';
 
 const tasks = ref<any[]>([]);
 const scope = ref<'project' | 'all'>('project');
@@ -50,13 +50,13 @@ const waitingTask = {
 };
 
 function mountPanel() {
-  return mount(TaskQueuePanel, {
+  return mount(TaskInboxPanel, {
     props: { clientId: 'client-1', currentProjectPath: '/repo/app', selectedAgentProfileId: 'codex', presets: [], loadPresets: async () => {} },
     global: { stubs: { Teleport: true, Transition: false } },
   });
 }
 
-describe('TaskQueuePanel', () => {
+describe('TaskInboxPanel', () => {
   beforeEach(() => {
     tasks.value = [{ ...waitingTask }];
     scope.value = 'project';
@@ -238,9 +238,9 @@ describe('TaskQueuePanel', () => {
 
   it('defaults wider and resizes from the left edge', async () => {
     const wrapper = mountPanel();
-    expect(wrapper.attributes('style')).toContain('--task-queue-panel-width: 480px');
+    expect(wrapper.attributes('style')).toContain('--task-inbox-panel-width: 480px');
 
-    const handle = wrapper.get('.task-queue-resize-handle');
+    const handle = wrapper.get('.task-inbox-resize-handle');
     await handle.trigger('mousedown', { clientX: 800 });
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 700 }));
     await wrapper.vm.$nextTick();
@@ -249,6 +249,6 @@ describe('TaskQueuePanel', () => {
     window.dispatchEvent(new Event('blur'));
     await wrapper.vm.$nextTick();
     expect(handle.classes()).not.toContain('is-resizing');
-    expect(wrapper.attributes('style')).toContain('--task-queue-panel-width: 580px');
+    expect(wrapper.attributes('style')).toContain('--task-inbox-panel-width: 580px');
   });
 });

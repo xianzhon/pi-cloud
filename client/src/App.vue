@@ -190,11 +190,11 @@
             <PhPlus :size="18" weight="bold" />
           </button>
           <button
-            v-if="showTaskQueue"
+            v-if="showTaskInbox"
             class="icon-btn mobile-task-close"
             type="button"
-            :aria-label="t('app.closeTaskQueue')"
-            @click="setTaskQueueVisible(false)"
+            :aria-label="t('app.closeTaskInbox')"
+            @click="setTaskInboxVisible(false)"
           >
             <PhX :size="18" weight="bold" />
           </button>
@@ -231,10 +231,10 @@
           <button
             class="icon-btn tooltip desktop-header-action"
             data-header-action="tasks"
-            @click="toggleTaskQueue"
-            :class="{ active: showTaskQueue }"
-            :data-tooltip="taskQueueTooltip"
-            :aria-label="t('app.taskQueue')"
+            @click="toggleTaskInbox"
+            :class="{ active: showTaskInbox }"
+            :data-tooltip="taskInboxTooltip"
+            :aria-label="t('app.taskInbox')"
           >
             <PhTray :size="18" weight="bold" />
           </button>
@@ -278,11 +278,11 @@
               </button>
               <button
                 class="mobile-action-item"
-                :class="{ active: showTaskQueue }"
-                @click="toggleTaskQueue(); showMobileActions = false"
+                :class="{ active: showTaskInbox }"
+                @click="toggleTaskInbox(); showMobileActions = false"
               >
                 <PhTray :size="18" weight="bold" />
-                <span>{{ t('app.taskQueue') }}</span>
+                <span>{{ t('app.taskInbox') }}</span>
               </button>
               <button
                 v-if="activeWorktree?.worktreeStatus === 'active'"
@@ -362,15 +362,15 @@
       />
     </main>
 
-    <LazyTaskQueuePanel
-      v-if="taskQueueFeatureLoaded"
-      :visible="showTaskQueue"
+    <LazyTaskInboxPanel
+      v-if="taskInboxFeatureLoaded"
+      :visible="showTaskInbox"
       :client-id="clientId"
       :current-project-path="selectedProjectPath"
       :selected-agent-profile-id="selectedAgentProfileId"
       :presets="skillPresets"
       :load-presets="loadPresets"
-      @close="setTaskQueueVisible(false)"
+      @close="setTaskInboxVisible(false)"
       @started="handleTaskStarted"
       @open-session="openTaskSession"
     />
@@ -610,7 +610,7 @@ const LazyEditorPanel = defineAsyncComponent(loadEditorPanel);
 const LazyGitHistoryView = defineAsyncComponent(() => import('./components/GitHistoryView.vue').then((module) => module.default));
 const LazySettingsDialog = defineAsyncComponent(() => import('./components/SettingsDialog.vue').then((module) => module.default));
 const LazyMemoryCenter = defineAsyncComponent(() => import('./components/MemoryCenter.vue').then((module) => module.default));
-const LazyTaskQueuePanel = defineAsyncComponent(() => import('./components/TaskQueuePanel.vue').then((module) => module.default));
+const LazyTaskInboxPanel = defineAsyncComponent(() => import('./components/TaskInboxPanel.vue').then((module) => module.default));
 const LazyTerminalPanel = defineAsyncComponent(() => import('./components/TerminalPanel.vue').then((module) => module.default));
 type TerminalRuntime = typeof import('./composables/useTerminal');
 type TerminalInstance = ReturnType<TerminalRuntime['createTerminalInstance']>;
@@ -785,8 +785,8 @@ const isReviewMode = computed(() => activeReviewSession.value !== null);
 const isSessionContextReady = computed(() => !activeSessionId.value || sidebarInitialized.value);
 const activeProjectPath = computed(() => sessionCwd.value || selectedProjectPath.value);
 const sessionCwdDisplay = computed(() => formatHomePath(sessionCwd.value));
-const showTaskQueue = ref(false);
-const taskQueueFeatureLoaded = ref(false);
+const showTaskInbox = ref(false);
+const taskInboxFeatureLoaded = ref(false);
 const headerTitle = computed(() => sessionTitle.value || 'Pi Cloud');
 const headerSubtitle = computed(() => sessionCwdDisplay.value || formatHomePath(selectedProjectPath.value));
 const headerProjectName = computed(() => formatProjectName(headerSubtitle.value));
@@ -808,7 +808,7 @@ const newSessionTooltip = computed(() => (
 const sidebarToggleTooltip = computed(() => `${t('app.toggleSidebar')} (${isMacPlatform() ? '⌘B' : 'Ctrl+B'})`);
 const terminalTooltip = computed(() => `${t('app.terminal')} (${isMacPlatform() ? '⌘`' : 'Ctrl+`'})`);
 const editorTooltip = computed(() => `${t('app.editor')} (Ctrl+E)`);
-const taskQueueTooltip = computed(() => `${t('app.taskQueue')} (Ctrl+Q)`);
+const taskInboxTooltip = computed(() => `${t('app.taskInbox')} (Ctrl+Q)`);
 const selectedProjectPath = ref('~');
 const gitStatus = ref<GitStatus>({ isGitRepo: false });
 let gitStatusRequestId = 0;
@@ -1028,8 +1028,8 @@ const terminalFeatureLoaded = ref(false);
 watch(showTerminal, (visible) => {
   if (visible) terminalFeatureLoaded.value = true;
 }, { flush: 'sync' });
-watch(showTaskQueue, (visible) => {
-  if (visible) taskQueueFeatureLoaded.value = true;
+watch(showTaskInbox, (visible) => {
+  if (visible) taskInboxFeatureLoaded.value = true;
 }, { flush: 'sync' });
 watch(showEditor, (visible) => {
   if (visible) editorFeatureLoaded.value = true;
@@ -1439,14 +1439,14 @@ function updateFullscreenState(): void {
   isFullscreen.value = Boolean(document.fullscreenElement);
 }
 
-function setTaskQueueVisible(visible: boolean): void {
-  showTaskQueue.value = visible;
+function setTaskInboxVisible(visible: boolean): void {
+  showTaskInbox.value = visible;
   sessionStorage.setItem('pi-cloud-sidebar-mode', visible ? 'tasks' : 'single');
   showMobileSidebar.value = false;
 }
 
-function toggleTaskQueue(): void {
-  setTaskQueueVisible(!showTaskQueue.value);
+function toggleTaskInbox(): void {
+  setTaskInboxVisible(!showTaskInbox.value);
 }
 
 function openTitleBarNew(): void {
@@ -1600,7 +1600,7 @@ async function waitForSessionContextReady(): Promise<void> {
 }
 
 async function handleTaskStarted(result: ProjectTaskStartResult): Promise<void> {
-  setTaskQueueVisible(false);
+  setTaskInboxVisible(false);
   const targetCwd = result.worktree?.worktreePath || result.task.projectPath;
   boundSessionId.value = result.sessionId;
   optimisticSessions.value.set(result.sessionId, {
@@ -1622,7 +1622,7 @@ async function handleTaskStarted(result: ProjectTaskStartResult): Promise<void> 
 }
 
 async function openTaskSession(sessionId: string): Promise<void> {
-  setTaskQueueVisible(false);
+  setTaskInboxVisible(false);
   await router.push(sessionRouteLocation(sessionId));
 }
 
@@ -1642,7 +1642,7 @@ function showCompactSessionContextMenu(event: MouseEvent, sessionId: string): vo
 
 async function selectSession(session: { id: string; path: string; name?: string; cwd?: string }): Promise<void> {
   activeReviewSession.value = null;
-  setTaskQueueVisible(false);
+  setTaskInboxVisible(false);
   showMobileSidebar.value = false;
   showMobileActions.value = false;
   router.push(sessionRouteLocation(session.id, session.cwd));
@@ -1667,7 +1667,7 @@ function handleReviewSourceSelected(sourceId: string, sourceLabel: string): void
 
 function handleReviewSessionSelected(event: { sourceId: string; sessionId: string }): void {
   activeReviewSession.value = { sourceId: event.sourceId, sessionId: event.sessionId };
-  setTaskQueueVisible(false);
+  setTaskInboxVisible(false);
   showMobileSidebar.value = false;
   showMobileActions.value = false;
   const query: Record<string, string> = { profile: event.sourceId };
@@ -1915,7 +1915,7 @@ function isFullscreenToggleShortcut(event: KeyboardEvent): boolean {
   return event.key === 'F11' && !event.metaKey && !event.ctrlKey && !event.altKey;
 }
 
-function isTaskQueueToggleShortcut(event: KeyboardEvent): boolean {
+function isTaskInboxToggleShortcut(event: KeyboardEvent): boolean {
   return event.ctrlKey
     && !event.shiftKey
     && !event.metaKey
@@ -1939,10 +1939,10 @@ function handleKeydown(event: KeyboardEvent) {
     return;
   }
 
-  if (isTaskQueueToggleShortcut(event)) {
+  if (isTaskInboxToggleShortcut(event)) {
     event.preventDefault();
     if (!event.repeat && !hasBlockingOverlayOpen() && !isTerminalKeyboardTarget(event.target)) {
-      toggleTaskQueue();
+      toggleTaskInbox();
     }
     return;
   }
@@ -2207,7 +2207,7 @@ onMounted(() => {
   authRefreshMounted = true;
   const savedSidebarMode = sessionStorage.getItem('pi-cloud-sidebar-mode');
   if (savedSidebarMode === 'single' || savedSidebarMode === 'tasks') {
-    showTaskQueue.value = savedSidebarMode === 'tasks';
+    showTaskInbox.value = savedSidebarMode === 'tasks';
   } else if (savedSidebarMode) {
     sessionStorage.removeItem('pi-cloud-sidebar-mode');
   }
@@ -2918,8 +2918,8 @@ onUnmounted(() => {
     display: none !important;
   }
 
-  /* Editor and task queue panels full-screen */
-  :deep(.task-queue-panel),
+  /* Editor and task inbox panels full-screen */
+  :deep(.task-inbox-panel),
   :deep(.editor-panel) {
     position: fixed !important;
     top: 0;

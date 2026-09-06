@@ -1,11 +1,11 @@
-# Task Queue User Manual
+# Task Inbox User Manual
 
-The Task Queue lets you save work for Pi to do later, then start it as a new Pi session when you are ready. It is useful for capturing ideas, splitting up parallel work, and preparing model, skill, and worktree settings without interrupting your current session.
+The Task Inbox lets you save work for Pi to do later, then start it as a new Pi session when you are ready. It is useful for capturing ideas, splitting up parallel work, and preparing model, skill, and worktree settings without interrupting your current session.
 
 ## What It Is For
 
 - **Keep the current conversation uninterrupted**: Save a task title, prompt, and launch configuration, then start it later.
-- **Plan work in batches**: Queue multiple features, fixes, or research tasks and start them in order or by priority.
+- **Plan work in batches**: Collect multiple features, fixes, or research tasks and start them in order or by priority.
 - **Preserve launch settings**: Each task records its project path, agent profile, model, skill selection, and worktree settings.
 - **Isolate code changes**: Create a managed worktree so each task runs in its own branch and directory.
 - **View tasks across projects**: Show tasks for the current project or all projects.
@@ -19,15 +19,15 @@ The Task Queue lets you save work for Pi to do later, then start it as a new Pi 
 - Assign different models, agent profiles, or skill combinations to different work.
 - Prepare task descriptions and private notes now, then start the work later.
 
-## Opening the Task Queue
+## Opening the Task Inbox
 
 ### Desktop
 
-Click **Task queue** at the bottom of the left sidebar. The main area switches from chat to the task queue panel.
+Click **Task inbox** at the bottom of the left sidebar. The main area switches from chat to the task inbox panel.
 
 ### Mobile
 
-Open the top action menu (the three-dot button) and select **Task queue**. While the task queue is open, use the close button at the top to return to the normal single-session chat view.
+Open the top action menu (the three-dot button) and select **Task inbox**. While the task inbox is open, use the close button at the top to return to the normal single-session chat view.
 
 ## Task Statuses
 
@@ -40,7 +40,7 @@ Open the top action menu (the three-dot button) and select **Task queue**. While
 
 ## Creating a Task
 
-1. Open the Task Queue.
+1. Open the Task Inbox.
 2. Click **+ New task**.
 3. Enter the task details:
    - **Project**: Select an existing project or click **Browse…** to choose a directory.
@@ -84,7 +84,7 @@ Only **Waiting** tasks can be edited. Configuration for started or completed tas
 
 ### Complete
 
-Only **Started** tasks can be marked **Complete**. This changes only the task queue status; it does not close or delete the Pi session.
+Only **Started** tasks can be marked **Complete**. This changes only the task inbox status; it does not close or delete the Pi session.
 
 ### Delete
 
@@ -92,7 +92,7 @@ Tasks in any state can be deleted. Deleting a task removes only its task record;
 
 ## Filters and Scope
 
-The task queue provides two filters:
+The task inbox provides two filters:
 
 - **Scope**
   - **Current project**: Show tasks whose project path matches the current project.
@@ -120,9 +120,9 @@ Use a managed worktree for tasks that modify code, especially parallel or experi
 
 ### Architecture
 
-The Task Queue has three main parts:
+The Task Inbox has three main parts:
 
-1. **Task queue panel**: `TaskQueuePanel` displays and filters tasks and provides create, edit, start, complete, and delete actions.
+1. **Task inbox panel**: `TaskInboxPanel` displays and filters tasks and provides create, edit, start, complete, and delete actions.
 2. **Task editor dialog**: `TaskEditorDialog` reuses the new-session launch controls to collect project, model, skill, and worktree settings.
 3. **Backend task service**: The `/api/tasks` REST API persists tasks and creates a new Pi session when a task starts.
 

@@ -60,7 +60,7 @@ Use the search box and the **Category** and **State** filters to narrow the list
 
 Good example:
 
-> The mobile Task Queue entry for this project is in the navigation dropdown.
+> The mobile Task Inbox entry for this project is in the navigation dropdown.
 
 Poor example:
 
@@ -107,7 +107,7 @@ This is useful when:
 The agent includes a `memory` tool. You can explicitly ask it to:
 
 - “Remember that this project's API errors must contain `code` and `message`.”
-- “Search your memory for the mobile Task Queue rule.”
+- “Search your memory for the mobile Task Inbox rule.”
 - “Update this memory…”
 - “Forget this memory…”
 
