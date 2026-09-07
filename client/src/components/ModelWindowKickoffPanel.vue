@@ -39,6 +39,7 @@
             @update:model-value="setModel(item, $event)"
           />
         </label>
+        <label>{{ t('settings.modelWindowKickoff.projectPath') }}<input v-model="item.projectPath" /></label>
         <label>{{ t('settings.modelWindowKickoff.windowHours') }}<input v-model.number="item.windowHours" type="number" min="0.02" step="0.5" /></label>
         <label>{{ t('settings.modelWindowKickoff.bufferSeconds') }}<input v-model.number="item.safetyBufferSeconds" type="number" min="0" /></label>
         <label>{{ t('settings.modelWindowKickoff.nextRun') }}<input v-model="item.nextRunLocal" type="datetime-local" /></label>
@@ -99,6 +100,7 @@ interface KickoffResponse {
   profileId: string;
   provider: string;
   modelId: string;
+  projectPath: string;
   prompt: string;
   windowDurationMinutes: number;
   safetyBufferSeconds: number;
@@ -119,6 +121,7 @@ interface ModelWindowKickoffPayload {
   profileId: string;
   provider: string;
   modelId: string;
+  projectPath: string;
   prompt: string;
   windowDurationMinutes: number;
   safetyBufferSeconds: number;
@@ -130,6 +133,7 @@ const profiles = ref<Profile[]>([]);
 const models = ref<Record<string, Model[]>>({});
 const channels = ref<Channel[]>([]);
 const kickoffs = ref<Draft[]>([]);
+const defaultProjectPath = ref('~');
 const channel = ref<Channel>();
 const channelName = ref('WeCom');
 const botKey = ref('');
@@ -149,12 +153,14 @@ onMounted(load);
 async function load(): Promise<void> {
   error.value = '';
   try {
-    const [profileResult, kickoffResult, channelResult] = await Promise.all([
+    const [profileResult, kickoffResult, channelResult, projectPathResult] = await Promise.all([
       apiRequest<{ profiles: Profile[] }>('/api/sessions/agent-profiles'),
       apiRequest<{ kickoffs: KickoffResponse[] }>('/api/model-window-kickoffs'),
       apiRequest<{ channels: Channel[] }>('/api/model-window-kickoffs/notification-channels'),
+      apiRequest<{ projectPath: string }>('/api/sessions/project-path'),
     ]);
     profiles.value = profileResult.profiles;
+    defaultProjectPath.value = projectPathResult.projectPath;
     kickoffs.value = kickoffResult.kickoffs.map(toDraft);
     channels.value = channelResult.channels;
     channel.value = channels.value.find((entry) => entry.configured);
@@ -221,7 +227,8 @@ async function add(): Promise<void> {
         profileId: profile.id,
         provider: model.provider,
         modelId: model.id,
-        prompt: 'Reply with OK only.',
+        projectPath: defaultProjectPath.value,
+        prompt: 'Ping',
         windowDurationMinutes: 300,
         safetyBufferSeconds: 60,
         nextRunAt: new Date().toISOString(),
@@ -275,6 +282,7 @@ function payload(item: Draft): ModelWindowKickoffPayload {
     profileId: item.profileId,
     provider: item.provider,
     modelId: item.modelId,
+    projectPath: item.projectPath,
     prompt: item.prompt,
     windowDurationMinutes: Math.round(item.windowHours * 60),
     safetyBufferSeconds: item.safetyBufferSeconds,

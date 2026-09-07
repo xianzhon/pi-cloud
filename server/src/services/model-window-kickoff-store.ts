@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PiCloudDatabase } from '../db/database.js';
 
-export const DEFAULT_KICKOFF_PROMPT = 'Reply with OK only.';
+export const DEFAULT_KICKOFF_PROMPT = 'Ping';
 
 export interface ModelWindowKickoff {
   id: string;
@@ -9,6 +9,7 @@ export interface ModelWindowKickoff {
   profileId: string;
   provider: string;
   modelId: string;
+  projectPath: string;
   prompt: string;
   windowDurationMinutes: number;
   safetyBufferSeconds: number;
@@ -26,6 +27,7 @@ export interface ModelWindowKickoffInput {
   profileId: string;
   provider: string;
   modelId: string;
+  projectPath?: string;
   prompt?: string;
   windowDurationMinutes?: number;
   safetyBufferSeconds?: number;
@@ -39,6 +41,7 @@ interface KickoffRow {
   profile_id: string;
   provider: string;
   model_id: string;
+  project_path: string;
   prompt: string;
   window_duration_minutes: number;
   safety_buffer_seconds: number;
@@ -56,6 +59,7 @@ interface ValidatedKickoffInput {
   profileId: string;
   provider: string;
   modelId: string;
+  projectPath: string;
   prompt: string;
   windowDurationMinutes: number;
   safetyBufferSeconds: number;
@@ -86,10 +90,10 @@ export class ModelWindowKickoffStore {
     const id = randomUUID();
     this.db.prepare(`
       INSERT INTO model_window_kickoffs (
-        id, enabled, profile_id, provider, model_id, prompt, window_duration_minutes,
+        id, enabled, profile_id, provider, model_id, project_path, prompt, window_duration_minutes,
         safety_buffer_seconds, notification_channel_id, next_run_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, value.enabled ? 1 : 0, value.profileId, value.provider, value.modelId, value.prompt,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, value.enabled ? 1 : 0, value.profileId, value.provider, value.modelId, value.projectPath, value.prompt,
       value.windowDurationMinutes, value.safetyBufferSeconds, value.notificationChannelId, value.nextRunAt, now, now);
     return this.get(id)!;
   }
@@ -98,10 +102,10 @@ export class ModelWindowKickoffStore {
     if (!this.get(id)) throw new Error('Model window kickoff not found');
     const value = validateInput(input, now);
     this.db.prepare(`
-      UPDATE model_window_kickoffs SET enabled = ?, profile_id = ?, provider = ?, model_id = ?, prompt = ?,
+      UPDATE model_window_kickoffs SET enabled = ?, profile_id = ?, provider = ?, model_id = ?, project_path = ?, prompt = ?,
         window_duration_minutes = ?, safety_buffer_seconds = ?, notification_channel_id = ?, next_run_at = ?, updated_at = ?
       WHERE id = ?
-    `).run(value.enabled ? 1 : 0, value.profileId, value.provider, value.modelId, value.prompt,
+    `).run(value.enabled ? 1 : 0, value.profileId, value.provider, value.modelId, value.projectPath, value.prompt,
       value.windowDurationMinutes, value.safetyBufferSeconds, value.notificationChannelId, value.nextRunAt, now, id);
     return this.get(id)!;
   }
@@ -131,6 +135,7 @@ function validateInput(input: ModelWindowKickoffInput, now: string): ValidatedKi
   const profileId = input.profileId?.trim();
   const provider = input.provider?.trim();
   const modelId = input.modelId?.trim();
+  const projectPath = input.projectPath?.trim() || '~';
   const prompt = (input.prompt ?? DEFAULT_KICKOFF_PROMPT).trim();
   const windowDurationMinutes = input.windowDurationMinutes ?? 300;
   const safetyBufferSeconds = input.safetyBufferSeconds ?? 60;
@@ -154,6 +159,7 @@ function validateInput(input: ModelWindowKickoffInput, now: string): ValidatedKi
     profileId,
     provider,
     modelId,
+    projectPath,
     prompt,
     windowDurationMinutes,
     safetyBufferSeconds,
@@ -169,6 +175,7 @@ function toRecord(row: KickoffRow): ModelWindowKickoff {
     profileId: row.profile_id,
     provider: row.provider,
     modelId: row.model_id,
+    projectPath: row.project_path,
     prompt: row.prompt,
     windowDurationMinutes: row.window_duration_minutes,
     safetyBufferSeconds: row.safety_buffer_seconds,

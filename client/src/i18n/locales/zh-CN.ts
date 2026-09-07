@@ -1354,6 +1354,7 @@ export default {
       enabled: '启用',
       profile: '智能体配置',
       model: '提供商和模型',
+      projectPath: '项目目录',
       windowHours: '窗口时长（小时）',
       bufferSeconds: '安全缓冲（秒）',
       nextRun: '下次启动时间',

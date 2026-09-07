@@ -6,7 +6,7 @@ import type { PiSessionService } from './session-manager.js';
 const POLL_INTERVAL_MS = 1 * 60_000;
 const FAILURE_RETRY_MS = 60 * 60_000;
 type KickoffSessionService = Pick<PiSessionService,
-  'setClientAgentProfile' | 'getSession' | 'listSessions' | 'resumeSession' | 'createSession'
+  'setClientAgentProfile' | 'listSessions' | 'resumeSession' | 'createSession'
   | 'renameSession' | 'setSessionModel' | 'runForegroundWithClientProfileProxy'>;
 
 interface SchedulerDependencies {
@@ -106,23 +106,21 @@ export async function probeModel(kickoff: ModelWindowKickoff, sessions: KickoffS
   const sessionName = `Model window kickoff: ${kickoff.provider}/${kickoff.modelId} (${kickoff.id.slice(0, 8)})`;
   await sessions.setClientAgentProfile(clientId, kickoff.profileId);
 
-  let session = sessions.getSession(clientId);
-  if (!session) {
-    const persisted = (await sessions.listSessions(clientId)).find((item) => item.name === sessionName);
-    if (persisted) {
-      session = await sessions.resumeSession(clientId, persisted.path);
-    } else {
-      session = (await sessions.createSession(clientId, {
-        agentProfileId: kickoff.profileId,
-        modelProvider: kickoff.provider,
-        modelId: kickoff.modelId,
-        memoryEnabled: false,
-      })).session;
-      await sessions.renameSession(clientId, session.sessionId, sessionName);
-    }
+  const persisted = (await sessions.listSessions(clientId, kickoff.projectPath))
+    .find((item) => item.name === sessionName);
+  let activeSession: Awaited<ReturnType<KickoffSessionService['resumeSession']>>;
+  if (persisted) {
+    activeSession = await sessions.resumeSession(clientId, persisted.path);
+  } else {
+    activeSession = (await sessions.createSession(clientId, {
+      cwd: kickoff.projectPath,
+      agentProfileId: kickoff.profileId,
+      modelProvider: kickoff.provider,
+      modelId: kickoff.modelId,
+      memoryEnabled: false,
+    })).session;
+    await sessions.renameSession(clientId, activeSession.sessionId, sessionName);
   }
-
-  const activeSession = session;
   await sessions.setSessionModel(clientId, activeSession.sessionId, kickoff.provider, kickoff.modelId);
   await sessions.runForegroundWithClientProfileProxy(clientId, () => activeSession.prompt(kickoff.prompt));
 

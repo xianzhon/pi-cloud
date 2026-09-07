@@ -1354,6 +1354,7 @@ export default {
       enabled: 'Enabled',
       profile: 'Agent profile',
       model: 'Provider and model',
+      projectPath: 'Project directory',
       windowHours: 'Window duration (hours)',
       bufferSeconds: 'Safety buffer (seconds)',
       nextRun: 'Next kickoff',

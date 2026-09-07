@@ -12,7 +12,7 @@ function setup(probe: () => Promise<void>, now = new Date('2026-01-01T00:00:00.0
   databases.push(db);
   const store = new ModelWindowKickoffStore(db);
   const kickoff = store.create({
-    profileId: 'default', provider: 'anthropic', modelId: 'claude',
+    profileId: 'default', provider: 'anthropic', modelId: 'claude', projectPath: '/tmp/project',
     windowDurationMinutes: 300, safetyBufferSeconds: 60, nextRunAt: now.toISOString(),
   }, now.toISOString());
   const send = vi.fn().mockResolvedValue(undefined);
@@ -39,6 +39,8 @@ describe('ModelWindowKickoffScheduler', () => {
       lastAttemptAt: '2026-01-01T00:00:00.000Z',
       lastSuccessAt: '2026-01-01T00:00:00.000Z',
       nextRunAt: '2026-01-01T05:01:00.000Z',
+      projectPath: '/tmp/project',
+      prompt: 'Ping',
       lastError: null,
     });
   });
@@ -78,7 +80,6 @@ describe('ModelWindowKickoffScheduler', () => {
     };
     const sessions = {
       setClientAgentProfile: vi.fn().mockResolvedValue(undefined),
-      getSession: vi.fn().mockReturnValue(undefined),
       listSessions: vi.fn().mockResolvedValue([]),
       resumeSession: vi.fn(),
       createSession: vi.fn().mockResolvedValue({ session }),
@@ -87,12 +88,15 @@ describe('ModelWindowKickoffScheduler', () => {
       runForegroundWithClientProfileProxy: vi.fn(async (_clientId, run) => run()),
     };
     const kickoff = {
-      id: '12345678-abcd', profileId: 'codex', provider: 'openai-codex', modelId: 'gpt-5.6-luna', prompt: 'Ping',
+      id: '12345678-abcd', profileId: 'codex', provider: 'openai-codex', modelId: 'gpt-5.6-luna',
+      projectPath: '/repo/project', prompt: 'Ping',
     } as Parameters<typeof probeModel>[0];
 
     await probeModel(kickoff, sessions as never);
 
+    expect(sessions.listSessions).toHaveBeenCalledWith('model-window-kickoff:12345678-abcd', '/repo/project');
     expect(sessions.createSession).toHaveBeenCalledWith('model-window-kickoff:12345678-abcd', expect.objectContaining({
+      cwd: '/repo/project',
       agentProfileId: 'codex',
       modelProvider: 'openai-codex',
       modelId: 'gpt-5.6-luna',
