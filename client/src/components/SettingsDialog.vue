@@ -78,6 +78,15 @@
                 <PhMagnifyingGlass :size="18" weight="bold" class="settings-menu-icon" />
                 <span>{{ t('settings.sections.reviewSources') }}</span>
               </button>
+              <button
+                class="settings-menu-item"
+                :class="{ active: activeSection === 'modelWindowKickoff' }"
+                type="button"
+                @click="activeSection = 'modelWindowKickoff'"
+              >
+                <PhTimer :size="18" weight="bold" class="settings-menu-icon" />
+                <span>{{ t('settings.sections.modelWindowKickoff') }}</span>
+              </button>
             </nav>
           </aside>
 
@@ -753,6 +762,7 @@
                 </section>
               </template>
 
+              <ModelWindowKickoffPanel v-if="activeSection === 'modelWindowKickoff'" />
               <SecurityPanel v-if="activeSection === 'security'" :totp-enabled="totpEnabled" embedded @updated="emit('updated')" />
               <SkillPresetsPanel
                 v-if="activeSection === 'skills'"
@@ -795,7 +805,7 @@ import { computed, ref, watch } from 'vue';
 import type { FullscreenShortcut, LanguagePreference, NewSessionShortcut, SoundNotificationPreference, StreamingMessageBehavior, ThemePreference } from '../composables/usePreferences';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import type { SkillPreset, SkillPresetInput } from '../composables/useSkillPresets';
-import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh } from '@phosphor-icons/vue';
+import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh, PhTimer } from '@phosphor-icons/vue';
 import { playTaskNotification } from '../services/soundNotifications';
 import { apiRequest } from '../services/apiClient';
 import { useReviewSources } from '../composables/useReviewSources';
@@ -805,6 +815,7 @@ import DialogCloseButton from './DialogCloseButton.vue';
 import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
 import SkillPresetsPanel from './SkillPresetsPanel.vue';
+import ModelWindowKickoffPanel from './ModelWindowKickoffPanel.vue';
 import FolderPickerModal from './FolderPickerModal.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
@@ -921,7 +932,7 @@ const fullscreenShortcutOptions: CustomSelectOption[] = [
   { value: 'ctrlShiftF', label: 'Ctrl+Shift+F' },
 ];
 
-const activeSection = ref<'general' | 'security' | 'chat' | 'keyboard' | 'skills' | 'git' | 'gateway' | 'reviewSources'>('general');
+const activeSection = ref<'general' | 'security' | 'chat' | 'keyboard' | 'skills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff'>('general');
 const { sources: reviewSources, loading: reviewSourcesLoading, error: reviewSourcesError, load: loadReviewSources, add: addReviewSource, remove: removeReviewSourceFn } = useReviewSources();
 const reviewSourceTypes = ref<ReviewSourceType[]>([]);
 const newReviewSourceType = ref('devin');
@@ -1533,6 +1544,7 @@ const sectionHeading = computed(() => {
   if (activeSection.value === 'git') return t('settings.sections.gitHeading');
   if (activeSection.value === 'gateway') return t('settings.sections.gateway');
   if (activeSection.value === 'reviewSources') return t('settings.sections.reviewSources');
+  if (activeSection.value === 'modelWindowKickoff') return t('settings.sections.modelWindowKickoff');
   return t('settings.sections.chatHeading');
 });
 

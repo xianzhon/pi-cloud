@@ -25,6 +25,7 @@ import { gatewayRoutes } from './routes/gateways.js';
 import { wecomGatewayRoutes } from './routes/wecom-gateway.js';
 import { gitHostingRoutes, type GitHostingRouteOptions } from './routes/git-hosting.js';
 import { reviewSourceRoutes } from './routes/review-sources.js';
+import { modelWindowKickoffRoutes } from './routes/model-window-kickoffs.js';
 import { authRoutes } from './routes/auth.js';
 import { chatWebSocket } from './ws/chat.js';
 import { terminalWebSocket } from './ws/terminal.js';
@@ -63,6 +64,9 @@ import { WeixinGatewayService } from './services/weixin-gateway.js';
 import { WecomGatewayService } from './services/wecom-gateway.js';
 import { ReviewSourceStore } from './services/review-source-store.js';
 import { ReviewSourceService } from './services/review-source-service.js';
+import { ModelWindowKickoffStore } from './services/model-window-kickoff-store.js';
+import { ModelWindowKickoffScheduler } from './services/model-window-kickoff-scheduler.js';
+import { NotificationChannelService } from './services/notification-channel.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -252,6 +256,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   const skillPresetStore = new SkillPresetStore(db);
   const reviewSourceStore = new ReviewSourceStore(db);
   const reviewSourceService = new ReviewSourceService(reviewSourceStore);
+  const modelWindowKickoffStore = new ModelWindowKickoffStore(db);
+  const notificationChannels = new NotificationChannelService(db);
+  const modelWindowKickoffScheduler = new ModelWindowKickoffScheduler({
+    store: modelWindowKickoffStore,
+    notifications: notificationChannels,
+    resolveProfile: async (profileId) => (await piSessionService.listAgentProfiles()).find((profile) => profile.id === profileId),
+    resolveProxy: (profileId) => piSessionService.getAgentProfileProxy(profileId),
+    log: app.log,
+  });
+  modelWindowKickoffScheduler.start();
   const sessionActivityStore = new SessionActivityStore(db);
   const sessionPinStore = new SessionPinStore(db);
   projectTaskStore.restoreAllStarting();
@@ -295,6 +309,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     worktreeMetadata: worktreeMetadataStore,
   });
   app.addHook('onClose', async () => {
+    await modelWindowKickoffScheduler.stop();
     await weixinGateway.stop();
     terminalManager.disposeAll();
     piSessionService.disposeAll();
@@ -394,6 +409,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(changelogRoutes, { prefix: '/api/changelog' });
   await app.register(speechRoutes, { prefix: '/api/speech' });
   await app.register(reviewSourceRoutes, { prefix: '/api/review-sources', reviewSourceService, pinStore: sessionPinStore });
+  await app.register(modelWindowKickoffRoutes, {
+    prefix: '/api/model-window-kickoffs',
+    store: modelWindowKickoffStore,
+    notifications: notificationChannels,
+    sessions: piSessionService,
+  });
   await app.register(chatWebSocket);
   await app.register(terminalWebSocket);
 

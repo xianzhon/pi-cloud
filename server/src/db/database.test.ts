@@ -38,6 +38,8 @@ describe('openPiCloudDatabase', () => {
       'memory_fts',
       'memory_projects',
       'memory_recall_events',
+      'model_window_kickoffs',
+      'notification_channels',
       'project_history',
       'project_tasks',
       'review_sources',
@@ -238,10 +240,11 @@ describe('openPiCloudDatabase', () => {
       { version: 2, name: 'gateway-schema' },
       { version: 3, name: 'project-history-schema' },
       { version: 4, name: 'wecom-gateway-schema' },
+      { version: 5, name: 'model-window-kickoff-schema' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 4 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 5 });
     db.close();
   });
 
