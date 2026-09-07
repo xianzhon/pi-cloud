@@ -261,8 +261,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   const modelWindowKickoffScheduler = new ModelWindowKickoffScheduler({
     store: modelWindowKickoffStore,
     notifications: notificationChannels,
+    sessions: piSessionService,
     resolveProfile: async (profileId) => (await piSessionService.listAgentProfiles()).find((profile) => profile.id === profileId),
-    resolveProxy: (profileId) => piSessionService.getAgentProfileProxy(profileId),
     log: app.log,
   });
   modelWindowKickoffScheduler.start();

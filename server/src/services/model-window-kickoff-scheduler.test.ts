@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openPiCloudDatabase } from '../db/database.js';
-import { ModelWindowKickoffScheduler } from './model-window-kickoff-scheduler.js';
+import { ModelWindowKickoffScheduler, probeModel } from './model-window-kickoff-scheduler.js';
 import { ModelWindowKickoffStore } from './model-window-kickoff-store.js';
 import type { NotificationChannelService } from './notification-channel.js';
 
@@ -19,8 +19,8 @@ function setup(probe: () => Promise<void>, now = new Date('2026-01-01T00:00:00.0
   const scheduler = new ModelWindowKickoffScheduler({
     store,
     notifications: { send } as unknown as NotificationChannelService,
+    sessions: {} as never,
     resolveProfile: async () => ({ id: 'default', label: 'Default', path: '/tmp/agent', isDefault: true }),
-    resolveProxy: async () => ({}),
     now: () => now,
     probe: async () => probe(),
   });
@@ -67,5 +67,46 @@ describe('ModelWindowKickoffScheduler', () => {
     await Promise.all([first, second]);
 
     expect(probe).toHaveBeenCalledOnce();
+  });
+
+  it('sends the probe through a named persistent Pi session', async () => {
+    const prompt = vi.fn().mockResolvedValue(undefined);
+    const session = {
+      sessionId: 'session-1',
+      prompt,
+      messages: [{ role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'OK' }] }],
+    };
+    const sessions = {
+      setClientAgentProfile: vi.fn().mockResolvedValue(undefined),
+      getSession: vi.fn().mockReturnValue(undefined),
+      listSessions: vi.fn().mockResolvedValue([]),
+      resumeSession: vi.fn(),
+      createSession: vi.fn().mockResolvedValue({ session }),
+      renameSession: vi.fn().mockResolvedValue(undefined),
+      setSessionModel: vi.fn().mockResolvedValue(undefined),
+      runForegroundWithClientProfileProxy: vi.fn(async (_clientId, run) => run()),
+    };
+    const kickoff = {
+      id: '12345678-abcd', profileId: 'codex', provider: 'openai-codex', modelId: 'gpt-5.6-luna', prompt: 'Ping',
+    } as Parameters<typeof probeModel>[0];
+
+    await probeModel(kickoff, sessions as never);
+
+    expect(sessions.createSession).toHaveBeenCalledWith('model-window-kickoff:12345678-abcd', expect.objectContaining({
+      agentProfileId: 'codex',
+      modelProvider: 'openai-codex',
+      modelId: 'gpt-5.6-luna',
+      memoryEnabled: false,
+    }));
+    expect(sessions.renameSession).toHaveBeenCalledWith(
+      'model-window-kickoff:12345678-abcd',
+      'session-1',
+      'Model window kickoff: openai-codex/gpt-5.6-luna (12345678)',
+    );
+    expect(sessions.runForegroundWithClientProfileProxy).toHaveBeenCalledWith(
+      'model-window-kickoff:12345678-abcd',
+      expect.any(Function),
+    );
+    expect(prompt).toHaveBeenCalledWith('Ping');
   });
 });

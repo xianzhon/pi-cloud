@@ -1,22 +1,21 @@
-import { complete } from '@earendil-works/pi-ai/compat';
-import { ModelRegistry, ModelRuntime } from '@earendil-works/pi-coding-agent';
-import { join } from 'node:path';
 import type { AgentProfile } from '../types.js';
-import { runWithAgentDirAndProxyEnv, type ProxyEnv } from './profile-proxy.js';
 import { ModelWindowKickoffStore, type ModelWindowKickoff } from './model-window-kickoff-store.js';
 import { NotificationChannelService } from './notification-channel.js';
+import type { PiSessionService } from './session-manager.js';
 
-const POLL_INTERVAL_MS = 10 * 60_000;
+const POLL_INTERVAL_MS = 1 * 60_000;
 const FAILURE_RETRY_MS = 60 * 60_000;
-const PROBE_TIMEOUT_MS = 60_000;
+type KickoffSessionService = Pick<PiSessionService,
+  'setClientAgentProfile' | 'getSession' | 'listSessions' | 'resumeSession' | 'createSession'
+  | 'renameSession' | 'setSessionModel' | 'runForegroundWithClientProfileProxy'>;
 
 interface SchedulerDependencies {
   store: ModelWindowKickoffStore;
   notifications: NotificationChannelService;
+  sessions: KickoffSessionService;
   resolveProfile(profileId: string): Promise<AgentProfile | undefined>;
-  resolveProxy(profileId: string): Promise<ProxyEnv>;
   now?: () => Date;
-  probe?: (kickoff: ModelWindowKickoff, profile: AgentProfile, proxy: ProxyEnv) => Promise<void>;
+  probe?: (kickoff: ModelWindowKickoff, profile: AgentProfile) => Promise<void>;
   pollIntervalMs?: number;
   log?: { error(value: unknown, message?: string): void };
 }
@@ -56,8 +55,11 @@ export class ModelWindowKickoffScheduler {
     try {
       const profile = await this.dependencies.resolveProfile(kickoff.profileId);
       if (!profile) throw new Error('Agent profile not found');
-      const proxy = await this.dependencies.resolveProxy(kickoff.profileId);
-      await (this.dependencies.probe ?? probeModel)(kickoff, profile, proxy);
+      if (this.dependencies.probe) {
+        await this.dependencies.probe(kickoff, profile);
+      } else {
+        await probeModel(kickoff, this.dependencies.sessions);
+      }
       const successfulAt = this.now();
       const next = new Date(successfulAt.getTime()
         + kickoff.windowDurationMinutes * 60_000
@@ -99,34 +101,36 @@ export class ModelWindowKickoffScheduler {
   }
 }
 
-export async function probeModel(kickoff: ModelWindowKickoff, profile: AgentProfile, proxy: ProxyEnv): Promise<void> {
-  await runWithAgentDirAndProxyEnv(profile.path, proxy, async () => {
-    const runtime = await ModelRuntime.create({
-      authPath: join(profile.path, 'auth.json'),
-      modelsPath: join(profile.path, 'models.json'),
-      allowModelNetwork: false,
-    });
-    const registry = new ModelRegistry(runtime);
-    const model = registry.find(kickoff.provider, kickoff.modelId);
-    if (!model) throw new Error(`Unknown model: ${kickoff.provider}/${kickoff.modelId}`);
-    const auth = await registry.getApiKeyAndHeaders(model);
-    if (!auth.ok) throw new Error(auth.error || 'Model authentication failed');
-    const response = await complete(model, {
-      messages: [{
-        role: 'user',
-        content: [{ type: 'text', text: kickoff.prompt }],
-        timestamp: Date.now(),
-      }],
-    }, {
-      apiKey: auth.apiKey,
-      headers: auth.headers,
-      env: auth.env,
-      maxTokens: 4,
-      maxRetries: 0,
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-    if (response.stopReason === 'error' || response.stopReason === 'aborted') {
-      throw new Error(response.errorMessage || `Model probe ${response.stopReason}`);
+export async function probeModel(kickoff: ModelWindowKickoff, sessions: KickoffSessionService): Promise<void> {
+  const clientId = `model-window-kickoff:${kickoff.id}`;
+  const sessionName = `Model window kickoff: ${kickoff.provider}/${kickoff.modelId} (${kickoff.id.slice(0, 8)})`;
+  await sessions.setClientAgentProfile(clientId, kickoff.profileId);
+
+  let session = sessions.getSession(clientId);
+  if (!session) {
+    const persisted = (await sessions.listSessions(clientId)).find((item) => item.name === sessionName);
+    if (persisted) {
+      session = await sessions.resumeSession(clientId, persisted.path);
+    } else {
+      session = (await sessions.createSession(clientId, {
+        agentProfileId: kickoff.profileId,
+        modelProvider: kickoff.provider,
+        modelId: kickoff.modelId,
+        memoryEnabled: false,
+      })).session;
+      await sessions.renameSession(clientId, session.sessionId, sessionName);
     }
-  });
+  }
+
+  const activeSession = session;
+  await sessions.setSessionModel(clientId, activeSession.sessionId, kickoff.provider, kickoff.modelId);
+  await sessions.runForegroundWithClientProfileProxy(clientId, () => activeSession.prompt(kickoff.prompt));
+
+  const response = [...activeSession.messages].reverse().find((message) => (
+    message.role === 'assistant' && 'stopReason' in message
+  ));
+  if (!response || !('stopReason' in response)) throw new Error('Model kickoff finished without an assistant response');
+  if (response.stopReason === 'error' || response.stopReason === 'aborted') {
+    throw new Error(response.errorMessage || `Model kickoff ${response.stopReason}`);
+  }
 }
