@@ -15,7 +15,7 @@ interface SchedulerDependencies {
   sessions: KickoffSessionService;
   resolveProfile(profileId: string): Promise<AgentProfile | undefined>;
   now?: () => Date;
-  probe?: (kickoff: ModelWindowKickoff, profile: AgentProfile) => Promise<void>;
+  probe?: (kickoff: ModelWindowKickoff, profile: AgentProfile) => Promise<string | void>;
   pollIntervalMs?: number;
   log?: { error(value: unknown, message?: string): void };
 }
@@ -55,11 +55,9 @@ export class ModelWindowKickoffScheduler {
     try {
       const profile = await this.dependencies.resolveProfile(kickoff.profileId);
       if (!profile) throw new Error('Agent profile not found');
-      if (this.dependencies.probe) {
-        await this.dependencies.probe(kickoff, profile);
-      } else {
-        await probeModel(kickoff, this.dependencies.sessions);
-      }
+      const response = this.dependencies.probe
+        ? await this.dependencies.probe(kickoff, profile)
+        : await probeModel(kickoff, this.dependencies.sessions);
       const successfulAt = this.now();
       const next = new Date(successfulAt.getTime()
         + kickoff.windowDurationMinutes * 60_000
@@ -72,6 +70,7 @@ export class ModelWindowKickoffScheduler {
             `Profile: ${profile.label || profile.id}`,
             `Model: ${kickoff.provider}/${kickoff.modelId}`,
             `Next kickoff: ${next.toLocaleString()}`,
+            ...(response ? [`Response:\n${response}`] : []),
           ].join('\n'));
         } catch (error) {
           this.dependencies.log?.error(error, 'Model window kickoff notification failed');
@@ -101,7 +100,7 @@ export class ModelWindowKickoffScheduler {
   }
 }
 
-export async function probeModel(kickoff: ModelWindowKickoff, sessions: KickoffSessionService): Promise<void> {
+export async function probeModel(kickoff: ModelWindowKickoff, sessions: KickoffSessionService): Promise<string> {
   const clientId = `model-window-kickoff:${kickoff.id}`;
   const sessionName = `Model window kickoff: ${kickoff.provider}/${kickoff.modelId} (${kickoff.id.slice(0, 8)})`;
   await sessions.setClientAgentProfile(clientId, kickoff.profileId);
@@ -131,4 +130,18 @@ export async function probeModel(kickoff: ModelWindowKickoff, sessions: KickoffS
   if (response.stopReason === 'error' || response.stopReason === 'aborted') {
     throw new Error(response.errorMessage || `Model kickoff ${response.stopReason}`);
   }
+  return extractAssistantText(response.content);
+}
+
+function extractAssistantText(content: unknown): string {
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((part): part is { type: 'text'; text: string } => (
+      typeof part === 'object' && part !== null && 'type' in part && part.type === 'text'
+      && 'text' in part && typeof part.text === 'string'
+    ))
+    .map((part) => part.text)
+    .join('')
+    .trim();
 }
