@@ -762,7 +762,7 @@
                 </section>
               </template>
 
-              <ModelWindowKickoffPanel v-if="activeSection === 'modelWindowKickoff'" />
+              <ModelWindowKickoffPanel v-if="activeSection === 'modelWindowKickoff'" :client-id="clientId" />
               <SecurityPanel v-if="activeSection === 'security'" :totp-enabled="totpEnabled" embedded @updated="emit('updated')" />
               <SkillPresetsPanel
                 v-if="activeSection === 'skills'"

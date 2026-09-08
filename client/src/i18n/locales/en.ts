@@ -1355,6 +1355,7 @@ export default {
       profile: 'Agent profile',
       model: 'Provider and model',
       projectPath: 'Project directory',
+      selectProjectPath: 'Select project directory',
       windowHours: 'Window duration (hours)',
       bufferSeconds: 'Safety buffer (seconds)',
       nextRun: 'Next kickoff',
