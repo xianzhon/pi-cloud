@@ -13,6 +13,10 @@
         <label class="field">{{ t('settings.modelWindowKickoff.botKey') }}<input v-model="botKey" type="password" :placeholder="channel?.configured ? t('settings.modelWindowKickoff.keyConfigured') : ''" /></label>
       </div>
       <div class="notification-actions">
+        <button v-if="channel" class="button danger" :disabled="busy" @click="deleteChannel">
+          <PhTrash :size="16" />
+          {{ t('settings.modelWindowKickoff.deleteChannel') }}
+        </button>
         <button class="button secondary" :disabled="busy || (!botKey && !channel)" @click="saveChannel">
           <PhFloppyDisk :size="16" />
           {{ t('settings.modelWindowKickoff.saveChannel') }}
@@ -326,6 +330,28 @@ async function remove(id: string): Promise<void> {
   }
 }
 
+async function deleteChannel(): Promise<void> {
+  if (!channel.value) return;
+
+  busy.value = true;
+  error.value = '';
+  const channelId = channel.value.id;
+  try {
+    await apiRequest(`/api/model-window-kickoffs/notification-channels/${encodeURIComponent(channelId)}`, { method: 'DELETE' });
+    channels.value = channels.value.filter((entry) => entry.id !== channelId);
+    kickoffs.value.forEach((item) => {
+      if (item.notificationChannelId === channelId) item.notificationChannelId = null;
+    });
+    channel.value = undefined;
+    channelName.value = 'WeCom';
+    botKey.value = '';
+  } catch (cause) {
+    error.value = message(cause);
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function saveChannel(): Promise<void> {
   busy.value = true;
   try {
@@ -471,6 +497,7 @@ function message(cause: unknown): string {
 
 .notification-actions {
   justify-content: flex-end;
+  gap: 0.6rem;
 }
 
 .kickoff-card {

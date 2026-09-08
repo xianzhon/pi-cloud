@@ -1351,6 +1351,7 @@ export default {
       botKey: 'WeCom bot key',
       keyConfigured: 'Configured - leave blank to keep it',
       saveChannel: 'Save notification channel',
+      deleteChannel: 'Delete channel',
       enabled: 'Enabled',
       profile: 'Agent profile',
       model: 'Provider and model',
