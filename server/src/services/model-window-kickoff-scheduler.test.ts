@@ -2,18 +2,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openPiCloudDatabase } from '../db/database.js';
 import { ModelWindowKickoffScheduler, probeModel } from './model-window-kickoff-scheduler.js';
 import { ModelWindowKickoffStore } from './model-window-kickoff-store.js';
-import type { NotificationChannelService } from './notification-channel.js';
+import { NotificationChannelService } from './notification-channel.js';
 
 const databases: ReturnType<typeof openPiCloudDatabase>[] = [];
 afterEach(() => databases.splice(0).forEach((db) => db.close()));
 
-function setup(probe: () => Promise<void>, now = new Date('2026-01-01T00:00:00.000Z')) {
+function setup(probe: () => Promise<string | void>, now = new Date('2026-01-01T00:00:00.000Z')) {
   const db = openPiCloudDatabase(':memory:');
   databases.push(db);
   const store = new ModelWindowKickoffStore(db);
+  const channel = new NotificationChannelService(db).saveWecom({ botKey: 'test-key' });
   const kickoff = store.create({
     profileId: 'default', provider: 'anthropic', modelId: 'claude', projectPath: '/tmp/project',
     windowDurationMinutes: 300, safetyBufferSeconds: 60, nextRunAt: now.toISOString(),
+    notificationChannelId: channel.id,
   }, now.toISOString());
   const send = vi.fn().mockResolvedValue(undefined);
   const scheduler = new ModelWindowKickoffScheduler({
@@ -45,6 +47,22 @@ describe('ModelWindowKickoffScheduler', () => {
     });
   });
 
+  it('formats successful kickoff notifications as styled WeCom Markdown with local times', async () => {
+    const now = new Date(2026, 0, 2, 3, 4, 5);
+    const { kickoff, scheduler, send } = setup(async () => 'OK', now);
+
+    await scheduler.tick();
+
+    expect(send).toHaveBeenCalledWith(kickoff.notificationChannelId, [
+      '✅Model window started',
+      '>Profile: <font color="comment">Default</font>',
+      '>Model: <font color="comment">anthropic/claude</font>',
+      '>Response: <font color="comment">OK</font>',
+      '>Started time: <font color="warning">2026-01-02 03:04:05</font>',
+      '>Next kickoff: <font color="comment">2026-01-02 08:05:05</font>',
+    ].join('\n'));
+  });
+
   it('records failures and retries in one hour', async () => {
     const { store, kickoff, scheduler } = setup(async () => { throw new Error('rate limited'); });
 
@@ -55,6 +73,22 @@ describe('ModelWindowKickoffScheduler', () => {
       lastSuccessAt: null,
       lastError: 'rate limited',
     });
+  });
+
+  it('formats failed kickoff notifications as styled WeCom Markdown with local times', async () => {
+    const now = new Date(2026, 0, 2, 3, 4, 5);
+    const { kickoff, scheduler, send } = setup(async () => { throw new Error('rate limited'); }, now);
+
+    await scheduler.tick();
+
+    expect(send).toHaveBeenCalledWith(kickoff.notificationChannelId, [
+      '❌Model window kickoff failed',
+      '>Profile: <font color="comment">default</font>',
+      '>Model: <font color="comment">anthropic/claude</font>',
+      '>Error: <font color="warning">rate limited</font>',
+      '>Started time: <font color="warning">2026-01-02 03:04:05</font>',
+      '>Retry: <font color="comment">2026-01-02 04:04:05</font>',
+    ].join('\n'));
   });
 
   it('does not run the same kickoff twice during overlapping ticks', async () => {

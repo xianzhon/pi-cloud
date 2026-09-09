@@ -65,13 +65,10 @@ export class ModelWindowKickoffScheduler {
       this.dependencies.store.recordSuccess(kickoff.id, successfulAt.toISOString(), next.toISOString());
       if (kickoff.notificationChannelId) {
         try {
-          await this.dependencies.notifications.send(kickoff.notificationChannelId, [
-            'Model window started',
-            `Profile: ${profile.label || profile.id}`,
-            `Model: ${kickoff.provider}/${kickoff.modelId}`,
-            `Next kickoff: ${next.toLocaleString()}`,
-            ...(response ? [`Response:\n${response}`] : []),
-          ].join('\n'));
+          await this.dependencies.notifications.send(
+            kickoff.notificationChannelId,
+            formatSuccessNotification(kickoff, profile, response, attemptedAt, next),
+          );
         } catch (error) {
           this.dependencies.log?.error(error, 'Model window kickoff notification failed');
         }
@@ -83,13 +80,10 @@ export class ModelWindowKickoffScheduler {
       this.dependencies.store.recordFailure(kickoff.id, failedAt.toISOString(), failure, retryAt.toISOString());
       if (kickoff.notificationChannelId) {
         try {
-          await this.dependencies.notifications.send(kickoff.notificationChannelId, [
-            'Model window kickoff failed',
-            `Profile: ${kickoff.profileId}`,
-            `Model: ${kickoff.provider}/${kickoff.modelId}`,
-            `Error: ${failure}`,
-            `Retry: ${retryAt.toLocaleString()}`,
-          ].join('\n'));
+          await this.dependencies.notifications.send(
+            kickoff.notificationChannelId,
+            formatFailureNotification(kickoff, failure, attemptedAt, retryAt),
+          );
         } catch (notificationError) {
           this.dependencies.log?.error(notificationError, 'Model window kickoff failure notification failed');
         }
@@ -98,6 +92,48 @@ export class ModelWindowKickoffScheduler {
       this.running.delete(kickoff.id);
     }
   }
+}
+
+function formatSuccessNotification(
+  kickoff: ModelWindowKickoff,
+  profile: AgentProfile,
+  response: string | void,
+  startedAt: Date,
+  next: Date,
+): string {
+  return [
+    '✅Model window started',
+    markdownField('Profile', profile.label || profile.id),
+    markdownField('Model', `${kickoff.provider}/${kickoff.modelId}`),
+    ...(response ? [markdownField('Response', response)] : []),
+    markdownField('Started time', formatLocalDateTime(startedAt), 'warning'),
+    markdownField('Next kickoff', formatLocalDateTime(next)),
+  ].join('\n');
+}
+
+function formatFailureNotification(
+  kickoff: ModelWindowKickoff,
+  failure: string,
+  startedAt: Date,
+  retryAt: Date,
+): string {
+  return [
+    '❌Model window kickoff failed',
+    markdownField('Profile', kickoff.profileId),
+    markdownField('Model', `${kickoff.provider}/${kickoff.modelId}`),
+    markdownField('Error', failure, 'warning'),
+    markdownField('Started time', formatLocalDateTime(startedAt), 'warning'),
+    markdownField('Retry', formatLocalDateTime(retryAt)),
+  ].join('\n');
+}
+
+function markdownField(label: string, value: string, color = 'comment'): string {
+  return `>${label}: <font color="${color}">${value}</font>`;
+}
+
+function formatLocalDateTime(value: Date): string {
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
 }
 
 export async function probeModel(kickoff: ModelWindowKickoff, sessions: KickoffSessionService): Promise<string> {
