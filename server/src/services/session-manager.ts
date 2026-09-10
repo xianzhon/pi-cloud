@@ -1529,6 +1529,13 @@ export class PiSessionService {
     this.cancelCleanup(clientId);
     
     const timer = setTimeout(() => {
+      this.cleanupTimers.delete(clientId);
+      const sessionIds = this.clientSessions.get(clientId) || new Set();
+      const isStreaming = Array.from(sessionIds).some((sessionId) => this.sessions.get(sessionId)?.isStreaming);
+      if (isStreaming) {
+        this.scheduleCleanup(clientId, delayMs);
+        return;
+      }
       this.disposeSession(clientId);
     }, delayMs);
     

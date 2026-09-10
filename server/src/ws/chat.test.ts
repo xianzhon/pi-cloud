@@ -79,6 +79,23 @@ async function openSocket() {
 }
 
 describe('chat websocket', () => {
+  it('keeps a streaming session running when the client disconnects', async () => {
+    const session = mocks.session as typeof mocks.session & { isStreaming?: boolean };
+    session.isStreaming = true;
+    mocks.session.abort.mockClear();
+    const cancelCleanupCalls = mocks.sessionService.cancelCleanup.mock.calls.length;
+    const scheduleCleanupCalls = mocks.sessionService.scheduleCleanup.mock.calls.length;
+    const socket = await openSocket();
+
+    socket.emit('close');
+
+    expect(mocks.session.abort).not.toHaveBeenCalled();
+    expect(mocks.sessionService.cancelCleanup).toHaveBeenCalledTimes(cancelCleanupCalls + 1);
+    expect(mocks.sessionService.scheduleCleanup).toHaveBeenCalledTimes(scheduleCleanupCalls + 1);
+    expect(mocks.sessionService.scheduleCleanup).toHaveBeenLastCalledWith('client-1');
+    delete session.isStreaming;
+  });
+
   it('acknowledges requested prompt preflight acceptance', async () => {
     const socket = await openSocket();
 

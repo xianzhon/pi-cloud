@@ -247,6 +247,31 @@ describe('PiSessionService', () => {
     }
   });
 
+  it('defers disconnected-client cleanup while a session is streaming', () => {
+    vi.useFakeTimers();
+    try {
+      const service = new PiSessionService();
+      const state = service as any;
+      const session = { isStreaming: true, dispose: vi.fn() };
+      state.sessions.set('session-1', session);
+      state.clientSessions.set('client-1', new Set(['session-1']));
+
+      service.scheduleCleanup('client-1', 1000);
+      vi.advanceTimersByTime(1000);
+
+      expect(session.dispose).not.toHaveBeenCalled();
+      expect(state.cleanupTimers.has('client-1')).toBe(true);
+
+      session.isStreaming = false;
+      vi.advanceTimersByTime(1000);
+
+      expect(session.dispose).toHaveBeenCalledOnce();
+      expect(state.cleanupTimers.has('client-1')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('discovers default and sibling agent profiles under ~/.pi', async () => {
     readdir.mockResolvedValue([
       { name: 'agent', isDirectory: () => true },

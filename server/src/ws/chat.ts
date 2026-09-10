@@ -132,6 +132,7 @@ export async function chatWebSocket(app: FastifyInstance) {
 
     const safeClientId = clientId;
     console.log(`Client connected: ${safeClientId}`);
+    sessionService.cancelCleanup(safeClientId);
 
     function sendPromptPreflight(
       sessionId: string,
@@ -390,14 +391,6 @@ export async function chatWebSocket(app: FastifyInstance) {
       console.log(`Client disconnected: ${safeClientId}`);
       unsubscribeMemoryUpdates();
       unsubscribeMemoryRecall();
-      const activeSession = sessionService.getSession(safeClientId);
-      if (activeSession?.isStreaming) {
-        abortSessionBestEffort(activeSession).then((aborted) => {
-          if (!aborted) sessionService.forceDisposeBySessionId(activeSession.sessionId);
-        }).catch((error) => {
-          console.warn('Failed to stop streaming session on disconnect:', error);
-        });
-      }
       sessionService.scheduleCleanup(safeClientId);
     });
   });
