@@ -1368,6 +1368,8 @@ export default {
       nextScheduled: '下次计划启动',
       lastError: '上次错误',
       save: '保存',
+      saving: '正在保存…',
+      saved: '已保存',
       delete: '删除',
       add: '添加启动计划',
       noModels: '此配置没有可用模型。',

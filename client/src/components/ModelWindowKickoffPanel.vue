@@ -26,7 +26,7 @@
 
     <p v-if="error" class="error-message" role="alert">{{ error }}</p>
 
-    <section v-for="item in kickoffs" :key="item.id" class="kickoff-card">
+    <section v-for="item in kickoffs" :key="item.id" class="kickoff-card" @input="clearSaveStatus(item.id)">
       <header class="card-heading">
         <div class="model-heading">
           <span class="model-label">{{ t('settings.modelWindowKickoff.model') }}</span>
@@ -83,7 +83,7 @@
             :model-value="item.notificationChannelId || ''"
             :options="notificationOptions"
             :aria-label="t('settings.modelWindowKickoff.notification')"
-            @update:model-value="item.notificationChannelId = $event || null"
+            @update:model-value="setNotificationChannel(item, $event)"
           />
         </label>
         <label class="field prompt-field">{{ t('settings.modelWindowKickoff.prompt') }}<textarea v-model="item.prompt" rows="3" /></label>
@@ -97,8 +97,14 @@
       </div>
 
       <footer class="card-actions">
+        <span v-if="saveStatus[item.id] === 'saved'" class="save-success" role="status">
+          {{ t('settings.modelWindowKickoff.saved') }}
+        </span>
         <button class="button danger" :disabled="busy" @click="remove(item.id)"><PhTrash :size="16" />{{ t('settings.modelWindowKickoff.delete') }}</button>
-        <button class="button primary" :disabled="busy" @click="save(item)"><PhFloppyDisk :size="16" />{{ t('settings.modelWindowKickoff.save') }}</button>
+        <button class="button primary save-button" :disabled="busy" @click="save(item)">
+          <PhFloppyDisk :size="16" />
+          {{ saveButtonLabel(item.id) }}
+        </button>
       </footer>
     </section>
 
@@ -196,6 +202,7 @@ const channelName = ref('WeCom');
 const botKey = ref('');
 const busy = ref(false);
 const error = ref('');
+const saveStatus = ref<Record<string, 'saving' | 'saved'>>({});
 const selectedProjectDraft = ref<Draft>();
 const showProjectPicker = computed(() => Boolean(selectedProjectDraft.value));
 const pickerInitialPath = computed(() => selectedProjectDraft.value?.projectPath || defaultProjectPath.value || '~');
@@ -256,6 +263,7 @@ function closeProjectPicker(): void {
 
 function selectProjectPath(payload: { path: string }): void {
   if (selectedProjectDraft.value) {
+    clearSaveStatus(selectedProjectDraft.value.id);
     selectedProjectDraft.value.projectPath = payload.path;
   }
   closeProjectPicker();
@@ -264,14 +272,17 @@ function selectProjectPath(payload: { path: string }): void {
 async function save(item: Draft): Promise<void> {
   busy.value = true;
   error.value = '';
+  saveStatus.value[item.id] = 'saving';
   try {
     const result = await apiRequest<{ kickoff: KickoffResponse }, ModelWindowKickoffPayload>(
       `/api/model-window-kickoffs/${item.id}`,
       { method: 'PUT', body: payload(item) },
     );
     Object.assign(item, toDraft(result.kickoff));
+    saveStatus.value[item.id] = 'saved';
   } catch (cause) {
     error.value = message(cause);
+    clearSaveStatus(item.id);
   } finally {
     busy.value = false;
   }
@@ -408,12 +419,29 @@ function modelOptions(profileId: string): CustomSelectOption[] {
 }
 
 function setProfile(item: Draft, profileId: string): void {
+  clearSaveStatus(item.id);
   item.profileId = profileId;
   void loadModels(profileId);
 }
 
 function setModel(item: Draft, value: string): void {
+  clearSaveStatus(item.id);
   [item.provider, item.modelId] = value.split('\n');
+}
+
+function setNotificationChannel(item: Draft, value: string): void {
+  clearSaveStatus(item.id);
+  item.notificationChannelId = value || null;
+}
+
+function clearSaveStatus(id: string): void {
+  delete saveStatus.value[id];
+}
+
+function saveButtonLabel(id: string): string {
+  return saveStatus.value[id] === 'saving'
+    ? t('settings.modelWindowKickoff.saving')
+    : t('settings.modelWindowKickoff.save');
 }
 
 function toLocal(value: string): string {
@@ -730,6 +758,12 @@ function message(cause: unknown): string {
   border-top: 1px solid var(--border);
 }
 
+.save-success {
+  margin-right: auto;
+  color: var(--success);
+  font-size: 0.82rem;
+}
+
 .button,
 .add-button {
   display: inline-flex;
@@ -752,6 +786,7 @@ function message(cause: unknown): string {
   color: white;
   background: var(--accent);
 }
+
 
 .button.secondary {
   color: var(--text-primary);

@@ -1368,6 +1368,8 @@ export default {
       nextScheduled: 'Next scheduled kickoff',
       lastError: 'Last error',
       save: 'Save',
+      saving: 'Saving…',
+      saved: 'Saved',
       delete: 'Delete',
       add: 'Add kickoff',
       noModels: 'This profile has no available models.',
