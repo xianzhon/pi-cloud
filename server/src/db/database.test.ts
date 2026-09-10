@@ -38,6 +38,8 @@ describe('openPiCloudDatabase', () => {
       'memory_fts',
       'memory_projects',
       'memory_recall_events',
+      'model_window_kickoffs',
+      'notification_channels',
       'project_history',
       'project_tasks',
       'review_sources',
@@ -59,6 +61,10 @@ describe('openPiCloudDatabase', () => {
       'weixin_gateway_sessions',
       'weixin_gateway_state',
     ]);
+    const kickoffColumns = db.prepare('PRAGMA table_info(model_window_kickoffs)').all() as Array<{ name: string; notnull: number }>;
+    expect(kickoffColumns.map((column) => column.name)).toContain('project_path');
+    expect(kickoffColumns.find((column) => column.name === 'project_path')?.notnull).toBe(1);
+
     const columns = db.prepare('PRAGMA table_info(project_tasks)').all() as Array<{ name: string; notnull: number }>;
     expect(columns.map((column) => column.name)).toEqual([
       'id', 'project_path', 'title', 'prompt', 'notes', 'status',
@@ -238,10 +244,12 @@ describe('openPiCloudDatabase', () => {
       { version: 2, name: 'gateway-schema' },
       { version: 3, name: 'project-history-schema' },
       { version: 4, name: 'wecom-gateway-schema' },
+      { version: 5, name: 'model-window-kickoff-schema' },
+      { version: 6, name: 'model-window-kickoff-project-path' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 4 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 6 });
     db.close();
   });
 

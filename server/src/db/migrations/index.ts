@@ -3,6 +3,8 @@ import { applicationSchemaMigration } from './001-application-schema.js';
 import { gatewaySchemaMigration } from './002-gateway-schema.js';
 import { projectHistorySchemaMigration } from './003-project-history-schema.js';
 import { wecomGatewaySchemaMigration } from './004-wecom-gateway-schema.js';
+import { modelWindowKickoffSchemaMigration } from './005-model-window-kickoff-schema.js';
+import { modelWindowKickoffProjectPathMigration } from './006-model-window-kickoff-project-path.js';
 import type { DatabaseMigration } from './migration.js';
 
 const migrations: DatabaseMigration[] = [
@@ -10,6 +12,8 @@ const migrations: DatabaseMigration[] = [
   gatewaySchemaMigration,
   projectHistorySchemaMigration,
   wecomGatewaySchemaMigration,
+  modelWindowKickoffSchemaMigration,
+  modelWindowKickoffProjectPathMigration,
 ];
 
 export function runDatabaseMigrations(db: PiCloudDatabase): void {
