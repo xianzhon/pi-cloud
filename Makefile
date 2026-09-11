@@ -9,7 +9,7 @@ build:
 	$(PNPM) build
 
 test:
-	$(PNPM) test
+	$(PNPM) test:coverage
 
 # Build the npm tarball used for package installation and release uploads.
 package: build test

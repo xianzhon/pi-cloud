@@ -166,6 +166,91 @@ describe('git hosting routes', () => {
     expect(result).toEqual({ pullRequest: { number: 3, url: 'https://git.example.com/owner/repo/pulls/3' } });
   });
 
+  it('handles settings lifecycle and provider connection errors', async () => {
+    const api = app();
+    const settings = { get: vi.fn(() => ({ serverUrl: 'https://gitea', token: 'old' })), getSanitized: vi.fn(() => ({ serverUrl: 'https://gitea', tokenConfigured: true })), save: vi.fn(), clear: vi.fn() };
+    const githubSettings = { get: vi.fn(() => ({ serverUrl: 'https://github.com', token: 'gh', proxyUrl: '' })), getSanitized: vi.fn(() => ({ serverUrl: 'https://github.com', tokenConfigured: true })), save: vi.fn(), clear: vi.fn(), saveProxyUrl: vi.fn() };
+    const createClient = vi.fn(() => ({ testConnection: vi.fn().mockRejectedValue(new Error('gitea down')) }));
+    const createGithubClient = vi.fn(() => ({ testConnection: vi.fn().mockResolvedValue(undefined) }));
+    await gitHostingRoutes(api.app as any, routeOptions({ settings, githubSettings, createClient, createGithubClient }) as any);
+    const successReply = { status: vi.fn().mockReturnThis(), send: vi.fn((value) => value) };
+
+    expect(await api.handlers['GET /settings']()).toEqual({
+      settings: { serverUrl: 'https://gitea', tokenConfigured: true },
+      githubSettings: { serverUrl: 'https://github.com', tokenConfigured: true },
+    });
+    await api.handlers['DELETE /settings']();
+    await api.handlers['POST /github/settings']({ body: { token: 'new' } }, successReply);
+    await api.handlers['DELETE /github/settings']();
+    await api.handlers['POST /github/proxy']({ body: { proxyUrl: 'http://proxy' } }, successReply);
+    expect(await api.handlers['POST /github/test']({ body: {} }, successReply)).toEqual({ success: true });
+    expect(settings.clear).toHaveBeenCalledTimes(1);
+    expect(githubSettings.clear).toHaveBeenCalledTimes(1);
+    expect(githubSettings.save).toHaveBeenCalledWith({ serverUrl: 'https://github.com', token: 'new' });
+    expect(githubSettings.saveProxyUrl).toHaveBeenCalledWith('http://proxy');
+
+    const failureReply = { status: vi.fn().mockReturnThis(), send: vi.fn((value) => value) };
+    await api.handlers['POST /test']({ body: {} }, failureReply);
+    expect(failureReply.status).toHaveBeenCalledWith(400);
+    expect(failureReply.send).toHaveBeenCalledWith({ error: 'gitea down' });
+  });
+
+  it('previews and creates issues for both providers and validates task state', async () => {
+    const api = app();
+    const tasks = { get: vi.fn(), attachGiteaIssue: vi.fn((_id, issue) => ({ id: 'task', giteaIssue: issue })) };
+    const git = { previewIssue: vi.fn().mockResolvedValue({ owner: 'o', repo: 'r' }) };
+    const createIssue = vi.fn().mockResolvedValue({ number: 2, url: 'issue-url' });
+    const options = routeOptions({ tasks, git, createClient: vi.fn(() => ({ createIssue })), createGithubClient: vi.fn(() => ({ createIssue })) });
+    await gitHostingRoutes(api.app as any, options as any);
+    tasks.get.mockReturnValueOnce(null);
+    const missingPreviewReply = { status: vi.fn().mockReturnThis(), send: vi.fn((value) => value) };
+    await api.handlers['POST /tasks/:id/issue/preview']({ params: { id: 'missing' } }, missingPreviewReply);
+    expect(missingPreviewReply.status).toHaveBeenCalledWith(404);
+    expect(missingPreviewReply.send).toHaveBeenCalledWith({ error: 'Task not found' });
+
+    tasks.get.mockReturnValueOnce({ projectPath: '/p', title: 'T', prompt: 'P', notes: '' });
+    expect(await api.handlers['POST /tasks/:id/issue/preview']({ params: { id: 'task' } }, {})).toEqual({ preview: { owner: 'o', repo: 'r' } });
+
+    const generateReply = { status: vi.fn().mockReturnThis(), send: vi.fn((value) => value) };
+    await api.handlers['POST /tasks/:id/issue/generate']({ body: { clientId: 'c' } }, generateReply);
+    expect(generateReply.status).toHaveBeenCalledWith(400);
+    expect(generateReply.send).toHaveBeenCalledWith({ error: 'Issue preview is required' });
+
+    tasks.get.mockReturnValueOnce(null);
+    const missingTaskReply = { status: vi.fn().mockReturnThis(), send: vi.fn((value) => value) };
+    await api.handlers['POST /tasks/:id/issue']({ params: { id: 'missing' }, body: {} }, missingTaskReply);
+    expect(missingTaskReply.status).toHaveBeenCalledWith(404);
+
+    tasks.get.mockReturnValueOnce({ giteaIssue: { number: 1 } });
+    const conflictReply = { status: vi.fn().mockReturnThis(), send: vi.fn((value) => value) };
+    await api.handlers['POST /tasks/:id/issue']({ params: { id: 'task' }, body: {} }, conflictReply);
+    expect(conflictReply.status).toHaveBeenCalledWith(409);
+    expect(conflictReply.send).toHaveBeenCalledWith({ error: 'Task already has an issue' });
+
+    tasks.get.mockReturnValueOnce({ giteaIssue: null });
+    const result = await api.handlers['POST /tasks/:id/issue']({ params: { id: 'task' }, body: { provider: 'gitea', owner: 'o', repo: 'r', title: 'T', body: 'B' } }, {});
+    expect(result.task.giteaIssue.number).toBe(2);
+    expect(createIssue).toHaveBeenCalledWith({ provider: 'gitea', owner: 'o', repo: 'r', title: 'T', body: 'B' });
+  });
+
+  it('previews PR defaults, validates generation, and maps integration failures', async () => {
+    const api = app();
+    const git = { previewPr: vi.fn().mockResolvedValue({ targetBranch: 'main' }), createPr: vi.fn().mockRejectedValue('bad') };
+    await gitHostingRoutes(api.app as any, routeOptions({ git }) as any);
+    expect(await api.handlers['POST /pr/preview']({ body: {} }, {})).toEqual({ preview: { targetBranch: 'main' } });
+    expect(git.previewPr).toHaveBeenCalledWith(expect.objectContaining({ cwd: '.', targetBranch: 'main' }));
+
+    const generateReply = { status: vi.fn().mockReturnThis(), send: vi.fn((value) => value) };
+    await api.handlers['POST /pr/generate']({ body: { clientId: 'c' } }, generateReply);
+    expect(generateReply.status).toHaveBeenCalledWith(400);
+    expect(generateReply.send).toHaveBeenCalledWith({ error: 'PR preview is required' });
+
+    const createReply = { status: vi.fn().mockReturnThis(), send: vi.fn((value) => value) };
+    await api.handlers['POST /pr/create']({ body: { preview: { cwd: '/p' }, title: '', body: '', commitMessage: '' } }, createReply);
+    expect(createReply.status).toHaveBeenCalledWith(500);
+    expect(createReply.send).toHaveBeenCalledWith({ error: 'Git integration request failed' });
+  });
+
   it('does not duplicate an existing closing issue line', async () => {
     const api = app();
     const createPr = vi.fn().mockResolvedValue({ number: 3, url: 'https://git.example.com/owner/repo/pulls/3' });

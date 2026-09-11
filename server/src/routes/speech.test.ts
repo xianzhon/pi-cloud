@@ -12,6 +12,7 @@ describe('speechRoutes', () => {
   it('reports unavailable when no STT API key is configured', async () => {
     delete process.env.PI_CLOUD_STT_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.PI_CLOUD_TTS_BASE_URL;
     const app = Fastify();
     await app.register(speechRoutes, { prefix: '/api/speech' });
 

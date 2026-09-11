@@ -158,6 +158,44 @@ describe('NewSessionDialog', () => {
     expect(wrapper.findAll('.skill-option-checkbox')).toHaveLength(0);
   });
 
+  it.each([
+    [{ mode: 'all', skills: [] }, 'all'],
+    [{ mode: 'enabled', skills: ['systematic-debugging', 'missing'] }, 'custom'],
+    [{ mode: 'disabled', skills: ['systematic-debugging'] }, 'custom'],
+  ] as const)('applies an initial skill policy', async (initialSkillPolicy, expectedMode) => {
+    const wrapper = mountDialog({ initialSkillPolicy });
+    expect((wrapper.find(`input[name="session-mode"][value="${expectedMode}"]`).element as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('applies an existing initial preset and updates when presets change', async () => {
+    const presets = [{ id: 'p1', name: 'One', mode: 'enabled', skills: ['systematic-debugging'] }];
+    const wrapper = mountDialog({ presets, initialSkillPolicy: { mode: 'disabled', skills: [], presetId: 'p1' } });
+    expect((wrapper.find('input[value="preset"]').element as HTMLInputElement).checked).toBe(true);
+    await wrapper.setProps({ presets: [{ id: 'p2', name: 'Two', mode: 'disabled', skills: [] }] });
+    expect(wrapper.text()).toContain('Two');
+    await wrapper.setProps({ presets: [] });
+    expect((wrapper.find('input[value="all"]').element as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('ignores invalid saved JSON and reflects submitting and server errors', async () => {
+    localStorage.setItem('pi-cloud.newSessionOptions:/workspace', '{bad');
+    const wrapper = mountDialog({ submitting: true, error: 'Could not start' });
+    expect(wrapper.get('[role="alert"]').text()).toBe('Could not start');
+    expect(wrapper.get('.create-session-submit').attributes('disabled')).toBeDefined();
+    await wrapper.get('.create-session-cancel').trigger('click');
+    expect(wrapper.emitted('close')).toBeUndefined();
+    await wrapper.setProps({ submitting: false });
+    await wrapper.get('.create-session-cancel').trigger('click');
+    expect(wrapper.emitted('close')).toBeTruthy();
+  });
+
+  it('includes an initial model and disabled custom skills in the payload', async () => {
+    localStorage.setItem('pi-cloud.newSessionOptions:/workspace', JSON.stringify({ mode: 'custom', customMode: 'disabled', selectedSkills: ['systematic-debugging'] }));
+    const wrapper = mountDialog({ initialModel: 'openai\u0000gpt' });
+    await wrapper.find('form').trigger('submit');
+    expect(wrapper.emitted('create')?.[0]?.[0]).toMatchObject({ modelProvider: 'openai', modelId: 'gpt', disabledSkills: ['systematic-debugging'] });
+  });
+
   it('saves session and skill options after creating a session', async () => {
     const wrapper = mountDialog();
 

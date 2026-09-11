@@ -120,10 +120,51 @@ describe('task routes', () => {
     }
   });
 
+  it('maps pull request activity onto tasks', async () => {
+    const activityStore = { listLatestPrForSessions: vi.fn(() => new Map([
+      ['session-1', { data: { number: 12, url: 'https://example.test/12', merged: true } }],
+    ])) };
+    store.list.mockReturnValue([{ ...task, sessionId: 'session-1' }, { ...task, id: 'task-2', sessionId: null }]);
+    const { app, handlers } = createMockApp();
+    await taskRoutes(app as any, { store, starter, activityStore } as any);
+    const result = await handlers['GET /']({ query: {} }, createReply());
+    expect(result.tasks[0].pullRequest).toEqual({ number: 12, url: 'https://example.test/12', status: 'merged' });
+    expect(result.tasks[1].pullRequest).toBeUndefined();
+  });
+
+  it('rejects every malformed draft field and invalid scope', async () => {
+    const handlers = await setup();
+    const invalidBodies = [
+      null, { ...draft, skills: 'read' }, { ...draft, skills: [1] }, { ...draft, skillMode: 'bad' },
+      { ...draft, projectPath: 1 }, { ...draft, title: ' ' }, { ...draft, prompt: null },
+      { ...draft, agentProfileId: '' }, { ...draft, modelProvider: 1 }, { ...draft, modelId: '' },
+      { ...draft, presetId: 1 },
+    ];
+    for (const body of invalidBodies) {
+      const reply = createReply();
+      await handlers['POST /']({ body }, reply);
+      expect(reply.status).toHaveBeenCalledWith(400);
+    }
+    const reply = createReply();
+    await handlers['GET /']({ query: { scope: 'other' } }, reply);
+    expect(reply.status).toHaveBeenCalledWith(400);
+  });
+
+  it('supports optional draft values and missing task lookup', async () => {
+    const handlers = await setup();
+    await handlers['POST /']({ body: { ...draft, notes: 1, presetId: '' } }, createReply());
+    expect(store.create).toHaveBeenCalledWith(expect.objectContaining({ notes: '', presetId: null }));
+    store.get.mockReturnValueOnce(null);
+    const reply = createReply();
+    await handlers['GET /:id']({ params: { id: 'missing' } }, reply);
+    expect(reply.status).toHaveBeenCalledWith(404);
+  });
+
   it.each([
     [new ProjectTaskNotFoundError('Task not found'), 404],
     [new ProjectTaskConflictError('Already started'), 409],
     [new ProjectTaskValidationError('Model unavailable'), 409],
+    [new Error('Unexpected'), 500],
   ])('maps a start error to its API status', async (error, status) => {
     starter.start.mockRejectedValue(error);
     const handlers = await setup();

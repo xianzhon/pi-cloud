@@ -88,6 +88,34 @@ describe('FileTreeNode', () => {
     expect(wrapper.findComponent(PhFolderOpen).exists()).toBe(true);
   });
 
+  it.each([
+    ['Dockerfile', 'icon-web'],
+    ['.gitignore', 'icon-config'],
+    ['photo.PNG', 'icon-image'],
+    ['bundle.zip', 'icon-archive'],
+    ['unknown.bin', 'icon-default'],
+  ])('categorizes the representative %s icon', (name, colorClass) => {
+    const wrapper = mount(FileTreeNode, { props: { node: { name, path: `/p/${name}`, type: 'file' }, level: 0, expandedPaths: new Set<string>() } });
+    expect(wrapper.find('.node-icon').classes()).toContain(colorClass);
+  });
+
+  it('emits directory selection and context-menu events', async () => {
+    const wrapper = mount(FileTreeNode, { props: { node: tree, level: 0, expandedPaths: new Set<string>(), selectedDirectoryPath: tree.path } });
+    expect(wrapper.find('.tree-node').classes()).toContain('selected');
+    await wrapper.find('.tree-node').trigger('contextmenu');
+    expect(wrapper.emitted('selectDir')?.[0]).toEqual([tree.path]);
+    expect(wrapper.emitted('contextMenu')?.[0]?.[1]).toEqual(tree);
+  });
+
+  it('renders missing and valid file symlinks with link-specific icons', () => {
+    for (const targetType of ['missing', 'file'] as const) {
+      const node: TreeNodeData = { name: 'link', path: '/link', type: 'file', isSymlink: true, targetType };
+      const wrapper = mount(FileTreeNode, { props: { node, level: 0, expandedPaths: new Set<string>() } });
+      expect(wrapper.find('.node-icon').classes()).toContain(targetType === 'missing' ? 'icon-warning' : 'icon-default');
+      expect(wrapper.find('.node-name').attributes('title')).toBe('/link');
+    }
+  });
+
   it('renders symlink nodes with a link indicator and target in the title', () => {
     const link: TreeNodeData = {
       name: 'src-link',

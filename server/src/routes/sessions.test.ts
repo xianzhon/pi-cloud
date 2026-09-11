@@ -66,6 +66,9 @@ vi.mock('../services/project-mover.js', () => ({
 
 const sessionService = {
     listAgentProfiles: vi.fn(),
+    createAgentProfile: vi.fn(),
+    deleteAgentProfile: vi.fn(),
+    listAgentProfileModels: vi.fn(),
     listAgentProfileApiKeyProviders: vi.fn(),
     saveAgentProfileApiKey: vi.fn(),
     removeAgentProfileApiKey: vi.fn(),
@@ -87,8 +90,11 @@ const sessionService = {
     renameSession: vi.fn(),
                 listAvailableSkills: vi.fn(),
     listAgentProfileSkills: vi.fn(),
+    saveAgentProfileDefaultModel: vi.fn(),
     getAgentProfileAutomationModel: vi.fn(),
     saveAgentProfileAutomationModel: vi.fn(),
+    getAgentProfileProxy: vi.fn(),
+    saveAgentProfileProxy: vi.fn(),
     getAgentProfileAutoRenameConfig: vi.fn(),
     saveAgentProfileAutoRenameConfig: vi.fn(),
     checkAgentProfileProxy: vi.fn(),
@@ -1304,5 +1310,95 @@ describe('session routes', () => {
     expect(pinStore.listGroups).toHaveBeenCalledWith(owner);
     expect(pinStore.listSessionIdsByGroup).toHaveBeenCalledWith(owner);
     expect(pinStore.unpinSession).toHaveBeenCalledWith(owner, 'session-1');
+  });
+
+  it('validates agent profile and project route inputs', async () => {
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+    const cases: Array<[string, unknown, number, string]> = [
+      ['POST /agent-profiles', { body: {} }, 400, 'name is required'],
+      ['POST /agent-profiles/:profileId/custom-providers/discover', { params: { profileId: 'p' }, body: {} }, 400, 'baseUrl is required'],
+      ['PUT /agent-profiles/:profileId/custom-providers/:providerId', { params: { profileId: 'p', providerId: 'x' }, body: { baseUrl: '', modelIds: 'bad' } }, 400, 'baseUrl, modelIds, and imageModelIds must be valid'],
+      ['POST /agent-profiles/:profileId/local-llm/discover', { params: { profileId: 'p' }, body: {} }, 400, 'baseUrl is required'],
+      ['PUT /agent-profiles/:profileId/local-llm', { params: { profileId: 'p' }, body: { baseUrl: '/v1', modelIds: 'bad' } }, 400, 'baseUrl and modelIds are required'],
+      ['PUT /agent-profiles/:profileId/api-key', { params: { profileId: 'p' }, body: {} }, 400, 'envVar and apiKey are required'],
+      ['GET /agent-profiles/:profileId/skills', { params: { profileId: 'p' }, query: {} }, 400, 'projectPath is required'],
+      ['PUT /agent-profiles/:profileId/default-model', { params: { profileId: 'p' }, body: {} }, 400, 'provider and modelId are required'],
+      ['PUT /agent-profiles/:profileId/automation-model', { params: { profileId: 'p' }, body: {} }, 400, 'provider and modelId are required'],
+      ['POST /agent-profile', { body: {} }, 400, 'clientId and profileId are required'],
+      ['GET /skills', { query: {} }, 400, 'clientId is required'],
+      ['GET /worktree-branches', { query: { clientId: 'c' } }, 400, 'clientId and projectPath are required'],
+      ['GET /worktree-copy-files', { query: { projectPath: '/p' } }, 400, 'clientId and projectPath are required'],
+      ['GET /git-status', { query: {} }, 400, 'clientId and projectPath are required'],
+      ['GET /pin-groups', { query: {} }, 503, 'Session pins are not configured'],
+      ['POST /pin-groups', { body: {} }, 503, 'Session pins are not configured'],
+      ['PUT /:id/pin', { params: { id: 's' }, body: {} }, 503, 'Session pins are not configured'],
+      ['DELETE /:id/pin', { params: { id: 's' }, query: {} }, 503, 'Session pins are not configured'],
+      ['GET /pinned', { query: {} }, 503, 'Session pins are not configured'],
+      ['GET /project-history', { query: {} }, 400, 'clientId is required'],
+      ['POST /project-history', { body: {} }, 400, 'clientId and projectPath are required'],
+      ['DELETE /project-history', { body: {} }, 400, 'clientId and projectPath are required'],
+    ];
+    for (const [route, request, status, error] of cases) {
+      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      await handlers[route](request, reply);
+      expect(reply.status, route).toHaveBeenCalledWith(status);
+      expect(reply.send, route).toHaveBeenCalledWith({ error });
+    }
+  });
+
+  it('dispatches successful agent profile operations', async () => {
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const operations: Array<[string, keyof typeof sessionService, unknown]> = [
+      ['POST /agent-profiles', 'createAgentProfile', { body: { name: ' Work ', copySettingsFrom: 'default' } }],
+      ['DELETE /agent-profiles/:profileId', 'deleteAgentProfile', { params: { profileId: 'work' } }],
+      ['GET /agent-profiles/:profileId/models', 'listAgentProfileModels', { params: { profileId: 'work' } }],
+      ['GET /agent-profiles/:profileId/api-key-providers', 'listAgentProfileApiKeyProviders', { params: { profileId: 'work' } }],
+      ['GET /agent-profiles/:profileId/custom-providers', 'listAgentProfileCustomProviders', { params: { profileId: 'work' } }],
+      ['DELETE /agent-profiles/:profileId/custom-providers/:providerId', 'removeAgentProfileCustomProvider', { params: { profileId: 'work', providerId: 'custom' } }],
+      ['GET /agent-profiles/:profileId/local-llm', 'getAgentProfileLocalLlm', { params: { profileId: 'work' } }],
+      ['DELETE /agent-profiles/:profileId/local-llm', 'removeAgentProfileLocalLlm', { params: { profileId: 'work' } }],
+      ['DELETE /agent-profiles/:profileId/api-key/:envVar', 'removeAgentProfileApiKey', { params: { profileId: 'work', envVar: 'KEY' } }],
+      ['DELETE /agent-profiles/:profileId/provider-auth/:providerId', 'logoutAgentProfileProvider', { params: { profileId: 'work', providerId: 'openai' } }],
+      ['GET /agent-profiles/:profileId/automation-model', 'getAgentProfileAutomationModel', { params: { profileId: 'work' } }],
+      ['GET /agent-profiles/:profileId/proxy', 'getAgentProfileProxy', { params: { profileId: 'work' } }],
+      ['GET /agent-profiles/:profileId/auto-rename', 'getAgentProfileAutoRenameConfig', { params: { profileId: 'work' } }],
+    ];
+    for (const [route, method, request] of operations) {
+      vi.mocked(sessionService[method] as any).mockResolvedValue({ ok: true });
+      await handlers[route](request, reply);
+      expect(sessionService[method]).toHaveBeenCalled();
+    }
+  });
+
+  it('converts agent profile service failures to route errors', async () => {
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+    const failures: Array<[string, keyof typeof sessionService, unknown, number]> = [
+      ['POST /agent-profiles', 'createAgentProfile', { body: { name: 'x' } }, 400],
+      ['DELETE /agent-profiles/:profileId', 'deleteAgentProfile', { params: { profileId: 'x' } }, 400],
+      ['GET /agent-profiles/:profileId/models', 'listAgentProfileModels', { params: { profileId: 'x' } }, 404],
+      ['GET /agent-profiles/:profileId/api-key-providers', 'listAgentProfileApiKeyProviders', { params: { profileId: 'x' } }, 404],
+      ['GET /agent-profiles/:profileId/custom-providers', 'listAgentProfileCustomProviders', { params: { profileId: 'x' } }, 404],
+      ['GET /agent-profiles/:profileId/local-llm', 'getAgentProfileLocalLlm', { params: { profileId: 'x' } }, 404],
+      ['DELETE /agent-profiles/:profileId/local-llm', 'removeAgentProfileLocalLlm', { params: { profileId: 'x' } }, 400],
+      ['DELETE /agent-profiles/:profileId/api-key/:envVar', 'removeAgentProfileApiKey', { params: { profileId: 'x', envVar: 'KEY' } }, 400],
+      ['DELETE /agent-profiles/:profileId/provider-auth/:providerId', 'logoutAgentProfileProvider', { params: { profileId: 'x', providerId: 'p' } }, 400],
+      ['GET /agent-profiles/:profileId/automation-model', 'getAgentProfileAutomationModel', { params: { profileId: 'x' } }, 404],
+      ['GET /agent-profiles/:profileId/proxy', 'getAgentProfileProxy', { params: { profileId: 'x' } }, 404],
+      ['GET /agent-profiles/:profileId/auto-rename', 'getAgentProfileAutoRenameConfig', { params: { profileId: 'x' } }, 404],
+    ];
+    for (const [route, method, request, status] of failures) {
+      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      vi.mocked(sessionService[method] as any).mockRejectedValueOnce(new Error('failed'));
+      await handlers[route](request, reply);
+      expect(reply.status, route).toHaveBeenCalledWith(status);
+      expect(reply.send, route).toHaveBeenCalledWith({ error: 'failed' });
+    }
   });
 });

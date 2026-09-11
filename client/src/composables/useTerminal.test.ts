@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { connectTerminal, createTerminalInstance, disconnectTerminal } from './useTerminal';
+import { applyTerminalTheme, connectTerminal, createTerminalInstance, disconnectTerminal, disposeTerminal, fitTerminal, openTerminal } from './useTerminal';
 
 const { MockTerminal } = vi.hoisted(() => {
   class MockTerminal {
@@ -66,6 +66,60 @@ describe('useTerminal', () => {
     expect(onDisconnect).toHaveBeenCalledTimes(1);
     expect(instance.socket).toBeNull();
     expect(instance.terminalId.value).toBeUndefined();
+  });
+
+  it('opens, fits, themes, and disposes terminal instances', () => {
+    const instance = createTerminalInstance();
+    openTerminal(instance, document.createElement('div'));
+    openTerminal(instance, document.createElement('div'));
+    fitTerminal(instance);
+    applyTerminalTheme(instance, 'light');
+    const disposable = { dispose: vi.fn() };
+    instance.disposables.push(disposable);
+    disposeTerminal(instance);
+    expect(instance.terminal.open).toHaveBeenCalledTimes(1);
+    expect(instance.terminal.focus).toHaveBeenCalledTimes(2);
+    expect(disposable.dispose).toHaveBeenCalled();
+    expect(instance.terminal.dispose).toHaveBeenCalled();
+    disposeTerminal(instance);
+  });
+
+  it('handles created, output, exit, input, and resize socket events', () => {
+    const instance = createTerminalInstance();
+    let onData: (data: string) => void = () => undefined;
+    let onResize: (size: { cols: number; rows: number }) => void = () => undefined;
+    vi.mocked(instance.terminal.onData).mockImplementation((callback: any) => { onData = callback; return { dispose: vi.fn() }; });
+    vi.mocked(instance.terminal.onResize).mockImplementation((callback: any) => { onResize = callback; return { dispose: vi.fn() }; });
+    const created = vi.fn();
+    const exited = vi.fn();
+    connectTerminal(instance, 'client id', '/a b', created, exited);
+    const socket = instance.socket as unknown as MockWebSocket;
+    socket.onopen?.();
+    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 't1', shell: '' }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: 'output', data: 'hello' }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: 'exit', terminalId: 't1', exitCode: 2 }) });
+    onData('ls');
+    onResize({ cols: 100, rows: 40 });
+    expect(socket.url).toContain('clientId=client id&cwd=%2Fa%20b');
+    expect(created).toHaveBeenCalledWith('t1', 'bash');
+    expect(exited).toHaveBeenCalledWith('t1', 2);
+    expect(socket.send).toHaveBeenCalledTimes(3);
+
+    connectTerminal(instance, 'other');
+    expect(socket.close).toHaveBeenCalled();
+  });
+
+  it('does not send input before terminal creation or on a closed socket', () => {
+    const instance = createTerminalInstance();
+    let onData: (data: string) => void = () => undefined;
+    vi.mocked(instance.terminal.onData).mockImplementation((callback: any) => { onData = callback; return { dispose: vi.fn() }; });
+    connectTerminal(instance, 'client');
+    const socket = instance.socket as unknown as MockWebSocket;
+    onData('ignored');
+    socket.readyState = 3;
+    instance.terminalId.value = 't';
+    onData('ignored');
+    expect(socket.send).not.toHaveBeenCalled();
   });
 
   it('does not notify expected websocket closes', () => {
