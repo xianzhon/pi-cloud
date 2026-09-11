@@ -1,7 +1,9 @@
-import { mount, flushPromises } from '@vue/test-utils';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { enableAutoUnmount, mount, flushPromises } from '@vue/test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { computed, defineComponent, h, reactive, ref } from 'vue';
 import App from './App.vue';
+
+enableAutoUnmount(afterEach);
 
 const push = vi.fn();
 const replace = vi.fn();
