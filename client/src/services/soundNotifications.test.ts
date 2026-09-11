@@ -23,7 +23,7 @@ describe('sound notifications', () => {
   });
 
   it.each([
-    ['chime', 3], ['ding', 1], ['alert', 2],
+    ['chime', 3], ['ding', 1], ['beep', 2],
   ] as const)('plays the %s pattern', async (sound, tones) => {
     const { context } = audio();
     Object.defineProperty(window, 'AudioContext', { configurable: true, value: vi.fn(function () { return context; }) });

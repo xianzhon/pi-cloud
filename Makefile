@@ -8,7 +8,12 @@ PNPM ?= pnpm
 build:
 	$(PNPM) build
 
+# Run local quality gates together so lint, formatting, build, and coverage
+# failures are caught before changes are pushed to CI.
 test:
+	$(PNPM) lint
+	$(PNPM) format:check
+	$(PNPM) build
 	$(PNPM) test:coverage
 
 # Build the npm tarball used for package installation and release uploads.

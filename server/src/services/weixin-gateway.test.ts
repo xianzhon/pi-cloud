@@ -113,7 +113,7 @@ describe('WeixinGatewayService behavior', () => {
   });
 
   it('handles every supported command and unknown commands', async () => {
-    const { db, service, internal, sessions } = createService();
+    const { db, internal, sessions } = createService();
     const replies: string[] = [];
     internal.sendReply = vi.fn(async (_config: unknown, _chat: string, text: string) => { replies.push(text); });
     internal.presetStore.create({ username: 'u', name: 'Review', mode: 'enabled', skills: ['read'] });
@@ -200,7 +200,7 @@ describe('WeixinGatewayService behavior', () => {
       .mockResolvedValueOnce({ ret: 0, typing_ticket: 'ticket' })
       .mockResolvedValueOnce({ ret: 0 });
     await internal.sendMessage(config(), 'u', { item_list: [] });
-    expect(request.mock.calls[0][2].msg.context_token).toBe('ctx');
+    expect((request.mock.calls[0][2] as { msg: { context_token: string } }).msg.context_token).toBe('ctx');
     await expect(internal.sendMessage(config(), 'u', {})).rejects.toThrow('nope');
     expect(await internal.getTypingTicket(config(), 'u')).toBe('ticket');
     expect(await internal.getTypingTicket(config(), 'u')).toBe('ticket');

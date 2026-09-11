@@ -77,7 +77,7 @@ describe('git hosting helpers', () => {
   it('previews changed files on a generated branch', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(123);
     const service = new GitHostingService();
-    vi.spyOn(service as any, 'git').mockImplementation(async (_cwd: string, args: string[]) => {
+    vi.spyOn(service as unknown as { git: (cwd: string, args: string[]) => Promise<string> }, 'git').mockImplementation(async (_cwd, args) => {
       const key = args.join(' ');
       if (key === 'rev-parse --show-toplevel') return '/repo';
       if (key === 'symbolic-ref --quiet --short HEAD') return 'main';
@@ -96,7 +96,7 @@ describe('git hosting helpers', () => {
 
   it('previews an ahead source branch without working-tree changes', async () => {
     const service = new GitHostingService();
-    vi.spyOn(service as any, 'git').mockImplementation(async (_cwd: string, args: string[]) => {
+    vi.spyOn(service as unknown as { git: (cwd: string, args: string[]) => Promise<string> }, 'git').mockImplementation(async (_cwd, args) => {
       const key = args.join(' ');
       const values: Record<string, string> = {
         'rev-parse --show-toplevel': '/repo', 'symbolic-ref --quiet --short HEAD': 'feature', 'status --porcelain': '',
@@ -111,7 +111,7 @@ describe('git hosting helpers', () => {
 
   it('rejects empty and excessive PR previews and unmatched remotes', async () => {
     const service = new GitHostingService();
-    const git = vi.spyOn(service as any, 'git');
+    const git = vi.spyOn(service as unknown as { git: (cwd: string, args: string[]) => Promise<string> }, 'git');
     git.mockImplementation(async (_cwd: string, args: string[]) => {
       const key = args.join(' ');
       if (key === 'rev-parse --show-toplevel') return '/repo';
@@ -138,7 +138,7 @@ describe('git hosting helpers', () => {
       commitMessage: 'Update a', title: 'Default title', body: 'Default body', stateToken: 'same',
     };
     vi.spyOn(service, 'previewPr').mockResolvedValue(preview);
-    const git = vi.spyOn(service as any, 'git').mockResolvedValue('');
+    const git = vi.spyOn(service as unknown as { git: (cwd: string, args: string[]) => Promise<string> }, 'git').mockResolvedValue('');
     const client = { createPullRequest: vi.fn().mockResolvedValue({ number: 1, url: 'u' }) };
     await expect(service.createPr({ preview, title: '', body: '', commitMessage: '', serverUrl: 'https://git.example.com', client: client as any })).resolves.toEqual({ number: 1, url: 'u' });
     expect(git).toHaveBeenCalledWith('/repo', ['checkout', '-b', 'pi/change']);
