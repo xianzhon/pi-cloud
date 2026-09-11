@@ -112,6 +112,22 @@ describe('ChatPanel', () => {
     vi.useRealTimers();
   });
 
+  it('inserts a saved user prompt at the caret without discarding the draft', async () => {
+    const wrapper = mount(ChatPanel, {
+      props: { userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.', createdAt: '2026-09-10T10:00:00.000Z', updatedAt: '2026-09-11T10:00:00.000Z' }] },
+    });
+    const input = wrapper.find('#chat-input');
+    await input.setValue('Before  after');
+    (input.element as HTMLTextAreaElement).setSelectionRange(7, 7);
+
+    await wrapper.find('.user-prompt-picker > button').trigger('click');
+    await wrapper.find('.user-prompt-menu button').trigger('click');
+
+    expect((input.element as HTMLTextAreaElement).value).toBe('Before Review this change. after');
+    expect((input.element as HTMLTextAreaElement).selectionStart).toBe(26);
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
   it('shows the profile default provider and model before a session exists', () => {
     const wrapper = mount(ChatPanel, { props: { modelInfo: 'openai / gpt-5.4' } });
 

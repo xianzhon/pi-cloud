@@ -35,6 +35,15 @@
               </button>
               <button
                 class="settings-menu-item"
+                :class="{ active: activeSection === 'prompts' }"
+                type="button"
+                @click="activeSection = 'prompts'"
+              >
+                <PhTextT :size="18" weight="bold" class="settings-menu-icon" />
+                <span>{{ t('settings.sections.prompts') }}</span>
+              </button>
+              <button
+                class="settings-menu-item"
                 :class="{ active: activeSection === 'keyboard' }"
                 type="button"
                 @click="activeSection = 'keyboard'"
@@ -762,6 +771,13 @@
                 </section>
               </template>
 
+              <UserPromptsPanel
+                v-if="activeSection === 'prompts'"
+                :prompts="userPrompts"
+                @create-prompt="forwardCreateUserPrompt"
+                @update-prompt="forwardUpdateUserPrompt"
+                @delete-prompt="emit('deleteUserPrompt', $event)"
+              />
               <ModelWindowKickoffPanel v-if="activeSection === 'modelWindowKickoff'" :client-id="clientId" />
               <SecurityPanel v-if="activeSection === 'security'" :totp-enabled="totpEnabled" embedded @updated="emit('updated')" />
               <SkillPresetsPanel
@@ -805,7 +821,8 @@ import { computed, ref, watch } from 'vue';
 import type { FullscreenShortcut, LanguagePreference, NewSessionShortcut, SoundNotificationPreference, StreamingMessageBehavior, ThemePreference } from '../composables/usePreferences';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import type { SkillPreset, SkillPresetInput } from '../composables/useSkillPresets';
-import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh, PhTimer } from '@phosphor-icons/vue';
+import type { UserPrompt, UserPromptInput } from '../composables/useUserPrompts';
+import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh, PhTextT, PhTimer } from '@phosphor-icons/vue';
 import { playTaskNotification } from '../services/soundNotifications';
 import { apiRequest } from '../services/apiClient';
 import { useReviewSources } from '../composables/useReviewSources';
@@ -816,6 +833,7 @@ import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
 import SkillPresetsPanel from './SkillPresetsPanel.vue';
 import ModelWindowKickoffPanel from './ModelWindowKickoffPanel.vue';
+import UserPromptsPanel from './UserPromptsPanel.vue';
 import FolderPickerModal from './FolderPickerModal.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
@@ -843,6 +861,7 @@ const props = withDefaults(defineProps<{
   autoSpeakAssistant?: boolean;
   availableSkills?: AvailableSkill[];
   skillPresets?: SkillPreset[];
+  userPrompts?: UserPrompt[];
   giteaServerUrl?: string;
   giteaTokenConfigured?: boolean;
   githubServerUrl?: string;
@@ -874,6 +893,7 @@ const props = withDefaults(defineProps<{
   autoSpeakAssistant: false,
   availableSkills: () => [],
   skillPresets: () => [],
+  userPrompts: () => [],
   giteaServerUrl: '',
   giteaTokenConfigured: false,
   githubServerUrl: 'https://github.com',
@@ -932,7 +952,7 @@ const fullscreenShortcutOptions: CustomSelectOption[] = [
   { value: 'ctrlShiftF', label: 'Ctrl+Shift+F' },
 ];
 
-const activeSection = ref<'general' | 'security' | 'chat' | 'keyboard' | 'skills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff'>('general');
+const activeSection = ref<'general' | 'security' | 'chat' | 'prompts' | 'keyboard' | 'skills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff'>('general');
 const { sources: reviewSources, loading: reviewSourcesLoading, error: reviewSourcesError, load: loadReviewSources, add: addReviewSource, remove: removeReviewSourceFn } = useReviewSources();
 const reviewSourceTypes = ref<ReviewSourceType[]>([]);
 const newReviewSourceType = ref('devin');
@@ -1454,11 +1474,20 @@ async function removeReviewSource(id: string) {
   }
 }
 
+function forwardCreateUserPrompt(input: UserPromptInput, complete: (error?: unknown) => void): void {
+  emit('createUserPrompt', input, complete);
+}
+
+function forwardUpdateUserPrompt(payload: { id: string; changes: UserPromptInput }, complete: (error?: unknown) => void): void {
+  emit('updateUserPrompt', payload, complete);
+}
+
 watch(() => props.visible, (visible) => {
   if (visible) {
     resetGitDrafts();
     resetGatewayDrafts();
     void Promise.all([loadReviewSources(), loadSupportedReviewSourceTypes()]).catch(() => undefined);
+    if (activeSection.value === 'prompts') emit('loadUserPrompts');
     if (activeSection.value === 'git') {
       void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
     }
@@ -1473,6 +1502,7 @@ watch(() => props.visible, (visible) => {
 });
 
 watch(activeSection, (section) => {
+  if (section === 'prompts') emit('loadUserPrompts');
   if (section === 'git') {
     void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
   }
@@ -1539,6 +1569,7 @@ watch(() => props.gatewaySaveSuccessTick, () => {
 const sectionHeading = computed(() => {
   if (activeSection.value === 'general') return t('settings.sections.general');
   if (activeSection.value === 'security') return t('settings.sections.securityHeading');
+  if (activeSection.value === 'prompts') return t('settings.sections.promptsHeading');
   if (activeSection.value === 'keyboard') return t('settings.sections.keyboardHeading');
   if (activeSection.value === 'skills') return t('settings.sections.skillsHeading');
   if (activeSection.value === 'git') return t('settings.sections.gitHeading');
@@ -1551,6 +1582,10 @@ const sectionHeading = computed(() => {
 const emit = defineEmits<{
   close: [];
   updated: [];
+  createUserPrompt: [input: UserPromptInput, complete: (error?: unknown) => void];
+  updateUserPrompt: [payload: { id: string; changes: UserPromptInput }, complete: (error?: unknown) => void];
+  deleteUserPrompt: [id: string];
+  loadUserPrompts: [];
   'update:showHintInfo': [value: boolean];
   'update:showCodeBlockLanguageHeaders': [value: boolean];
   'update:streamingMessageBehavior': [value: StreamingMessageBehavior];
