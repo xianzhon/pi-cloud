@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => {
     sessionId: 'session-1',
     model: { provider: 'test', id: 'vision', input: ['text', 'image'] },
     sessionManager: { getCwd: vi.fn(() => '/project') },
-    subscribe: vi.fn(() => () => {}),
+    subscribe: vi.fn((_callback?: (event: unknown) => void) => () => {}),
     prompt,
     compact: vi.fn(),
     abort: vi.fn(),
@@ -24,6 +24,10 @@ const mocks = vi.hoisted(() => {
     runWithClientProfileProxy: vi.fn(async (_clientId: string, fn: () => Promise<unknown>) => fn()),
     runForegroundWithClientProfileProxy: vi.fn(async (_clientId: string, fn: () => Promise<unknown>) => fn()),
     getRuntimeStatus: vi.fn(),
+    isSessionStreaming: vi.fn(() => false),
+    markSessionStreamingStarted: vi.fn(() => 1_000),
+    getSessionStreamingStartedAt: vi.fn(() => 1_000),
+    markSessionStreamingFinished: vi.fn(),
     forceDisposeBySessionId: vi.fn(),
   };
   return { prompt, saveUploadedImages, session, sessionService };
@@ -59,7 +63,7 @@ class FakeSocket {
   }
 }
 
-async function openSocket() {
+async function createSocketServer() {
   const routes = new Map<string, Function>();
   const app = {
     memoryRuntime: { onUpdated: vi.fn(() => () => {}), onRecall: vi.fn(() => () => {}) },
@@ -73,9 +77,15 @@ async function openSocket() {
   };
   const { chatWebSocket } = await import('./chat.js');
   await chatWebSocket(app as any);
-  const socket = new FakeSocket();
-  routes.get('/ws/chat')!(socket, { query: { clientId: 'client-1' } });
-  return socket;
+  return (clientId = 'client-1') => {
+    const socket = new FakeSocket();
+    routes.get('/ws/chat')!(socket, { query: { clientId } });
+    return socket;
+  };
+}
+
+async function openSocket() {
+  return (await createSocketServer())();
 }
 
 describe('chat websocket', () => {
@@ -94,6 +104,42 @@ describe('chat websocket', () => {
     expect(mocks.sessionService.scheduleCleanup).toHaveBeenCalledTimes(scheduleCleanupCalls + 1);
     expect(mocks.sessionService.scheduleCleanup).toHaveBeenLastCalledWith('client-1');
     delete session.isStreaming;
+  });
+
+  it('broadcasts stream events and completion to every client watching the session', async () => {
+    const open = await createSocketServer();
+    const desktop = open('desktop');
+    const mobile = open('mobile');
+    mobile.emit('message', Buffer.from(JSON.stringify({
+      type: 'watch', payload: { sessionId: 'session-1' },
+    })));
+
+    let publishEvent: ((event: unknown) => void) | undefined;
+    mocks.session.subscribe.mockImplementationOnce((callback?: (event: unknown) => void) => {
+      publishEvent = callback;
+      return () => {};
+    });
+    let finishPrompt: (() => void) | undefined;
+    mocks.prompt.mockImplementationOnce(() => new Promise<void>((resolve) => { finishPrompt = resolve; }));
+
+    desktop.emit('message', Buffer.from(JSON.stringify({
+      type: 'prompt', payload: { text: 'Implement', sessionId: 'session-1' },
+    })));
+    await vi.waitFor(() => expect(publishEvent).toBeDefined());
+    publishEvent!({ type: 'agent_start' });
+    publishEvent!({ type: 'agent_end' });
+    finishPrompt!();
+
+    await vi.waitFor(() => expect(mobile.sent.map((message) => JSON.parse(message))).toContainEqual({
+      type: 'status', sessionId: 'session-1', status: 'idle',
+    }));
+    expect(mobile.sent.map((message) => JSON.parse(message))).toContainEqual({
+      type: 'event', sessionId: 'session-1', event: { type: 'agent_start' }, streamingStartedAt: 1_000,
+    });
+    expect(mobile.sent.map((message) => JSON.parse(message))).toContainEqual({
+      type: 'event', sessionId: 'session-1', event: { type: 'agent_end' }, streamingStartedAt: 1_000,
+    });
+    mocks.prompt.mockClear();
   });
 
   it('acknowledges requested prompt preflight acceptance', async () => {

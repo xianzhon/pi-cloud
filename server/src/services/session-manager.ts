@@ -153,6 +153,7 @@ export class PiSessionService {
   private clientSessions: Map<string, Set<string>> = new Map();
   private currentClientSession: Map<string, string> = new Map();
   private cleanupTimers: Map<string, NodeJS.Timeout> = new Map();
+  private streamingStartedAt: Map<string, number> = new Map();
   private clientProfiles: Map<string, string> = new Map();
   private sessionListCache: Map<string, SessionListCacheEntry> = new Map();
   private userMessageCountCache: Map<string, UserMessageCountCacheEntry> = new Map();
@@ -1519,6 +1520,22 @@ export class PiSessionService {
     return this.getSessionBySessionId(sessionId)?.isStreaming === true;
   }
 
+  markSessionStreamingStarted(sessionId: string): number {
+    const startedAt = this.streamingStartedAt.get(sessionId) ?? Date.now();
+    this.streamingStartedAt.set(sessionId, startedAt);
+    return startedAt;
+  }
+
+  getSessionStreamingStartedAt(sessionId: string): number | undefined {
+    const startedAt = this.streamingStartedAt.get(sessionId);
+    if (startedAt !== undefined || !this.isSessionStreaming(sessionId)) return startedAt;
+    return this.markSessionStreamingStarted(sessionId);
+  }
+
+  markSessionStreamingFinished(sessionId: string): void {
+    this.streamingStartedAt.delete(sessionId);
+  }
+
   isCwdStreaming(cwd: string): boolean {
     return Array.from(this.sessions.values()).some((session) => (
       session.sessionManager.getCwd() === cwd && session.isStreaming === true
@@ -1558,6 +1575,7 @@ export class PiSessionService {
       if (!session) continue;
       session.dispose();
       this.sessions.delete(sessionId);
+      this.streamingStartedAt.delete(sessionId);
     }
     this.clientSessions.delete(clientId);
     this.currentClientSession.delete(clientId);
@@ -1587,6 +1605,7 @@ export class PiSessionService {
       session.dispose();
       this.sessions.delete(sessionId);
     }
+    this.streamingStartedAt.delete(sessionId);
 
     for (const [clientId, sessionIds] of this.clientSessions) {
       sessionIds.delete(sessionId);

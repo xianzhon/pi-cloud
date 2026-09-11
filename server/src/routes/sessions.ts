@@ -1286,6 +1286,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
         model: foundSession.model,
         thinkingLevel: foundSession.thinkingLevel,
         isStreaming: foundSession.isStreaming,
+        streamingStartedAt: sessionService.getSessionStreamingStartedAt(foundSession.sessionId),
         activity: options.activityStore?.listForSession(foundSession.sessionId) || [],
       }, worktreeMetadata);
     }

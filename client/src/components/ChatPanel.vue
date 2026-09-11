@@ -798,6 +798,7 @@ const { autoSpeakAssistant } = usePreferences();
 const {
   messages,
   isStreaming,
+  streamingStartedAt,
   hideThinkingBlock,
   addLocalMessage,
   sendMessage,
@@ -1059,7 +1060,6 @@ const imageInputRef = ref<HTMLInputElement>();
 const cameraInputRef = ref<HTMLInputElement>();
 const commitMessageInputRef = ref<HTMLTextAreaElement>();
 const messagesRef = ref<HTMLElement>();
-const streamingStartedAt = ref<number | null>(null);
 const streamingElapsedSeconds = ref(0);
 let streamingElapsedTimerId: number | undefined;
 let isUnmounted = false;
@@ -1161,16 +1161,13 @@ function clearStreamingElapsedTimer(): void {
 
 function startStreamingElapsedTimer(): void {
   clearStreamingElapsedTimer();
-  if (streamingStartedAt.value === null) {
-    streamingStartedAt.value = Date.now();
-  }
   updateStreamingElapsed();
   streamingElapsedTimerId = window.setInterval(updateStreamingElapsed, 1000);
 }
 
 function stopStreamingElapsedTimer(): void {
   clearStreamingElapsedTimer();
-  streamingStartedAt.value = null;
+  streamingElapsedSeconds.value = 0;
 }
 
 function isMessagesScrolledNearBottom(threshold = AUTO_SCROLL_BOTTOM_THRESHOLD): boolean {
@@ -1636,10 +1633,10 @@ watch(
   { immediate: true },
 );
 
-watch(isStreaming, (streaming, wasStreaming) => {
-  if (streaming && !wasStreaming) {
+watch([isStreaming, streamingStartedAt], ([streaming], [wasStreaming]) => {
+  if (streaming) {
     startStreamingElapsedTimer();
-  } else if (!streaming && wasStreaming) {
+  } else if (wasStreaming) {
     stopStreamingElapsedTimer();
     void refreshSessionStatus();
   }

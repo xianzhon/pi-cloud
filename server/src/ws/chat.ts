@@ -10,7 +10,7 @@ import { sendJson } from './safe-send.js';
 const ABORT_GRACE_MS = 5_000;
 
 interface WSMessage {
-  type: 'prompt' | 'steer' | 'followUp' | 'abort';
+  type: 'watch' | 'prompt' | 'steer' | 'followUp' | 'abort';
   payload?: {
     text?: string;
     sessionId?: string;
@@ -100,6 +100,8 @@ function formatCompactResult(result: any, status: ReturnType<PiSessionService['g
 
 export async function chatWebSocket(app: FastifyInstance) {
   const sessionService = app.services.sessions;
+  const clients = new Set<{ socket: Parameters<typeof sendJson>[0]; watchedSessionId?: string }>();
+
   app.get('/ws/chat', { websocket: true }, (socket, req) => {
     const auth = app.authServices;
     if (!isAllowedRequestOrigin(req)) {
@@ -131,8 +133,18 @@ export async function chatWebSocket(app: FastifyInstance) {
     }
 
     const safeClientId = clientId;
+    const connectedClient = { socket, watchedSessionId: undefined as string | undefined };
+    clients.add(connectedClient);
     console.log(`Client connected: ${safeClientId}`);
     sessionService.cancelCleanup(safeClientId);
+
+    function broadcastToSession(sessionId: string, message: unknown): void {
+      for (const client of clients) {
+        if (client === connectedClient || client.watchedSessionId === sessionId) {
+          sendJson(client.socket, message);
+        }
+      }
+    }
 
     function sendPromptPreflight(
       sessionId: string,
@@ -211,6 +223,21 @@ export async function chatWebSocket(app: FastifyInstance) {
         const message: WSMessage = JSON.parse(rawData.toString());
         
         switch (message.type) {
+          case 'watch': {
+            connectedClient.watchedSessionId = message.payload?.sessionId;
+            const targetSessionId = connectedClient.watchedSessionId;
+            if (targetSessionId) {
+              const isStreaming = sessionService.isSessionStreaming(targetSessionId);
+              sendJson(socket, {
+                type: 'streaming_state',
+                sessionId: targetSessionId,
+                isStreaming,
+                ...(isStreaming ? { streamingStartedAt: sessionService.getSessionStreamingStartedAt(targetSessionId) } : {}),
+              });
+            }
+            break;
+          }
+
           case 'prompt': {
             const session = await ensureTargetSession(message.payload?.sessionId);
             if (!session) {
@@ -229,6 +256,8 @@ export async function chatWebSocket(app: FastifyInstance) {
 
             sessionService.cancelCleanup(safeClientId);
             const sessionId = session.sessionId;
+            connectedClient.watchedSessionId = sessionId;
+            const streamingStartedAt = sessionService.markSessionStreamingStarted(sessionId);
             const compactInstructions = parseCompactCommand(message.payload?.text || '');
             req.log?.info({
               clientId: safeClientId,
@@ -261,7 +290,7 @@ export async function chatWebSocket(app: FastifyInstance) {
                   if (recent.every((t) => t.name === recent[0].name && t.input === recent[0].input)) {
                     loopDetected = true;
                     console.warn(`[loop-detected] tool="${name}" sessionId=${sessionId}`);
-                    sendJson(socket, {
+                    broadcastToSession(sessionId, {
                       type: 'loop_detected',
                       sessionId,
                       message: `Loop detected: tool "${name}" called ${MAX_REPEATED_TOOL_CALLS} times with identical input. Stopping automatically.`,
@@ -277,10 +306,11 @@ export async function chatWebSocket(app: FastifyInstance) {
                 }
               }
 
-              sendJson(socket, {
+              broadcastToSession(sessionId, {
                 type: 'event',
                 sessionId,
                 event,
+                streamingStartedAt,
               });
             });
 
@@ -317,9 +347,8 @@ export async function chatWebSocket(app: FastifyInstance) {
               });
             } finally {
               unsubscribe();
-              if (!loopDetected) {
-                sendJson(socket, { type: 'status', sessionId, status: 'idle' });
-              }
+              sessionService.markSessionStreamingFinished(sessionId);
+              broadcastToSession(sessionId, { type: 'status', sessionId, status: 'idle' });
             }
             break;
           }
@@ -373,7 +402,8 @@ export async function chatWebSocket(app: FastifyInstance) {
                   message: 'Request did not stop cleanly; the stuck runtime was discarded.',
                 });
               }
-              sendJson(socket, { type: 'status', sessionId: session.sessionId, status: 'idle' });
+              sessionService.markSessionStreamingFinished(session.sessionId);
+              broadcastToSession(session.sessionId, { type: 'status', sessionId: session.sessionId, status: 'idle' });
             }
             break;
           }
@@ -388,6 +418,7 @@ export async function chatWebSocket(app: FastifyInstance) {
     });
 
     socket.on('close', () => {
+      clients.delete(connectedClient);
       console.log(`Client disconnected: ${safeClientId}`);
       unsubscribeMemoryUpdates();
       unsubscribeMemoryRecall();

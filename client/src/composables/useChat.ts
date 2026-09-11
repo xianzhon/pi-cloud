@@ -331,6 +331,7 @@ export function useChat() {
   interface SessionChatState {
     messages: Message[];
     isStreaming: boolean;
+    streamingStartedAt: number | null;
     currentMessage: Message | null;
     pendingMemoryRecall: MessageMemoryRecall | null;
   }
@@ -397,6 +398,7 @@ export function useChat() {
       removeMessage(pending.userMessage, pending.targetSessionId);
       const state = ensureSessionState(pending.targetSessionId);
       state.isStreaming = false;
+      state.streamingStartedAt = null;
       if (streamingSessionId.value === pending.targetSessionId) streamingSessionId.value = null;
       emitSessionStreamingState(pending.targetSessionId, false);
       pending.onRejected?.(message || 'The message was rejected. Try again.');
@@ -446,6 +448,7 @@ export function useChat() {
     const streamingState = getStreamingSessionState(targetSessionId);
     const wasStreaming = streamingState.isStreaming;
     streamingState.isStreaming = false;
+    streamingState.streamingStartedAt = null;
     if (wasStreaming) playTaskNotification(soundNotification.value);
     emitSessionStreamingState(targetSessionId, false, completed);
   }
@@ -456,6 +459,7 @@ export function useChat() {
       sessionStates.value[key] = {
         messages: [],
         isStreaming: false,
+        streamingStartedAt: null,
         currentMessage: null,
         pendingMemoryRecall: null,
       };
@@ -473,6 +477,7 @@ export function useChat() {
 
   const messages = computed(() => getViewedSessionState().messages);
   const isStreaming = computed(() => getViewedSessionState().isStreaming);
+  const streamingStartedAt = computed(() => getViewedSessionState().streamingStartedAt);
 
   function setViewedSession(newSessionId: string | null): void {
     sessionId.value = newSessionId;
@@ -618,10 +623,32 @@ export function useChat() {
     }
   }
 
+  const unsubscribeConnected = on('connected', () => {
+    if (sessionId.value) send({ type: 'watch', payload: { sessionId: sessionId.value } });
+  });
+
   const unsubscribeDisconnected = on('disconnected', () => {
     const targetSessionId = sessionId.value || streamingSessionId.value;
     if (targetSessionId && getStreamingSessionState(targetSessionId).isStreaming) {
       void reconcileStreamingSession();
+    }
+  });
+
+  const unsubscribeStreamingState = on('streaming_state', (data: any) => {
+    const targetSessionId = getMessageSessionId(data);
+    if (!targetSessionId) return;
+    const state = ensureSessionState(targetSessionId);
+    const wasStreaming = state.isStreaming;
+    state.isStreaming = data.isStreaming === true;
+    state.streamingStartedAt = state.isStreaming && Number.isFinite(data.streamingStartedAt)
+      ? data.streamingStartedAt
+      : null;
+    if (state.isStreaming) {
+      streamingSessionId.value = targetSessionId;
+      emitSessionStreamingState(targetSessionId, true);
+    } else if (wasStreaming) {
+      finishStreaming(targetSessionId, true);
+      void loadSessionHistory(targetSessionId, { force: true });
     }
   });
 
@@ -708,7 +735,11 @@ export function useChat() {
       case 'agent_start':
       case 'compaction_start':
         if (targetSessionId) streamingSessionId.value = targetSessionId;
-        getStreamingSessionState(targetSessionId).isStreaming = true;
+        const state = getStreamingSessionState(targetSessionId);
+        state.isStreaming = true;
+        state.streamingStartedAt = Number.isFinite(data.streamingStartedAt)
+          ? data.streamingStartedAt
+          : state.streamingStartedAt ?? Date.now();
         emitSessionStreamingState(targetSessionId, true);
         window.dispatchEvent(new CustomEvent('refresh-sessions'));
         break;
@@ -765,6 +796,7 @@ export function useChat() {
     console.error('Chat error:', data.message);
     const targetSessionId = getMessageSessionId(data);
     getStreamingSessionState(targetSessionId).isStreaming = false;
+    getStreamingSessionState(targetSessionId).streamingStartedAt = null;
     emitSessionStreamingState(targetSessionId, false);
   });
 
@@ -780,6 +812,7 @@ export function useChat() {
       kind: 'text',
     });
     state.isStreaming = false;
+    state.streamingStartedAt = null;
     emitSessionStreamingState(targetSessionId, false);
     window.dispatchEvent(new CustomEvent('refresh-sessions'));
   });
@@ -795,6 +828,7 @@ export function useChat() {
       kind: 'text',
     });
     state.isStreaming = false;
+    state.streamingStartedAt = null;
     emitSessionStreamingState(targetSessionId, false);
     window.dispatchEvent(new CustomEvent('refresh-sessions'));
   });
@@ -804,7 +838,9 @@ export function useChat() {
     for (const requestId of Array.from(pendingPromptPreflights.keys())) {
       settlePromptPreflight(requestId, false);
     }
+    unsubscribeConnected();
     unsubscribeDisconnected();
+    unsubscribeStreamingState();
     unsubscribeEvent();
     unsubscribeMemoryRecall();
     unsubscribePromptPreflight();
@@ -862,6 +898,7 @@ export function useChat() {
       if (!sent) return false;
       state.messages.push(userMessage);
       state.isStreaming = true;
+      state.streamingStartedAt ??= Date.now();
       streamingSessionId.value = resolvedSessionId;
       if (options.copySummaryOnComplete) {
         pendingSummaryCopySessions.add(getStateKey(streamingSessionId.value));
@@ -886,6 +923,7 @@ export function useChat() {
 
     state.messages.push(userMessage);
     state.isStreaming = true;
+    state.streamingStartedAt ??= Date.now();
     streamingSessionId.value = resolvedSessionId;
     if (options.copySummaryOnComplete) {
       pendingSummaryCopySessions.add(getStateKey(streamingSessionId.value));
@@ -935,6 +973,7 @@ export function useChat() {
   async function loadSessionHistory(newSessionId: string, options: LoadSessionHistoryOptions = {}) {
     try {
       setViewedSession(newSessionId);
+      send({ type: 'watch', payload: { sessionId: newSessionId } });
       const response = await fetch(`/api/sessions/${newSessionId}?clientId=${encodeURIComponent(clientId)}`);
       const data = await response.json();
       
@@ -1024,7 +1063,14 @@ export function useChat() {
           state.messages = normalizedMessages;
         }
         state.isStreaming = Boolean(data.isStreaming) || (!options.force && state.isStreaming);
+        if (!state.isStreaming) {
+          state.streamingStartedAt = null;
+        } else if (Number.isFinite(data.streamingStartedAt)) {
+          state.streamingStartedAt = data.streamingStartedAt;
+        }
       }
+      // Re-subscribe after the snapshot so this acknowledgement wins any completion race during loading.
+      send({ type: 'watch', payload: { sessionId: newSessionId } });
     } catch (error) {
       console.error('Failed to load session history:', error);
     }
@@ -1033,6 +1079,7 @@ export function useChat() {
   return {
     messages,
     isStreaming,
+    streamingStartedAt,
     sessionId,
     hideThinkingBlock,
     addLocalMessage,

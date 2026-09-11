@@ -126,6 +126,19 @@ describe('useChat', () => {
     })]);
   });
 
+  it('restores the server streaming start time and subscribes for cross-device updates', async () => {
+    const { chat } = mountChat();
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      json: async () => ({ messages: [], isStreaming: true, streamingStartedAt: 12_345 }),
+    })));
+
+    await chat.loadSessionHistory('session-1');
+
+    expect(chat.isStreaming.value).toBe(true);
+    expect(chat.streamingStartedAt.value).toBe(12_345);
+    expect(send).toHaveBeenCalledWith({ type: 'watch', payload: { sessionId: 'session-1' } });
+  });
+
   it('marks the agent as streaming immediately after sending a prompt', () => {
     const { chat } = mountChat();
 

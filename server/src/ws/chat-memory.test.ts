@@ -13,6 +13,10 @@ const sessionService = vi.hoisted(() => ({
   cancelCleanup: vi.fn(),
   scheduleCleanup: vi.fn(),
   getRuntimeStatus: vi.fn(() => ({ contextUsage: undefined })),
+  isSessionStreaming: vi.fn(() => false),
+  markSessionStreamingStarted: vi.fn(() => 1_000),
+  getSessionStreamingStartedAt: vi.fn(() => 1_000),
+  markSessionStreamingFinished: vi.fn(),
   forceDisposeBySessionId: vi.fn(),
 }));
 

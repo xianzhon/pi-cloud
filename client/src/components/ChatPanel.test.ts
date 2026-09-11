@@ -21,6 +21,7 @@ type TestChatMessage = {
 
 const chatMessages = ref<TestChatMessage[]>([]);
 const chatIsStreaming = ref(false);
+const chatStreamingStartedAt = ref<number | null>(null);
 const addLocalMessage = vi.fn((message) => {
   const localMessage = { ...message, id: `local-${chatMessages.value.length}`, timestamp: Date.now() };
   chatMessages.value.push(localMessage);
@@ -35,6 +36,7 @@ vi.mock('../composables/useChat', () => ({
   useChat: () => ({
     messages: chatMessages,
     isStreaming: chatIsStreaming,
+    streamingStartedAt: chatStreamingStartedAt,
     hideThinkingBlock: ref(false),
     addLocalMessage,
     sendMessage,
@@ -100,6 +102,7 @@ describe('ChatPanel', () => {
   beforeEach(() => {
     chatMessages.value = [];
     chatIsStreaming.value = false;
+    chatStreamingStartedAt.value = null;
     MockMediaRecorder.instances = [];
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
     localStorage.clear();
@@ -724,6 +727,22 @@ describe('ChatPanel', () => {
     await stopButton.trigger('click');
     expect(abort).toHaveBeenCalledOnce();
     expect(wrapper.text()).toContain('partial answer');
+  });
+
+  it('restores the elapsed streaming time from the shared start timestamp', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(75_000);
+    chatIsStreaming.value = true;
+    chatStreamingStartedAt.value = 10_000;
+
+    const wrapper = mount(ChatPanel);
+    await nextTick();
+
+    expect(wrapper.find('.streaming-elapsed').text()).toBe('1:05');
+
+    vi.advanceTimersByTime(2_000);
+    await nextTick();
+    expect(wrapper.find('.streaming-elapsed').text()).toBe('1:07');
   });
 
   it('keeps the streaming indicator in thinking mode for read-only tools', async () => {
