@@ -32,9 +32,10 @@
         <span>{{ t('components.userPromptsPanel.content') }}</span>
         <textarea v-model="content" rows="7" :placeholder="t('components.userPromptsPanel.content')"></textarea>
       </label>
+      <p v-if="saveError" class="save-error" role="alert">{{ saveError }}</p>
       <div class="form-actions">
-        <button v-if="editingId" type="button" class="prompt-action-button" @click="reset">{{ t('components.userPromptsPanel.cancel') }}</button>
-        <button type="submit" class="prompt-action-button save-button" :disabled="!name.trim() || !content.trim()">
+        <button v-if="editingId" type="button" class="prompt-action-button" :disabled="saving" @click="reset">{{ t('components.userPromptsPanel.cancel') }}</button>
+        <button type="submit" class="prompt-action-button save-button" :disabled="saving || !name.trim() || !content.trim()">
           <PhFloppyDisk :size="16" />
           {{ t('components.userPromptsPanel.save') }}
         </button>
@@ -51,25 +52,31 @@ import type { UserPrompt, UserPromptInput } from '../composables/useUserPrompts'
 
 const t = i18n.global.t;
 const props = defineProps<{ prompts: UserPrompt[] }>();
+type SaveComplete = (error?: unknown) => void;
+
 const emit = defineEmits<{
-  createPrompt: [input: UserPromptInput];
-  updatePrompt: [payload: { id: string; changes: UserPromptInput }];
+  createPrompt: [input: UserPromptInput, complete: SaveComplete];
+  updatePrompt: [payload: { id: string; changes: UserPromptInput }, complete: SaveComplete];
   deletePrompt: [id: string];
 }>();
 const editingId = ref<string | null>(null);
 const name = ref('');
 const content = ref('');
+const saving = ref(false);
+const saveError = ref('');
 
 function startEditing(prompt: UserPrompt): void {
   editingId.value = prompt.id;
   name.value = prompt.name;
   content.value = prompt.content;
+  saveError.value = '';
 }
 
 function reset(): void {
   editingId.value = null;
   name.value = '';
   content.value = '';
+  saveError.value = '';
 }
 
 function formatDate(value: string): string {
@@ -97,10 +104,21 @@ function formatRelativeUnit(value: number, unit: Intl.RelativeTimeFormatUnit): s
 
 function save(): void {
   const changes = { name: name.value.trim(), content: content.value.trim() };
-  if (!changes.name || !changes.content) return;
-  if (editingId.value) emit('updatePrompt', { id: editingId.value, changes });
-  else emit('createPrompt', changes);
-  reset();
+  if (!changes.name || !changes.content || saving.value) return;
+
+  saving.value = true;
+  saveError.value = '';
+  const complete: SaveComplete = (error) => {
+    saving.value = false;
+    if (error) {
+      saveError.value = error instanceof Error ? error.message : t('components.userPromptsPanel.saveFailed');
+      return;
+    }
+    reset();
+  };
+
+  if (editingId.value) emit('updatePrompt', { id: editingId.value, changes }, complete);
+  else emit('createPrompt', changes, complete);
 }
 </script>
 
@@ -242,6 +260,12 @@ h4 {
   min-height: 10rem;
   resize: vertical;
   line-height: 1.5;
+}
+
+.save-error {
+  margin: 0;
+  color: var(--error-color, #ef4444);
+  font-size: 0.8125rem;
 }
 
 .form-actions {

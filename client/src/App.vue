@@ -541,9 +541,10 @@
       @create-skill-preset="handleCreateSkillPreset"
       @update-skill-preset="handleUpdateSkillPreset"
       @delete-skill-preset="handleDeleteSkillPreset"
-      @create-user-prompt="createUserPrompt"
+      @create-user-prompt="handleCreateUserPrompt"
       @update-user-prompt="handleUpdateUserPrompt"
       @delete-user-prompt="deleteUserPrompt"
+      @load-user-prompts="handleLoadUserPrompts"
       @clear-launch-cache="handleClearLaunchCache"
       @save-git-settings="handleSaveGitSettings"
       @save-gateway-settings="handleSaveGatewaySettings"
@@ -1842,8 +1843,26 @@ async function handleDeleteSkillPreset(id: string) {
   await deletePreset(id);
 }
 
-async function handleUpdateUserPrompt(payload: { id: string; changes: { name: string; content: string } }) {
-  await updateUserPrompt(payload.id, payload.changes);
+async function handleCreateUserPrompt(input: { name: string; content: string }, complete: (error?: unknown) => void) {
+  try {
+    await createUserPrompt(input);
+    complete();
+  } catch (error) {
+    complete(error);
+  }
+}
+
+async function handleUpdateUserPrompt(payload: { id: string; changes: { name: string; content: string } }, complete: (error?: unknown) => void) {
+  try {
+    await updateUserPrompt(payload.id, payload.changes);
+    complete();
+  } catch (error) {
+    complete(error);
+  }
+}
+
+function handleLoadUserPrompts(): void {
+  void loadUserPrompts().catch(() => {});
 }
 
 async function handleSearchSelect(sessionId: string) {

@@ -1062,6 +1062,7 @@ export default {
       content: 'Prompt content',
       updated: 'Updated {date}',
       save: 'Save',
+      saveFailed: 'Failed to save prompt.',
       cancel: 'Cancel',
       edit: 'Edit prompt',
       delete: 'Delete prompt',

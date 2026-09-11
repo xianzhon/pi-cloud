@@ -198,6 +198,7 @@ describe('SettingsDialog', () => {
     const promptsButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Prompts'))!;
 
     await promptsButton.trigger('click');
+    expect(wrapper.emitted('loadUserPrompts')).toHaveLength(1);
     expect(wrapper.find('.user-prompt-card').text()).toContain('Review this change.');
     expect(wrapper.find('.user-prompt-heading time').attributes('datetime')).toBe('2026-09-11T10:00:00.000Z');
 
@@ -205,9 +206,15 @@ describe('SettingsDialog', () => {
     await wrapper.find('.user-prompt-form textarea').setValue('Review this carefully.');
     await wrapper.find('.user-prompt-form').trigger('submit');
 
-    expect(wrapper.emitted('updateUserPrompt')).toEqual([[
-      { id: 'prompt-1', changes: { name: 'Review', content: 'Review this carefully.' } },
-    ]]);
+    const updateEvent = wrapper.emitted('updateUserPrompt')![0];
+    expect(updateEvent[0]).toEqual({ id: 'prompt-1', changes: { name: 'Review', content: 'Review this carefully.' } });
+    expect(updateEvent[1]).toBeTypeOf('function');
+
+    (updateEvent[1] as (error?: unknown) => void)(new Error('Prompt name already exists'));
+    await wrapper.vm.$nextTick();
+
+    expect((wrapper.find('.user-prompt-form textarea').element as HTMLTextAreaElement).value).toBe('Review this carefully.');
+    expect(wrapper.find('[role="alert"]').text()).toBe('Prompt name already exists');
   });
 
   it('lists the task inbox keyboard shortcut', async () => {

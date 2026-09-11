@@ -774,8 +774,8 @@
               <UserPromptsPanel
                 v-if="activeSection === 'prompts'"
                 :prompts="userPrompts"
-                @create-prompt="emit('createUserPrompt', $event)"
-                @update-prompt="emit('updateUserPrompt', $event)"
+                @create-prompt="forwardCreateUserPrompt"
+                @update-prompt="forwardUpdateUserPrompt"
                 @delete-prompt="emit('deleteUserPrompt', $event)"
               />
               <ModelWindowKickoffPanel v-if="activeSection === 'modelWindowKickoff'" :client-id="clientId" />
@@ -1474,11 +1474,20 @@ async function removeReviewSource(id: string) {
   }
 }
 
+function forwardCreateUserPrompt(input: UserPromptInput, complete: (error?: unknown) => void): void {
+  emit('createUserPrompt', input, complete);
+}
+
+function forwardUpdateUserPrompt(payload: { id: string; changes: UserPromptInput }, complete: (error?: unknown) => void): void {
+  emit('updateUserPrompt', payload, complete);
+}
+
 watch(() => props.visible, (visible) => {
   if (visible) {
     resetGitDrafts();
     resetGatewayDrafts();
     void Promise.all([loadReviewSources(), loadSupportedReviewSourceTypes()]).catch(() => undefined);
+    if (activeSection.value === 'prompts') emit('loadUserPrompts');
     if (activeSection.value === 'git') {
       void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
     }
@@ -1493,6 +1502,7 @@ watch(() => props.visible, (visible) => {
 });
 
 watch(activeSection, (section) => {
+  if (section === 'prompts') emit('loadUserPrompts');
   if (section === 'git') {
     void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
   }
@@ -1572,9 +1582,10 @@ const sectionHeading = computed(() => {
 const emit = defineEmits<{
   close: [];
   updated: [];
-  createUserPrompt: [input: UserPromptInput];
-  updateUserPrompt: [payload: { id: string; changes: UserPromptInput }];
+  createUserPrompt: [input: UserPromptInput, complete: (error?: unknown) => void];
+  updateUserPrompt: [payload: { id: string; changes: UserPromptInput }, complete: (error?: unknown) => void];
   deleteUserPrompt: [id: string];
+  loadUserPrompts: [];
   'update:showHintInfo': [value: boolean];
   'update:showCodeBlockLanguageHeaders': [value: boolean];
   'update:streamingMessageBehavior': [value: StreamingMessageBehavior];

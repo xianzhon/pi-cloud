@@ -1981,10 +1981,13 @@ function addFileReference(path: string) {
 }
 
 async function insertUserPrompt(content: string): Promise<void> {
-  inputText.value = content;
+  const start = inputRef.value?.selectionStart ?? inputText.value.length;
+  const end = inputRef.value?.selectionEnd ?? start;
+  inputText.value = inputText.value.slice(0, start) + content + inputText.value.slice(end);
   showUserPrompts.value = false;
   await resizeInputAfterDomUpdate();
   inputRef.value?.focus();
+  inputRef.value?.setSelectionRange(start + content.length, start + content.length);
 }
 
 async function submitExternalPrompt(text: string, options?: { hideCommandMessage?: boolean }): Promise<boolean> {

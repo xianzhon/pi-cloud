@@ -1062,6 +1062,7 @@ export default {
       content: '提示词内容',
       updated: '更新于 {date}',
       save: '保存',
+      saveFailed: '保存提示词失败。',
       cancel: '取消',
       edit: '编辑提示词',
       delete: '删除提示词',
