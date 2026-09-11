@@ -523,6 +523,20 @@ describe('authRoutes', () => {
     expect((await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json()).toEqual({ prompts: [] });
   });
 
+  it('rate limits user prompt persistence requests by IP', async () => {
+    ({ app, tempDir, db, totp } = await buildApp());
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+
+    for (let request = 0; request < 100; request += 1) {
+      const response = await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers: { cookie } });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const blocked = await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers: { cookie } });
+    expect(blocked.statusCode).toBe(429);
+  });
+
   it('rejects invalid preference payloads', async () => {
     ({ app, tempDir, db, totp } = await buildApp());
     const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });

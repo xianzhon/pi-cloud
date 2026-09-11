@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import type { AuthConfig } from '../config/auth';
 import type { AuditLog } from '../auth/audit';
 import type { IpRateLimiter } from '../auth/rate-limit';
@@ -367,42 +368,51 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     return { success: true };
   });
 
-  app.get('/user-prompts', async (req, reply) => {
-    const session = requireAuth(req, reply);
-    if (!session) return;
-    return { prompts: userPromptStore.list() };
-  });
+  await app.register(async (userPromptRoutes) => {
+    // Keep prompt persistence from becoming an unbounded source of SQLite work.
+    await userPromptRoutes.register(rateLimit, {
+      max: 100,
+      timeWindow: '1 minute',
+      keyGenerator: (req) => getRequestContext(req, config.trustProxy).ip,
+    });
 
-  app.post('/user-prompts', async (req, reply) => {
-    const session = requireAuth(req, reply);
-    if (!session) return;
-    try {
-      return { prompt: userPromptStore.create(parseUserPromptBody((req.body as Record<string, unknown>) || {})) };
-    } catch (error) {
-      return sendUserPromptError(reply, error);
-    }
-  });
+    userPromptRoutes.get('/user-prompts', async (req, reply) => {
+      const session = requireAuth(req, reply);
+      if (!session) return;
+      return { prompts: userPromptStore.list() };
+    });
 
-  app.patch('/user-prompts/:id', async (req, reply) => {
-    const session = requireAuth(req, reply);
-    if (!session) return;
-    try {
-      return {
-        prompt: userPromptStore.update(
-          (req.params as { id: string }).id,
-          parseUserPromptBody((req.body as Record<string, unknown>) || {}),
-        ),
-      };
-    } catch (error) {
-      return sendUserPromptError(reply, error);
-    }
-  });
+    userPromptRoutes.post('/user-prompts', async (req, reply) => {
+      const session = requireAuth(req, reply);
+      if (!session) return;
+      try {
+        return { prompt: userPromptStore.create(parseUserPromptBody((req.body as Record<string, unknown>) || {})) };
+      } catch (error) {
+        return sendUserPromptError(reply, error);
+      }
+    });
 
-  app.delete('/user-prompts/:id', async (req, reply) => {
-    const session = requireAuth(req, reply);
-    if (!session) return;
-    userPromptStore.delete((req.params as { id: string }).id);
-    return { success: true };
+    userPromptRoutes.patch('/user-prompts/:id', async (req, reply) => {
+      const session = requireAuth(req, reply);
+      if (!session) return;
+      try {
+        return {
+          prompt: userPromptStore.update(
+            (req.params as { id: string }).id,
+            parseUserPromptBody((req.body as Record<string, unknown>) || {}),
+          ),
+        };
+      } catch (error) {
+        return sendUserPromptError(reply, error);
+      }
+    });
+
+    userPromptRoutes.delete('/user-prompts/:id', async (req, reply) => {
+      const session = requireAuth(req, reply);
+      if (!session) return;
+      userPromptStore.delete((req.params as { id: string }).id);
+      return { success: true };
+    });
   });
 
   app.post('/2fa/setup', async (req, reply) => {

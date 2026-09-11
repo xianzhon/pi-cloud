@@ -17,6 +17,7 @@
     "@earendil-works/pi-coding-agent": "catalog:",
     "@fastify/cookie": "catalog:",
     "@fastify/cors": "catalog:",
+    "@fastify/rate-limit": "catalog:",
     "@fastify/static": "catalog:",
     "@fastify/websocket": "catalog:",
     "@lydell/node-pty": "catalog:",
