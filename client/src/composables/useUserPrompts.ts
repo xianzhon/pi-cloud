@@ -5,6 +5,8 @@ export interface UserPrompt {
   id: string;
   name: string;
   content: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UserPromptInput {

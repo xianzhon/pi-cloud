@@ -114,7 +114,7 @@ describe('ChatPanel', () => {
 
   it('inserts a saved user prompt into the composer without sending it', async () => {
     const wrapper = mount(ChatPanel, {
-      props: { userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.' }] },
+      props: { userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.', createdAt: '2026-09-10T10:00:00.000Z', updatedAt: '2026-09-11T10:00:00.000Z' }] },
     });
 
     await wrapper.find('.user-prompt-picker > button').trigger('click');

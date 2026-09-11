@@ -1060,6 +1060,7 @@ export default {
       editPrompt: '编辑提示词',
       name: '提示词名称',
       content: '提示词内容',
+      updated: '更新于 {date}',
       save: '保存',
       cancel: '取消',
       edit: '编辑提示词',

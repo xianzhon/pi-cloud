@@ -193,12 +193,13 @@ describe('SettingsDialog', () => {
 
   it('manages user prompts from the Prompts section', async () => {
     const wrapper = mountSettingsDialog({
-      userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.' }],
+      userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.', createdAt: '2026-09-10T10:00:00.000Z', updatedAt: '2026-09-11T10:00:00.000Z' }],
     });
     const promptsButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Prompts'))!;
 
     await promptsButton.trigger('click');
     expect(wrapper.find('.user-prompt-card').text()).toContain('Review this change.');
+    expect(wrapper.find('.user-prompt-heading time').attributes('datetime')).toBe('2026-09-11T10:00:00.000Z');
 
     await wrapper.find('.user-prompt-actions button').trigger('click');
     await wrapper.find('.user-prompt-form textarea').setValue('Review this carefully.');

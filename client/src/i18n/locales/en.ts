@@ -1060,6 +1060,7 @@ export default {
       editPrompt: 'Edit prompt',
       name: 'Prompt name',
       content: 'Prompt content',
+      updated: 'Updated {date}',
       save: 'Save',
       cancel: 'Cancel',
       edit: 'Edit prompt',
