@@ -4710,7 +4710,8 @@ function handleInputKeydown(event: KeyboardEvent) {
     flex-basis: 100%;
   }
 
-  .composer-hint {
+  .composer-hint,
+  .user-prompt-picker {
     display: none;
   }
 
