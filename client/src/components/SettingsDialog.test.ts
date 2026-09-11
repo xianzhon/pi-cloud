@@ -191,6 +191,24 @@ describe('SettingsDialog', () => {
     }));
   });
 
+  it('manages user prompts from the Prompts section', async () => {
+    const wrapper = mountSettingsDialog({
+      userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.' }],
+    });
+    const promptsButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Prompts'))!;
+
+    await promptsButton.trigger('click');
+    expect(wrapper.find('.user-prompt-card').text()).toContain('Review this change.');
+
+    await wrapper.find('.user-prompt-actions button').trigger('click');
+    await wrapper.find('.user-prompt-form textarea').setValue('Review this carefully.');
+    await wrapper.find('.user-prompt-form').trigger('submit');
+
+    expect(wrapper.emitted('updateUserPrompt')).toEqual([[
+      { id: 'prompt-1', changes: { name: 'Review', content: 'Review this carefully.' } },
+    ]]);
+  });
+
   it('lists the task inbox keyboard shortcut', async () => {
     const wrapper = mountSettingsDialog();
 

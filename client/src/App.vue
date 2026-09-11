@@ -328,6 +328,7 @@
         :showHintInfo="showHintInfo"
         :showCodeBlockLanguageHeaders="showCodeBlockLanguageHeaders"
         :modelInfo="selectedAgentModelSummary"
+        :user-prompts="userPrompts"
         :showGoToTopButton="showGoToTopButton"
         :showChatViewOptionsButton="showChatViewOptionsButton"
         :fullscreen="isFullscreen"
@@ -503,6 +504,7 @@
       :auto-speak-assistant="autoSpeakAssistant"
       :available-skills="availableSkills"
       :skill-presets="skillPresets"
+      :user-prompts="userPrompts"
       :gitea-server-url="gitHosting.settings.value.serverUrl"
       :gitea-token-configured="gitHosting.settings.value.tokenConfigured"
       :github-server-url="gitHosting.githubSettings.value.serverUrl"
@@ -539,6 +541,9 @@
       @create-skill-preset="handleCreateSkillPreset"
       @update-skill-preset="handleUpdateSkillPreset"
       @delete-skill-preset="handleDeleteSkillPreset"
+      @create-user-prompt="createUserPrompt"
+      @update-user-prompt="handleUpdateUserPrompt"
+      @delete-user-prompt="deleteUserPrompt"
       @clear-launch-cache="handleClearLaunchCache"
       @save-git-settings="handleSaveGitSettings"
       @save-gateway-settings="handleSaveGatewaySettings"
@@ -578,6 +583,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useWebSocket } from './composables/useWebSocket';
 import { useAuth } from './composables/useAuth';
 import { usePreferences } from './composables/usePreferences';
+import { useUserPrompts } from './composables/useUserPrompts';
 import { useTheme } from './composables/useTheme';
 import { i18n, setLocale } from './i18n';
 import { PhBrain, PhGear, PhMagnifyingGlass, PhPlus, PhTrash, PhTerminal, PhNotePencil, PhTray, PhGitBranch, PhGitMerge, PhGitPullRequest, PhSidebarSimple, PhRobot, PhFolderSimple, PhDotsThreeVertical, PhCornersOut, PhCornersIn, PhMoon, PhSun, PhX } from '@phosphor-icons/vue';
@@ -709,6 +715,8 @@ const {
 } = usePreferences();
 const t = i18n.global.t;
 watch(language, setLocale, { immediate: true });
+
+const { prompts: userPrompts, loadPrompts: loadUserPrompts, createPrompt: createUserPrompt, updatePrompt: updateUserPrompt, deletePrompt: deleteUserPrompt } = useUserPrompts();
 
 const { resolvedTheme } = useTheme();
 const themeToggleLabel = computed(() => resolvedTheme.value === 'dark' ? t('app.switchToLightTheme') : t('app.switchToDarkTheme'));
@@ -1834,6 +1842,10 @@ async function handleDeleteSkillPreset(id: string) {
   await deletePreset(id);
 }
 
+async function handleUpdateUserPrompt(payload: { id: string; changes: { name: string; content: string } }) {
+  await updateUserPrompt(payload.id, payload.changes);
+}
+
 async function handleSearchSelect(sessionId: string) {
   try {
     const response = await fetch(`/api/sessions/${sessionId}/resume`, {
@@ -2185,6 +2197,7 @@ let authenticatedAppReady = false;
 async function initializeAuthenticatedApp(): Promise<void> {
   await Promise.all([
     loadPreferences(),
+    loadUserPrompts().catch(() => {}),
     gitHosting.loadSettings().catch(() => {}),
     gatewaySettings.loadSettings().catch(() => {}),
     refreshSelectedAgentProfileDetails(),

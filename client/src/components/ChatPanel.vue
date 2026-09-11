@@ -257,6 +257,24 @@
         ></textarea>
         <div class="composer-meta-row">
           <span class="composer-hint">{{ t('components.chatPanel.enterSendsShiftEnterForNewlineCtrl') }}</span>
+          <div v-if="userPrompts.length" class="user-prompt-picker">
+            <button
+              type="button"
+              class="prompt-polish-btn tooltip tooltip-above"
+              :aria-label="t('components.chatPanel.userPrompts')"
+              :data-tooltip="t('components.chatPanel.userPrompts')"
+              :aria-expanded="showUserPrompts"
+              @click="showUserPrompts = !showUserPrompts"
+            >
+              <PhTextT :size="16" />
+            </button>
+            <div v-if="showUserPrompts" class="user-prompt-menu" role="menu">
+              <button v-for="prompt in userPrompts" :key="prompt.id" type="button" role="menuitem" @click="insertUserPrompt(prompt.content)">
+                <strong>{{ prompt.name }}</strong>
+                <span>{{ prompt.content }}</span>
+              </button>
+            </div>
+          </div>
           <button
             type="button"
             class="prompt-polish-btn tooltip tooltip-above"
@@ -752,7 +770,8 @@ import { replaceSlashToken, useSlashCommands } from '../composables/useSlashComm
 import { useFileSearch, replaceFileToken } from '../composables/useFileSearch';
 import type { SlashCommandItem } from '../types/slashCommands';
 import type { FileSearchResult } from '../types/fileSearch';
-import { PhArrowUp, PhCamera, PhCaretDown, PhCornersIn, PhCornersOut, PhDownloadSimple, PhEye, PhImage, PhLightbulb, PhListChecks, PhListDashes, PhMagicWand, PhMicrophone, PhRobot, PhSpeakerHigh, PhStop, PhX } from '@phosphor-icons/vue';
+import { PhArrowUp, PhCamera, PhCaretDown, PhCornersIn, PhCornersOut, PhDownloadSimple, PhEye, PhImage, PhLightbulb, PhListChecks, PhListDashes, PhMagicWand, PhMicrophone, PhRobot, PhSpeakerHigh, PhStop, PhTextT, PhX } from '@phosphor-icons/vue';
+import type { UserPrompt } from '../composables/useUserPrompts';
 import MessageBubble from './MessageBubble.vue';
 import SlashCommandMenu from './SlashCommandMenu.vue';
 import FileSearchMenu from './FileSearchMenu.vue';
@@ -800,6 +819,7 @@ const props = withDefaults(defineProps<{
   showHintInfo?: boolean;
   showCodeBlockLanguageHeaders?: boolean;
   modelInfo?: string;
+  userPrompts?: UserPrompt[];
   showGoToTopButton?: boolean;
   showChatViewOptionsButton?: boolean;
   fullscreen?: boolean;
@@ -812,6 +832,7 @@ const props = withDefaults(defineProps<{
   showGoToTopButton: true,
   showChatViewOptionsButton: true,
   fullscreen: false,
+  userPrompts: () => [],
 });
 
 const emit = defineEmits<{ branchChanged: []; toggleFullscreen: []; }>();
@@ -958,6 +979,7 @@ const {
   clearAcceptedAttachments,
 } = useChatAttachments((key, params) => t(key, params || {}));
 const isPolishingPrompt = ref(false);
+const showUserPrompts = ref(false);
 const promptPolishError = ref('');
 const dictationAvailable = ref(false);
 const ttsAvailable = ref(false);
@@ -1956,6 +1978,13 @@ function addFileReference(path: string) {
     inputRef.value?.setSelectionRange(inputText.value.length, inputText.value.length);
     resizeInput();
   });
+}
+
+async function insertUserPrompt(content: string): Promise<void> {
+  inputText.value = content;
+  showUserPrompts.value = false;
+  await resizeInputAfterDomUpdate();
+  inputRef.value?.focus();
 }
 
 async function submitExternalPrompt(text: string, options?: { hideCommandMessage?: boolean }): Promise<boolean> {
@@ -4005,6 +4034,51 @@ function handleInputKeydown(event: KeyboardEvent) {
   color: var(--text-tertiary);
   font-size: 0.6875rem;
   line-height: 1.2;
+}
+
+.user-prompt-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.user-prompt-menu {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  bottom: calc(100% + 0.5rem);
+  width: min(22rem, 80vw);
+  max-height: 16rem;
+  overflow: auto;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 25%);
+}
+
+.user-prompt-menu button {
+  display: grid;
+  width: 100%;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-prompt-menu button:hover {
+  background: var(--bg-tertiary);
+}
+
+.user-prompt-menu span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-hint {

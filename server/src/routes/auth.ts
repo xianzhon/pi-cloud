@@ -9,6 +9,7 @@ import { verifyConfiguredPassword } from '../auth/password.js';
 import type { PiCloudDatabase } from '../db/database';
 import { SkillPresetStore } from '../services/skill-preset-store.js';
 import type { SkillPresetMode } from '../services/skill-preset-store.js';
+import { UserPromptStore } from '../services/user-prompt-store.js';
 
 interface AuthRouteOptions {
   config: AuthConfig;
@@ -40,6 +41,7 @@ type PreferencePatchBody = {
 export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions) {
   const { config, sessions, audit, totp, rateLimiter, db } = options;
   const presetStore = new SkillPresetStore(db);
+  const userPromptStore = new UserPromptStore(db);
 
   function getPreferenceValue(key: string): string | undefined {
     const row = db
@@ -137,6 +139,14 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     return { name, mode, skills };
   }
 
+  function parseUserPromptBody(body: Record<string, unknown>): { name: string; content: string } {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    if (!name) throw new Error('name is required');
+    if (!content) throw new Error('content is required');
+    return { name, content };
+  }
+
   function isUniqueConstraintError(error: unknown) {
     return error instanceof Error && /unique/i.test(error.message);
   }
@@ -146,6 +156,13 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
       return reply.status(409).send({ error: 'A preset with that name already exists' });
     }
     return reply.status(400).send({ error: error instanceof Error ? error.message : 'Invalid preset payload' });
+  }
+
+  function sendUserPromptError(reply: FastifyReply, error: unknown) {
+    if (isUniqueConstraintError(error)) {
+      return reply.status(409).send({ error: 'A prompt with that name already exists' });
+    }
+    return reply.status(400).send({ error: error instanceof Error ? error.message : 'Invalid prompt payload' });
   }
 
   app.get('/me', async (req, reply) => {
@@ -347,6 +364,44 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     const session = requireAuth(req, reply);
     if (!session) return;
     presetStore.delete((req.params as { id: string }).id, session.username);
+    return { success: true };
+  });
+
+  app.get('/user-prompts', async (req, reply) => {
+    const session = requireAuth(req, reply);
+    if (!session) return;
+    return { prompts: userPromptStore.list() };
+  });
+
+  app.post('/user-prompts', async (req, reply) => {
+    const session = requireAuth(req, reply);
+    if (!session) return;
+    try {
+      return { prompt: userPromptStore.create(parseUserPromptBody((req.body as Record<string, unknown>) || {})) };
+    } catch (error) {
+      return sendUserPromptError(reply, error);
+    }
+  });
+
+  app.patch('/user-prompts/:id', async (req, reply) => {
+    const session = requireAuth(req, reply);
+    if (!session) return;
+    try {
+      return {
+        prompt: userPromptStore.update(
+          (req.params as { id: string }).id,
+          parseUserPromptBody((req.body as Record<string, unknown>) || {}),
+        ),
+      };
+    } catch (error) {
+      return sendUserPromptError(reply, error);
+    }
+  });
+
+  app.delete('/user-prompts/:id', async (req, reply) => {
+    const session = requireAuth(req, reply);
+    if (!session) return;
+    userPromptStore.delete((req.params as { id: string }).id);
     return { success: true };
   });
 

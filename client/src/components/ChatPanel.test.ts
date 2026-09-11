@@ -112,6 +112,18 @@ describe('ChatPanel', () => {
     vi.useRealTimers();
   });
 
+  it('inserts a saved user prompt into the composer without sending it', async () => {
+    const wrapper = mount(ChatPanel, {
+      props: { userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.' }] },
+    });
+
+    await wrapper.find('.user-prompt-picker > button').trigger('click');
+    await wrapper.find('.user-prompt-menu button').trigger('click');
+
+    expect((wrapper.find('#chat-input').element as HTMLTextAreaElement).value).toBe('Review this change.');
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
   it('shows the profile default provider and model before a session exists', () => {
     const wrapper = mount(ChatPanel, { props: { modelInfo: 'openai / gpt-5.4' } });
 

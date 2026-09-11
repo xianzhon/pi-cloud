@@ -52,6 +52,7 @@ describe('openPiCloudDatabase', () => {
       'session_worktrees',
       'sessions',
       'skill_presets',
+      'user_prompts',
       'wecom_gateway_configs',
       'wecom_gateway_credentials',
       'wecom_gateway_sessions',
@@ -61,6 +62,9 @@ describe('openPiCloudDatabase', () => {
       'weixin_gateway_sessions',
       'weixin_gateway_state',
     ]);
+    const userPromptColumns = db.prepare('PRAGMA table_info(user_prompts)').all() as Array<{ name: string }>;
+    expect(userPromptColumns.map((column) => column.name)).toEqual(['id', 'name', 'content', 'created_at', 'updated_at']);
+
     const kickoffColumns = db.prepare('PRAGMA table_info(model_window_kickoffs)').all() as Array<{ name: string; notnull: number }>;
     expect(kickoffColumns.map((column) => column.name)).toContain('project_path');
     expect(kickoffColumns.find((column) => column.name === 'project_path')?.notnull).toBe(1);
@@ -246,10 +250,11 @@ describe('openPiCloudDatabase', () => {
       { version: 4, name: 'wecom-gateway-schema' },
       { version: 5, name: 'model-window-kickoff-schema' },
       { version: 6, name: 'model-window-kickoff-project-path' },
+      { version: 7, name: 'user-prompts-schema' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 6 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 7 });
     db.close();
   });
 

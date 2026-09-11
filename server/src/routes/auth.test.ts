@@ -158,12 +158,14 @@ describe('authRoutes', () => {
     const disable = await app.inject({ method: 'POST', url: '/api/auth/2fa/disable' });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences' });
     const updatePreferences = await app.inject({ method: 'PATCH', url: '/api/auth/preferences', payload: { showHintInfo: false } });
+    const userPrompts = await app.inject({ method: 'GET', url: '/api/auth/user-prompts' });
     const audit = await app.inject({ method: 'GET', url: '/api/auth/audit' });
 
     expect(setup.statusCode).toBe(401);
     expect(disable.statusCode).toBe(401);
     expect(preferences.statusCode).toBe(401);
     expect(updatePreferences.statusCode).toBe(401);
+    expect(userPrompts.statusCode).toBe(401);
     expect(audit.statusCode).toBe(401);
   });
 
@@ -493,6 +495,32 @@ describe('authRoutes', () => {
     expect(remove.statusCode).toBe(200);
     expect(remove.json()).toEqual({ success: true });
     expect(afterDelete.json()).toEqual({ presets: [] });
+  });
+
+  it('lists, creates, updates, and deletes user prompts', async () => {
+    ({ app, tempDir, db, totp } = await buildApp());
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const cookieHeader = String(login.headers['set-cookie']).split(';')[0];
+    const headers = { cookie: cookieHeader };
+
+    expect((await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json()).toEqual({ prompts: [] });
+    const create = await app.inject({
+      method: 'POST', url: '/api/auth/user-prompts', headers,
+      payload: { name: 'Review', content: 'Review this change.' },
+    });
+    const id = create.json().prompt.id;
+    expect(create.json()).toMatchObject({ prompt: { name: 'Review', content: 'Review this change.' } });
+
+    const update = await app.inject({
+      method: 'PATCH', url: `/api/auth/user-prompts/${id}`, headers,
+      payload: { name: 'Test', content: 'Write focused tests.' },
+    });
+    expect(update.json()).toMatchObject({ prompt: { id, name: 'Test', content: 'Write focused tests.' } });
+    expect((await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json())
+      .toMatchObject({ prompts: [{ id, name: 'Test', content: 'Write focused tests.' }] });
+
+    expect((await app.inject({ method: 'DELETE', url: `/api/auth/user-prompts/${id}`, headers })).json()).toEqual({ success: true });
+    expect((await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json()).toEqual({ prompts: [] });
   });
 
   it('rejects invalid preference payloads', async () => {
