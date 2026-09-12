@@ -381,6 +381,7 @@
       ref="editorPanelRef"
       :visible="showEditor"
       :cwd="sessionCwd || selectedProjectPath"
+      :profile-id="selectedAgentProfileId"
       :auto-refresh="editorAutoRefresh"
       @close="showEditor = false"
       @add-reference="addEditorReference"

@@ -42,6 +42,7 @@ describe('openPiCloudDatabase', () => {
       'memory_recall_events',
       'model_window_kickoffs',
       'notification_channels',
+      'pinned_files',
       'project_history',
       'project_tasks',
       'review_sources',
@@ -271,10 +272,11 @@ describe('openPiCloudDatabase', () => {
       { version: 6, name: 'model-window-kickoff-project-path' },
       { version: 7, name: 'user-prompts-schema' },
       { version: 8, name: 'application-settings-table' },
+      { version: 9, name: 'pinned-files-schema' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 8 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 9 });
     db.close();
   });
 

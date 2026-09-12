@@ -1168,6 +1168,8 @@ describe('SessionSidebar', () => {
       { id: 'default', name: 'Default', isDefault: true, createdAt: '2026-08-01T00:00:00.000Z' },
       { id: 'important', name: 'Important', isDefault: false, createdAt: '2026-08-02T00:00:00.000Z' },
     ];
+    const openFile = vi.fn();
+    window.addEventListener('open-file-in-editor', openFile);
     const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
       const ok = (payload: object) => ({ ok: true, json: async () => payload });
       if (url === '/api/sessions/agent-profiles') return ok({ profiles: defaultProfiles });
@@ -1181,7 +1183,11 @@ describe('SessionSidebar', () => {
       }
       if (url === '/api/sessions/pin-groups?profileId=default') return ok({ groups });
       if (String(url).startsWith('/api/sessions/pinned?')) {
-        return ok({ groups: groups.map((group) => ({ ...group, sessions: group.id === 'important' ? [pinnedSession] : [] })) });
+        return ok({ groups: groups.map((group) => ({
+          ...group,
+          sessions: group.id === 'important' ? [pinnedSession] : [],
+          filePaths: group.id === 'important' ? ['/project/docs/RELEASE.md'] : [],
+        })) });
       }
       return ok({ sessions: [] });
     });
@@ -1193,7 +1199,20 @@ describe('SessionSidebar', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('Pinned session'));
     expect(wrapper.text()).toContain('Default');
     expect(wrapper.text()).toContain('Important');
-
+    expect(wrapper.text()).toContain('RELEASE.md');
+    expect(wrapper.get('.pinned-file-item .file-icon').classes()).toContain('icon-docs');
+    await wrapper.get('.pinned-file-item').trigger('click');
+    expect((openFile.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      path: '/project/docs/RELEASE.md', kind: 'path',
+    });
+    await wrapper.get('.pinned-file-item').trigger('contextmenu');
+    const fileGroupChoices = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.pin-group-choices button'));
+    fileGroupChoices.find((button) => button.textContent?.includes('Default'))!.click();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/sessions/files/pin', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ filePath: '/project/docs/RELEASE.md', groupId: 'default', profileId: 'default' }),
+    })));
+    await vi.waitFor(() => expect(wrapper.get('.session-item').exists()).toBe(true));
     await wrapper.get('.session-item').trigger('contextmenu');
     expect(document.body.querySelector('.pin-session-btn')?.textContent).toContain('Move to group');
     const moveChoices = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.pin-group-choices button'));
@@ -1221,6 +1240,7 @@ describe('SessionSidebar', () => {
       method: 'POST',
       body: JSON.stringify({ name: 'Later', profileId: 'default' }),
     }));
+    window.removeEventListener('open-file-in-editor', openFile);
   });
 
   it('pins review sessions and displays them in pinned groups', async () => {

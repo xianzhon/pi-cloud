@@ -7,6 +7,7 @@ import { modelWindowKickoffSchemaMigration } from './005-model-window-kickoff-sc
 import { modelWindowKickoffProjectPathMigration } from './006-model-window-kickoff-project-path.js';
 import { userPromptsSchemaMigration } from './007-user-prompts-schema.js';
 import { applicationSettingsTableMigration } from './008-application-settings-table.js';
+import { pinnedFilesSchemaMigration } from './009-pinned-files-schema.js';
 import type { DatabaseMigration } from './migration.js';
 
 const migrations: DatabaseMigration[] = [
@@ -18,6 +19,7 @@ const migrations: DatabaseMigration[] = [
   modelWindowKickoffProjectPathMigration,
   userPromptsSchemaMigration,
   applicationSettingsTableMigration,
+  pinnedFilesSchemaMigration,
 ];
 
 export function runDatabaseMigrations(db: PiCloudDatabase): void {

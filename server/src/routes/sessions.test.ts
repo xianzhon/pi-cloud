@@ -1293,7 +1293,10 @@ describe('session routes', () => {
       createGroup: vi.fn(),
       pinSession: vi.fn(),
       unpinSession: vi.fn(),
+      pinFile: vi.fn(),
+      unpinFile: vi.fn(),
       listSessionIdsByGroup: vi.fn(() => new Map([['important', ['session-1']]])),
+      listFilePathsByGroup: vi.fn(() => new Map([['important', ['/project/RELEASE.md']]])),
     };
     const { sessionRoutes } = await import('./sessions.js');
     const { app, handlers } = createMockApp();
@@ -1304,12 +1307,22 @@ describe('session routes', () => {
     const result = await handlers['GET /pinned']({ query: { clientId: 'client-1', profileId: 'work' } }, reply);
     const pinGroups = await handlers['GET /pin-groups']({ query: { profileId: 'work' } }, reply);
     await handlers['DELETE /:id/pin']({ params: { id: 'session-1' }, query: { profileId: 'work' } }, reply);
+    await handlers['PUT /files/pin']({ body: { profileId: 'work', groupId: 'important', filePath: '/project/GUIDE.md' } }, reply);
+    await handlers['DELETE /files/pin']({ query: { profileId: 'work', filePath: '/project/GUIDE.md' } }, reply);
 
-    expect(result.groups[0]).toMatchObject({ id: 'important', sessions: [{ id: 'session-1', name: 'Pinned' }] });
-    expect(pinGroups.groups[0]).toMatchObject({ id: 'important', sessionIds: ['session-1'] });
+    expect(result.groups[0]).toMatchObject({
+      id: 'important',
+      filePaths: ['/project/RELEASE.md'],
+      sessions: [{ id: 'session-1', name: 'Pinned' }],
+    });
+    expect(pinGroups.groups[0]).toMatchObject({
+      id: 'important', sessionIds: ['session-1'], filePaths: ['/project/RELEASE.md'],
+    });
     expect(pinStore.listGroups).toHaveBeenCalledWith(owner);
     expect(pinStore.listSessionIdsByGroup).toHaveBeenCalledWith(owner);
     expect(pinStore.unpinSession).toHaveBeenCalledWith(owner, 'session-1');
+    expect(pinStore.pinFile).toHaveBeenCalledWith('work', '/project/GUIDE.md', 'important');
+    expect(pinStore.unpinFile).toHaveBeenCalledWith('work', '/project/GUIDE.md');
   });
 
   it('validates agent profile and project route inputs', async () => {
@@ -1333,6 +1346,8 @@ describe('session routes', () => {
       ['GET /git-status', { query: {} }, 400, 'clientId and projectPath are required'],
       ['GET /pin-groups', { query: {} }, 503, 'Session pins are not configured'],
       ['POST /pin-groups', { body: {} }, 503, 'Session pins are not configured'],
+      ['PUT /files/pin', { body: {} }, 503, 'Session pins are not configured'],
+      ['DELETE /files/pin', { query: {} }, 503, 'Session pins are not configured'],
       ['PUT /:id/pin', { params: { id: 's' }, body: {} }, 503, 'Session pins are not configured'],
       ['DELETE /:id/pin', { params: { id: 's' }, query: {} }, 503, 'Session pins are not configured'],
       ['GET /pinned', { query: {} }, 503, 'Session pins are not configured'],

@@ -351,6 +351,18 @@
       @click.stop
     >
       <button @click="addContextTabToReference">{{ t('components.editorPanel.addToReference') }}</button>
+      <div v-if="!contextTab.virtual" class="pin-file-submenu">
+        <button type="button">{{ t('components.editorPanel.pinFileToGroup') }} <span>›</span></button>
+        <div class="pin-file-choices">
+          <button
+            v-for="group in filePinGroups"
+            :key="group.id"
+            type="button"
+            :disabled="group.filePaths.includes(contextTab.path)"
+            @click="pinFile(contextTab.path, group.id)"
+          >{{ group.isDefault ? t('components.sessionSidebar.defaultPinGroup') : group.name }}</button>
+        </div>
+      </div>
       <button @click="copyContextTabRelativePath">{{ t('components.editorPanel.copyRelativePath') }}</button>
       <button @click="copyContextTabFullPath">{{ t('components.editorPanel.copyFullPath') }}</button>
       <button @click="downloadContextTab">{{ t('components.editorPanel.download') }}</button>
@@ -380,6 +392,18 @@
       <button v-if="fileContextMenu.node.type === 'directory'" @click="createNewFolderFromContext">
         {{ t('components.editorPanel.newFolderHere') }}
       </button>
+      <div v-if="fileContextMenu.node.type === 'file'" class="pin-file-submenu">
+        <button type="button">{{ t('components.editorPanel.pinFileToGroup') }} <span>›</span></button>
+        <div class="pin-file-choices">
+          <button
+            v-for="group in filePinGroups"
+            :key="group.id"
+            type="button"
+            :disabled="group.filePaths.includes(fileContextMenu.node.path)"
+            @click="pinFile(fileContextMenu.node.path, group.id)"
+          >{{ group.isDefault ? t('components.sessionSidebar.defaultPinGroup') : group.name }}</button>
+        </div>
+      </div>
       <button @click="copyPathFromContext('filename')">{{ t('components.editorPanel.copyFilename') }}</button>
       <button @click="copyPathFromContext('relative')">{{ t('components.editorPanel.copyRelativePath') }}</button>
       <button @click="copyPathFromContext('full')">{{ t('components.editorPanel.copyFullPath') }}</button>
@@ -572,11 +596,14 @@ const markdownRenderer = new Marked({
 
 const { resolvedTheme } = useTheme();
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   visible: boolean;
   cwd: string;
+  profileId?: string;
   autoRefresh?: boolean;
-}>();
+}>(), {
+  profileId: 'default',
+});
 
 const emit = defineEmits<{
   close: [];
@@ -702,6 +729,13 @@ const tabContextMenu = ref<{
   left: 0,
   top: 0,
 });
+interface FilePinGroup {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  filePaths: string[];
+}
+const filePinGroups = ref<FilePinGroup[]>([]);
 const inputPrompt = ref({
   visible: false,
   title: '',
@@ -2414,6 +2448,7 @@ function closeContextMenus() {
 
 function showFileContextMenu(event: MouseEvent, node: TreeNodeData) {
   closeTabContextMenu();
+  if (node.type === 'file') void loadFilePinGroups();
   if (node.type === 'directory') selectedDirectoryPath.value = node.path;
   fileContextMenu.value = {
     visible: true,
@@ -2425,6 +2460,7 @@ function showFileContextMenu(event: MouseEvent, node: TreeNodeData) {
 
 function showTabContextMenu(event: MouseEvent, tabPath: string) {
   hideTabTooltip();
+  void loadFilePinGroups();
   closeFileContextMenu();
   tabContextMenu.value = {
     visible: true,
@@ -2432,6 +2468,27 @@ function showTabContextMenu(event: MouseEvent, tabPath: string) {
     top: event.clientY,
     tabPath,
   };
+}
+
+async function loadFilePinGroups() {
+  try {
+    const response = await fetch(`/api/sessions/pin-groups?profileId=${encodeURIComponent(props.profileId)}`);
+    if (!response.ok) return;
+    const data = await response.json() as { groups?: FilePinGroup[] };
+    filePinGroups.value = (data.groups || []).map((group) => ({ ...group, filePaths: group.filePaths || [] }));
+  } catch {
+    filePinGroups.value = [];
+  }
+}
+
+async function pinFile(filePath: string, groupId: string) {
+  closeContextMenus();
+  const response = await fetch('/api/sessions/files/pin', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filePath, groupId, profileId: props.profileId }),
+  });
+  if (response.ok) window.dispatchEvent(new Event('pinned-files-changed'));
 }
 
 function createNewFileFromContext() {
@@ -3567,6 +3624,33 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 .context-menu button.danger:hover {
   color: var(--error);
+}
+
+.pin-file-submenu {
+  position: relative;
+}
+
+.pin-file-submenu > button {
+  display: flex;
+  justify-content: space-between;
+}
+
+.pin-file-choices {
+  position: absolute;
+  top: 0;
+  left: calc(100% - 1px);
+  display: none;
+  width: 180px;
+  padding: 0.25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.pin-file-submenu:hover > .pin-file-choices,
+.pin-file-submenu:focus-within > .pin-file-choices {
+  display: block;
 }
 
 .file-tree {

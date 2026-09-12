@@ -390,6 +390,7 @@ export default {
       closeOthers: '关闭其他文件',
       unpin: '取消固定',
       pin: '固定',
+      pinFileToGroup: '将文件置顶到分组…',
       newFileHere: '在此处新建文件',
       newFolderHere: '此处新建文件夹',
       copyFilename: '复制文件名',

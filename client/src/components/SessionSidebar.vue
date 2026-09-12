@@ -157,7 +157,7 @@
           >
             <PhCaretRight :size="14" weight="bold" :class="{ expanded: !collapsedPinGroups.has(entry.group.id) }" />
             <span>{{ entry.group.isDefault ? t('components.sessionSidebar.defaultPinGroup') : entry.group.name }}</span>
-            <span class="pin-group-count">{{ entry.group.sessions.length }}</span>
+            <span class="pin-group-count">{{ entry.group.sessions.length + entry.group.filePaths.length }}</span>
           </button>
         </div>
         <div
@@ -215,6 +215,20 @@
             </span>
           </div>
         </div>
+        <button
+          v-else-if="entry.filePath"
+          class="pinned-file-item"
+          type="button"
+          :title="entry.filePath"
+          @click="openPinnedFile(entry.filePath)"
+          @contextmenu.prevent="showFileContextMenu($event, entry.filePath, entry.groupId!)"
+        >
+          <FileIcon :name="fileName(entry.filePath)" :size="16" />
+          <span class="pinned-file-details">
+            <span class="pinned-file-name">{{ fileName(entry.filePath) }}</span>
+            <span class="pinned-file-path">{{ formatHomePath(entry.filePath) }}</span>
+          </span>
+        </button>
       </template>
 
       <button v-if="scope === 'pinned'" class="add-pin-group-btn" type="button" @click="addPinGroupDialog.visible = true">
@@ -294,6 +308,41 @@
         </button>
         <button v-if="!isReviewMode" @click="openRenameDialog"><PhPencilSimple :size="14" /> {{ t('components.sessionSidebar.rename') }}</button>
         <button v-if="canDeleteSelectedSession" class="danger" @click="openDeleteConfirm"><PhTrash :size="14" /> {{ t('components.sessionSidebar.delete') }}</button>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="fileContextMenu.visible"
+        class="session-context-menu"
+        :style="{ left: `${fileContextMenu.left}px`, top: `${fileContextMenu.top}px` }"
+        @click.stop
+      >
+        <div class="pin-group-submenu">
+          <button class="pin-session-btn" type="button" aria-haspopup="menu">
+            <PhPushPin :size="14" />
+            <span>{{ t('components.sessionSidebar.moveToGroup') }}</span>
+            <PhCaretRight class="submenu-caret" :size="14" weight="bold" />
+          </button>
+          <div class="pin-group-choices" role="menu">
+            <button
+              v-for="group in pinGroups"
+              :key="group.id"
+              type="button"
+              role="menuitemradio"
+              :aria-checked="fileContextMenu.groupId === group.id"
+              :disabled="fileContextMenu.groupId === group.id"
+              @click="pinContextFile(group.id)"
+            >
+              <PhCheck v-if="fileContextMenu.groupId === group.id" :size="14" weight="bold" />
+              <span v-else class="group-check-placeholder" aria-hidden="true"></span>
+              {{ group.isDefault ? t('components.sessionSidebar.defaultPinGroup') : group.name }}
+            </button>
+          </div>
+        </div>
+        <button class="remove-pin-btn" @click="unpinContextFile">
+          <PhX :size="14" /> {{ t('components.sessionSidebar.removeFromGroup') }}
+        </button>
       </div>
     </Teleport>
 
@@ -404,6 +453,7 @@ import { i18n } from '../i18n';
 import { formatHomePath } from '../utils/paths';
 import { computed, ref, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { PhBrain, PhCheck, PhFolder, PhX, PhPencilSimple, PhTrash, PhSignOut, PhPlus, PhArrowSquareOut, PhGitMerge, PhGitPullRequest, PhGitBranch, PhMagnifyingGlass, PhCaretRight, PhPushPin } from '@phosphor-icons/vue';
+import FileIcon from './FileIcon.vue';
 import FolderPickerModal from './FolderPickerModal.vue';
 import InputPromptModal from './InputPromptModal.vue';
 import ConfirmModal from './ConfirmModal.vue';
@@ -449,6 +499,7 @@ interface PinGroup {
   isDefault: boolean;
   createdAt: string;
   sessionIds: string[];
+  filePaths: string[];
   sessions: Session[];
 }
 
@@ -457,6 +508,7 @@ interface SessionListEntry {
   group?: PinGroup;
   groupId?: string;
   session?: Session;
+  filePath?: string;
 }
 
 interface CompactSession {
@@ -529,13 +581,17 @@ const sessionListEntries = computed<SessionListEntry[]>(() => {
   return pinGroups.value.flatMap<SessionListEntry>((group) => [
     { key: `group-${group.id}`, group },
     ...(!collapsedPinGroups.value.has(group.id)
-      ? group.sessions.map((session) => ({ key: `session-${group.id}-${session.id}`, groupId: group.id, session }))
+      ? [
+          ...group.sessions.map((session) => ({ key: `session-${group.id}-${session.id}`, groupId: group.id, session })),
+          ...group.filePaths.map((filePath) => ({ key: `file-${group.id}-${filePath}`, groupId: group.id, filePath })),
+        ]
       : []),
   ]);
 });
 
 // Context menu
 const contextMenu = ref({ visible: false, left: 0, top: 0, session: null as Session | null, groupId: null as string | null });
+const fileContextMenu = ref({ visible: false, left: 0, top: 0, filePath: '', groupId: '' });
 
 const moveSessionDialog = ref({ visible: false, session: null as Session | null });
 
@@ -753,7 +809,11 @@ async function loadSessions(options: { append?: boolean } = {}) {
       const data = await response.json() as { groups?: PinGroup[] };
       if (requestId !== sessionRequestId) return;
       pinGroups.value = Array.isArray(data.groups)
-        ? data.groups.map((group) => ({ ...group, sessionIds: group.sessions.map((session) => session.id) }))
+        ? data.groups.map((group) => ({
+            ...group,
+            sessionIds: group.sessions.map((session) => session.id),
+            filePaths: group.filePaths || [],
+          }))
         : [];
       sessions.value = pinGroups.value.flatMap((group) => group.sessions);
       nextSessionOffset.value = sessions.value.length;
@@ -1288,6 +1348,7 @@ watch(sessions, (items) => {
 // ── Context menu ───────────────────────────────────────────────────────────
 
 function showContextMenu(event: MouseEvent, session: Session, groupId?: string) {
+  closeFileContextMenu();
   closeContextMenu();
   contextMenu.value = { visible: true, left: event.clientX, top: event.clientY, session, groupId: groupId || null };
   nextTick(() => {
@@ -1307,7 +1368,32 @@ function closeContextMenu() {
 }
 
 function handleContextMenuEscape(event: KeyboardEvent) {
-  if (event.key === 'Escape') closeContextMenu();
+  if (event.key === 'Escape') {
+    closeContextMenu();
+    closeFileContextMenu();
+  }
+}
+
+function showFileContextMenu(event: MouseEvent, filePath: string, groupId: string) {
+  closeContextMenu();
+  fileContextMenu.value = { visible: true, left: event.clientX, top: event.clientY, filePath, groupId };
+  nextTick(() => {
+    document.addEventListener('click', closeFileContextMenu, { once: true });
+    document.addEventListener('keydown', handleContextMenuEscape, { once: true });
+  });
+}
+
+function closeFileContextMenu() {
+  fileContextMenu.value.visible = false;
+  document.removeEventListener('keydown', handleContextMenuEscape);
+}
+
+function openPinnedFile(filePath: string) {
+  window.dispatchEvent(new CustomEvent('open-file-in-editor', { detail: { path: filePath, kind: 'path' } }));
+}
+
+function fileName(filePath: string): string {
+  return filePath.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || filePath;
 }
 
 function togglePinGroup(groupId: string) {
@@ -1323,7 +1409,12 @@ async function loadPinGroups() {
     : `/api/sessions/pin-groups?profileId=${encodeURIComponent(selectedAgentProfile.value)}`;
   const response = await fetch(url);
   const data = await response.json() as { groups?: Array<Omit<PinGroup, 'sessions'>> };
-  pinGroups.value = (data.groups || []).map((group) => ({ ...group, sessionIds: group.sessionIds || [], sessions: [] }));
+  pinGroups.value = (data.groups || []).map((group) => ({
+    ...group,
+    sessionIds: group.sessionIds || [],
+    filePaths: group.filePaths || [],
+    sessions: [],
+  }));
 }
 
 async function createPinGroup(name: string) {
@@ -1375,6 +1466,27 @@ async function unpinContextSession() {
     ? `/api/review-sources/${encodeURIComponent(selectedReviewSourceId.value)}/sessions/${encodeURIComponent(session.id)}/pin`
     : `/api/sessions/${encodeURIComponent(session.id)}/pin?profileId=${encodeURIComponent(selectedAgentProfile.value)}`;
   const response = await fetch(pinUrl, { method: 'DELETE' });
+  if (response.ok) await loadSessions();
+}
+
+async function pinContextFile(groupId: string) {
+  const filePath = fileContextMenu.value.filePath;
+  closeFileContextMenu();
+  if (!filePath) return;
+  const response = await fetch('/api/sessions/files/pin', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filePath, groupId, profileId: selectedAgentProfile.value }),
+  });
+  if (response.ok) await loadSessions();
+}
+
+async function unpinContextFile() {
+  const filePath = fileContextMenu.value.filePath;
+  closeFileContextMenu();
+  if (!filePath) return;
+  const query = new URLSearchParams({ filePath, profileId: selectedAgentProfile.value });
+  const response = await fetch(`/api/sessions/files/pin?${query}`, { method: 'DELETE' });
   if (response.ok) await loadSessions();
 }
 
@@ -1537,8 +1649,13 @@ onMounted(async () => {
 
 // Listen for session list events
 const refreshHandler = () => loadSessions();
+const pinnedFilesChangedHandler = () => {
+  if (scope.value === 'pinned' && !isReviewMode.value) void loadSessions();
+  else if (!isReviewMode.value) void loadPinGroups();
+};
 onMounted(() => {
   window.addEventListener('refresh-sessions', refreshHandler);
+  window.addEventListener('pinned-files-changed', pinnedFilesChangedHandler);
   window.addEventListener('session-created', addCreatedSession);
   window.addEventListener('session-first-message', updateFirstMessage);
   window.addEventListener('session-streaming-state', updateStreamingState);
@@ -1548,6 +1665,7 @@ onMounted(() => {
 onUnmounted(() => {
   clearTimeout(reviewSearchTimeout);
   window.removeEventListener('refresh-sessions', refreshHandler);
+  window.removeEventListener('pinned-files-changed', pinnedFilesChangedHandler);
   window.removeEventListener('session-created', addCreatedSession);
   window.removeEventListener('session-first-message', updateFirstMessage);
   window.removeEventListener('session-streaming-state', updateStreamingState);
@@ -1886,6 +2004,45 @@ defineExpose({ focusProjectPath, loadSessions, showContextMenuForSession, switch
 
 .pinned-session-list .session-item {
   padding-left: 1.55rem;
+}
+
+.pinned-file-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 0.5rem;
+  padding: 0.45rem 0.625rem 0.45rem 1.55rem;
+  color: var(--text-secondary);
+  text-align: left;
+  border-radius: var(--radius-md);
+}
+
+.pinned-file-item:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.pinned-file-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.pinned-file-name,
+.pinned-file-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pinned-file-name {
+  font-weight: 500;
+}
+
+.pinned-file-path {
+  color: var(--text-muted);
+  font-size: 0.7rem;
 }
 
 .session-item {

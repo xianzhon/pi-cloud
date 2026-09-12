@@ -390,6 +390,7 @@ export default {
       closeOthers: 'Close others',
       unpin: 'Unpin',
       pin: 'Pin',
+      pinFileToGroup: 'Pin file to group…',
       newFileHere: 'New file here',
       newFolderHere: 'New folder here',
       copyFilename: 'Copy filename',

@@ -1074,6 +1074,49 @@ describe('EditorPanel', () => {
     expect(remainingTabs[0].text()).toContain('two.ts');
   });
 
+  it('pins files from tab and file-tree context menus to a profile group', async () => {
+    const pinnedFilesChanged = vi.fn();
+    window.addEventListener('pinned-files-changed', pinnedFilesChanged);
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const value = String(url);
+      if (value.startsWith('/api/files/tree')) {
+        return { ok: true, json: async () => ({ tree: [
+          { name: 'manual.txt', path: '/project/manual.txt', type: 'file' },
+        ] }) };
+      }
+      if (value.startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: 'Manual', mtime: 1 }) };
+      if (value.startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      if (value === '/api/sessions/pin-groups?profileId=work') {
+        return { ok: true, json: async () => ({ groups: [
+          { id: 'release', name: 'Release', isDefault: false, filePaths: [] },
+        ] }) };
+      }
+      if (value === '/api/sessions/files/pin' && init?.method === 'PUT') return { ok: true };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project', profileId: 'work' } });
+    await wrapper.vm.openFile('/project/README.txt');
+    await wrapper.find('.editor-tabs .tab').trigger('contextmenu');
+    await vi.waitFor(() => expect(wrapper.find('.tab-context-menu .pin-file-choices button').exists()).toBe(true));
+    await wrapper.get('.tab-context-menu .pin-file-choices button').trigger('click');
+    expect(fetch).toHaveBeenCalledWith('/api/sessions/files/pin', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ filePath: '/project/README.txt', groupId: 'release', profileId: 'work' }),
+    }));
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('manual.txt'));
+    await wrapper.get('.tree-node').trigger('contextmenu');
+    await vi.waitFor(() => expect(wrapper.find('.file-context-menu .pin-file-choices button').exists()).toBe(true));
+    await wrapper.get('.file-context-menu .pin-file-choices button').trigger('click');
+    expect(fetch).toHaveBeenCalledWith('/api/sessions/files/pin', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ filePath: '/project/manual.txt', groupId: 'release', profileId: 'work' }),
+    }));
+    expect(pinnedFilesChanged).toHaveBeenCalledTimes(2);
+    window.removeEventListener('pinned-files-changed', pinnedFilesChanged);
+  });
+
   it('downloads files from tab and file-tree context menus and folders as zip files', async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     vi.stubGlobal('URL', {

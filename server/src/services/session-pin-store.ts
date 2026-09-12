@@ -69,6 +69,43 @@ export class SessionPinStore {
     `).run(owner.type, owner.id, sessionId);
   }
 
+  pinFile(profileId: string, filePath: string, groupId: string): void {
+    const owner = { type: 'profile' as const, id: profileId };
+    this.ensureDefaultGroup(owner);
+    if (!this.db.prepare(`
+      SELECT 1 FROM session_pin_groups WHERE owner_type = 'profile' AND owner_id = ? AND id = ?
+    `).get(profileId, groupId)) {
+      throw new Error('Pin group not found');
+    }
+    this.db.prepare(`
+      INSERT INTO pinned_files (owner_type, owner_id, file_path, group_id, created_at)
+      VALUES ('profile', ?, ?, ?, ?)
+      ON CONFLICT(owner_type, owner_id, file_path) DO UPDATE SET group_id = excluded.group_id
+    `).run(profileId, filePath, groupId, new Date().toISOString());
+  }
+
+  unpinFile(profileId: string, filePath: string): void {
+    this.db.prepare(`
+      DELETE FROM pinned_files WHERE owner_type = 'profile' AND owner_id = ? AND file_path = ?
+    `).run(profileId, filePath);
+  }
+
+  listFilePathsByGroup(profileId: string): Map<string, string[]> {
+    const rows = this.db.prepare(`
+      SELECT group_id, file_path
+      FROM pinned_files
+      WHERE owner_type = 'profile' AND owner_id = ?
+      ORDER BY created_at, file_path
+    `).all(profileId) as Array<{ group_id: string; file_path: string }>;
+    const result = new Map<string, string[]>();
+    for (const row of rows) {
+      const paths = result.get(row.group_id) || [];
+      paths.push(row.file_path);
+      result.set(row.group_id, paths);
+    }
+    return result;
+  }
+
   listSessionIdsByGroup(owner: SessionPinOwner): Map<string, string[]> {
     const rows = this.db.prepare(`
       SELECT group_id, session_id

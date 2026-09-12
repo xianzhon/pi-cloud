@@ -25,14 +25,23 @@ describe('SessionPinStore', () => {
     store.pinSession(defaultProfile, 'session-1', group.id);
     store.pinSession(workProfile, 'session-1', DEFAULT_PIN_GROUP_ID);
     store.pinSession(codexSource, 'session-1', DEFAULT_PIN_GROUP_ID);
+    store.pinFile('default', '/project/RELEASE.md', group.id);
+    store.pinFile('work', '/work/RUNBOOK.md', DEFAULT_PIN_GROUP_ID);
 
     expect(store.listSessionIdsByGroup(defaultProfile).get(group.id)).toEqual(['session-1']);
     expect(store.listSessionIdsByGroup(workProfile).get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
     expect(store.listSessionIdsByGroup(codexSource).get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
     expect(store.listGroups(workProfile)).toHaveLength(1);
+    expect(store.listFilePathsByGroup('default').get(group.id)).toEqual(['/project/RELEASE.md']);
+    expect(store.listFilePathsByGroup('work').get(DEFAULT_PIN_GROUP_ID)).toEqual(['/work/RUNBOOK.md']);
+
+    store.pinFile('default', '/project/RELEASE.md', DEFAULT_PIN_GROUP_ID);
+    expect(store.listFilePathsByGroup('default').get(DEFAULT_PIN_GROUP_ID)).toEqual(['/project/RELEASE.md']);
 
     store.unpinSession(workProfile, 'session-1');
+    store.unpinFile('work', '/work/RUNBOOK.md');
     expect(store.listSessionIdsByGroup(workProfile).get(DEFAULT_PIN_GROUP_ID)).toBeUndefined();
+    expect(store.listFilePathsByGroup('work').get(DEFAULT_PIN_GROUP_ID)).toBeUndefined();
     expect(store.listSessionIdsByGroup(codexSource).get(DEFAULT_PIN_GROUP_ID)).toEqual(['session-1']);
   });
 });

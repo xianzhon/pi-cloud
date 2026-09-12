@@ -1,7 +1,7 @@
 // server/src/routes/sessions.ts
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import * as os from 'os';
-import { dirname } from 'path';
+import { dirname, isAbsolute } from 'path';
 import { projectMover } from '../services/project-mover.js';
 import { sessionFileRelocator } from '../services/session-file-relocator.js';
 import type { PiSessionService } from '../services/session-manager.js';
@@ -169,7 +169,7 @@ function sanitizeSessionTree(tree: any[]): any[] {
 interface SessionRouteOptions {
   projectTaskStore?: Pick<ProjectTaskStore, 'listProjectPaths' | 'replaceProjectPath'>;
   projectHistoryStore?: Pick<ProjectHistoryStore, 'list' | 'touch' | 'remove'>;
-  pinStore?: Pick<SessionPinStore, 'listGroups' | 'createGroup' | 'pinSession' | 'unpinSession' | 'listSessionIdsByGroup'>;
+  pinStore?: Pick<SessionPinStore, 'listGroups' | 'createGroup' | 'pinSession' | 'unpinSession' | 'listSessionIdsByGroup' | 'pinFile' | 'unpinFile' | 'listFilePathsByGroup'>;
   activityStore?: Pick<SessionActivityStore, 'listForSession'> & Partial<Pick<SessionActivityStore, 'listLatestPrForSessions' | 'updatePrStatus'>>;
   refreshPrStatus?: (activity: SessionActivityRecord) => Promise<PullRequestStatus>;
   repositoryCloner?: Pick<RepositoryCloner, 'preview' | 'start' | 'getJob' | 'subscribe' | 'cancel'>;
@@ -609,10 +609,12 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     if (!profileId) return reply.status(400).send({ error: 'profileId is required' });
     const owner = { type: 'profile' as const, id: profileId };
     const idsByGroup = options.pinStore.listSessionIdsByGroup(owner);
+    const filesByGroup = options.pinStore.listFilePathsByGroup(profileId);
     return {
       groups: options.pinStore.listGroups(owner).map((group) => ({
         ...group,
         sessionIds: idsByGroup.get(group.id) || [],
+        filePaths: filesByGroup.get(group.id) || [],
       })),
     };
   });
@@ -626,6 +628,28 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     } catch (error) {
       return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to create pin group' });
     }
+  });
+
+  app.put('/files/pin', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { filePath, groupId, profileId } = req.body as { filePath?: string; groupId?: string; profileId?: string };
+    if (!filePath || !isAbsolute(filePath) || !groupId || !profileId) {
+      return reply.status(400).send({ error: 'absolute filePath, groupId, and profileId are required' });
+    }
+    try {
+      options.pinStore.pinFile(profileId, filePath, groupId);
+      return { success: true };
+    } catch (error) {
+      return reply.status(404).send({ error: error instanceof Error ? error.message : 'Pin group not found' });
+    }
+  });
+
+  app.delete('/files/pin', async (req, reply) => {
+    if (!options.pinStore) return reply.status(503).send({ error: 'Session pins are not configured' });
+    const { filePath, profileId } = req.query as { filePath?: string; profileId?: string };
+    if (!filePath || !profileId) return reply.status(400).send({ error: 'filePath and profileId are required' });
+    options.pinStore.unpinFile(profileId, filePath);
+    return { success: true };
   });
 
   app.put('/:id/pin', async (req, reply) => {
@@ -662,9 +686,11 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     }, worktreeMetadata)]));
     const owner = { type: 'profile' as const, id: profileId };
     const idsByGroup = options.pinStore.listSessionIdsByGroup(owner);
+    const filesByGroup = options.pinStore.listFilePathsByGroup(profileId);
     return {
       groups: options.pinStore.listGroups(owner).map((group) => ({
         ...group,
+        filePaths: filesByGroup.get(group.id) || [],
         sessions: (idsByGroup.get(group.id) || [])
           .map((id) => sessionsById.get(id))
           .filter((session): session is NonNullable<typeof session> => Boolean(session))
