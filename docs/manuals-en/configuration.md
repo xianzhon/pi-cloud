@@ -46,7 +46,7 @@ pi-cloud --hostname 0.0.0.0 --no-open
 | `PI_CLOUD_SESSION_MAX_HOURS` | `720` | Maximum session lifetime, including renewals, in hours |
 | `PI_CLOUD_COOKIE_SECURE` | `false` | Restrict the session cookie to HTTPS connections |
 | `PI_CLOUD_TRUST_PROXY` | `false` | Trust `X-Forwarded-*` headers from a reverse proxy |
-| `SKIP_2FA_VERIFY` | `false` | Emergency 2FA bypass; keep disabled during normal operation |
+| `SKIP_2FA_VERIFY` | `false` | Emergency TOTP bypass for login and password-confirmed recovery actions; keep disabled during normal operation |
 
 When exposing Pi Cloud on a network, use HTTPS through a trusted reverse proxy and keep authentication enabled. Set `PI_CLOUD_TRUST_PROXY=true` and `PI_CLOUD_COOKIE_SECURE=true` when deployed behind HTTPS as described in the [deployment manual](deployment.md#reverse-proxy-nginx).
 

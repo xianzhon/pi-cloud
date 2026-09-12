@@ -37,6 +37,66 @@ describe('SecurityPanel', () => {
     expect(wrapper.find('img[alt="TOTP QR code"]').attributes('src')).toBe('data:image/png;base64,abc');
   });
 
+  it('submits the password when enabling 2FA', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/auth/2fa/setup') {
+        return { json: async () => ({ secret: 'ABC', qrCodeDataUrl: 'data:image/png;base64,abc', otpauthUrl: 'otpauth://totp/x' }) };
+      }
+      if (url === '/api/auth/2fa/enable') return { ok: true, json: async () => ({ success: true }) };
+      if (url === '/api/auth/audit') return { json: async () => ({ events: [] }) };
+      return { json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = mount(SecurityPanel, { props: { totpEnabled: false } });
+    await wrapper.find('.start-2fa').trigger('click');
+    await flushPromises();
+    await wrapper.find('input[name="verificationCode"]').setValue('123456');
+    await wrapper.find('input[name="password"]').setValue('secret');
+    await wrapper.find('.verify-2fa').trigger('click');
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/2fa/enable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: 'ABC', code: '123456', password: 'secret', totpCode: '' }),
+    });
+  });
+
+  it('submits the password and current TOTP code when disabling 2FA', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/auth/2fa/disable') return { ok: true, json: async () => ({ success: true }) };
+      if (url === '/api/auth/audit') return { json: async () => ({ events: [] }) };
+      return { json: async () => ({}) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = mount(SecurityPanel, {
+      props: { totpEnabled: true },
+      global: {
+        stubs: {
+          ConfirmModal: {
+            props: ['visible'],
+            emits: ['confirm', 'cancel'],
+            template: '<div v-if="visible"><slot name="message" /><button class="confirm-disable" @click="$emit(\'confirm\')">Confirm</button></div>',
+          },
+        },
+      },
+    });
+    await flushPromises();
+    await wrapper.find('.disable-2fa').trigger('click');
+    await wrapper.find('input[name="sensitivePassword"]').setValue('secret');
+    await wrapper.find('input[name="sensitiveTotpCode"]').setValue('123456');
+    await wrapper.find('.confirm-disable').trigger('click');
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/2fa/disable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'secret', totpCode: '123456' }),
+    });
+  });
+
   it('shows the standalone header and close button by default', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url === '/api/auth/audit') return { json: async () => ({ events: [] }) };
@@ -137,7 +197,7 @@ describe('SecurityPanel', () => {
 
   it('clears the audit log after confirmation', async () => {
     const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
-      if (url === '/api/auth/audit' && options?.method === 'DELETE') return { json: async () => ({ success: true }) };
+      if (url === '/api/auth/audit' && options?.method === 'DELETE') return { ok: true, json: async () => ({ success: true }) };
       if (url === '/api/auth/audit') return { json: async () => ({ events: [{ id: 1, createdAt: '2026-06-03T00:00:00.000Z', type: 'login_success', status: 'success', ip: '127.0.0.1', metadata: {} }] }) };
       return { json: async () => ({}) };
     });
@@ -150,7 +210,7 @@ describe('SecurityPanel', () => {
           ConfirmModal: {
             props: ['visible'],
             emits: ['confirm', 'cancel'],
-            template: '<button v-if="visible" class="confirm-clear" @click="$emit(\'confirm\')">Confirm</button>',
+            template: '<div v-if="visible"><slot name="message" /><button class="confirm-clear" @click="$emit(\'confirm\')">Confirm</button></div>',
           },
         },
       },
@@ -158,10 +218,15 @@ describe('SecurityPanel', () => {
     await flushPromises();
 
     await wrapper.find('.clear-audit').trigger('click');
+    await wrapper.find('input[name="sensitivePassword"]').setValue('secret');
     await wrapper.find('.confirm-clear').trigger('click');
     await flushPromises();
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/audit', { method: 'DELETE' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/audit', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'secret', totpCode: '' }),
+    });
   });
 
   it('shows an empty state when there are no audit events', async () => {

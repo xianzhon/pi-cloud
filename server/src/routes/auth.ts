@@ -122,6 +122,37 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     return session;
   }
 
+  async function requireSensitiveActionAuth(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    body: { password?: string; totpCode?: string },
+    action: string,
+  ): Promise<boolean> {
+    const context = getRequestContext(req, config.trustProxy);
+    if (rateLimiter.isBlocked(context.ip)) {
+      audit.record({ type: 'sensitive_action_rate_limited', status: 'failure', username: config.username, ...context, metadata: { action } });
+      reply.status(429).send({ error: 'Too many failed attempts. Try again later.' });
+      return false;
+    }
+
+    const validPassword = await verifyConfiguredPassword(body.password || '', config);
+    const totpEnabled = totp.getStatus().enabled;
+    const canBypassTotp = config.skip2faVerify && (action === 'totp_enable' || action === 'totp_disable');
+    const validTotp = !totpEnabled || canBypassTotp || Boolean(body.totpCode && totp.verify(body.totpCode));
+    if (!validPassword || !validTotp) {
+      rateLimiter.recordFailure(context.ip);
+      audit.record({ type: 'sensitive_action_failure', status: 'failure', username: config.username, ...context, metadata: { action } });
+      reply.status(401).send({ error: 'Invalid password or verification code' });
+      return false;
+    }
+
+    rateLimiter.recordSuccess(context.ip);
+    if (totpEnabled && canBypassTotp) {
+      audit.record({ type: 'sensitive_action_totp_bypassed', status: 'info', username: config.username, ...context, metadata: { action } });
+    }
+    return true;
+  }
+
   function parsePresetBody(body: Record<string, unknown>): { name: string; mode: SkillPresetMode; skills: string[] } {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const mode = body.mode;
@@ -425,7 +456,8 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     const session = requireAuth(req, reply);
     if (!session) return;
     const context = getRequestContext(req, config.trustProxy);
-    const body = req.body as { secret?: string; code?: string };
+    const body = (req.body || {}) as { secret?: string; code?: string; password?: string; totpCode?: string };
+    if (!await requireSensitiveActionAuth(req, reply, body, 'totp_enable')) return;
     if (!body.secret || !body.code || !totp.enable(body.secret, body.code)) {
       audit.record({ type: 'totp_enable_failure', status: 'failure', username: config.username, ...context });
       return reply.status(400).send({ error: 'Invalid verification code' });
@@ -438,6 +470,8 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     const session = requireAuth(req, reply);
     if (!session) return;
     const context = getRequestContext(req, config.trustProxy);
+    const body = (req.body || {}) as { password?: string; totpCode?: string };
+    if (!await requireSensitiveActionAuth(req, reply, body, 'totp_disable')) return;
     totp.disable();
     audit.record({ type: 'totp_disabled', status: 'success', username: config.username, ...context });
     return { success: true, enabled: false };
@@ -446,6 +480,8 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
   app.delete('/audit', async (req, reply) => {
     const session = requireAuth(req, reply);
     if (!session) return;
+    const body = (req.body || {}) as { password?: string; totpCode?: string };
+    if (!await requireSensitiveActionAuth(req, reply, body, 'audit_clear')) return;
     audit.clear();
     return { success: true };
   });

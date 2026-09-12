@@ -12,13 +12,16 @@
           <p class="security-status">{{ t('components.securityPanel.status') }} <strong>{{ totpEnabled ? t('components.securityPanel.enabled') : t('components.securityPanel.disabled') }}</strong></p>
         </div>
         <button v-if="!totpEnabled && !setup" class="start-2fa dialog-action primary-action" @click="startSetup">{{ t('components.securityPanel.enable2FA') }}</button>
-        <button v-if="totpEnabled" class="disable-2fa dialog-action compact-action danger-action" @click="disable2fa">{{ t('components.securityPanel.disable2FA') }}</button>
+        <button v-if="totpEnabled" class="disable-2fa dialog-action compact-action danger-action" @click="openSensitiveAction('disable2fa')">{{ t('components.securityPanel.disable2FA') }}</button>
       </div>
 
       <div v-if="setup" class="totp-setup">
         <img :src="setup.qrCodeDataUrl" :alt="t('components.securityPanel.totpQrCode')" />
         <p>{{ t('components.securityPanel.manualKey') }} <code>{{ setup.secret }}</code></p>
-        <input v-model="verificationCode" name="verificationCode" :placeholder="t('components.securityPanel.verificationCode')" />
+        <input v-model="verificationCode" name="verificationCode" autocomplete="one-time-code" :placeholder="t('components.securityPanel.newVerificationCode')" />
+        <input v-model="password" name="password" type="password" autocomplete="current-password" :placeholder="t('components.securityPanel.password')" />
+        <input v-if="totpEnabled" v-model="currentTotpCode" name="currentTotpCode" autocomplete="one-time-code" :placeholder="t('components.securityPanel.currentVerificationCode')" />
+        <p v-if="sensitiveActionError" class="sensitive-action-error">{{ sensitiveActionError }}</p>
         <button class="verify-2fa dialog-action primary-action" @click="enable2fa">{{ t('components.securityPanel.verifyAndEnable') }}</button>
       </div>
     </section>
@@ -26,7 +29,7 @@
     <section class="security-card">
       <div class="audit-header">
         <h3>{{ t('components.securityPanel.auditLog') }}</h3>
-        <button class="clear-audit" type="button" :disabled="!events.length" @click="showClearAuditConfirm = true">{{ t('components.securityPanel.clearLog') }}</button>
+        <button class="clear-audit" type="button" :disabled="!events.length" @click="openSensitiveAction('clearAudit')">{{ t('components.securityPanel.clearLog') }}</button>
       </div>
       <div class="audit-table-wrap">
         <table class="audit-table">
@@ -63,14 +66,21 @@
     </section>
 
     <ConfirmModal
-      :visible="showClearAuditConfirm"
-      :confirm-text="t('components.securityPanel.clearLog')"
+      :visible="sensitiveAction !== null"
+      :confirm-text="sensitiveAction === 'disable2fa' ? t('components.securityPanel.disable2FA') : t('components.securityPanel.clearLog')"
       variant="danger"
-      @confirm="clearAudit"
-      @cancel="showClearAuditConfirm = false"
+      @confirm="confirmSensitiveAction"
+      @cancel="closeSensitiveAction"
     >
-      <template #title>{{ t('components.securityPanel.clearAuditLog') }}</template>
-      <template #message>{{ t('components.securityPanel.thisPermanentlyDeletesAllAuditEvents') }}</template>
+      <template #title>{{ sensitiveAction === 'disable2fa' ? t('components.securityPanel.disable2FA') : t('components.securityPanel.clearAuditLog') }}</template>
+      <template #message>
+        <div class="sensitive-action-form">
+          <p>{{ sensitiveAction === 'disable2fa' ? t('components.securityPanel.confirmDisable2FA') : t('components.securityPanel.thisPermanentlyDeletesAllAuditEvents') }}</p>
+          <input v-model="password" name="sensitivePassword" type="password" autocomplete="current-password" :placeholder="t('components.securityPanel.password')" />
+          <input v-if="totpEnabled" v-model="currentTotpCode" name="sensitiveTotpCode" autocomplete="one-time-code" :placeholder="t('components.securityPanel.currentVerificationCode')" />
+          <p v-if="sensitiveActionError" class="sensitive-action-error">{{ sensitiveActionError }}</p>
+        </div>
+      </template>
     </ConfirmModal>
   </section>
 </template>
@@ -92,9 +102,12 @@ const emit = defineEmits<{ close: []; updated: [] }>();
 
 const setup = ref<{ secret: string; qrCodeDataUrl: string; otpauthUrl: string } | null>(null);
 const verificationCode = ref('');
+const password = ref('');
+const currentTotpCode = ref('');
+const sensitiveAction = ref<'disable2fa' | 'clearAudit' | null>(null);
+const sensitiveActionError = ref('');
 const events = ref<any[]>([]);
 const auditPage = ref(1);
-const showClearAuditConfirm = ref(false);
 // Keep the security panel compact enough to show pagination without a second vertical scroll area.
 const AUDIT_PAGE_SIZE = 7;
 
@@ -173,10 +186,27 @@ async function loadAudit() {
   auditPage.value = 1;
 }
 
-async function clearAudit(): Promise<void> {
-  await fetch('/api/auth/audit', { method: 'DELETE' });
-  showClearAuditConfirm.value = false;
+function openSensitiveAction(action: 'disable2fa' | 'clearAudit'): void {
+  sensitiveAction.value = action;
+  password.value = '';
+  currentTotpCode.value = '';
+  sensitiveActionError.value = '';
+}
+
+function closeSensitiveAction(): void {
+  sensitiveAction.value = null;
+  sensitiveActionError.value = '';
+}
+
+async function clearAudit(): Promise<boolean> {
+  const response = await fetch('/api/auth/audit', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: password.value, totpCode: currentTotpCode.value }),
+  });
+  if (response.ok === false) return false;
   await loadAudit();
+  return true;
 }
 
 async function startSetup() {
@@ -186,20 +216,44 @@ async function startSetup() {
 
 async function enable2fa() {
   if (!setup.value) return;
-  await fetch('/api/auth/2fa/enable', {
+  const response = await fetch('/api/auth/2fa/enable', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ secret: setup.value.secret, code: verificationCode.value }),
+    body: JSON.stringify({
+      secret: setup.value.secret,
+      code: verificationCode.value,
+      password: password.value,
+      totpCode: currentTotpCode.value,
+    }),
   });
+  if (response.ok === false) {
+    sensitiveActionError.value = t('components.securityPanel.invalidPasswordOrVerificationCode');
+    return;
+  }
   setup.value = null;
+  password.value = '';
+  currentTotpCode.value = '';
+  sensitiveActionError.value = '';
   emit('updated');
   await loadAudit();
 }
 
-async function disable2fa() {
-  await fetch('/api/auth/2fa/disable', { method: 'POST' });
+async function disable2fa(): Promise<boolean> {
+  const response = await fetch('/api/auth/2fa/disable', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: password.value, totpCode: currentTotpCode.value }),
+  });
+  if (response.ok === false) return false;
   emit('updated');
   await loadAudit();
+  return true;
+}
+
+async function confirmSensitiveAction(): Promise<void> {
+  const succeeded = sensitiveAction.value === 'disable2fa' ? await disable2fa() : await clearAudit();
+  if (succeeded) closeSensitiveAction();
+  else sensitiveActionError.value = t('components.securityPanel.invalidPasswordOrVerificationCode');
 }
 
 onMounted(loadAudit);
@@ -298,6 +352,17 @@ onMounted(loadAudit);
   background: white;
   padding: 0.5rem;
   border-radius: 8px;
+}
+.sensitive-action-form {
+  display: grid;
+  gap: 0.75rem;
+}
+.sensitive-action-form p {
+  margin: 0;
+}
+.sensitive-action-error {
+  color: var(--error);
+  font-size: 0.875rem;
 }
 @media (max-width: 640px) {
   .security-card-header {
