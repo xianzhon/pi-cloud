@@ -1,6 +1,7 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
+import { useToasts } from '../composables/useToasts';
 import ChatPanel from './ChatPanel.vue';
 
 enableAutoUnmount(afterEach);
@@ -32,6 +33,7 @@ const abort = vi.fn();
 const loadSessionHistory = vi.fn();
 const toggleThinking = vi.fn();
 const clearMessages = vi.fn();
+const toastController = useToasts();
 vi.mock('../composables/useChat', () => ({
   useChat: () => ({
     messages: chatMessages,
@@ -107,9 +109,11 @@ describe('ChatPanel', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
     localStorage.clear();
     sessionStorage.removeItem('pi-cloud-message-input-height');
+    toastController.clearToasts();
   });
 
   afterEach(() => {
+    toastController.clearToasts();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     vi.useRealTimers();
@@ -517,8 +521,9 @@ describe('ChatPanel', () => {
 
     await wrapper.vm.submitExternalPrompt('/diff', { hideCommandMessage: true });
 
-    expect(chatMessages.value).toEqual([
-      expect.objectContaining({ role: 'assistant', content: 'No working tree changes.' }),
+    expect(chatMessages.value).toEqual([]);
+    expect(toastController.toasts.value).toEqual([
+      expect.objectContaining({ type: 'info', message: 'No working tree changes.' }),
     ]);
   });
 

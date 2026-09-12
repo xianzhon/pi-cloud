@@ -481,6 +481,7 @@
       @undo="undoMemoryExtraction"
       @dismiss="memory.dismissToast"
     />
+    <ToastHost />
 
     <LazySettingsDialog
       v-if="settingsFeatureLoaded"
@@ -598,6 +599,7 @@ import { useTerminalPanel } from './composables/useTerminalPanel';
 import ConfirmModal from './components/ConfirmModal.vue';
 import SearchModal from './components/SearchModal.vue';
 import MemoryToast from './components/MemoryToast.vue';
+import ToastHost from './components/ToastHost.vue';
 import { useAvailableSkills } from './composables/useAvailableSkills';
 import { useSkillPresets } from './composables/useSkillPresets';
 import { useWorktreeBranches } from './composables/useWorktreeBranches';

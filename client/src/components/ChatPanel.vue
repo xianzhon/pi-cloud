@@ -790,10 +790,12 @@ import { useSessionRuntime } from '../composables/useSessionRuntime';
 import { useChatPullRequests } from '../composables/useChatPullRequests';
 import { createGitOperations } from '../services/gitOperations';
 import { usePreferences } from '../composables/usePreferences';
+import { useToasts } from '../composables/useToasts';
 
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
 const { autoSpeakAssistant } = usePreferences();
+const { showToast } = useToasts();
 
 const {
   messages,
@@ -2626,7 +2628,7 @@ async function handleDiffCommand(text: string, showCommandMessage = true) {
     responseMessage.content = formatDiffSummary(data, scope);
 
     if (!showCommandMessage && !data.oversized && !data.stat?.trim() && !data.diff?.trim()) {
-      addLocalMessage(responseMessage, props.sessionId);
+      showToast(responseMessage.content);
     }
   } catch (error) {
     responseMessage.status = 'failure';

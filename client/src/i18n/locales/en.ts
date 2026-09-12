@@ -723,6 +723,9 @@ export default {
         matched: 'matched',
       },
     },
+    toastHost: {
+      dismiss: 'Dismiss notification',
+    },
     memoryToast: {
       memoryUpdated: 'Memory updated',
       review: 'Review',

@@ -723,6 +723,9 @@ export default {
         matched: '匹配时适用',
       },
     },
+    toastHost: {
+      dismiss: '关闭通知',
+    },
     memoryToast: {
       memoryUpdated: '记忆已更新',
       review: '审核',
