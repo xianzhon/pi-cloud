@@ -46,14 +46,14 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
 
   function getPreferenceValue(key: string): string | undefined {
     const row = db
-      .prepare('SELECT value FROM security_settings WHERE key = ?')
+      .prepare('SELECT value FROM application_settings WHERE key = ?')
       .get(key) as { value: string } | undefined;
     return row?.value;
   }
 
   function setPreferenceValue(key: string, value: string): void {
     db.prepare(`
-      INSERT INTO security_settings (key, value, updated_at)
+      INSERT INTO application_settings (key, value, updated_at)
       VALUES (?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `).run(key, value, new Date().toISOString());

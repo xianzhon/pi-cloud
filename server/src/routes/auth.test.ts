@@ -192,7 +192,7 @@ describe('authRoutes', () => {
       payload: { showHintInfo: false },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.showHintInfo') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.showHintInfo') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toEqual({ showHintInfo: false, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
@@ -212,7 +212,7 @@ describe('authRoutes', () => {
       payload: { confirmSessionDelete: false },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.confirmSessionDelete') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.confirmSessionDelete') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json().confirmSessionDelete).toBe(false);
@@ -232,7 +232,7 @@ describe('authRoutes', () => {
       payload: { showCodeBlockLanguageHeaders: false },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.showCodeBlockLanguageHeaders') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.showCodeBlockLanguageHeaders') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: false, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
@@ -252,7 +252,7 @@ describe('authRoutes', () => {
       payload: { streamingMessageBehavior: 'followUp' },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.streamingMessageBehavior') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.streamingMessageBehavior') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'followUp', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
@@ -272,7 +272,7 @@ describe('authRoutes', () => {
       payload: { newSessionShortcut: 'ctrlAltN' },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.newSessionShortcut') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.newSessionShortcut') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlAltN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
@@ -292,7 +292,7 @@ describe('authRoutes', () => {
       payload: { fullscreenShortcut: 'ctrlShiftF' },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.fullscreenShortcut') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.fullscreenShortcut') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'ctrlShiftF', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
@@ -312,9 +312,9 @@ describe('authRoutes', () => {
       payload: { showGoToTopButton: false, showChatViewOptionsButton: false, autoExtractMemory: false },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const goToTopRow = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.showGoToTopButton') as { value: string };
-    const viewOptionsRow = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.showChatViewOptionsButton') as { value: string };
-    const autoExtractRow = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('memory.autoExtract') as { value: string };
+    const goToTopRow = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.showGoToTopButton') as { value: string };
+    const viewOptionsRow = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.showChatViewOptionsButton') as { value: string };
+    const autoExtractRow = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('memory.autoExtract') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: false, showChatViewOptionsButton: false, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
@@ -336,7 +336,7 @@ describe('authRoutes', () => {
       payload: { theme: 'light' },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.theme') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.theme') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'light', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
@@ -356,7 +356,7 @@ describe('authRoutes', () => {
       payload: { language: 'zh-CN' },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.language') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.language') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'zh-CN', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
@@ -376,7 +376,7 @@ describe('authRoutes', () => {
       payload: { soundNotification: 'chime' },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.soundNotification') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.soundNotification') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'chime', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
@@ -395,7 +395,7 @@ describe('authRoutes', () => {
       headers: { cookie: cookieHeader },
       payload: { autoSpeakAssistant: true },
     });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.autoSpeakAssistant') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.autoSpeakAssistant') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json().autoSpeakAssistant).toBe(true);
@@ -414,7 +414,7 @@ describe('authRoutes', () => {
       payload: { gitCloneParentPath: '  ~/src  ' },
     });
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
-    const row = db!.prepare('SELECT value FROM security_settings WHERE key = ?').get('ui.gitCloneParentPath') as { value: string };
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.gitCloneParentPath') as { value: string };
 
     expect(update.statusCode).toBe(200);
     expect(update.json().gitCloneParentPath).toBe('~/src');

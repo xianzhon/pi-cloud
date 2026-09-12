@@ -52,7 +52,7 @@ export class GithubSettingsStore {
     const value = proxyUrl.trim();
     if (value) new URL(value);
     if (value) this.set(PROXY_URL_KEY, value);
-    else this.db.prepare('DELETE FROM security_settings WHERE key = ?').run(PROXY_URL_KEY);
+    else this.db.prepare('DELETE FROM application_settings WHERE key = ?').run(PROXY_URL_KEY);
     return this.get();
   }
 
@@ -62,17 +62,17 @@ export class GithubSettingsStore {
   }
 
   clear(): void {
-    this.db.prepare('DELETE FROM security_settings WHERE key IN (?, ?)').run(SERVER_URL_KEY, TOKEN_KEY);
+    this.db.prepare('DELETE FROM application_settings WHERE key IN (?, ?)').run(SERVER_URL_KEY, TOKEN_KEY);
   }
 
   private value(key: string): string | undefined {
-    const row = this.db.prepare('SELECT value FROM security_settings WHERE key = ?').get(key) as { value: string } | undefined;
+    const row = this.db.prepare('SELECT value FROM application_settings WHERE key = ?').get(key) as { value: string } | undefined;
     return row?.value;
   }
 
   private set(key: string, value: string): void {
     this.db.prepare(`
-      INSERT INTO security_settings (key, value, updated_at)
+      INSERT INTO application_settings (key, value, updated_at)
       VALUES (?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `).run(key, value, new Date().toISOString());

@@ -101,8 +101,8 @@ export class MemoryStore {
   constructor(private readonly db: PiCloudDatabase) {}
 
   isAutoExtractionEnabled(): boolean {
-    const row = this.db.prepare('SELECT value FROM security_settings WHERE key = ?').get('memory.autoExtract') as { value: string } | undefined;
-    return row?.value !== 'false';
+    const row = this.db.prepare('SELECT value FROM application_settings WHERE key = ?').get('memory.autoExtract') as { value: string } | undefined;
+    return row?.value === 'true';
   }
 
   getOrCreateProject(profileId: string, canonicalPath: string): MemoryProject {

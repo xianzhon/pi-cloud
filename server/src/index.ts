@@ -194,8 +194,8 @@ function isSpaRoute(req: { method: string; url: string }): boolean {
   return true;
 }
 
-function getSecuritySetting(db: PiCloudDatabase, key: string): string {
-  const row = db.prepare('SELECT value FROM security_settings WHERE key = ?').get(key) as { value: string } | undefined;
+function getApplicationSetting(db: PiCloudDatabase, key: string): string {
+  const row = db.prepare('SELECT value FROM application_settings WHERE key = ?').get(key) as { value: string } | undefined;
   return row?.value || '';
 }
 
@@ -284,7 +284,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       ...await piSessionService.getClientAgentProxyEnvForRoutes(clientId || 'default'),
       ...githubSettings.proxyEnv(),
     }),
-    gitCloneParentPath: () => getSecuritySetting(db, 'ui.gitCloneParentPath') || path.join(os.homedir(), 'git', 'github'),
+    gitCloneParentPath: () => getApplicationSetting(db, 'ui.gitCloneParentPath') || path.join(os.homedir(), 'git', 'github'),
   });
   const gitHosting = new GitHostingService();
   const worktreeManager = new WorktreeManager();

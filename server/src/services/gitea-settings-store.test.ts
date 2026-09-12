@@ -4,7 +4,7 @@ import { GiteaSettingsStore } from './gitea-settings-store';
 
 function db() {
   const database = new Database(':memory:');
-  database.exec('CREATE TABLE security_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)');
+  database.exec('CREATE TABLE application_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)');
   return database;
 }
 

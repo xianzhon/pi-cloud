@@ -38,19 +38,19 @@ export class TotpService {
   }
 
   private getValue(key: string): string | undefined {
-    const row = this.db.prepare('SELECT value FROM security_settings WHERE key = ?').get(key) as { value: string } | undefined;
+    const row = this.db.prepare('SELECT value FROM application_settings WHERE key = ?').get(key) as { value: string } | undefined;
     return row?.value;
   }
 
   private setValue(key: string, value: string): void {
     this.db.prepare(`
-      INSERT INTO security_settings (key, value, updated_at)
+      INSERT INTO application_settings (key, value, updated_at)
       VALUES (?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `).run(key, value, new Date().toISOString());
   }
 
   private deleteValue(key: string): void {
-    this.db.prepare('DELETE FROM security_settings WHERE key = ?').run(key);
+    this.db.prepare('DELETE FROM application_settings WHERE key = ?').run(key);
   }
 }

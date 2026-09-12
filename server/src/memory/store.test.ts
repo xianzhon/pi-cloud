@@ -31,6 +31,18 @@ describe('MemoryStore', () => {
     db.close();
   });
 
+  it('disables automatic extraction unless explicitly enabled', () => {
+    expect(store.isAutoExtractionEnabled()).toBe(false);
+
+    db.prepare('INSERT INTO application_settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('memory.autoExtract', 'true', new Date().toISOString());
+    expect(store.isAutoExtractionEnabled()).toBe(true);
+
+    db.prepare('UPDATE application_settings SET value = ? WHERE key = ?')
+      .run('false', 'memory.autoExtract');
+    expect(store.isAutoExtractionEnabled()).toBe(false);
+  });
+
   it('uses profile and canonical path as the project identity', () => {
     const project = store.getOrCreateProject('default', '/repo/app');
     const sameProject = store.getOrCreateProject('default', '/repo/app');

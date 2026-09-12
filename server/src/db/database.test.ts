@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import { openPiCloudDatabase } from './database';
 import { runDatabaseMigrations } from './migrations/index';
+import { applicationSettingsTableMigration } from './migrations/008-application-settings-table';
 
 describe('openPiCloudDatabase', () => {
   let tempDir: string;
@@ -29,6 +30,7 @@ describe('openPiCloudDatabase', () => {
 
     expect(tables).toEqual([
       'agent_profile_settings',
+      'application_settings',
       'audit_events',
       'commit_message_prompts',
       'feishu_gateway_configs',
@@ -44,7 +46,6 @@ describe('openPiCloudDatabase', () => {
       'project_tasks',
       'review_sources',
       'schema_migrations',
-      'security_settings',
       'session_builtin_events',
       'session_pin_groups',
       'session_pins',
@@ -121,6 +122,24 @@ describe('openPiCloudDatabase', () => {
       'prompt_format_version',
       'skip_reason',
     ]));
+    db.close();
+  });
+
+  it('renames security settings without losing existing values', () => {
+    const db = new Database(':memory:');
+    db.exec(`
+      CREATE TABLE security_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+      INSERT INTO security_settings VALUES ('memory.autoExtract', 'false', '2026-09-12T00:00:00.000Z');
+    `);
+
+    applicationSettingsTableMigration.up(db);
+
+    expect(db.prepare('SELECT * FROM application_settings').all()).toEqual([{
+      key: 'memory.autoExtract',
+      value: 'false',
+      updated_at: '2026-09-12T00:00:00.000Z',
+    }]);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'security_settings'").get()).toBeUndefined();
     db.close();
   });
 
@@ -251,10 +270,11 @@ describe('openPiCloudDatabase', () => {
       { version: 5, name: 'model-window-kickoff-schema' },
       { version: 6, name: 'model-window-kickoff-project-path' },
       { version: 7, name: 'user-prompts-schema' },
+      { version: 8, name: 'application-settings-table' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 7 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 8 });
     db.close();
   });
 
