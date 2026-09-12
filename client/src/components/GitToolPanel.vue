@@ -140,8 +140,11 @@ async function refresh(): Promise<void> {
 }
 
 function runAction(command: string): void {
+  if (command === '/status') {
+    void refresh();
+    return;
+  }
   emit('command', command);
-  if (command === '/status') void refresh();
 }
 
 function openFile(path: string): void {

@@ -906,6 +906,10 @@ interface ChatLocalMessage {
   memory?: MessageMemoryRecall;
 }
 
+function createResponseMessage(message: ChatLocalMessage, showMessage: boolean, sessionId?: string): ChatLocalMessage {
+  return showMessage ? addLocalMessage(message, sessionId) : { ...message };
+}
+
 interface ReviewVisibleMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -2588,13 +2592,13 @@ async function handleOpenGitCommit(commit: string) {
 async function handleDiffCommand(text: string, showCommandMessage = true) {
   slashCommands.close();
   if (showCommandMessage) addLocalMessage({ role: 'user', content: text, kind: 'text' }, props.sessionId);
-  const responseMessage = addLocalMessage({
+  const responseMessage = createResponseMessage({
     role: 'assistant',
     content: t('components.chatPanel.loadingGitDiff'),
     kind: 'status',
     status: 'pending',
     title: t('components.chatPanel.gitDiff'),
-  }, props.sessionId);
+  }, showCommandMessage, props.sessionId);
 
   inputText.value = '';
   resizeInputAfterDomUpdate();
@@ -2635,13 +2639,13 @@ function formatStatusResponse(data: { cwd?: string; output?: string }) {
 async function handleStatusCommand(text: string, showUserMessage = true) {
   slashCommands.close();
   if (showUserMessage) addLocalMessage({ role: 'user', content: text, kind: 'text' }, props.sessionId);
-  const responseMessage = addLocalMessage({
+  const responseMessage = createResponseMessage({
     role: 'assistant',
     content: t('components.chatPanel.loadingGitStatus'),
     kind: 'status',
     status: 'pending',
     title: t('components.chatPanel.gitStatus'),
-  }, props.sessionId);
+  }, showUserMessage, props.sessionId);
 
   inputText.value = '';
   resizeInputAfterDomUpdate();
@@ -2685,7 +2689,7 @@ async function handleGitSyncCommand(text: string, command: GitSyncCommand, showU
   const title = `Git ${command}`;
   slashCommands.close();
   if (showUserMessage) addLocalMessage({ role: 'user', content: text, kind: 'text' }, props.sessionId);
-  const responseMessage = addLocalMessage({ role: 'assistant', content: t('components.chatPanel.runningGitCommand', { command }), kind: 'status', status: 'pending', title }, props.sessionId);
+  const responseMessage = createResponseMessage({ role: 'assistant', content: t('components.chatPanel.runningGitCommand', { command }), kind: 'status', status: 'pending', title }, showUserMessage, props.sessionId);
 
   inputText.value = '';
   resizeInputAfterDomUpdate();
@@ -2795,7 +2799,7 @@ async function submitBranchDialog() {
 
 async function runBranchCreate(name: string, baseBranch: string | undefined, userText: string, showUserMessage = true) {
   if (showUserMessage) addLocalMessage({ role: 'user', content: userText, kind: 'text' }, props.sessionId);
-  const responseMessage = addLocalMessage({ role: 'assistant', content: t('components.chatPanel.creatingGitBranch'), kind: 'status', status: 'pending', title: t('components.chatPanel.gitBranch') }, props.sessionId);
+  const responseMessage = createResponseMessage({ role: 'assistant', content: t('components.chatPanel.creatingGitBranch'), kind: 'status', status: 'pending', title: t('components.chatPanel.gitBranch') }, showUserMessage, props.sessionId);
 
   try {
     const data = await gitOperations.createBranch({ cwd: props.projectPath || '~', name, baseBranch });
@@ -2815,7 +2819,7 @@ async function runBranchCreate(name: string, baseBranch: string | undefined, use
 
 async function runBranchSwitch(name: string, pull: boolean, deleteOriginal: boolean, userText: string, showUserMessage = true) {
   if (showUserMessage) addLocalMessage({ role: 'user', content: userText, kind: 'text' }, props.sessionId);
-  const responseMessage = addLocalMessage({ role: 'assistant', content: t('components.chatPanel.switchingGitBranch'), kind: 'status', status: 'pending', title: t('components.chatPanel.gitBranch') }, props.sessionId);
+  const responseMessage = createResponseMessage({ role: 'assistant', content: t('components.chatPanel.switchingGitBranch'), kind: 'status', status: 'pending', title: t('components.chatPanel.gitBranch') }, showUserMessage, props.sessionId);
 
   try {
     const data = await gitOperations.switchBranch({
@@ -2868,13 +2872,13 @@ function formatCommitSuccess(data: { cwd?: string; message?: string; commit?: st
 async function handleCommitCommand(text: string, showUserMessage = true) {
   slashCommands.close();
   if (showUserMessage) addLocalMessage({ role: 'user', content: text, kind: 'text' }, props.sessionId);
-  const responseMessage = addLocalMessage({
+  const responseMessage = createResponseMessage({
     role: 'assistant',
     content: t('components.chatPanel.preparingGitCommitPreview'),
     kind: 'status',
     status: 'pending',
     title: t('components.chatPanel.gitCommit'),
-  }, props.sessionId);
+  }, showUserMessage, props.sessionId);
 
   inputText.value = '';
   resizeInputAfterDomUpdate();

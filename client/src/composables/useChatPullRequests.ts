@@ -63,13 +63,14 @@ export function useChatPullRequests(options: PullRequestOptions) {
     options.closeCommands();
     const sessionId = options.sessionId();
     if (showUserMessage) options.addLocalMessage({ role: 'user', content: text, kind: 'text' }, sessionId);
-    const responseMessage = options.addLocalMessage({
+    const response: ChatLocalMessage = {
       role: 'assistant',
       content: options.t('components.chatPanel.preparingPrPreview'),
       kind: 'status',
       status: 'pending',
       title: options.t('components.chatPanel.pullRequest'),
-    }, sessionId);
+    };
+    const responseMessage = showUserMessage ? options.addLocalMessage(response, sessionId) : response;
     options.clearComposer();
 
     try {

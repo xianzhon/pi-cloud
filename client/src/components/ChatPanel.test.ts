@@ -493,7 +493,7 @@ describe('ChatPanel', () => {
     wrapper.unmount();
   });
 
-  it('hides Git command messages submitted from the Git panel', async () => {
+  it('keeps Git commands submitted from the Git panel out of chat history', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       cwd: '/repo',
       output: 'On branch main',
@@ -504,11 +504,10 @@ describe('ChatPanel', () => {
     await wrapper.vm.submitExternalPrompt('/status', { hideCommandMessage: true });
     await wrapper.vm.submitExternalPrompt('/diff', { hideCommandMessage: true });
 
-    expect(chatMessages.value.some(message => message.role === 'user' && ['/status', '/diff'].includes(message.content))).toBe(false);
-    expect(chatMessages.value.some(message => message.role === 'assistant' && message.content.includes('On branch main'))).toBe(true);
+    expect(chatMessages.value).toEqual([]);
   });
 
-  it('preserves the composer draft after cancelling a commit opened from the Git panel', async () => {
+  it('preserves the draft and chat history after cancelling a commit opened from the Git panel', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const payload = String(input).includes('/api/git/status')
         ? { cwd: '/repo', message: 'Update changes', files: [{ status: 'M', path: 'changed.ts' }] }
@@ -524,6 +523,7 @@ describe('ChatPanel', () => {
     await nextTick();
 
     expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('Keep this draft');
+    expect(chatMessages.value).toEqual([]);
   });
 
   it('preserves an external prompt when the socket cannot send', async () => {

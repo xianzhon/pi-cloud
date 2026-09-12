@@ -634,6 +634,9 @@ describe('App routing', () => {
     expect(wrapper.find('.git-tool-panel').exists()).toBe(true);
     expect(wrapper.get('[data-rail-action="git"]').classes()).toContain('active');
 
+    await wrapper.get('.git-tool-action[aria-label="Refresh"]').trigger('click');
+    expect(submitExternalPrompt).not.toHaveBeenCalled();
+
     await wrapper.get('.git-tool-action[aria-label="Show diff"]').trigger('click');
     expect(submitExternalPrompt).toHaveBeenCalledWith('/diff', { hideCommandMessage: true });
 

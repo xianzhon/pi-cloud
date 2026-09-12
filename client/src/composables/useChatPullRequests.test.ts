@@ -50,7 +50,7 @@ describe('useChatPullRequests', () => {
   it('uses defaults, handles empty files, and records preview failures', async () => {
     hosting.previewPr.mockResolvedValueOnce(preview({ provider: 'gitea', files: [] }));
     const first = setup({ projectPath: () => undefined });
-    await first.pr.handlePrCommand('/pr', false);
+    await first.pr.handlePrCommand('/pr');
     expect(hosting.previewPr).toHaveBeenCalledWith('~', 'main');
     expect(first.messages.at(-1).content).toContain('Proposed Gitea PR');
     expect(first.messages.at(-1).content).toContain('noUncommittedFiles');
@@ -61,6 +61,16 @@ describe('useChatPullRequests', () => {
     await second.pr.handlePrCommand('/pr main');
     expect(second.options.branchOptions.value).toEqual([]);
     expect(second.messages.at(-1)).toMatchObject({ status: 'failure', content: 'preview failed' });
+  });
+
+  it('keeps PRs opened from the Git panel out of chat history', async () => {
+    hosting.previewPr.mockResolvedValue(preview());
+    const { pr, messages } = setup();
+
+    await pr.handlePrCommand('/pr main', false);
+    pr.cancelPr();
+
+    expect(messages).toEqual([]);
   });
 
   it('cancels and updates target branches while preserving edited content', async () => {

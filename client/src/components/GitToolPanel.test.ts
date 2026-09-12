@@ -11,7 +11,7 @@ describe('GitToolPanel', () => {
     vi.stubGlobal('fetch', vi.fn(async () => response({ files: [] })));
   });
 
-  it('lists changed files and emits the matching slash command for each action', async () => {
+  it('lists changed files and emits commands only for actions handled by chat', async () => {
     vi.mocked(fetch).mockResolvedValue(response({
       files: [
         { status: 'M', path: 'client/src/App.vue' },
@@ -31,7 +31,7 @@ describe('GitToolPanel', () => {
     ]);
     expect(actions.every(button => button.attributes('title') === undefined)).toBe(true);
 
-    const commands = ['/status', '/commit', '/pr', '/push', '/pull', '/branch', '/diff'];
+    const commands = ['/commit', '/pr', '/push', '/pull', '/branch', '/diff'];
     for (const button of actions) await button.trigger('click');
 
     expect(wrapper.emitted('history')).toHaveLength(1);
