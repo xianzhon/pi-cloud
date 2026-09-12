@@ -507,6 +507,21 @@ describe('ChatPanel', () => {
     expect(chatMessages.value).toEqual([]);
   });
 
+  it('shows when a diff requested from the Git panel is empty', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      cwd: '/repo',
+      stat: '',
+      diff: '',
+    }), { status: 200 })));
+    const wrapper = mount(ChatPanel, { props: { sessionId: 'session-1', projectPath: '/repo' } });
+
+    await wrapper.vm.submitExternalPrompt('/diff', { hideCommandMessage: true });
+
+    expect(chatMessages.value).toEqual([
+      expect.objectContaining({ role: 'assistant', content: 'No working tree changes.' }),
+    ]);
+  });
+
   it('preserves the draft and chat history after cancelling a commit opened from the Git panel', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const payload = String(input).includes('/api/git/status')

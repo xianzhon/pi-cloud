@@ -2624,6 +2624,10 @@ async function handleDiffCommand(text: string, showCommandMessage = true) {
     responseMessage.status = data.oversized ? 'failure' : undefined;
     responseMessage.title = data.oversized ? t('components.chatPanel.gitDiffUnavailable') : undefined;
     responseMessage.content = formatDiffSummary(data, scope);
+
+    if (!showCommandMessage && !data.oversized && !data.stat?.trim() && !data.diff?.trim()) {
+      addLocalMessage(responseMessage, props.sessionId);
+    }
   } catch (error) {
     responseMessage.status = 'failure';
     responseMessage.title = t('components.chatPanel.gitDiffFailed');
