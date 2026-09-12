@@ -27,6 +27,10 @@ function shouldExcludePath(path: string): boolean {
   return parts.some(part => EXCLUDED_DIRS.has(part));
 }
 
+function isDirectPathQuery(query: string): boolean {
+  return query.startsWith('/') || query.startsWith('~/');
+}
+
 export function findFileToken(text: string, cursor: number): FileToken | null {
   const beforeCursor = text.slice(0, cursor);
   const tokenStart = beforeCursor.search(/(^|\s)@[^\s]*$/);
@@ -155,6 +159,37 @@ export function useFileSearch(projectPath?: FileSearchPathSource) {
     return pendingFetch;
   }
 
+  async function fetchPathQuery(query: string): Promise<FileSearchResult[]> {
+    const slashIndex = query.lastIndexOf('/');
+    const searchPath = query.slice(0, slashIndex) || '/';
+
+    state.value.isLoading = true;
+    try {
+      const response = await fetch(`/api/files/search?pattern=*&path=${encodeURIComponent(searchPath)}`);
+      if (!response.ok) return [];
+      const data = await response.json() as { files: string[] };
+      const files = data.files.map((filePath) => {
+        const path = `${searchPath === '/' ? '' : searchPath}/${filePath}`;
+        const name = filePath.split('/').at(-1) || filePath;
+        const dotIndex = name.lastIndexOf('.');
+        return {
+          path,
+          name,
+          directory: path.slice(0, -(name.length + 1)) || '/',
+          type: dotIndex > 0 ? name.slice(dotIndex) : '',
+          score: 0,
+          isRecent: false,
+        };
+      });
+      return files;
+    } catch (error) {
+      console.error('Failed to fetch files:', error);
+      return [];
+    } finally {
+      state.value.isLoading = false;
+    }
+  }
+
   async function updateQuery(text: string, cursor: number) {
     const requestId = ++queryRequestId;
     const token = findFileToken(text, cursor);
@@ -177,7 +212,9 @@ export function useFileSearch(projectPath?: FileSearchPathSource) {
       state.value.activeIndex = 0;
     }
 
-    const files = await fetchFiles();
+    const files = isDirectPathQuery(token.query)
+      ? await fetchPathQuery(token.query)
+      : await fetchFiles();
 
     if (
       requestId !== queryRequestId ||
@@ -196,7 +233,10 @@ export function useFileSearch(projectPath?: FileSearchPathSource) {
     if (!token.query) {
       state.value.results = recentFileResults;
     } else {
-      const query = parseFileQuery(token.query);
+      const queryText = isDirectPathQuery(token.query)
+        ? token.query.slice(token.query.lastIndexOf('/') + 1)
+        : token.query;
+      const query = parseFileQuery(queryText);
       const filtered = filterAndRankFiles(files, query);
       const filteredPaths = new Set(filtered.map(f => f.path));
       const matchingRecent = recentFileResults.filter(f => filteredPaths.has(f.path));

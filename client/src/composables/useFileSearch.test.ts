@@ -151,6 +151,23 @@ describe('useFileSearch', () => {
       expect(fileSearch.suggestions.value.map((file) => file.path)).toEqual(['src/components/ChatPanel.vue']);
     });
 
+    it.each([
+      ['@/home/test/Knowledge/release.md', '/home/test/Knowledge', '/home/test/Knowledge/release.md'],
+      ['@~/Knowledge/release.md', '~/Knowledge', '~/Knowledge/release.md'],
+    ])('searches the referenced directory for %s', async (text, searchPath, expectedPath) => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ files: ['release.md', 'other.md'] }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const fileSearch = useFileSearch('/workspace');
+      await fileSearch.updateQuery(text, text.length);
+
+      expect(fetchMock).toHaveBeenCalledWith(`/api/files/search?pattern=*&path=${encodeURIComponent(searchPath)}`);
+      expect(fileSearch.suggestions.value.map((file) => file.path)).toEqual([expectedPath]);
+    });
+
     it('keeps the selection within the visible results', async () => {
       const files = Array.from({ length: 12 }, (_, index) => `src/chat-${index}.ts`);
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
