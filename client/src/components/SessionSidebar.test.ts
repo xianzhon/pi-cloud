@@ -1212,7 +1212,7 @@ describe('SessionSidebar', () => {
       method: 'PUT',
       body: JSON.stringify({ filePath: '/project/docs/RELEASE.md', groupId: 'default', profileId: 'default' }),
     })));
-    await vi.waitFor(() => expect(wrapper.get('.session-item').exists()).toBe(true));
+    await vi.waitFor(() => expect(wrapper.find('.session-item').exists()).toBe(true));
     await wrapper.get('.session-item').trigger('contextmenu');
     expect(document.body.querySelector('.pin-session-btn')?.textContent).toContain('Move to group');
     const moveChoices = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.pin-group-choices button'));
