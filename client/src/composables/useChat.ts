@@ -333,7 +333,9 @@ export function useChat() {
     isStreaming: boolean;
     streamingStartedAt: number | null;
     currentMessage: Message | null;
+    retryMessage: Message | null;
     pendingMemoryRecall: MessageMemoryRecall | null;
+    receivedModelOutcome: boolean;
   }
 
   interface SendMessageOptions {
@@ -461,7 +463,9 @@ export function useChat() {
         isStreaming: false,
         streamingStartedAt: null,
         currentMessage: null,
+        retryMessage: null,
         pendingMemoryRecall: null,
+        receivedModelOutcome: false,
       };
     }
     return sessionStates.value[key];
@@ -504,6 +508,26 @@ export function useChat() {
     if (state.currentMessage && !state.messages.includes(state.currentMessage)) {
       state.messages.push(state.currentMessage);
     }
+    state.receivedModelOutcome = true;
+  }
+
+  function showModelFailure(message: string, targetSessionId?: string | null): Message {
+    const state = ensureSessionState(targetSessionId);
+    removeEmptyCurrentMessage(targetSessionId);
+    const failure = state.retryMessage || {
+      id: createClientId(),
+      role: 'assistant' as const,
+      content: '',
+      timestamp: Date.now(),
+      kind: 'status' as const,
+    };
+    failure.content = message || 'The model returned an error without details.';
+    failure.status = 'failure';
+    failure.title = 'Model response failed';
+    if (!state.retryMessage) state.messages.push(failure);
+    state.retryMessage = failure;
+    state.receivedModelOutcome = true;
+    return failure;
   }
 
   function takePendingMemoryRecall(state: SessionChatState): MessageMemoryRecall | undefined {
@@ -711,8 +735,15 @@ export function useChat() {
 
       case 'message_end':
         applyCompletedAssistantMetadata(event.message, targetSessionId);
-        // Keep message if it has text or thinking content
-        removeEmptyCurrentMessage(targetSessionId);
+        if (event.message?.stopReason === 'error') {
+          showModelFailure(event.message.errorMessage, targetSessionId);
+        } else {
+          // Keep message if it has text or thinking content.
+          removeEmptyCurrentMessage(targetSessionId);
+          if (event.message?.stopReason === 'aborted') {
+            getStreamingSessionState(targetSessionId).receivedModelOutcome = true;
+          }
+        }
         break;
 
       case 'tool_execution_start':
@@ -745,12 +776,40 @@ export function useChat() {
         break;
 
       case 'agent_end':
+        // A low-level run may be followed by automatic retry or queued work.
+        break;
+
+      case 'agent_settled': {
+        const state = getStreamingSessionState(targetSessionId);
+        if (!state.receivedModelOutcome) {
+          showModelFailure('The model completed without returning a response.', targetSessionId);
+        }
         finishStreaming(targetSessionId, true);
         emitSummaryGenerated(targetSessionId);
         emitAssistantResponseCompleted(targetSessionId);
         // One completion refresh covers edits from any tool without continuous Git polling.
         window.dispatchEvent(new CustomEvent('refresh-git-status'));
         break;
+      }
+
+      case 'auto_retry_start': {
+        const failure = showModelFailure(event.errorMessage, targetSessionId);
+        failure.status = 'pending';
+        failure.title = `Model unavailable - retrying (${event.attempt}/${event.maxAttempts})`;
+        break;
+      }
+
+      case 'auto_retry_end': {
+        const state = getStreamingSessionState(targetSessionId);
+        if (event.success && state.retryMessage) {
+          removeMessage(state.retryMessage, targetSessionId);
+          state.retryMessage = null;
+          state.receivedModelOutcome = false;
+        } else if (!event.success) {
+          showModelFailure(event.finalError, targetSessionId);
+        }
+        break;
+      }
 
       case 'compaction_end':
         finishStreaming(targetSessionId);
@@ -795,9 +854,9 @@ export function useChat() {
   const unsubscribeError = on('error', (data: any) => {
     console.error('Chat error:', data.message);
     const targetSessionId = getMessageSessionId(data);
-    getStreamingSessionState(targetSessionId).isStreaming = false;
-    getStreamingSessionState(targetSessionId).streamingStartedAt = null;
-    emitSessionStreamingState(targetSessionId, false);
+    showModelFailure(data.message, targetSessionId);
+    stopStreaming(targetSessionId);
+    window.dispatchEvent(new CustomEvent('refresh-sessions'));
   });
 
   const unsubscribeLoopDetected = on('loop_detected', (data: any) => {
@@ -922,6 +981,8 @@ export function useChat() {
     });
 
     state.messages.push(userMessage);
+    state.receivedModelOutcome = false;
+    state.retryMessage = null;
     state.isStreaming = true;
     state.streamingStartedAt ??= Date.now();
     streamingSessionId.value = resolvedSessionId;
@@ -1021,6 +1082,7 @@ export function useChat() {
               return;
             }
 
+            const messageStart = normalizedMessages.length;
             msg.content.forEach((item: any) => {
               const normalized = messageFromContentItem(item, role, timestamp);
               if (normalized) {
@@ -1036,6 +1098,17 @@ export function useChat() {
                 normalizedMessages.push(normalized);
               }
             });
+            if (normalizedMessages.length === messageStart && msg.stopReason === 'error') {
+              normalizedMessages.push({
+                id: msg.id || msg.responseId || createClientId(),
+                role: 'assistant',
+                content: msg.errorMessage || 'The model returned an error without details.',
+                timestamp,
+                kind: 'status',
+                status: 'failure',
+                title: 'Model response failed',
+              });
+            }
             return;
           }
 

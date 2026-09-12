@@ -186,7 +186,7 @@ describe('useChat', () => {
       },
     });
     expect(speechHandler).not.toHaveBeenCalled();
-    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_end' } });
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_settled' } });
 
     expect(summaryHandler).toHaveBeenCalledWith(expect.objectContaining({
       type: 'summary-generated',
@@ -228,20 +228,63 @@ describe('useChat', () => {
     });
   });
 
-  it('marks the session ready and requests a Git refresh when the agent finishes', () => {
+  it('waits for the agent to settle before marking the session complete', () => {
     const { chat } = mountChat();
     chat.sessionId.value = 'session-1';
+    chat.sendMessage('hello', 'session-1');
     const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
 
-    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_end' } });
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_end', willRetry: true } });
+    expect(chat.isStreaming.value).toBe(true);
 
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_settled' } });
+
+    expect(chat.isStreaming.value).toBe(false);
+    expect(chat.messages.value).toEqual(expect.arrayContaining([
+      expect.objectContaining({ content: 'The model completed without returning a response.', status: 'failure' }),
+    ]));
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({
       type: 'session-streaming-state',
       detail: { id: 'session-1', isStreaming: false, completed: true },
     }));
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'refresh-git-status',
-    }));
+    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'refresh-git-status' }));
+  });
+
+  it('shows retry progress and removes the transient error after recovery', () => {
+    const { chat } = mountChat();
+    chat.setViewedSession('session-1');
+    chat.sendMessage('hello', 'session-1');
+
+    handlers.get('event')?.({
+      sessionId: 'session-1',
+      event: { type: 'message_end', message: { role: 'assistant', stopReason: 'error', errorMessage: '503 model busy' } },
+    });
+    handlers.get('event')?.({
+      sessionId: 'session-1',
+      event: { type: 'auto_retry_start', attempt: 1, maxAttempts: 3, errorMessage: '503 model busy' },
+    });
+
+    expect(chat.messages.value).toEqual(expect.arrayContaining([
+      expect.objectContaining({ content: '503 model busy', title: 'Model unavailable - retrying (1/3)', status: 'pending' }),
+    ]));
+
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'auto_retry_end', success: true, attempt: 1 } });
+    expect(chat.messages.value).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ content: '503 model busy' }),
+    ]));
+  });
+
+  it('shows WebSocket model errors in the conversation', () => {
+    const { chat } = mountChat();
+    chat.setViewedSession('session-1');
+    chat.sendMessage('hello', 'session-1');
+
+    handlers.get('error')?.({ sessionId: 'session-1', message: 'Model service unavailable' });
+
+    expect(chat.isStreaming.value).toBe(false);
+    expect(chat.messages.value).toEqual(expect.arrayContaining([
+      expect.objectContaining({ content: 'Model service unavailable', title: 'Model response failed', status: 'failure' }),
+    ]));
   });
 
   it('announces successful plan proposals for authoritative report reload', () => {
