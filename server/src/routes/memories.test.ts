@@ -189,8 +189,10 @@ describe('memory routes', () => {
     expect(runtime.store.getExtractionRun(runId)?.status).toBe('queued');
     runtime.store.claimNextExtractionRun('default');
     runtime.store.failRun(runId, 'provider unavailable again');
+    vi.mocked(sessionService.findPersistedSession).mockResolvedValue(undefined);
     const clear = await app.inject({
-      method: 'POST', url: `/api/memories/extractions/${runId}/clear`, payload: context,
+      method: 'POST', url: `/api/memories/extractions/${runId}/clear`,
+      payload: { ...context, sessionId: 'deleted-session' },
     });
     expect(clear.statusCode).toBe(204);
     expect(runtime.store.getExtractionRun(runId)?.status).toBe('cancelled');

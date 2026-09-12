@@ -142,7 +142,10 @@ export async function memoryRoutes(app: FastifyInstance) {
   app.post('/extractions/:id/clear', async (req, reply) => {
     try {
       const body = requestBody(req.body);
-      const context = await resolveContext(app, body);
+      const context = await resolveContext(app, {
+        clientId: body.clientId,
+        projectPath: body.projectPath,
+      });
       const { id } = req.params as { id: string };
       requireAccessibleRun(app, context, id);
       app.memoryRuntime.store.clearFailedRun(id);
