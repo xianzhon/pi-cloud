@@ -39,6 +39,9 @@ describe('TotpService', () => {
     const code = generateSync({ secret: setup.secret });
 
     expect(totp.enable(setup.secret, code)).toBe(true);
+    const stored = db.prepare("SELECT value FROM application_settings WHERE key = 'totp.secret'").get() as { value: string };
+    expect(stored.value).toMatch(/^enc:v1:/);
+    expect(stored.value).not.toContain(setup.secret);
     expect(totp.getStatus()).toEqual({ enabled: true });
     expect(totp.verify(code)).toBe(true);
     expect(verifySync({ token: code, secret: setup.secret }).valid).toBe(true);

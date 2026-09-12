@@ -5,6 +5,7 @@ import type { ImageContent } from '@earendil-works/pi-ai';
 import QRCode from 'qrcode';
 import { Agent, fetch as undiciFetch } from 'undici';
 import type { PiCloudDatabase } from '../db/database.js';
+import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
 import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_COUNT, sniffImageMimeType, validateImages } from './image-input.js';
@@ -99,6 +100,7 @@ const TYPING_KEEPALIVE_INTERVAL_MS = 5000;
 const directImageFetchAgent = new Agent();
 
 export class WeixinGatewayService {
+  private readonly credentials: CredentialCipher;
   private readonly presetStore: SkillPresetStore;
   private readonly gatewaySettings: GatewaySettingsStore;
   private readonly seen = new Map<string, number>();
@@ -115,6 +117,7 @@ export class WeixinGatewayService {
     gatewaySettings: GatewaySettingsStore | undefined,
     private readonly sessionService: PiSessionService,
   ) {
+    this.credentials = credentialCipher(db);
     this.presetStore = new SkillPresetStore(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
   }
@@ -264,7 +267,7 @@ export class WeixinGatewayService {
     } | undefined;
     return row ? {
       accountId: row.account_id,
-      token: row.token,
+      token: this.credentials.decrypt(row.token),
       baseUrl: row.base_url,
       userId: row.user_id || undefined,
     } : null;
@@ -280,7 +283,13 @@ export class WeixinGatewayService {
         base_url = excluded.base_url,
         user_id = excluded.user_id,
         updated_at = excluded.updated_at
-    `).run(credential.accountId, credential.token, credential.baseUrl, credential.userId || null, new Date().toISOString());
+    `).run(
+      credential.accountId,
+      this.credentials.encrypt(credential.token),
+      credential.baseUrl,
+      credential.userId || null,
+      new Date().toISOString(),
+    );
   }
 
   private async pollLoop(initialConfig: WeixinGatewayConfig): Promise<void> {
@@ -851,7 +860,7 @@ export class WeixinGatewayService {
 
   private getContextToken(accountId: string, peerId: string): string | undefined {
     const row = this.db.prepare('SELECT context_token FROM weixin_gateway_context_tokens WHERE account_id = ? AND peer_id = ?').get(accountId, peerId) as { context_token: string } | undefined;
-    return row?.context_token;
+    return row?.context_token ? this.credentials.decrypt(row.context_token) : undefined;
   }
 
   private saveContextToken(accountId: string, peerId: string, contextToken: string): void {
@@ -859,7 +868,7 @@ export class WeixinGatewayService {
       INSERT INTO weixin_gateway_context_tokens (account_id, peer_id, context_token, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(account_id, peer_id) DO UPDATE SET context_token = excluded.context_token, updated_at = excluded.updated_at
-    `).run(accountId, peerId, contextToken, new Date().toISOString());
+    `).run(accountId, peerId, this.credentials.encrypt(contextToken), new Date().toISOString());
   }
 
   private startTypingIndicator(config: WeixinGatewayConfig, chatId: string): () => void {

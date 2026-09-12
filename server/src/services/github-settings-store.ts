@@ -1,4 +1,5 @@
 import type { PiCloudDatabase } from '../db/database';
+import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
 import { normalizeServerUrl } from './gitea-settings-store';
 
 export interface GithubSettings {
@@ -19,12 +20,16 @@ const PROXY_URL_KEY = 'github.proxyUrl';
 const DEFAULT_SERVER_URL = 'https://github.com';
 
 export class GithubSettingsStore {
-  constructor(private readonly db: PiCloudDatabase) {}
+  private readonly credentials: CredentialCipher;
+
+  constructor(private readonly db: PiCloudDatabase) {
+    this.credentials = credentialCipher(db);
+  }
 
   get(): GithubSettings {
     return {
       serverUrl: this.value(SERVER_URL_KEY) || DEFAULT_SERVER_URL,
-      token: this.value(TOKEN_KEY) || '',
+      token: this.credentials.decryptOrDefault(this.value(TOKEN_KEY)),
       proxyUrl: this.value(PROXY_URL_KEY) || '',
     };
   }
@@ -44,7 +49,7 @@ export class GithubSettingsStore {
     if (!serverUrl) throw new Error('GitHub server URL is required');
     if (!token) throw new Error('GitHub token is required');
     this.set(SERVER_URL_KEY, serverUrl);
-    this.set(TOKEN_KEY, token);
+    this.set(TOKEN_KEY, this.credentials.encrypt(token));
     return this.get();
   }
 

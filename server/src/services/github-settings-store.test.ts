@@ -9,6 +9,9 @@ describe('GithubSettingsStore', () => {
     expect(store.get()).toEqual({ serverUrl: 'https://github.com', token: '', proxyUrl: '' });
     expect(store.getSanitized()).toEqual({ serverUrl: 'https://github.com', tokenConfigured: false, proxyUrl: '' });
     store.save({ serverUrl: 'https://github.example.com/', token: ' secret ' });
+    const stored = db.prepare("SELECT value FROM application_settings WHERE key = 'github.token'").get() as { value: string };
+    expect(stored.value).toMatch(/^enc:v1:/);
+    expect(stored.value).not.toContain('secret');
     store.saveProxyUrl(' http://proxy.example:8080 ');
     expect(store.getSanitized()).toEqual({ serverUrl: 'https://github.example.com', tokenConfigured: true, proxyUrl: 'http://proxy.example:8080' });
     expect(store.proxyEnv()).toEqual(githubProxyEnvFromUrl('http://proxy.example:8080'));

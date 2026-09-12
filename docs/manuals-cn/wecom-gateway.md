@@ -20,4 +20,4 @@ Pi Cloud 必须能通过公网 HTTPS 被企业微信访问。回调端点是 `/a
 
 推荐使用 UI 配置。对于集中管理的部署，可以设置 `PI_CLOUD_WECOM_CORP_ID`、`PI_CLOUD_WECOM_CORP_SECRET`、`PI_CLOUD_WECOM_AGENT_ID`、`PI_CLOUD_WECOM_CALLBACK_TOKEN`、`PI_CLOUD_WECOM_ENCODING_AES_KEY`，以及可选的 `PI_CLOUD_WECOM_ALLOWED_USERS`。环境变量会覆盖 UI 中保存的配置，并使设置页面变为只读。具体格式见 `.env.example`。
 
-应用 Secret、回调 Token 和 EncodingAESKey 都属于敏感凭据，请限制对 Pi Cloud 数据库和环境变量文件的访问。
+应用 Secret、回调 Token 和 EncodingAESKey 都属于敏感凭据。通过 UI 保存的值会使用 Pi Cloud 凭据加密密钥加密后写入 SQLite。请限制对数据库、凭据密钥和环境变量文件的访问。

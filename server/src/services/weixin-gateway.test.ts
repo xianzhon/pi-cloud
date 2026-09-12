@@ -164,6 +164,9 @@ describe('WeixinGatewayService behavior', () => {
     internal.saveSyncBuf('bot', 'sync');
     expect(internal.getSyncBuf('bot')).toBe('sync');
     internal.saveContextToken('bot', 'peer', 'context');
+    const storedContext = db.prepare('SELECT context_token FROM weixin_gateway_context_tokens WHERE account_id = ? AND peer_id = ?')
+      .get('bot', 'peer') as { context_token: string };
+    expect(storedContext.context_token).toMatch(/^enc:v1:/);
     expect(internal.getContextToken('bot', 'peer')).toBe('context');
     internal.saveCredential({ accountId: 'a', token: 't', baseUrl: 'u' });
     expect(internal.loadCredential()).toMatchObject({ accountId: 'a', token: 't', baseUrl: 'u' });

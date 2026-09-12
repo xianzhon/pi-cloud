@@ -18,6 +18,7 @@ describe('WorktreeMetadataStore', () => {
   afterEach(() => {
     db.close();
     rmSync(dbPath, { force: true });
+    rmSync(`${dbPath}.credentials.key`, { force: true });
   });
 
   it('saves and reads active managed worktree metadata', () => {

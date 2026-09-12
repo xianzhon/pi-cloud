@@ -22,12 +22,15 @@ On the first run of a global installation, Pi Cloud copies the complete sample c
 | `FRONTEND_PORT` | `5173` | Frontend development server port |
 | `HOST` | `127.0.0.1` | Backend bind address |
 | `PI_CLOUD_DB_PATH` | User configuration directory | Custom SQLite database path |
+| `PI_CLOUD_CREDENTIAL_ENCRYPTION_KEY` | Generated key file | Base64-encoded 32-byte key used to encrypt credentials stored in SQLite |
 | `PI_CLOUD_ALLOWED_ROOTS` | User home directory | Comma-separated directories the file browser and terminal may access |
 | `PI_CLOUD_DISABLE_PATH_CHECK` | `true` on Windows; `false` on macOS/Linux | Disable allowed-root checks for file, terminal cwd, and Git API paths |
 | `PI_CLOUD_ENABLE_SYSTEM_OPEN` | `false` | Enable **Open with system tool** through non-localhost URLs, such as a local nginx hostname |
 | `PI_CLOUD_TERMINAL_SHELL` | `COMSPEC`/`cmd.exe` on Windows; `SHELL`/`bash` on macOS/Linux | Terminal shell executable, such as `powershell.exe`, `pwsh.exe`, or `/bin/zsh` |
 
 **Open with system tool** is automatically available through `localhost`, `127.0.0.1`, `::1`, and `*.localhost`. Set `PI_CLOUD_ENABLE_SYSTEM_OPEN=true` when accessing the same local machine through a custom reverse-proxy hostname. The action launches an application on the machine running Pi Cloud, so enable it only for trusted local deployments. Restart the server after changing this setting.
+
+TOTP secrets, GitHub/Gitea tokens, and gateway credentials are encrypted in SQLite with AES-256-GCM. If `PI_CLOUD_CREDENTIAL_ENCRYPTION_KEY` is unset, Pi Cloud creates `<database-path>.credentials.key` with owner-only permissions. Generate an environment-managed key with `openssl rand -base64 32`. Configure it before saving credentials, do not change it while encrypted credentials exist, and back it up separately from the database. Losing the key makes those credentials unrecoverable. Existing plaintext credentials are encrypted automatically on the next startup.
 
 When `PI_CLOUD_DISABLE_PATH_CHECK=true`, `PI_CLOUD_ALLOWED_ROOTS` is ignored. Windows disables these checks by default so paths on other drives remain accessible; set `PI_CLOUD_DISABLE_PATH_CHECK=false` and configure `PI_CLOUD_ALLOWED_ROOTS` to restrict access. Disabling the check allows WebUI filesystem endpoints to access any path permitted to the server process, so use it only in a trusted deployment.
 

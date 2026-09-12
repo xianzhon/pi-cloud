@@ -235,6 +235,7 @@ describe('PiSessionService', () => {
     vi.restoreAllMocks();
     db.close();
     rmSync(dbPath, { force: true });
+    rmSync(`${dbPath}.credentials.key`, { force: true });
     if (originalAgentDir === undefined) {
       delete process.env.PI_CODING_AGENT_DIR;
     } else {

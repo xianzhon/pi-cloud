@@ -20,4 +20,4 @@ For a voice message, Pi Cloud downloads the AMR media from WeCom, sends it to th
 
 The UI setup is recommended. For managed deployments, configure `PI_CLOUD_WECOM_CORP_ID`, `PI_CLOUD_WECOM_CORP_SECRET`, `PI_CLOUD_WECOM_AGENT_ID`, `PI_CLOUD_WECOM_CALLBACK_TOKEN`, `PI_CLOUD_WECOM_ENCODING_AES_KEY`, and optionally `PI_CLOUD_WECOM_ALLOWED_USERS`. Environment values override saved UI configuration and make the connection read-only in Settings. See `.env.example` for the exact format.
 
-Treat the application Secret, callback Token, and EncodingAESKey as credentials. Restrict access to the Pi Cloud database and environment files.
+Treat the application Secret, callback Token, and EncodingAESKey as credentials. UI-saved values are encrypted in SQLite using Pi Cloud's credential encryption key. Restrict access to the database, credential key, and environment files.

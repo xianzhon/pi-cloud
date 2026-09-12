@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
+import { initializeCredentialEncryption } from './credential-encryption.js';
 import { runDatabaseMigrations } from './migrations/index.js';
 
 export type PiCloudDatabase = Database.Database;
@@ -22,10 +23,16 @@ export function openPiCloudDatabase(dbPath: string): PiCloudDatabase {
     process.umask(previousUmask);
   }
 
-  db.pragma('journal_mode = WAL');
-  db.pragma('busy_timeout = 5000');
-  db.pragma('foreign_keys = ON');
-  runDatabaseMigrations(db);
+  try {
+    db.pragma('journal_mode = WAL');
+    db.pragma('busy_timeout = 5000');
+    db.pragma('foreign_keys = ON');
+    runDatabaseMigrations(db);
+    initializeCredentialEncryption(db, dbPath);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
 
   if (isPersistent) {
     for (const filePath of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {

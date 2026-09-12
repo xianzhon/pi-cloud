@@ -1,8 +1,10 @@
+import { randomBytes } from 'node:crypto';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
+import { credentialCipher } from './credential-encryption';
 import { openPiCloudDatabase } from './database';
 import { runDatabaseMigrations } from './migrations/index';
 import { applicationSettingsTableMigration } from './migrations/008-application-settings-table';
@@ -154,6 +156,65 @@ describe('openPiCloudDatabase', () => {
     }
 
     db.close();
+  });
+
+  it('encrypts existing credentials and keeps them out of the SQLite file', async () => {
+    const initial = openPiCloudDatabase(dbPath);
+    initial.close();
+
+    const legacy = new Database(dbPath);
+    const now = '2026-09-12T00:00:00.000Z';
+    legacy.prepare('INSERT INTO application_settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('totp.secret', 'totp-plaintext-secret', now);
+    legacy.prepare('INSERT INTO application_settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('github.token', 'github-plaintext-token', now);
+    legacy.prepare(`INSERT INTO wecom_gateway_credentials
+      (id, corp_id, corp_secret, agent_id, callback_token, encoding_aes_key, allowed_users_json, created_at, updated_at)
+      VALUES (1, 'corp', 'wecom-plaintext-secret', '1', 'callback-plaintext-token', 'aes-plaintext-key', '[]', ?, ?)`)
+      .run(now, now);
+    legacy.prepare(`INSERT INTO weixin_gateway_credentials (id, account_id, token, base_url, updated_at)
+      VALUES (1, 'account', 'weixin-plaintext-token', 'https://example.test', ?)`)
+      .run(now);
+    legacy.prepare(`INSERT INTO notification_channels (id, type, name, config_json, created_at, updated_at)
+      VALUES ('channel', 'wecom', 'WeCom', ?, ?, ?)`)
+      .run(JSON.stringify({ botKey: 'bot-plaintext-key' }), now, now);
+    legacy.close();
+
+    const db = openPiCloudDatabase(dbPath);
+    const values = db.prepare("SELECT value FROM application_settings WHERE key IN ('totp.secret', 'github.token') ORDER BY key")
+      .all() as Array<{ value: string }>;
+    expect(values.every(({ value }) => value.startsWith('enc:v1:'))).toBe(true);
+    expect(credentialCipher(db).decrypt(values[0].value)).toBe('github-plaintext-token');
+
+    const wecom = db.prepare('SELECT corp_secret, callback_token, encoding_aes_key FROM wecom_gateway_credentials').get() as Record<string, string>;
+    expect(Object.values(wecom).every((value) => value.startsWith('enc:v1:'))).toBe(true);
+    const weixin = db.prepare('SELECT token FROM weixin_gateway_credentials').get() as { token: string };
+    expect(credentialCipher(db).decrypt(weixin.token)).toBe('weixin-plaintext-token');
+    const channel = db.prepare('SELECT config_json FROM notification_channels').get() as { config_json: string };
+    expect(JSON.parse(channel.config_json).botKey).toMatch(/^enc:v1:/);
+    db.close();
+
+    const databaseBytes = await fs.readFile(dbPath);
+    for (const plaintext of ['totp-plaintext-secret', 'github-plaintext-token', 'wecom-plaintext-secret', 'weixin-plaintext-token', 'bot-plaintext-key']) {
+      expect(databaseBytes.includes(Buffer.from(plaintext))).toBe(false);
+    }
+  });
+
+  it('fails closed when the credential key no longer matches', async () => {
+    const db = openPiCloudDatabase(dbPath);
+    db.prepare('INSERT INTO application_settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('github.token', credentialCipher(db).encrypt('secret-token'), new Date().toISOString());
+    db.close();
+
+    await fs.writeFile(`${dbPath}.credentials.key`, randomBytes(32).toString('base64'));
+    expect(() => openPiCloudDatabase(dbPath)).toThrow('Unable to decrypt stored credential');
+  });
+
+  it.runIf(process.platform !== 'win32')('restricts the credential key file to the current user', async () => {
+    const db = openPiCloudDatabase(dbPath);
+    db.close();
+    const stats = await fs.stat(`${dbPath}.credentials.key`);
+    expect(stats.mode & 0o777).toBe(0o600);
   });
 
   it('migrates session activity to support branch deletion events', async () => {
