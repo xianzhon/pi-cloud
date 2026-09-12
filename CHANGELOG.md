@@ -2,6 +2,30 @@
 
 All notable changes to Pi Cloud are documented here.
 
+## [2.0.2] - 2026-09-12
+
+### Added
+
+- Added scheduled model-window kickoffs with configurable profiles, models, projects, timing, probe prompts, persistent sessions, retry status, and optional WeCom notifications.
+- Added reusable user prompts that can be managed in Settings and inserted into the chat composer.
+- Added persistent file pinning to the same profile groups used for pinned sessions, with sidebar access and move/unpin controls.
+- Added an action to open the current workspace and agent profile in a new browser tab.
+- Added direct absolute and home-relative path suggestions for `@` file references.
+- Added in-app toast notifications for Git panel actions that run without adding messages to chat history.
+
+### Changed
+
+- Renamed the task queue to the task inbox throughout the interface and documentation.
+- Active response streaming now continues after a client disconnects and synchronizes its state and events across clients watching the same session.
+- Automatic memory extraction now requires explicit opt-in; existing saved preferences are preserved during the settings migration.
+
+### Fixed
+
+- Improved model error and automatic-retry feedback, and prevented busy responses from being treated as completed before the agent settles.
+- Preserved composer drafts when hidden prompts run Git panel actions.
+- Prevented hidden Git panel actions from leaving status messages in chat history while still reporting empty diffs and failures.
+- Fixed clearing failed memory-extraction runs when their originating session was not persisted.
+
 ## [2.0.1] - 2026-09-04
 
 ### Added
