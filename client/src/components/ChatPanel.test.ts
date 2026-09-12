@@ -527,6 +527,21 @@ describe('ChatPanel', () => {
     ]);
   });
 
+  it('shows push completion from the Git panel without adding chat history', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      cwd: '/repo',
+      output: 'Everything up-to-date',
+    }), { status: 200 })));
+    const wrapper = mount(ChatPanel, { props: { projectPath: '/repo' } });
+
+    await wrapper.vm.submitExternalPrompt('/push', { hideCommandMessage: true });
+
+    expect(chatMessages.value).toEqual([]);
+    expect(toastController.toasts.value).toEqual([
+      expect.objectContaining({ type: 'success', message: 'Git push completed.' }),
+    ]);
+  });
+
   it('preserves the draft and chat history after cancelling a commit opened from the Git panel', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const payload = String(input).includes('/api/git/status')

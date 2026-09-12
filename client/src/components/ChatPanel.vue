@@ -1033,6 +1033,7 @@ const commitDiffContent = ref('');
 const collapsedCommitDiffFiles = ref(new Set<string>());
 const commitDiffViewMode = ref<'unified' | 'split'>('unified');
 let commitDiffRequestId = 0;
+const commitCommandShowsUserMessage = ref(true);
 const branchDialogOpen = ref(false);
 const branchDialogMode = ref<BranchDialogMode>('switch');
 const branchDialogLoading = ref(false);
@@ -1092,6 +1093,7 @@ const {
     void resizeInputAfterDomUpdate();
   },
   addLocalMessage: (message, sessionId) => addLocalMessage(message, sessionId),
+  showToast,
   t: (key, params) => t(key, params || {}),
 });
 const fileSearch = useFileSearch(() => props.projectPath);
@@ -2627,13 +2629,15 @@ async function handleDiffCommand(text: string, showCommandMessage = true) {
     responseMessage.title = data.oversized ? t('components.chatPanel.gitDiffUnavailable') : undefined;
     responseMessage.content = formatDiffSummary(data, scope);
 
-    if (!showCommandMessage && !data.oversized && !data.stat?.trim() && !data.diff?.trim()) {
-      showToast(responseMessage.content);
+    const hasNoDiff = !data.stat?.trim() && !data.diff?.trim();
+    if (!showCommandMessage && (data.oversized || hasNoDiff)) {
+      showToast(responseMessage.content, data.oversized ? 'error' : 'info');
     }
   } catch (error) {
     responseMessage.status = 'failure';
     responseMessage.title = t('components.chatPanel.gitDiffFailed');
     responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToLoadGitDiff');
+    if (!showCommandMessage) showToast(responseMessage.content, 'error');
   }
 }
 
@@ -2707,11 +2711,13 @@ async function handleGitSyncCommand(text: string, command: GitSyncCommand, showU
     responseMessage.status = undefined;
     responseMessage.title = undefined;
     responseMessage.content = formatGitSyncSuccess(command, data);
+    if (!showUserMessage) showToast(`Git ${command} completed.`, 'success');
     void refreshSessionStatus();
   } catch (error) {
     responseMessage.status = 'failure';
     responseMessage.title = `${title} failed`;
     responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToRunGitCommand', { command });
+    if (!showUserMessage) showToast(responseMessage.content, 'error');
   }
 }
 
@@ -2813,12 +2819,14 @@ async function runBranchCreate(name: string, baseBranch: string | undefined, use
     responseMessage.status = undefined;
     responseMessage.title = undefined;
     responseMessage.content = formatBranchSuccess(data);
+    if (!showUserMessage) showToast(t('components.chatPanel.switchedToNewBranch', { name: data.name || name }), 'success');
     emit('branchChanged');
     void refreshSessionStatus();
   } catch (error) {
     responseMessage.status = 'failure';
     responseMessage.title = t('components.chatPanel.gitBranchFailed');
     responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToCreateGitBranch');
+    if (!showUserMessage) showToast(responseMessage.content, 'error');
     throw error;
   }
 }
@@ -2835,12 +2843,14 @@ async function runBranchSwitch(name: string, pull: boolean, deleteOriginal: bool
     responseMessage.status = undefined;
     responseMessage.title = undefined;
     responseMessage.content = formatBranchSwitchSuccess(data);
+    if (!showUserMessage) showToast(t('components.chatPanel.switchedToBranch', { name: data.name || name }), 'success');
     emit('branchChanged');
     void refreshSessionStatus();
   } catch (error) {
     responseMessage.status = 'failure';
     responseMessage.title = t('components.chatPanel.gitBranchFailed');
     responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToSwitchGitBranch');
+    if (!showUserMessage) showToast(responseMessage.content, 'error');
     throw error;
   }
 }
@@ -2877,6 +2887,7 @@ function formatCommitSuccess(data: { cwd?: string; message?: string; commit?: st
 
 async function handleCommitCommand(text: string, showUserMessage = true) {
   slashCommands.close();
+  commitCommandShowsUserMessage.value = showUserMessage;
   if (showUserMessage) addLocalMessage({ role: 'user', content: text, kind: 'text' }, props.sessionId);
   const responseMessage = createResponseMessage({
     role: 'assistant',
@@ -2897,6 +2908,7 @@ async function handleCommitCommand(text: string, showUserMessage = true) {
       responseMessage.status = undefined;
       responseMessage.title = undefined;
       responseMessage.content = `### Git commit\n\nNo changes to commit in \`${data.cwd || props.projectPath}\`.`;
+      if (!showUserMessage) showToast(t('components.chatPanel.noWorkingTreeChanges'));
       return;
     }
 
@@ -2919,6 +2931,7 @@ async function handleCommitCommand(text: string, showUserMessage = true) {
     responseMessage.status = 'failure';
     responseMessage.title = t('components.chatPanel.gitCommitFailed');
     responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToPrepareGitCommit');
+    if (!showUserMessage) showToast(responseMessage.content, 'error');
   }
 }
 
@@ -3098,12 +3111,16 @@ async function confirmCommit() {
     responseMessage.status = undefined;
     responseMessage.title = undefined;
     responseMessage.content = formatCommitSuccess(data, preview.mode);
+    if (!commitCommandShowsUserMessage.value) {
+      showToast(preview.mode === 'amend' ? t('components.chatPanel.commitAmended') : t('components.chatPanel.commitCreated'), 'success');
+    }
     window.dispatchEvent(new CustomEvent('refresh-file-tree'));
     window.dispatchEvent(new CustomEvent('refresh-git-status'));
   } catch (error) {
     responseMessage.status = 'failure';
     responseMessage.title = preview.mode === 'amend' ? t('components.chatPanel.gitAmendFailed') : t('components.chatPanel.gitCommitFailed');
     responseMessage.content = error instanceof Error ? error.message : preview.mode === 'amend' ? t('components.chatPanel.failedToAmendGitCommit') : t('components.chatPanel.failedToCreateGitCommit');
+    if (!commitCommandShowsUserMessage.value) showToast(responseMessage.content, 'error');
   } finally {
     commitStatusMessage.value = null;
   }

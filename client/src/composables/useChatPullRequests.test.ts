@@ -23,6 +23,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     projectPath: () => '/repo', sessionId: () => 'session-1', clientId: () => 'client-1',
     branchOptions: ref(['develop', 'main']), closeCommands: vi.fn(), clearComposer: vi.fn(),
     addLocalMessage: vi.fn((message: any) => { messages.push(message); return message; }),
+    showToast: vi.fn(),
     t: (key: string) => key,
     ...overrides,
   };
@@ -63,14 +64,20 @@ describe('useChatPullRequests', () => {
     expect(second.messages.at(-1)).toMatchObject({ status: 'failure', content: 'preview failed' });
   });
 
-  it('keeps PRs opened from the Git panel out of chat history', async () => {
-    hosting.previewPr.mockResolvedValue(preview());
-    const { pr, messages } = setup();
+  it('keeps PRs opened from the Git panel out of chat history and toasts preview failures', async () => {
+    hosting.previewPr.mockResolvedValueOnce(preview());
+    const { pr, options, messages } = setup();
 
     await pr.handlePrCommand('/pr main', false);
     pr.cancelPr();
+    hosting.previewPr.mockRejectedValueOnce(new Error('Current branch matches target branch and there is nothing to PR'));
+    await pr.handlePrCommand('/pr main', false);
 
     expect(messages).toEqual([]);
+    expect(options.showToast).toHaveBeenCalledWith(
+      'Current branch matches target branch and there is nothing to PR',
+      'error',
+    );
   });
 
   it('cancels and updates target branches while preserving edited content', async () => {
@@ -132,5 +139,12 @@ describe('useChatPullRequests', () => {
     await failed.pr.handlePrCommand('/pr main');
     await failed.pr.confirmPr();
     expect(failed.messages.at(-1)).toMatchObject({ status: 'failure', content: 'components.chatPanel.failedToCreatePullRequest' });
+
+    hosting.previewPr.mockResolvedValue(preview());
+    hosting.createPr.mockResolvedValueOnce({ pullRequest: { number: 43, url: 'https://example.test/pr/43' } });
+    const hidden = setup();
+    await hidden.pr.handlePrCommand('/pr main', false);
+    await hidden.pr.confirmPr();
+    expect(hidden.options.showToast).toHaveBeenCalledWith('GitHub PR #43 created.', 'success');
   });
 });

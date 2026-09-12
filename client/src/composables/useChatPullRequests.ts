@@ -17,6 +17,7 @@ interface PullRequestOptions {
   closeCommands: () => void;
   clearComposer: () => void;
   addLocalMessage: (message: ChatLocalMessage, sessionId?: string) => ChatLocalMessage;
+  showToast: (message: string, type?: 'info' | 'success' | 'error') => unknown;
   t: (key: string, params?: Record<string, unknown>) => string;
 }
 
@@ -28,6 +29,7 @@ export function useChatPullRequests(options: PullRequestOptions) {
   const gitHosting = useGitHosting();
   const prPreview = ref<GitHostingPrPreview | null>(null);
   const prStatusMessage = ref<ChatLocalMessage | null>(null);
+  const prShowsUserMessage = ref(true);
   const prGeneratingContent = ref(false);
   const prUpdatingTargetBranch = ref(false);
   const prGenerationError = ref('');
@@ -62,6 +64,7 @@ export function useChatPullRequests(options: PullRequestOptions) {
   async function handlePrCommand(text: string, showUserMessage = true) {
     options.closeCommands();
     const sessionId = options.sessionId();
+    prShowsUserMessage.value = showUserMessage;
     if (showUserMessage) options.addLocalMessage({ role: 'user', content: text, kind: 'text' }, sessionId);
     const response: ChatLocalMessage = {
       role: 'assistant',
@@ -87,6 +90,7 @@ export function useChatPullRequests(options: PullRequestOptions) {
       responseMessage.status = 'failure';
       responseMessage.title = options.t('components.chatPanel.pullRequestFailed');
       responseMessage.content = error instanceof Error ? error.message : options.t('components.chatPanel.failedToPreparePullRequest');
+      if (!showUserMessage) options.showToast(responseMessage.content, 'error');
     }
   }
 
@@ -169,11 +173,13 @@ export function useChatPullRequests(options: PullRequestOptions) {
       responseMessage.title = undefined;
       const provider = preview.provider === 'github' ? 'GitHub' : 'Gitea';
       responseMessage.content = `### ${provider} PR created\n\n#${result.pullRequest.number}: ${result.pullRequest.url}`;
+      if (!prShowsUserMessage.value) options.showToast(`${provider} PR #${result.pullRequest.number} created.`, 'success');
       window.dispatchEvent(new CustomEvent('refresh-file-tree'));
     } catch (error) {
       responseMessage.status = 'failure';
       responseMessage.title = options.t('components.chatPanel.pullRequestFailed');
       responseMessage.content = error instanceof Error ? error.message : options.t('components.chatPanel.failedToCreatePullRequest');
+      if (!prShowsUserMessage.value) options.showToast(responseMessage.content, 'error');
     } finally {
       prStatusMessage.value = null;
     }
