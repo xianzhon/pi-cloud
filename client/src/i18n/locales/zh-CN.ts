@@ -1358,6 +1358,11 @@ export default {
       closePanel: '关闭面板',
       restore: '恢复',
       maximize: '最大化',
+      connecting: '正在连接…',
+      reconnecting: '正在重新连接…',
+      disconnected: '已断开连接',
+      retry: '重试',
+      close: '关闭',
     },
   },
   settings: {

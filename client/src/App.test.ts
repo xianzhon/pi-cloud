@@ -273,6 +273,7 @@ vi.mock('./composables/useTerminal', () => {
     connectTerminal: vi.fn(),
     disconnectTerminal: vi.fn(),
     disposeTerminal: vi.fn(),
+    retryTerminal: vi.fn(),
     applyTerminalTheme: vi.fn(),
   };
 });

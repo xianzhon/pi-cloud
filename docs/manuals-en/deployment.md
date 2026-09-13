@@ -142,8 +142,11 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 }
 ```
+
+Pi Cloud sends WebSocket ping frames every 25 seconds. Keep reverse-proxy, CDN, and load-balancer WebSocket idle timeouts comfortably above that interval.
 
 Set `PI_CLOUD_TRUST_PROXY=true` and `PI_CLOUD_COOKIE_SECURE=true` in `.env` when behind HTTPS.

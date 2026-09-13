@@ -4,19 +4,28 @@ import { isAllowedRequestOrigin } from '../auth/origin.js';
 import { getRequestContext, getSessionFromRequest } from '../auth/request.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
 
+const HEARTBEAT_INTERVAL_MS = 25_000;
+
 export async function terminalWebSocket(app: FastifyInstance) {
   const terminalManager = app.services.terminals;
   app.get('/ws/terminal', { websocket: true }, async (socket, req) => {
-    const { clientId, cwd } = req.query as { 
-      clientId?: string; 
-      cwd?: string 
+    const { clientId, cwd, terminalId: requestedTerminalId } = req.query as {
+      clientId?: string;
+      cwd?: string;
+      terminalId?: string;
+    };
+
+    const safeSend = (message: object) => {
+      if (socket.readyState !== 1) return;
+      try {
+        socket.send(JSON.stringify(message));
+      } catch (error) {
+        req.log.warn({ err: error }, 'Terminal WebSocket send failed');
+      }
     };
 
     if (!clientId) {
-      socket.send(JSON.stringify({ 
-        type: 'error', 
-        message: 'clientId required' 
-      }));
+      safeSend({ type: 'error', message: 'clientId required' });
       socket.close();
       return;
     }
@@ -25,7 +34,7 @@ export async function terminalWebSocket(app: FastifyInstance) {
     const context = getRequestContext(req, auth.authConfig.trustProxy);
     if (!isAllowedRequestOrigin(req)) {
       auth.audit.record({ type: 'websocket_origin_rejected', status: 'failure', ...context, metadata: { path: '/ws/terminal', origin: req.headers.origin } });
-      socket.send(JSON.stringify({ type: 'error', message: 'Origin not allowed' }));
+      safeSend({ type: 'error', message: 'Origin not allowed' });
       socket.close();
       return;
     }
@@ -33,76 +42,109 @@ export async function terminalWebSocket(app: FastifyInstance) {
     const session = getSessionFromRequest(req, auth.authConfig, auth.sessions);
     if (!session) {
       auth.audit.record({ type: 'websocket_auth_failure', status: 'failure', ...context, metadata: { path: '/ws/terminal' } });
-      socket.send(JSON.stringify({ type: 'error', message: 'Authentication required' }));
+      safeSend({ type: 'error', message: 'Authentication required' });
       socket.close();
       return;
     }
 
-    let resolvedCwd: string;
-    try {
-      resolvedCwd = await resolveAllowedPath(cwd || process.cwd());
-    } catch (error) {
-      auth.audit.record({ type: 'terminal_cwd_rejected', status: 'failure', username: session.username, ...context, metadata: { cwd } });
-      socket.send(JSON.stringify({ type: 'error', message: error instanceof Error ? error.message : 'Terminal cwd not allowed' }));
-      socket.close();
-      return;
+    const attachmentId = Symbol('terminal-websocket');
+    let terminal: ReturnType<typeof terminalManager.create>;
+    let resolvedCwd: string | undefined;
+
+    if (requestedTerminalId) {
+      const existingTerminal = terminalManager.attach(requestedTerminalId, clientId, session.username, attachmentId);
+      if (!existingTerminal) {
+        safeSend({ type: 'error', message: 'Terminal is no longer available' });
+        socket.close(4404, 'Terminal not found');
+        return;
+      }
+      terminal = existingTerminal;
+    } else {
+      try {
+        resolvedCwd = await resolveAllowedPath(cwd || process.cwd());
+      } catch (error) {
+        auth.audit.record({ type: 'terminal_cwd_rejected', status: 'failure', username: session.username, ...context, metadata: { cwd } });
+        safeSend({ type: 'error', message: error instanceof Error ? error.message : 'Terminal cwd not allowed' });
+        socket.close();
+        return;
+      }
+      terminal = terminalManager.create(clientId, resolvedCwd, session.username, attachmentId);
     }
 
-    auth.audit.record({ type: 'terminal_opened', status: 'success', username: session.username, ...context, metadata: { cwd: resolvedCwd } });
-
-    let terminalId: string | null = null;
-
-    const terminal = terminalManager.create(clientId, resolvedCwd);
-    terminalId = terminal.id;
-
-    terminal.pty.onData((data) => {
-      socket.send(JSON.stringify({ 
-        type: 'output', 
-        terminalId: terminal.id,
-        data 
-      }));
+    const terminalId = terminal.id;
+    auth.audit.record({
+      type: requestedTerminalId ? 'terminal_reattached' : 'terminal_opened',
+      status: 'success',
+      username: session.username,
+      ...context,
+      metadata: { terminalId, ...(resolvedCwd ? { cwd: resolvedCwd } : {}) },
     });
 
-    terminal.pty.onExit(({ exitCode }) => {
-      socket.send(JSON.stringify({ 
-        type: 'exit', 
-        terminalId: terminal.id,
-        exitCode 
-      }));
+    const bufferedOutput = terminalManager.setOutputHandler(terminalId, attachmentId, (data) => {
+      safeSend({ type: 'output', terminalId, data });
+    });
+    if (bufferedOutput) safeSend({ type: 'output', terminalId, data: bufferedOutput });
+
+    const exitDisposable = terminal.pty.onExit(({ exitCode }) => {
+      if (terminal.attachmentId === attachmentId) {
+        safeSend({ type: 'exit', terminalId, exitCode });
+      }
     });
 
-    socket.send(JSON.stringify({ 
-      type: 'created', 
-      terminalId: terminal.id,
-      shell: terminal.shell
-    }));
+    safeSend({
+      type: requestedTerminalId ? 'reattached' : 'created',
+      terminalId,
+      shell: terminal.shell,
+    });
+
+    const heartbeat = setInterval(() => {
+      if (socket.readyState === 1) {
+        try {
+          socket.ping();
+        } catch (error) {
+          req.log.warn({ err: error }, 'Terminal WebSocket ping failed');
+        }
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+    heartbeat.unref();
 
     socket.on('message', (rawData: Buffer) => {
       try {
         const message = JSON.parse(rawData.toString());
-        
+        // A replaced socket must not be able to control or dispose the new attachment.
+        if (terminal.attachmentId !== attachmentId) return;
+
         switch (message.type) {
           case 'input':
-            if (message.terminalId === terminal.id && typeof message.data === 'string') {
-              terminalManager.writeTo(terminal.id, message.data);
+            if (message.terminalId === terminalId && typeof message.data === 'string') {
+              terminalManager.writeTo(terminalId, message.data);
             }
             break;
           case 'resize':
-            if (message.terminalId === terminal.id && Number.isFinite(message.cols) && Number.isFinite(message.rows)) {
-              terminalManager.resize(terminal.id, message.cols, message.rows);
+            if (message.terminalId === terminalId && Number.isFinite(message.cols) && Number.isFinite(message.rows)) {
+              terminalManager.resize(terminalId, message.cols, message.rows);
+            }
+            break;
+          case 'dispose':
+            if (message.terminalId === terminalId) {
+              terminalManager.dispose(terminalId);
             }
             break;
         }
       } catch (error) {
-        console.error('Terminal message error:', error);
+        req.log.warn({ err: error }, 'Invalid terminal WebSocket message');
       }
     });
 
-    socket.on('close', () => {
-      // Only dispose the terminal associated with this WebSocket connection
-      if (terminalId) {
-        terminalManager.dispose(terminalId);
-      }
+    socket.on('error', (error) => {
+      req.log.warn({ err: error, terminalId }, 'Terminal WebSocket error');
+    });
+
+    socket.on('close', (code, reason) => {
+      clearInterval(heartbeat);
+      exitDisposable.dispose();
+      terminalManager.detach(terminalId, attachmentId);
+      req.log.info({ terminalId, code, reason: reason.toString() }, 'Terminal WebSocket closed');
     });
   });
 }

@@ -356,6 +356,7 @@
         @close="showTerminal = false"
         @switch="switchTerminalSession"
         @closeTerminal="handleCloseTerminal"
+        @retryTerminal="handleRetryTerminal"
         @setHostRef="setTerminalHostRef"
         @updateHeight="updateTerminalHeight"
         @startMove="startTerminalMove"
@@ -2197,16 +2198,15 @@ async function handleCreateTerminal() {
     if (session.hostEl) {
       runtime.openTerminal(instance, session.hostEl);
       runtime.connectTerminal(instance, clientId, session.cwd, (_termId, shell) => {
-        // Update the session label with the actual shell name from the server
+        // Update the session label with the actual shell name from the server.
         const s = terminalSessions.value.find(t => t.terminal_id === terminalId);
         if (s) s.label = shell;
       }, (_termId, _exitCode) => {
-        // Auto-close the tab after a short delay so the user can see the exit message
+        // Auto-close the tab after a short delay so the user can see the exit message.
         setTimeout(() => handleCloseTerminal(terminalId), 1500);
-      }, () => {
-        // The server disposes the PTY when the WebSocket closes. Remove the stale tab
-        // so the user can immediately create a fresh terminal after an idle timeout.
-        setTimeout(() => handleCloseTerminal(terminalId), 1500);
+      }, undefined, (state) => {
+        const s = terminalSessions.value.find(t => t.terminal_id === terminalId);
+        if (s) s.connection_state = state;
       });
 
       // Set up resize observer
@@ -2232,6 +2232,11 @@ function handleCloseTerminal(terminalId: string) {
     terminalInstanceMap.delete(terminalId);
   }
   removeTerminalSession(terminalId);
+}
+
+function handleRetryTerminal(terminalId: string) {
+  const instance = terminalInstanceMap.get(terminalId);
+  if (instance) terminalRuntime?.retryTerminal(instance);
 }
 
 function handleSessionsRefresh() {
@@ -2323,7 +2328,8 @@ onUnmounted(() => {
   authRefreshMounted = false;
   clearAuthRefreshTimer();
   disposeAllTerminals();
-  terminalInstanceMap.forEach(instance => terminalRuntime?.disposeTerminal(instance));
+  // App teardown is a detach, not an explicit terminal close, so the PTY can be resumed.
+  terminalInstanceMap.forEach(instance => terminalRuntime?.disposeTerminal(instance, false));
   terminalInstanceMap.clear();
 });
 </script>

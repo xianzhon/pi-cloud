@@ -13,6 +13,7 @@ export interface TerminalSession {
   resizeObserver: ResizeObserver | null
   history: string[]
   pending_output: string[]
+  connection_state: 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 }
 
 export interface PanelRect {
@@ -328,6 +329,7 @@ export function useTerminalPanel(initial: InitialTerminalPanelState = {}) {
       resizeObserver: null,
       history: [],
       pending_output: [],
+      connection_state: 'connecting',
     }
     sessions.value.push(session)
     activeId.value = terminalId

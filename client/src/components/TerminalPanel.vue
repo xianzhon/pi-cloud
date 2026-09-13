@@ -77,6 +77,19 @@
         v-show="activeId === session.terminal_id"
         class="terminal-host-wrapper"
       >
+        <div
+          v-if="session.connection_state && session.connection_state !== 'connected'"
+          class="terminal-connection-status"
+          role="status"
+        >
+          <span>{{ session.connection_state === 'connecting' ? t('components.terminalPanel.connecting') : session.connection_state === 'reconnecting' ? t('components.terminalPanel.reconnecting') : t('components.terminalPanel.disconnected') }}</span>
+          <button
+            v-if="session.connection_state !== 'connecting'"
+            type="button"
+            @click="$emit('retryTerminal', session.terminal_id)"
+          >{{ t('components.terminalPanel.retry') }}</button>
+          <button type="button" @click="$emit('closeTerminal', session.terminal_id)">{{ t('components.terminalPanel.close') }}</button>
+        </div>
         <div :ref="(el: any) => $emit('setHostRef', session.terminal_id, el as HTMLElement | null)" class="terminal-host"></div>
       </div>
     </div>
@@ -99,6 +112,7 @@ export interface TerminalSession {
   resizeObserver: ResizeObserver | null
   history: string[]
   pending_output: string[]
+  connection_state?: 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 }
 
 const props = defineProps<{
@@ -122,6 +136,7 @@ const emit = defineEmits<{
   close: []
   switch: [terminalId: string]
   closeTerminal: [terminalId: string]
+  retryTerminal: [terminalId: string]
   setHostRef: [terminalId: string, el: HTMLElement | null]
   updateHeight: [height: number]
   startMove: [event: MouseEvent]
@@ -446,9 +461,35 @@ onUnmounted(onDockedResizeEnd)
 }
 
 .terminal-host-wrapper {
+  position: relative;
   flex: 1;
   overflow: hidden;
   min-height: 0;
+}
+
+.terminal-connection-status {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color, #45475a);
+  border-radius: 5px;
+  background: var(--bg-secondary, #252536);
+  color: var(--text-secondary, #bac2de);
+  font-size: 12px;
+}
+
+.terminal-connection-status button {
+  padding: 2px 7px;
+  border: 1px solid var(--border-color, #45475a);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
 
 .terminal-host {
