@@ -23,7 +23,7 @@ Press `1` through `8` to select the tools in toolbar order, or `0` for the erase
 
 Annotations use document-relative coordinates, so they stay aligned when the PDF or image zoom changes.
 
-For images, use the mouse wheel or a pinch gesture to zoom, drag to pan, and double-click to reset zoom. PDF wheel zoom continues to require Ctrl or Command. Zoom can also be changed from the navigation toolbar.
+For images, use Ctrl or Command with the mouse wheel, or use a pinch gesture, to zoom. Drag to pan, and double-click to reset zoom. Zoom can also be changed from the navigation toolbar.
 
 ## PDF Page Color
 

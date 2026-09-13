@@ -797,7 +797,7 @@ function savePageTone(): void {
 }
 
 function handleZoomWheel(event: WheelEvent): void {
-  if (!isImage.value && !event.ctrlKey && !event.metaKey) return;
+  if (!event.ctrlKey && !event.metaKey) return;
   event.preventDefault();
   if (loading.value || event.deltaY === 0) return;
   setScale(scale.value + (event.deltaY < 0 ? scaleStep.value : -scaleStep.value));

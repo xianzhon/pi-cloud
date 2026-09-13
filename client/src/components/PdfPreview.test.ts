@@ -161,14 +161,14 @@ describe('PdfPreview', () => {
     const regularScroll = wheelEvent(false);
     viewport.element.dispatchEvent(regularScroll);
     await wrapper.vm.$nextTick();
-    expect(regularScroll.defaultPrevented).toBe(true);
-    expect(wrapper.get('.pdf-zoom-level').text()).toBe('105%');
+    expect(regularScroll.defaultPrevented).toBe(false);
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('100%');
 
     const modifierZoom = wheelEvent(true);
     viewport.element.dispatchEvent(modifierZoom);
     await flushPromises();
     expect(modifierZoom.defaultPrevented).toBe(true);
-    expect(wrapper.get('.pdf-zoom-level').text()).toBe('110%');
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('105%');
 
     await viewport.trigger('dblclick');
     expect(wrapper.get('.pdf-zoom-level').text()).toBe('100%');
