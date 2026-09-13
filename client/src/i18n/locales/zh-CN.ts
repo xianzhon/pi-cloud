@@ -418,7 +418,6 @@ export default {
       previewHtml: '预览 HTML',
       editHtmlSource: '编辑 HTML 源',
       htmlPreview: 'HTML 预览',
-      imageZoomControls: '图片缩放控件',
       zoomOut: '缩小',
       zoomIn: '放大',
       resetImageZoom: '重置图片缩放',

@@ -160,16 +160,27 @@ describe('PdfPreview', () => {
     };
     const regularScroll = wheelEvent(false);
     viewport.element.dispatchEvent(regularScroll);
-    expect(regularScroll.defaultPrevented).toBe(false);
-    expect(wrapper.get('.pdf-zoom-level').text()).toBe('100%');
+    await wrapper.vm.$nextTick();
+    expect(regularScroll.defaultPrevented).toBe(true);
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('105%');
 
     const modifierZoom = wheelEvent(true);
     viewport.element.dispatchEvent(modifierZoom);
     await flushPromises();
     expect(modifierZoom.defaultPrevented).toBe(true);
-    expect(wrapper.get('.pdf-zoom-level').text()).toBe('105%');
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('110%');
 
-    for (let step = 0; step < 20; step++) await wrapper.get('[aria-label="Zoom out"]').trigger('click');
+    await viewport.trigger('dblclick');
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('100%');
+
+    await viewport.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 100, clientY: 150 });
+    await viewport.trigger('pointerdown', { button: 0, pointerId: 2, clientX: 300, clientY: 150 });
+    await viewport.trigger('pointermove', { pointerId: 1, clientX: 0, clientY: 150 });
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('150%');
+    await viewport.trigger('pointerup', { pointerId: 1 });
+    await viewport.trigger('pointerup', { pointerId: 2 });
+
+    for (let step = 0; step < 30; step++) await wrapper.get('[aria-label="Zoom out"]').trigger('click');
     expect(wrapper.get('.pdf-zoom-level').text()).toBe('5%');
 
     const canvas = wrapper.get('.pdf-annotation-canvas');
@@ -192,6 +203,36 @@ describe('PdfPreview', () => {
       method: 'POST',
       body: expect.stringContaining('/project/.annotations/image.png.annotations.json'),
     }));
+
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    await wrapper.get('[aria-label="Export annotated image"]').trigger('click');
+    await flushPromises();
+    expect(HTMLCanvasElement.prototype.toDataURL).toHaveBeenCalledWith('image/png');
+    expect(click).toHaveBeenCalledOnce();
+  });
+
+  it('reports image rendering failures separately from image loading failures', async () => {
+    class MockImage {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload?: () => void;
+      onerror?: () => void;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    }
+    vi.stubGlobal('Image', MockImage);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
+
+    const wrapper = mount(PdfPreview, {
+      props: {
+        src: '/api/files/raw?path=image.png',
+        filePath: '/project/image.png',
+        kind: 'image',
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.get('.pdf-error').text()).toBe('Failed to render image');
   });
 
   it('loads a PDF without an outline', async () => {
@@ -501,36 +542,26 @@ describe('PdfPreview', () => {
     expect(wrapper.get('.pdf-annotation-canvas').classes()).not.toContain('enabled');
   });
 
-  it('loads annotations from the legacy visible sidecar name', async () => {
+  it('loads annotations from the hidden annotation directory', async () => {
     const fetchMock = vi.mocked(fetch);
-    fetchMock.mockImplementation(async (url) => {
-      if (String(url).includes('%2Fproject%2F.annotations%2Fdocument.pdf.annotations.json')) {
-        return { ok: false, status: 404 } as Response;
-      }
-      if (String(url).includes('%2Fproject%2F.document.pdf.annotations.json')) {
-        return { ok: false, status: 404 } as Response;
-      }
-      if (String(url).includes('%2Fproject%2Fdocument.pdf.annotations.json')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            content: JSON.stringify({
-              version: 1,
-              pages: { '1': [{ color: '#ef4444', width: 3, points: [{ x: 0.1, y: 0.1 }] }] },
-            }),
-          }),
-        } as Response;
-      }
-      throw new Error(`Unexpected fetch: ${String(url)}`);
-    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        content: JSON.stringify({
+          version: 1,
+          pages: { '1': [{ color: '#ef4444', width: 3, points: [{ x: 0.1, y: 0.1 }] }] },
+        }),
+      }),
+    } as Response);
 
     const wrapper = mount(PdfPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2Fdocument.pdf.annotations.json');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.annotations%2Fdocument.pdf.annotations.json');
     expect(wrapper.find('[aria-label="Clear annotations on this page"]').attributes('disabled')).toBeUndefined();
   });
 

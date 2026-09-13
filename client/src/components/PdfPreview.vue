@@ -239,12 +239,14 @@
       ref="viewportEl"
       class="pdf-viewport"
       :class="{ pannable: tool === 'pan', panning: isPanning, 'has-outline': showOutline && outline.length }"
+      :title="isImage ? t('components.editorPanel.imagePanHint') : undefined"
       @pointerdown="startPan"
       @pointermove="continuePan"
       @pointerup="finishPan"
       @pointercancel="finishPan"
       @scroll="handleViewportScroll"
       @wheel="handleZoomWheel"
+      @dblclick="resetImageZoom"
     >
       <div v-if="loading" class="pdf-message" role="status">{{ t(isImage ? 'components.editorPanel.loadingImage' : 'components.editorPanel.loadingPdf') }}</div>
       <div v-else-if="error" class="pdf-message pdf-error" role="alert">{{ error }}</div>
@@ -362,6 +364,7 @@ interface AnnotationStroke {
 interface TextEditorState { page: string; point: AnnotationPoint; index?: number; text: string; color: string; fontSize: number }
 interface TooltipState { text: string; left: number; top: number }
 interface ToolbarPosition { left: number; top: number }
+interface ImagePinch { initialDistance: number; initialScale: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
 type PdfFitMode = 'width' | 'height';
 type PdfPageTone = 'original' | 'warm' | 'gray' | 'dark';
@@ -516,6 +519,8 @@ const renderTasks = new Map<number, RenderTask>();
 const renderRequests = new Map<number, number>();
 let activePointer: number | undefined;
 let panStart: { pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined;
+const imagePointers = new Map<number, AnnotationPoint>();
+let imagePinch: ImagePinch | undefined;
 let moveStart: { index: number; point: AnnotationPoint; points: AnnotationPoint[]; resizeIndex?: number } | undefined;
 const selectedAnnotation = ref<{ page: number; index: number }>();
 let annotationChanged = false;
@@ -658,13 +663,6 @@ function annotationFilePath(filePath = props.filePath): string {
   return `${directory}.annotations${separator}${filename}.annotations.json`;
 }
 
-function legacyAnnotationFilePaths(): string[] {
-  const separatorIndex = Math.max(props.filePath.lastIndexOf('/'), props.filePath.lastIndexOf('\\'));
-  const directory = props.filePath.slice(0, separatorIndex + 1);
-  const filename = props.filePath.slice(separatorIndex + 1);
-  return [`${directory}.${filename}.annotations.json`, `${props.filePath}.annotations.json`];
-}
-
 function setPageElement(page: number, element: unknown): void {
   const previous = pageElements.get(page);
   if (previous) pageObserver?.unobserve(previous);
@@ -788,10 +786,14 @@ function savePageTone(): void {
 }
 
 function handleZoomWheel(event: WheelEvent): void {
-  if (!event.ctrlKey && !event.metaKey) return;
+  if (!isImage.value && !event.ctrlKey && !event.metaKey) return;
   event.preventDefault();
   if (loading.value || event.deltaY === 0) return;
   setScale(scale.value + (event.deltaY < 0 ? scaleStep.value : -scaleStep.value));
+}
+
+function resetImageZoom(): void {
+  if (isImage.value) setScale(1);
 }
 
 async function goToPage(page: number): Promise<void> {
@@ -1110,13 +1112,20 @@ async function renderVisiblePages(): Promise<void> {
   await Promise.all([...targets].map(page => renderPage(page)));
 }
 
+function handleRenderError(renderError: unknown): void {
+  console.error(`Failed to render ${isImage.value ? 'image' : 'PDF'}:`, renderError);
+  error.value = t(isImage.value
+    ? 'components.editorPanel.imageRenderFailed'
+    : 'components.editorPanel.pdfRenderFailed');
+}
+
 function handlePageIntersection(entries: IntersectionObserverEntry[]): void {
   for (const entry of entries) {
     const page = Number((entry.target as HTMLElement).dataset.page);
     if (!page) continue;
     if (entry.isIntersecting) {
       visiblePages.add(page);
-      void renderPage(page);
+      void renderPage(page).catch(handleRenderError);
     } else {
       visiblePages.delete(page);
     }
@@ -1129,18 +1138,14 @@ async function loadAnnotations(version: number): Promise<void> {
   undoStack.value = [];
   redoStack.value = [];
   try {
-    for (const filePath of [annotationFilePath(), ...legacyAnnotationFilePaths()]) {
-      const response = await fetch(`/api/files/read?path=${encodeURIComponent(filePath)}`);
-      if (version !== loadVersion) return;
-      if (response.status === 404) continue;
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as { content?: string };
-      const parsed = JSON.parse(data.content || '') as AnnotationDocument;
-      if (parsed.version === 1 && parsed.pages && typeof parsed.pages === 'object') {
-        annotations.value = parsed;
-        annotationSidecarExists = true;
-      }
-      return;
+    const response = await fetch(`/api/files/read?path=${encodeURIComponent(annotationFilePath())}`);
+    if (version !== loadVersion || response.status === 404) return;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json() as { content?: string };
+    const parsed = JSON.parse(data.content || '') as AnnotationDocument;
+    if (parsed.version === 1 && parsed.pages && typeof parsed.pages === 'object') {
+      annotations.value = parsed;
+      annotationSidecarExists = true;
     }
   } catch (loadError) {
     if (version === loadVersion) console.error('Failed to load annotations:', loadError);
@@ -1169,6 +1174,10 @@ async function loadPdf(): Promise<void> {
   renderTasks.forEach(task => task.cancel());
   renderTasks.clear();
   visiblePages.clear();
+  imagePointers.clear();
+  imagePinch = undefined;
+  panStart = undefined;
+  isPanning.value = false;
   pageSizes.value = {};
   outline.value = [];
   const previousLoadingTask = loadingTask;
@@ -1193,7 +1202,7 @@ async function loadPdf(): Promise<void> {
       keepToolbarInBounds();
       loadedFilePath = props.filePath;
       loading.value = false;
-      await renderVisiblePages();
+      await renderVisiblePages().catch(handleRenderError);
       return;
     }
 
@@ -1228,7 +1237,7 @@ async function loadPdf(): Promise<void> {
     keepToolbarInBounds();
     loadedFilePath = props.filePath;
     loading.value = false;
-    await renderVisiblePages();
+    await renderVisiblePages().catch(handleRenderError);
     if (pageNumber.value > 1) pageElements.get(pageNumber.value)?.scrollIntoView({ block: 'start' });
   } catch (loadError) {
     if (version !== loadVersion) return;
@@ -1238,9 +1247,27 @@ async function loadPdf(): Promise<void> {
   }
 }
 
+function imagePinchDistance(): number | undefined {
+  const [first, second] = imagePointers.values();
+  return first && second ? Math.hypot(second.x - first.x, second.y - first.y) : undefined;
+}
+
 function startPan(event: PointerEvent): void {
   const viewport = viewportEl.value;
   if (tool.value !== 'pan' || event.button !== 0 || !viewport) return;
+  viewport.setPointerCapture?.(event.pointerId);
+
+  if (isImage.value) {
+    imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const distance = imagePinchDistance();
+    if (distance !== undefined) {
+      imagePinch = { initialDistance: distance, initialScale: scale.value };
+      panStart = undefined;
+      isPanning.value = false;
+      return;
+    }
+  }
+
   panStart = {
     pointerId: event.pointerId,
     x: event.clientX,
@@ -1249,20 +1276,32 @@ function startPan(event: PointerEvent): void {
     scrollTop: viewport.scrollTop,
   };
   isPanning.value = true;
-  viewport.setPointerCapture?.(event.pointerId);
 }
 
 function continuePan(event: PointerEvent): void {
   const viewport = viewportEl.value;
-  if (!viewport || panStart?.pointerId !== event.pointerId) return;
+  if (!viewport) return;
+  if (isImage.value && imagePointers.has(event.pointerId)) {
+    imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const distance = imagePinchDistance();
+    if (imagePinch && distance !== undefined && imagePinch.initialDistance > 0) {
+      setScale(imagePinch.initialScale * distance / imagePinch.initialDistance);
+      return;
+    }
+  }
+  if (panStart?.pointerId !== event.pointerId) return;
   viewport.scrollLeft = panStart.scrollLeft - (event.clientX - panStart.x);
   viewport.scrollTop = panStart.scrollTop - (event.clientY - panStart.y);
 }
 
 function finishPan(event: PointerEvent): void {
   const viewport = viewportEl.value;
-  if (panStart?.pointerId !== event.pointerId) return;
+  if (isImage.value) {
+    imagePointers.delete(event.pointerId);
+    if (imagePointers.size < 2) imagePinch = undefined;
+  }
   viewport?.releasePointerCapture?.(event.pointerId);
+  if (panStart?.pointerId !== event.pointerId) return;
   panStart = undefined;
   isPanning.value = false;
 }
@@ -1612,10 +1651,7 @@ function rerenderVisiblePages(): void {
   clearTimeout(zoomRenderTimer);
   if (loading.value || error.value) return;
   // CSS resizes existing canvases immediately; defer expensive rasterization until zoom settles.
-  zoomRenderTimer = setTimeout(() => void renderVisiblePages().catch((renderError) => {
-    console.error('Failed to render PDF:', renderError);
-    error.value = t('components.editorPanel.pdfRenderFailed');
-  }), ZOOM_RENDER_DELAY);
+  zoomRenderTimer = setTimeout(() => void renderVisiblePages().catch(handleRenderError), ZOOM_RENDER_DELAY);
 }
 
 watch(scale, rerenderVisiblePages);
@@ -1646,6 +1682,7 @@ onUnmounted(() => {
   clearTimeout(statusTimer);
   clearTimeout(viewSaveTimer);
   clearTimeout(zoomRenderTimer);
+  imagePointers.clear();
   pageObserver?.disconnect();
   renderTasks.forEach(task => task.cancel());
   void loadingTask?.destroy();

@@ -277,14 +277,16 @@
         v-else-if="activePdfSrc && activeTab"
         :src="activePdfSrc"
         :file-path="activeTab"
-        :initial-scale="activeTabInfo?.pdfScale"
-        @scale-change="setActivePdfScale"
+        :initial-scale="activeTabInfo?.previewScale"
+        @scale-change="setActivePreviewScale"
       />
       <PdfPreview
         v-else-if="activeImageSrc && activeTab"
         kind="image"
         :src="activeImageSrc"
         :file-path="activeTab"
+        :initial-scale="activeTabInfo?.previewScale"
+        @scale-change="setActivePreviewScale"
       />
       <div
         class="editor-container"
@@ -570,7 +572,7 @@ interface Tab {
   kind: 'text' | 'image' | 'pdf' | 'archive';
   virtual?: boolean;
   pinned?: boolean;
-  pdfScale?: number;
+  previewScale?: number;
 }
 
 interface FileReadResponse {
@@ -733,8 +735,10 @@ const activeImageSrc = computed(() => activeTabInfo.value?.kind === 'image' && a
 const activePdfSrc = computed(() => activeTabInfo.value?.kind === 'pdf' && activeTab.value
   ? `/api/files/raw?path=${encodeURIComponent(activeTab.value)}`
   : '');
-function setActivePdfScale(scale: number): void {
-  if (activeTabInfo.value?.kind === 'pdf') activeTabInfo.value.pdfScale = scale;
+function setActivePreviewScale(scale: number): void {
+  if (activeTabInfo.value?.kind === 'pdf' || activeTabInfo.value?.kind === 'image') {
+    activeTabInfo.value.previewScale = scale;
+  }
 }
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isHtmlFile(activeTab.value));

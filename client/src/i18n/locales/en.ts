@@ -418,7 +418,6 @@ export default {
       previewHtml: 'Preview HTML',
       editHtmlSource: 'Edit HTML source',
       htmlPreview: 'HTML preview',
-      imageZoomControls: 'Image zoom controls',
       zoomOut: 'Zoom out',
       zoomIn: 'Zoom in',
       resetImageZoom: 'Reset image zoom',

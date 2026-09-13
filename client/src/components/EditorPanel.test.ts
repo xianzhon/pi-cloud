@@ -584,7 +584,7 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.pdf-preview-test').attributes('data-initial-scale')).toBe('1.5');
   });
 
-  it('opens image files in the annotation preview', async () => {
+  it('opens image files in the annotation preview and preserves each tab zoom level', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).startsWith('/api/files/tree')) {
         return { ok: true, json: async () => ({ tree: [] }) };
@@ -605,6 +605,15 @@ describe('EditorPanel', () => {
       'data-file-path': '/project/large.png',
     });
     expect(wrapper.find('.editor-container').classes()).toContain('hidden');
+
+    wrapper.findComponent({ name: 'PdfPreviewStub' }).vm.$emit('scale-change', 1.5);
+    await wrapper.vm.openFile('/project/other.png');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.pdf-preview-test').attributes('data-initial-scale')).toBeUndefined();
+
+    const firstImageTab = wrapper.findAll('.tab').find(tab => tab.text().includes('large.png'));
+    await firstImageTab?.trigger('click');
+    expect(wrapper.find('.pdf-preview-test').attributes('data-initial-scale')).toBe('1.5');
   });
 
   it('defaults to a narrower editor width, resizes from its left edge, and relayouts Monaco', async () => {

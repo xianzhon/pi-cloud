@@ -1,13 +1,13 @@
-# PDF Annotations User Manual
+# PDF and Image Annotations User Manual
 
-Pi Cloud lets you annotate PDF files opened in the workspace editor. Annotations are stored separately, so editing does not modify the original PDF.
+Pi Cloud lets you annotate PDF and image files opened in the workspace editor. Annotations are stored separately, so editing does not modify the original document.
 
-## Open and Annotate a PDF
+## Open and Annotate a Document
 
-1. Open a `.pdf` file from the workspace file tree.
+1. Open a PDF or supported image file from the workspace file tree.
 2. Select an annotation tool from the toolbar.
-3. Choose a color and width, then draw or place the annotation on the displayed page.
-4. Select the active tool again to return to normal PDF navigation.
+3. Choose a color and width, then draw or place the annotation on the displayed page or image.
+4. Select the active tool again to return to normal document navigation.
 
 The annotation toolbar provides:
 
@@ -21,11 +21,13 @@ The annotation toolbar provides:
 
 Press `1` through `8` to select the tools in toolbar order, or `0` for the eraser. The toolbar can be dragged, moved with the arrow keys from its drag handle, and switched between horizontal and vertical layouts.
 
-Annotations use page-relative coordinates, so they stay aligned with the page when the PDF zoom changes.
+Annotations use document-relative coordinates, so they stay aligned when the PDF or image zoom changes.
 
-## Page Color
+For images, use the mouse wheel or a pinch gesture to zoom, drag to pan, and double-click to reset zoom. PDF wheel zoom continues to require Ctrl or Command. Zoom can also be changed from the navigation toolbar.
 
-Use the page-color selector in the PDF navigation toolbar to choose **Original**, **Warm**, **Gray**, or **Dark**. The setting is saved with the PDF view state. It only changes the on-screen preview; the original PDF and exported copies keep their original colors.
+## PDF Page Color
+
+For PDFs, use the page-color selector in the navigation toolbar to choose **Original**, **Warm**, **Gray**, or **Dark**. The setting is saved with the PDF view state. It only changes the on-screen preview; the original PDF and exported copies keep their original colors.
 
 ## Saving and Status
 
@@ -35,7 +37,7 @@ Annotations save automatically after drawing, erasing, undoing, redoing, or clea
 - A check when the latest changes have been saved.
 - An error indicator if saving fails.
 
-There is no separate Save command for PDF annotations.
+There is no separate Save command for PDF or image annotations.
 
 ## Storage Location
 
@@ -54,8 +56,6 @@ For example:
 
 The leading `.` makes the directory hidden in the default Pi Cloud file-tree view. Enable **Show hidden files** in the file tree when you need to see or manage it. The sidecar contains vector annotations grouped by page, and the original document remains unchanged.
 
-Sidecars created by earlier Pi Cloud versions used `.<document filename>.annotations.json` or the visible `<document filename>.annotations.json` beside the document. These files are still loaded for compatibility. After the next annotation change, Pi Cloud saves the annotations in `.annotations`; the old file can then be removed manually.
-
 The sidecar is a regular workspace file and is subject to the same allowed-root and filesystem permissions as other editor files. Pi Cloud must have write permission in the document's directory to create `.annotations` and save annotations.
 
 ## Back Up, Move, or Share Annotations
@@ -64,9 +64,12 @@ Keep the document and its `.annotations` sidecar file together when backing up, 
 
 To remove all saved annotations, show hidden files, delete the corresponding `.annotations/<document filename>.annotations.json` sidecar, and reopen the document.
 
+## Export an Annotated Copy
+
+Use the download button in the navigation toolbar to export a flattened copy. PDF files download as `<name>-annotated.pdf`, and images download as `<name>-annotated.png`. The original document and annotation sidecar remain unchanged.
+
 ## Current Limitations
 
-- Annotations are displayed by Pi Cloud and are not embedded into the PDF.
-- Opening the original PDF in another PDF reader will not show the sidecar annotations.
-- Exporting or flattening annotations into a new PDF is not currently supported.
+- Annotations remain separate from the original document until you export a flattened copy.
+- Opening the original document in another viewer will not show the sidecar annotations.
 - Exporting individual annotations to other annotation formats is not currently supported.
