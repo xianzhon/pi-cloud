@@ -273,14 +273,14 @@
         :srcdoc="activeHtmlDocument"
         :title="t('components.editorPanel.htmlPreview')"
       ></iframe>
-      <PdfPreview
+      <MediaAnnotationPreview
         v-else-if="activePdfSrc && activeTab"
         :src="activePdfSrc"
         :file-path="activeTab"
         :initial-scale="activeTabInfo?.previewScale"
         @scale-change="setActivePreviewScale"
       />
-      <PdfPreview
+      <MediaAnnotationPreview
         v-else-if="activeImageSrc && activeTab"
         kind="image"
         :src="activeImageSrc"
@@ -427,7 +427,7 @@ import TreeNode, { type TreeNodeData } from './FileTreeNode.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import InputPromptModal from './InputPromptModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
-import PdfPreview from './PdfPreview.vue';
+import MediaAnnotationPreview from './MediaAnnotationPreview.vue';
 
 const t = i18n.global.t;
 

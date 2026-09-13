@@ -16,9 +16,9 @@ vi.mock('../utils/markdownPdfExport', () => ({
   createMarkdownPdfCopy: markdownPdfCopyMock,
   exportMarkdownPdf: markdownPdfExportMock,
 }));
-vi.mock('./PdfPreview.vue', () => ({
+vi.mock('./MediaAnnotationPreview.vue', () => ({
   default: {
-    name: 'PdfPreviewStub',
+    name: 'MediaAnnotationPreviewStub',
     props: ['src', 'filePath', 'initialScale', 'kind'],
     emits: ['scale-change'],
     template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-initial-scale="initialScale" :data-kind="kind" />',
@@ -620,7 +620,7 @@ describe('EditorPanel', () => {
       .toBe('/project/document.pdf');
     expect(wrapper.find('.editor-container').classes()).toContain('hidden');
 
-    wrapper.findComponent({ name: 'PdfPreviewStub' }).vm.$emit('scale-change', 1.5);
+    wrapper.findComponent({ name: 'MediaAnnotationPreviewStub' }).vm.$emit('scale-change', 1.5);
     await wrapper.vm.openFile('/project/other.pdf');
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.pdf-preview-test').attributes('data-initial-scale')).toBeUndefined();
@@ -652,7 +652,7 @@ describe('EditorPanel', () => {
     });
     expect(wrapper.find('.editor-container').classes()).toContain('hidden');
 
-    wrapper.findComponent({ name: 'PdfPreviewStub' }).vm.$emit('scale-change', 1.5);
+    wrapper.findComponent({ name: 'MediaAnnotationPreviewStub' }).vm.$emit('scale-change', 1.5);
     await wrapper.vm.openFile('/project/other.png');
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.pdf-preview-test').attributes('data-initial-scale')).toBeUndefined();

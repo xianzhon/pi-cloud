@@ -1,6 +1,6 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import PdfPreview from './PdfPreview.vue';
+import MediaAnnotationPreview from './MediaAnnotationPreview.vue';
 
 const pdfjsMock = vi.hoisted(() => {
   const render = vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() }));
@@ -65,7 +65,7 @@ const context = {
   textBaseline: '',
 } as unknown as CanvasRenderingContext2D;
 
-describe('PdfPreview', () => {
+describe('MediaAnnotationPreview', () => {
   beforeEach(() => {
     pdfjsMock.document.numPages = 2;
     pdfjsMock.getOutline.mockResolvedValue([]);
@@ -95,7 +95,7 @@ describe('PdfPreview', () => {
   });
 
   it('loads a PDF and supports page navigation and zoom', async () => {
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -136,7 +136,7 @@ describe('PdfPreview', () => {
       throw new Error(`Unexpected fetch: ${String(url)}`);
     }));
 
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: {
         src: '/api/files/raw?path=image.png',
         filePath: '/project/image.png',
@@ -236,7 +236,7 @@ describe('PdfPreview', () => {
     vi.stubGlobal('Image', MockImage);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: {
         src: '/api/files/raw?path=image.png',
         filePath: '/project/image.png',
@@ -260,7 +260,7 @@ describe('PdfPreview', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
 
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: {
         src: '/api/files/raw?path=image.png',
         filePath: '/project/image.png',
@@ -274,7 +274,7 @@ describe('PdfPreview', () => {
 
   it('loads a PDF without an outline', async () => {
     pdfjsMock.getOutline.mockResolvedValueOnce(null);
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -294,7 +294,7 @@ describe('PdfPreview', () => {
     ]);
     pdfjsMock.getDestination.mockResolvedValueOnce([{ num: 4, gen: 0 }]);
     pdfjsMock.getPageIndex.mockResolvedValueOnce(1);
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -316,7 +316,7 @@ describe('PdfPreview', () => {
   });
 
   it('toggles between fitting the current page to the viewport width and height', async () => {
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -343,7 +343,7 @@ describe('PdfPreview', () => {
   });
 
   it('renders a newly selected PDF once after resetting a changed zoom level', async () => {
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -365,7 +365,7 @@ describe('PdfPreview', () => {
   });
 
   it('zooms the PDF with modifier-wheel without triggering browser zoom', async () => {
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -402,7 +402,7 @@ describe('PdfPreview', () => {
   });
 
   it('uses continuous scrolling without a view mode control', async () => {
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -416,7 +416,7 @@ describe('PdfPreview', () => {
 
   it('only rasterizes nearby pages when a PDF has many pages', async () => {
     pdfjsMock.document.numPages = 20;
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=large.pdf', filePath: '/project/large.pdf' },
     });
     await flushPromises();
@@ -426,7 +426,7 @@ describe('PdfPreview', () => {
   });
 
   it('pans the PDF viewport by dragging when annotation tools are inactive', async () => {
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -446,7 +446,7 @@ describe('PdfPreview', () => {
   });
 
   it('moves the annotation toolbar and switches to a vertical layout', async () => {
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -490,7 +490,7 @@ describe('PdfPreview', () => {
   });
 
   it('keeps annotation controls at the top and page controls at the bottom-left', async () => {
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -538,7 +538,7 @@ describe('PdfPreview', () => {
   });
 
   it('activates annotation tools with number shortcuts in toolbar order', async () => {
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -593,7 +593,7 @@ describe('PdfPreview', () => {
       }),
     } as Response);
 
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -625,7 +625,7 @@ describe('PdfPreview', () => {
       return { ok: false, status: 404 } as Response;
     });
 
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -665,7 +665,7 @@ describe('PdfPreview', () => {
       return { ok: false, status: 404 } as Response;
     });
 
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -702,7 +702,7 @@ describe('PdfPreview', () => {
       throw new Error(`Unexpected fetch: ${String(url)}`);
     });
 
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -740,7 +740,7 @@ describe('PdfPreview', () => {
       if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
       throw new Error(`Unexpected fetch: ${String(url)}`);
     });
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -794,7 +794,7 @@ describe('PdfPreview', () => {
       if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
       throw new Error(`Unexpected fetch: ${String(url)}`);
     });
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -839,7 +839,7 @@ describe('PdfPreview', () => {
       if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
       throw new Error(`Unexpected fetch: ${String(url)}`);
     });
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -885,7 +885,7 @@ describe('PdfPreview', () => {
       if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
       throw new Error(`Unexpected fetch: ${String(url)}`);
     });
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -934,7 +934,7 @@ describe('PdfPreview', () => {
         }
         throw new Error(`Unexpected fetch: ${String(url)}`);
       });
-      const wrapper = mount(PdfPreview, {
+      const wrapper = mount(MediaAnnotationPreview, {
         props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
       });
       await flushPromises();
@@ -989,7 +989,7 @@ describe('PdfPreview', () => {
       downloadedFilename = this.download;
     });
 
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
@@ -1012,7 +1012,7 @@ describe('PdfPreview', () => {
       if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
       throw new Error(`Unexpected fetch: ${String(url)}`);
     });
-    const wrapper = mount(PdfPreview, {
+    const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
