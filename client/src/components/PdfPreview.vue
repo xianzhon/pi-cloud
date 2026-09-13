@@ -655,12 +655,23 @@ function cloneAnnotations(value = annotations.value): AnnotationDocument {
   return JSON.parse(JSON.stringify(value)) as AnnotationDocument;
 }
 
-function annotationFilePath(filePath = props.filePath): string {
+function annotationPathParts(filePath = props.filePath): { directory: string; filename: string; separator: string } {
   const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
-  const separator = filePath[separatorIndex] || '/';
-  const directory = filePath.slice(0, separatorIndex + 1);
-  const filename = filePath.slice(separatorIndex + 1);
+  return {
+    directory: filePath.slice(0, separatorIndex + 1),
+    filename: filePath.slice(separatorIndex + 1),
+    separator: filePath[separatorIndex] || '/',
+  };
+}
+
+function annotationFilePath(filePath = props.filePath): string {
+  const { directory, filename, separator } = annotationPathParts(filePath);
   return `${directory}.annotations${separator}${filename}.annotations.json`;
+}
+
+function legacyAnnotationFilePaths(): string[] {
+  const { directory, filename } = annotationPathParts();
+  return [`${directory}.${filename}.annotations.json`, `${props.filePath}.annotations.json`];
 }
 
 function setPageElement(page: number, element: unknown): void {
@@ -1137,18 +1148,26 @@ async function loadAnnotations(version: number): Promise<void> {
   annotationSidecarExists = false;
   undoStack.value = [];
   redoStack.value = [];
-  try {
-    const response = await fetch(`/api/files/read?path=${encodeURIComponent(annotationFilePath())}`);
-    if (version !== loadVersion || response.status === 404) return;
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json() as { content?: string };
-    const parsed = JSON.parse(data.content || '') as AnnotationDocument;
-    if (parsed.version === 1 && parsed.pages && typeof parsed.pages === 'object') {
-      annotations.value = parsed;
-      annotationSidecarExists = true;
+  let lastLoadError: unknown;
+  for (const filePath of [annotationFilePath(), ...legacyAnnotationFilePaths()]) {
+    try {
+      const response = await fetch(`/api/files/read?path=${encodeURIComponent(filePath)}`);
+      if (version !== loadVersion) return;
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json() as { content?: string };
+      const parsed = JSON.parse(data.content || '') as AnnotationDocument;
+      if (parsed.version === 1 && parsed.pages && typeof parsed.pages === 'object') {
+        annotations.value = parsed;
+        annotationSidecarExists = true;
+        return;
+      }
+    } catch (loadError) {
+      lastLoadError = loadError;
     }
-  } catch (loadError) {
-    if (version === loadVersion) console.error('Failed to load annotations:', loadError);
+  }
+  if (version === loadVersion && lastLoadError) {
+    console.error('Failed to load annotations:', lastLoadError);
   }
 }
 

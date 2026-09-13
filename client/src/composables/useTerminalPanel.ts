@@ -36,7 +36,13 @@ export interface PanelInteraction {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-type PanelMode = 'docked' | 'floating' | 'maximized'
+export type PanelMode = 'docked' | 'floating' | 'maximized'
+
+interface InitialTerminalPanelState {
+  visible?: boolean
+  mode?: PanelMode
+  previousMode?: Exclude<PanelMode, 'maximized'>
+}
 
 const MIN_HEIGHT = 140
 const MIN_WIDTH = 400
@@ -54,10 +60,10 @@ function clamp(value: number, min: number, max: number): number {
 
 // ─── Composable ──────────────────────────────────────────────────────────────
 
-export function useTerminalPanel() {
+export function useTerminalPanel(initial: InitialTerminalPanelState = {}) {
   // ── Visibility ────────────────────────────────────────────────────────────
 
-  const visible = ref(false)
+  const visible = ref(initial.visible ?? false)
 
   function toggle() {
     visible.value = !visible.value
@@ -65,7 +71,7 @@ export function useTerminalPanel() {
 
   // ── Mode: docked / floating / maximized ───────────────────────────────────
 
-  const mode = ref<PanelMode>('docked')
+  const mode = ref<PanelMode>(initial.mode ?? 'docked')
   const isMaximized = computed(() => mode.value === 'maximized')
   const isFloating = computed(() => mode.value === 'floating')
 
@@ -98,7 +104,7 @@ export function useTerminalPanel() {
     }
   }
 
-  const previousMode = ref<PanelMode>('docked')
+  const previousMode = ref<Exclude<PanelMode, 'maximized'>>(initial.previousMode ?? 'docked')
 
   // ── Docked height ─────────────────────────────────────────────────────────
 
@@ -377,6 +383,7 @@ export function useTerminalPanel() {
     popOut,
     dock,
     toggleMaximize,
+    previousMode,
 
     // Docked
     terminalHeight,

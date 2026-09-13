@@ -67,10 +67,12 @@ const updatePreset = vi.fn(async () => {});
 const deletePreset = vi.fn(async () => {});
 const {
   editorOpenFile,
+  terminalCreateInstance,
   submitExternalPrompt,
   heavyModuleLoads,
 } = vi.hoisted(() => ({
   editorOpenFile: vi.fn(),
+  terminalCreateInstance: vi.fn(() => ({ terminal: { options: {} } })),
   submitExternalPrompt: vi.fn(async () => true),
   heavyModuleLoads: {
     editor: 0,
@@ -181,7 +183,7 @@ vi.mock('./components/ChatPanel.vue', () => ({
 }));
 vi.mock('./components/TerminalPanel.vue', () => {
   heavyModuleLoads.terminalPanel += 1;
-  return { __esModule: true, default: { props: ['visible'], template: '<div class="terminal-panel-stub" :data-visible="String(visible)" />' } };
+  return { __esModule: true, default: { props: ['visible', 'mode'], template: '<div class="terminal-panel-stub" :data-visible="String(visible)" :data-mode="mode" />' } };
 });
 vi.mock('./components/EditorPanel.vue', () => ({
   __esModule: true,
@@ -189,9 +191,9 @@ vi.mock('./components/EditorPanel.vue', () => ({
     heavyModuleLoads.editor += 1;
     return {
       name: 'EditorPanel',
-      props: ['visible'],
+      props: ['visible', 'initialFile', 'initialMaximized'],
       methods: { openFile: editorOpenFile },
-      template: '<div class="editor-panel-stub" :data-visible="String(visible)" />',
+      template: '<div class="editor-panel-stub" :data-visible="String(visible)" :data-file="initialFile" :data-maximized="String(initialMaximized)" />',
     };
   })(),
 }));
@@ -265,7 +267,7 @@ vi.mock('./components/SettingsDialog.vue', () => ({
 vi.mock('./composables/useTerminal', () => {
   heavyModuleLoads.terminalRuntime += 1;
   return {
-    createTerminalInstance: vi.fn(() => ({ terminal: { options: {} } })),
+    createTerminalInstance: terminalCreateInstance,
     openTerminal: vi.fn(),
     fitTerminal: vi.fn(),
     connectTerminal: vi.fn(),
@@ -303,6 +305,7 @@ describe('App routing', () => {
     updatePreset.mockClear();
     deletePreset.mockClear();
     editorOpenFile.mockClear();
+    terminalCreateInstance.mockClear();
     memorySetContext.mockClear();
     memoryLoadCounts.mockClear();
     memoryExtractSession.mockClear();
@@ -362,6 +365,114 @@ describe('App routing', () => {
     });
 
     wrapper.unmount();
+  });
+
+  it('persists the active editor item reported by the editor', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    await wrapper.get('[data-header-action="editor"]').trigger('click');
+    await flushPromises();
+
+    wrapper.findComponent({ name: 'EditorPanel' }).vm.$emit('workspaceStateChanged', {
+      maximized: false,
+      activeFile: '/workspace/app.ts',
+    });
+    await flushPromises();
+
+    expect(JSON.parse(sessionStorage.getItem('pi-cloud-workspace-state-v1') || '{}')).toMatchObject({
+      showEditor: true,
+      activeEditorFile: '/workspace/app.ts',
+    });
+  });
+
+  it('waits for URL profile and session context before restoring the editor item', async () => {
+    sessionStorage.setItem('pi-cloud-workspace-state-v1', JSON.stringify({
+      showEditor: true,
+      showTaskInbox: false,
+      editorMaximized: false,
+      terminalVisible: false,
+      terminalMode: 'docked',
+      terminalPreviousMode: 'docked',
+      activeEditorFile: '/workspace/image.png',
+    }));
+    const SessionSidebarStub = defineComponent({
+      emits: ['initialized', 'projectPathChanged'],
+      setup(_props, { emit }) {
+        return () => h('button', {
+          class: 'sidebar-initialize-editor',
+          onClick: () => {
+            emit('projectPathChanged', '/workspace', { initial: true });
+            emit('initialized');
+          },
+        });
+      },
+    });
+
+    const wrapper = mount(App, {
+      global: { stubs: { SessionSidebar: SessionSidebarStub } },
+    });
+    await flushPromises();
+
+    expect(wrapper.find('.editor-panel-stub').exists()).toBe(false);
+    await wrapper.get('.sidebar-initialize-editor').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.editor-panel-stub').attributes('data-file')).toBe('/workspace/image.png');
+  });
+
+  it('waits for the project path before restoring a terminal', async () => {
+    sessionStorage.setItem('pi-cloud-workspace-state-v1', JSON.stringify({
+      showEditor: false,
+      showTaskInbox: false,
+      editorMaximized: false,
+      terminalVisible: true,
+      terminalMode: 'docked',
+      terminalPreviousMode: 'docked',
+    }));
+    const SessionSidebarStub = defineComponent({
+      emits: ['initialized', 'projectPathChanged'],
+      setup(_props, { emit }) {
+        return () => h('button', {
+          class: 'sidebar-initialize-terminal',
+          onClick: () => {
+            emit('projectPathChanged', '/workspace', { initial: true });
+            emit('initialized');
+          },
+        });
+      },
+    });
+
+    const wrapper = mount(App, {
+      global: { stubs: { SessionSidebar: SessionSidebarStub } },
+    });
+    await flushPromises();
+
+    expect(terminalCreateInstance).not.toHaveBeenCalled();
+    await wrapper.get('.sidebar-initialize-terminal').trigger('click');
+    await flushPromises();
+    expect(terminalCreateInstance).toHaveBeenCalledOnce();
+  });
+
+  it('restores the persisted workspace and active editor item', async () => {
+    sessionStorage.setItem('pi-cloud-workspace-state-v1', JSON.stringify({
+      showEditor: true,
+      showTaskInbox: true,
+      editorMaximized: true,
+      terminalVisible: false,
+      terminalMode: 'floating',
+      terminalPreviousMode: 'docked',
+      activeEditorFile: '/workspace/image.png',
+    }));
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    expect(wrapper.get('.editor-panel-stub').attributes()).toMatchObject({
+      'data-visible': 'true',
+      'data-file': '/workspace/image.png',
+      'data-maximized': 'true',
+    });
+    expect(wrapper.get('.task-inbox-panel').classes()).toContain('visible');
+    expect(route.params.id).toBe('session-1');
   });
 
   const preloadErrorStubs = {

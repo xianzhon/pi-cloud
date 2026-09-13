@@ -377,14 +377,17 @@
     />
     
     <LazyEditorPanel
-      v-if="editorFeatureLoaded"
+      v-if="editorFeatureLoaded && sidebarInitialized"
       ref="editorPanelRef"
       :visible="showEditor"
       :cwd="sessionCwd || selectedProjectPath"
       :profile-id="selectedAgentProfileId"
       :auto-refresh="editorAutoRefresh"
+      :initial-file="activeEditorFile"
+      :initial-maximized="editorMaximized"
       @close="showEditor = false"
       @add-reference="addEditorReference"
+      @workspace-state-changed="handleEditorWorkspaceStateChanged"
     />
 
     <LazyGitHistoryView
@@ -610,6 +613,7 @@ import { useGatewaySettings } from './composables/useGatewaySettings';
 import { cachedLaunchResource, invalidateLaunchResourceCache, launchCacheKey } from './composables/useLaunchResourceCache';
 import { normalizePathSeparators } from './utils/paths';
 import { createPreloadErrorHandler } from './utils/preloadErrorRecovery';
+import { loadWorkspaceState, saveWorkspaceState } from './services/workspaceState';
 
 let editorPanelPromise: ReturnType<typeof importEditorPanel> | undefined;
 function importEditorPanel() {
@@ -718,6 +722,7 @@ const {
   setGitCloneParentPath,
 } = usePreferences();
 const t = i18n.global.t;
+const restoredWorkspaceState = loadWorkspaceState();
 watch(language, setLocale, { immediate: true });
 
 const { prompts: userPrompts, loadPrompts: loadUserPrompts, createPrompt: createUserPrompt, updatePrompt: updateUserPrompt, deletePrompt: deleteUserPrompt } = useUserPrompts();
@@ -797,8 +802,8 @@ const isReviewMode = computed(() => activeReviewSession.value !== null);
 const isSessionContextReady = computed(() => !activeSessionId.value || sidebarInitialized.value);
 const activeProjectPath = computed(() => sessionCwd.value || selectedProjectPath.value);
 const sessionCwdDisplay = computed(() => formatHomePath(sessionCwd.value));
-const showTaskInbox = ref(false);
-const taskInboxFeatureLoaded = ref(false);
+const showTaskInbox = ref(restoredWorkspaceState?.showTaskInbox ?? false);
+const taskInboxFeatureLoaded = ref(showTaskInbox.value);
 const headerTitle = computed(() => sessionTitle.value || 'Pi Cloud');
 const headerSubtitle = computed(() => sessionCwdDisplay.value || formatHomePath(selectedProjectPath.value));
 const headerProjectName = computed(() => formatProjectName(headerSubtitle.value));
@@ -855,8 +860,10 @@ const newSessionInitialModel = ref('');
 const selectedAgentName = computed(() => selectedReviewSourceLabel.value || formatAgentName(selectedAgentProfileLabel.value));
 const isReviewProfileSelected = computed(() => Boolean(selectedReviewSourceLabel.value));
 const selectedAgentModelSummary = ref('');
-const showEditor = ref(false);
-const editorFeatureLoaded = ref(false);
+const showEditor = ref(restoredWorkspaceState?.showEditor ?? false);
+const editorFeatureLoaded = ref(showEditor.value);
+const editorMaximized = ref(restoredWorkspaceState?.editorMaximized ?? false);
+const activeEditorFile = ref(restoredWorkspaceState?.activeEditorFile);
 const showGitTool = ref(true);
 const showGitHistory = ref(false);
 const isFullscreen = ref(false);
@@ -864,7 +871,7 @@ const fullscreenLabel = computed(() => t(isFullscreen.value ? 'app.exitFullscree
 const fullscreenTooltip = computed(() => `${fullscreenLabel.value} (${formatFullscreenShortcut(fullscreenShortcut.value)})`);
 const fullscreenAriaLabel = computed(() => t(isFullscreen.value ? 'app.exitFullscreen' : 'app.enterFullscreen'));
 interface EditorPanelHandle {
-  openFile(path: string, line?: number, column?: number): void;
+  openFile(path: string, line?: number, column?: number): void | Promise<void>;
   openVirtualDiff(detail: { cwd: string; scope: string; content: string }): void;
 }
 const editorPanelRef = ref<EditorPanelHandle>();
@@ -926,6 +933,12 @@ async function saveSessionTitle(): Promise<void> {
 function addEditorReference(path: string) {
   chatPanelRef.value?.addFileReference(path);
 }
+
+function handleEditorWorkspaceStateChanged(state: { maximized: boolean; activeFile?: string }): void {
+  editorMaximized.value = state.maximized;
+  activeEditorFile.value = state.activeFile;
+}
+
 const {
   visible: showTerminal,
   toggle: toggleTerminalPanel,
@@ -935,6 +948,7 @@ const {
   popOut: popOutTerminal,
   dock: dockTerminal,
   toggleMaximize: toggleTerminalMaximize,
+  previousMode: terminalPreviousMode,
   terminalHeight,
   updateHeight: updateTerminalHeight,
   floatRect: terminalFloatRect,
@@ -950,7 +964,32 @@ const {
   switchSession: switchTerminalSession,
   setHostRef: setTerminalHostRef,
   disposeAll: disposeAllTerminals,
-} = useTerminalPanel();
+} = useTerminalPanel({
+  visible: restoredWorkspaceState?.terminalVisible,
+  mode: restoredWorkspaceState?.terminalMode,
+  previousMode: restoredWorkspaceState?.terminalPreviousMode,
+});
+
+watch([
+  showEditor,
+  showTaskInbox,
+  editorMaximized,
+  activeEditorFile,
+  showTerminal,
+  terminalMode,
+  terminalPreviousMode,
+], () => {
+  saveWorkspaceState({
+    showEditor: showEditor.value,
+    showTaskInbox: showTaskInbox.value,
+    editorMaximized: editorMaximized.value,
+    terminalVisible: showTerminal.value,
+    terminalMode: terminalMode.value,
+    terminalPreviousMode: terminalPreviousMode.value,
+    ...(activeEditorFile.value ? { activeEditorFile: activeEditorFile.value } : {}),
+  });
+});
+
 interface FinishWorktreePreview {
   worktreePath: string;
   baseRepoPath: string;
@@ -1029,14 +1068,14 @@ watch(activeProjectPath, (projectPath, previousProjectPath) => {
   if (previousProjectPath && projectPath !== previousProjectPath) showGitHistory.value = false;
 });
 
-// Auto-create a terminal when the panel opens with no sessions
-watch(showTerminal, (visible) => {
-  if (visible && terminalSessions.value.length === 0) {
+// Wait for the sidebar to resolve the project before choosing the terminal cwd.
+watch([showTerminal, sidebarInitialized], ([visible, sidebarReady]) => {
+  if (visible && sidebarReady && terminalSessions.value.length === 0) {
     void handleCreateTerminal();
   }
 });
 
-const terminalFeatureLoaded = ref(false);
+const terminalFeatureLoaded = ref(showTerminal.value);
 watch(showTerminal, (visible) => {
   if (visible) terminalFeatureLoaded.value = true;
 }, { flush: 'sync' });
@@ -1453,7 +1492,11 @@ function updateFullscreenState(): void {
 
 function setTaskInboxVisible(visible: boolean): void {
   showTaskInbox.value = visible;
-  sessionStorage.setItem('pi-cloud-sidebar-mode', visible ? 'tasks' : 'single');
+  try {
+    sessionStorage.setItem('pi-cloud-sidebar-mode', visible ? 'tasks' : 'single');
+  } catch {
+    // The reactive workspace state still updates when storage is unavailable.
+  }
   showMobileSidebar.value = false;
 }
 
@@ -2240,11 +2283,17 @@ watch(isConnected, (connected) => {
 
 onMounted(() => {
   authRefreshMounted = true;
-  const savedSidebarMode = sessionStorage.getItem('pi-cloud-sidebar-mode');
-  if (savedSidebarMode === 'single' || savedSidebarMode === 'tasks') {
-    showTaskInbox.value = savedSidebarMode === 'tasks';
-  } else if (savedSidebarMode) {
-    sessionStorage.removeItem('pi-cloud-sidebar-mode');
+  if (!restoredWorkspaceState) {
+    try {
+      const savedSidebarMode = sessionStorage.getItem('pi-cloud-sidebar-mode');
+      if (savedSidebarMode === 'single' || savedSidebarMode === 'tasks') {
+        showTaskInbox.value = savedSidebarMode === 'tasks';
+      } else if (savedSidebarMode) {
+        sessionStorage.removeItem('pi-cloud-sidebar-mode');
+      }
+    } catch {
+      // Continue with the default layout when session storage is unavailable.
+    }
   }
   void refreshAuth();
   window.addEventListener('keydown', handleEditorToggleKeydown, true);

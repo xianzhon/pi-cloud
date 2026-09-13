@@ -30,6 +30,15 @@ describe('useTerminalPanel', () => {
     expect(panel.mode.value).toBe('docked')
   })
 
+  it('restores an initial display state', () => {
+    const panel = useTerminalPanel({ visible: true, mode: 'maximized', previousMode: 'floating' })
+
+    expect(panel.visible.value).toBe(true)
+    expect(panel.isMaximized.value).toBe(true)
+    panel.toggleMaximize()
+    expect(panel.isFloating.value).toBe(true)
+  })
+
   it('loads and persists valid dimensions and falls back for invalid storage', () => {
     localStorage.setItem('pi-cloud-terminal-height', '420')
     localStorage.setItem('pi-cloud-terminal-float-rect-v2', JSON.stringify({ top: 1, left: 2, width: 700, height: 500 }))

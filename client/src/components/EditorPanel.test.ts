@@ -135,6 +135,52 @@ describe('EditorPanel', () => {
     });
   });
 
+  it('restores maximized state and reports an opened annotation image', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: false, status: 415, json: async () => ({ kind: 'image', mtime: 1 }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    const wrapper = mount(EditorPanel, {
+      props: {
+        visible: true,
+        cwd: '/project',
+        initialFile: '/project/image.png',
+        initialMaximized: true,
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.get('.editor-panel').classes()).toContain('maximized');
+    expect(wrapper.emitted('workspaceStateChanged')).toContainEqual([{
+      maximized: true,
+      activeFile: '/project/image.png',
+    }]);
+  });
+
+  it('clears a restored file path that can no longer be opened', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: false, status: 404, json: async () => ({}) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    const wrapper = mount(EditorPanel, {
+      props: {
+        visible: true,
+        cwd: '/project',
+        initialFile: '/project/deleted.ts',
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.emitted('workspaceStateChanged')).toContainEqual([{
+      maximized: false,
+    }]);
+  });
+
   it('opens archive listings as read-only plaintext', async () => {
     const content = 'Archive contents (2 entries)\n\nMETA-INF/MANIFEST.MF\ncom/example/App.class';
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {

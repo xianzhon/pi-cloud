@@ -56,6 +56,8 @@ For example:
 
 The leading `.` makes the directory hidden in the default Pi Cloud file-tree view. Enable **Show hidden files** in the file tree when you need to see or manage it. The sidecar contains vector annotations grouped by page, and the original document remains unchanged.
 
+For backward compatibility, Pi Cloud can read older sidecars named `.<document filename>.annotations.json` or `<document filename>.annotations.json` beside the document. These old files are never modified. New saves are written to the `.annotations` directory, after which the old sidecar can be removed manually.
+
 The sidecar is a regular workspace file and is subject to the same allowed-root and filesystem permissions as other editor files. Pi Cloud must have write permission in the document's directory to create `.annotations` and save annotations.
 
 ## Back Up, Move, or Share Annotations

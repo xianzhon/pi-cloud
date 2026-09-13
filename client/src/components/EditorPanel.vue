@@ -557,13 +557,17 @@ const props = withDefaults(defineProps<{
   cwd: string;
   profileId?: string;
   autoRefresh?: boolean;
+  initialFile?: string;
+  initialMaximized?: boolean;
 }>(), {
   profileId: 'default',
+  initialMaximized: false,
 });
 
 const emit = defineEmits<{
   close: [];
   addReference: [path: string];
+  workspaceStateChanged: [state: { maximized: boolean; activeFile?: string }];
 }>();
 
 interface Tab {
@@ -606,7 +610,7 @@ const fileTreeEl = ref<HTMLElement>();
 const defaultEditorWidth = '50vw';
 const editorWidthPx = ref<number>();
 const editorWidthCss = computed(() => editorWidthPx.value ? `${editorWidthPx.value}px` : defaultEditorWidth);
-const isMaximized = ref(false);
+const isMaximized = ref(props.initialMaximized);
 const panelClasses = computed(() => ({
   visible: props.visible,
   maximized: isMaximized.value,
@@ -1820,10 +1824,10 @@ function navigateToDiffFile(index: string): void {
 
 async function openFile(filePath: string, line?: number, column?: number) {
   filePath = normalizePathSeparators(filePath);
-  selectedDirectoryPath.value = dirname(filePath) || rootDirectory();
 
   const existing = tabs.value.find(t => t.path === filePath);
   if (existing) {
+    selectedDirectoryPath.value = dirname(filePath) || rootDirectory();
     activeTab.value = filePath;
     collapseFileTreeOnMobile();
     if (existing.kind === 'text' || existing.kind === 'archive') {
@@ -1845,6 +1849,7 @@ async function openFile(filePath: string, line?: number, column?: number) {
           path: filePath,
           kind: data.kind,
         });
+        selectedDirectoryPath.value = dirname(filePath) || rootDirectory();
         activeTab.value = filePath;
         collapseFileTreeOnMobile();
         if (data.mtime) fileTimestamps.set(filePath, data.mtime);
@@ -1876,6 +1881,7 @@ async function openFile(filePath: string, line?: number, column?: number) {
       kind: isArchive ? 'archive' : 'text',
     });
     
+    selectedDirectoryPath.value = dirname(filePath) || rootDirectory();
     activeTab.value = filePath;
     collapseFileTreeOnMobile();
     
@@ -2813,6 +2819,7 @@ watch(() => props.visible, (isVisible) => {
 });
 
 watch(isMaximized, () => {
+  emit('workspaceStateChanged', { maximized: isMaximized.value, activeFile: activeTab.value });
   nextTick(() => {
     editor?.layout();
     splitDiffEditor?.layout();
@@ -2859,6 +2866,7 @@ function showActiveEditor(path = activeTab.value): void {
 }
 
 watch(activeTab, (path) => {
+  emit('workspaceStateChanged', { maximized: isMaximized.value, activeFile: path });
   showActiveEditor(path);
 });
 
@@ -2913,6 +2921,12 @@ function registerSystemOpenEditorAction(): void {
 
 onMounted(() => {
   reloadRootTree();
+  if (props.initialFile) {
+    const initialFile = normalizePathSeparators(props.initialFile);
+    void openFile(initialFile).then(() => {
+      if (activeTab.value !== initialFile) emit('workspaceStateChanged', { maximized: isMaximized.value });
+    });
+  }
   if (!isLocalSystemOpen) {
     void loadFileCapabilities().then(registerSystemOpenEditorAction);
   }

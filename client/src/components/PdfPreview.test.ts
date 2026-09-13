@@ -211,6 +211,29 @@ describe('PdfPreview', () => {
     expect(click).toHaveBeenCalledOnce();
   });
 
+  it('reports image loading failures', async () => {
+    class MockImage {
+      naturalWidth = 0;
+      naturalHeight = 0;
+      onload?: () => void;
+      onerror?: () => void;
+      set src(_value: string) { queueMicrotask(() => this.onerror?.()); }
+    }
+    vi.stubGlobal('Image', MockImage);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const wrapper = mount(PdfPreview, {
+      props: {
+        src: '/api/files/raw?path=image.png',
+        filePath: '/project/image.png',
+        kind: 'image',
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.get('.pdf-error').text()).toBe('Failed to load image');
+  });
+
   it('reports image rendering failures separately from image loading failures', async () => {
     class MockImage {
       naturalWidth = 800;
@@ -563,6 +586,77 @@ describe('PdfPreview', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.annotations%2Fdocument.pdf.annotations.json');
     expect(wrapper.find('[aria-label="Clear annotations on this page"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it.each([
+    ['hidden sibling', '/project/.document.pdf.annotations.json'],
+    ['visible sibling', '/project/document.pdf.annotations.json'],
+  ])('reads annotations from the legacy %s sidecar without modifying it', async (_label, legacyPath) => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (url) => {
+      if (String(url) === '/api/files/write') return { ok: true, status: 200 } as Response;
+      if (String(url) === `/api/files/read?path=${encodeURIComponent(legacyPath)}`) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            content: JSON.stringify({
+              version: 1,
+              pages: { '1': [{ color: '#ef4444', width: 3, points: [{ x: 0.1, y: 0.1 }] }] },
+            }),
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    });
+
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/files/read?path=${encodeURIComponent(legacyPath)}`);
+    const clearButton = wrapper.get('[aria-label="Clear annotations on this page"]');
+    expect(clearButton.attributes('disabled')).toBeUndefined();
+
+    await clearButton.trigger('click');
+    await flushPromises();
+    const writeCall = fetchMock.mock.calls.find(([url]) => url === '/api/files/write');
+    expect(writeCall).toBeDefined();
+    expect(JSON.parse(String(writeCall?.[1]?.body)).path)
+      .toBe('/project/.annotations/document.pdf.annotations.json');
+  });
+
+  it('falls back to a legacy sidecar when the canonical sidecar is unreadable', async () => {
+    const canonicalPath = '/project/.annotations/document.pdf.annotations.json';
+    const legacyPath = '/project/.document.pdf.annotations.json';
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (url) => {
+      if (String(url) === `/api/files/read?path=${encodeURIComponent(canonicalPath)}`) {
+        return { ok: false, status: 500 } as Response;
+      }
+      if (String(url) === `/api/files/read?path=${encodeURIComponent(legacyPath)}`) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            content: JSON.stringify({
+              version: 1,
+              pages: { '1': [{ color: '#ef4444', width: 3, points: [{ x: 0.1, y: 0.1 }] }] },
+            }),
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    });
+
+    const wrapper = mount(PdfPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/files/read?path=${encodeURIComponent(legacyPath)}`);
+    expect(wrapper.get('[aria-label="Clear annotations on this page"]').attributes('disabled')).toBeUndefined();
   });
 
   it('restores and saves viewer state in an existing annotation sidecar', async () => {
