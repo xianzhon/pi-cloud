@@ -109,6 +109,7 @@ describe('PdfPreview', () => {
     expect(fetch).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.annotations%2Fdocument.pdf.annotations.json');
     expect(pdfjsMock.getPage).toHaveBeenCalledWith(1);
     expect(wrapper.find('.pdf-page-status').text()).toBe('1/2');
+    expect(wrapper.get('[aria-label="PDF page color"]').element.tagName).toBe('BUTTON');
 
     await wrapper.find('[aria-label="Next page"]').trigger('click');
     await flushPromises();
@@ -150,7 +151,11 @@ describe('PdfPreview', () => {
     expect(wrapper.find('[aria-label="Export annotated image"]').exists()).toBe(true);
 
     const toneControl = wrapper.get('[aria-label="Image color"]');
-    await toneControl.setValue('warm');
+    expect(toneControl.element.tagName).toBe('BUTTON');
+    await toneControl.trigger('click');
+    const warmOption = wrapper.findAll('[role="option"]').find(option => option.text() === 'Warm');
+    expect(warmOption).toBeDefined();
+    await warmOption!.trigger('click');
     await flushPromises();
     expect(wrapper.get('.pdf-pages').classes()).toContain('tone-warm');
     expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
@@ -499,6 +504,7 @@ describe('PdfPreview', () => {
       'Zoom out',
       'Reset PDF zoom',
       'Zoom in',
+      'PDF page color',
       'Fit PDF to viewport width',
       'Export annotated PDF',
     ]);

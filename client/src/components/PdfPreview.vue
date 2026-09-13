@@ -199,19 +199,16 @@
         :aria-label="t('components.editorPanel.zoomIn')"
         @click="setScale(scale + scaleStep)"
       ><PhPlus :size="18" /></button>
-      <label class="pdf-tone-control">
+      <div class="pdf-tone-control">
         <span class="pdf-tone-swatch" :class="`tone-${pageTone}`" aria-hidden="true" />
-        <select
-          v-model="pageTone"
+        <CustomSelect
+          :model-value="pageTone"
+          :options="pageToneOptions"
           :disabled="loading"
           :aria-label="t(isImage ? 'components.editorPanel.imageTone' : 'components.editorPanel.pdfPageTone')"
-          @change="savePageTone"
-        >
-          <option v-for="option in pageToneOptions" :key="option.value" :value="option.value">
-            {{ t(option.label) }}
-          </option>
-        </select>
-      </label>
+          @update:model-value="setPageTone"
+        />
+      </div>
       <button
         type="button"
         :disabled="loading"
@@ -350,6 +347,7 @@ import {
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { i18n } from '../i18n';
+import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 
 interface AnnotationPoint { x: number; y: number }
 type DrawingTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'whiteout';
@@ -420,12 +418,12 @@ const ANNOTATION_TOOLS = new Set<AnnotationTool>([
   'pan', 'pen', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'whiteout', 'move', 'eraser',
 ]);
 const PDF_PAGE_TONES = new Set<PdfPageTone>(['original', 'warm', 'gray', 'dark']);
-const pageToneOptions: Array<{ value: PdfPageTone; label: string }> = [
-  { value: 'original', label: 'components.editorPanel.pdfPageToneOriginal' },
-  { value: 'warm', label: 'components.editorPanel.pdfPageToneWarm' },
-  { value: 'gray', label: 'components.editorPanel.pdfPageToneGray' },
-  { value: 'dark', label: 'components.editorPanel.pdfPageToneDark' },
-];
+const pageToneOptions = computed<CustomSelectOption[]>(() => [
+  { value: 'original', label: t('components.editorPanel.pdfPageToneOriginal') },
+  { value: 'warm', label: t('components.editorPanel.pdfPageToneWarm') },
+  { value: 'gray', label: t('components.editorPanel.pdfPageToneGray') },
+  { value: 'dark', label: t('components.editorPanel.pdfPageToneDark') },
+]);
 const shapeTools: Array<{ name: DrawingTool; label: string; icon: object; shortcut: string }> = [
   { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus, shortcut: '3' },
   { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight, shortcut: '4' },
@@ -792,7 +790,9 @@ function scheduleViewSave(): void {
   viewSaveTimer = setTimeout(() => void saveAnnotations(), VIEW_SAVE_DELAY);
 }
 
-function savePageTone(): void {
+function setPageTone(value: string): void {
+  if (!PDF_PAGE_TONES.has(value as PdfPageTone)) return;
+  pageTone.value = value as PdfPageTone;
   void saveAnnotations();
 }
 
@@ -1841,22 +1841,24 @@ onUnmounted(() => {
   border-left: 1px solid var(--border-color);
 }
 
-.pdf-tone-control select {
-  width: 78px;
+.pdf-tone-control :deep(.custom-select) { width: 82px; }
+
+.pdf-tone-control :deep(.custom-select-trigger) {
   height: 34px;
-  padding: 0 1.25rem 0 0.25rem;
+  padding: 0 0.45rem;
   border: 0;
-  outline: 0;
+  border-radius: 0;
   background: transparent;
-  color: var(--text-primary);
-  font: inherit;
   font-size: 0.75rem;
-  cursor: pointer;
 }
 
-.pdf-tone-control select:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.pdf-tone-control select:disabled { cursor: default; opacity: 0.45; }
-.pdf-tone-control option { background: var(--bg-secondary); color: var(--text-primary); }
+.pdf-tone-control :deep(.custom-select-trigger:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+.pdf-tone-control :deep(.custom-select-list) { min-width: 96px; }
 
 .pdf-tone-swatch {
   width: 12px;
