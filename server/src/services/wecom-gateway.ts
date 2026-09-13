@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { ImageContent } from '@earendil-works/pi-ai';
 import type { PiCloudDatabase } from '../db/database.js';
+import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
 import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_BYTES, sniffImageMimeType, validateImages } from './image-input.js';
@@ -93,6 +94,7 @@ function generateEncodingAesKey(): string {
 }
 
 export class WecomGatewayService {
+  private readonly credentials: CredentialCipher;
   private readonly gatewaySettings: GatewaySettingsStore;
   private readonly presetStore: SkillPresetStore;
   private readonly seen = new Map<string, number>();
@@ -105,6 +107,7 @@ export class WecomGatewayService {
     gatewaySettings: GatewaySettingsStore | undefined,
     private readonly sessionService: PiSessionService,
   ) {
+    this.credentials = credentialCipher(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
     this.presetStore = new SkillPresetStore(db);
   }
@@ -147,7 +150,16 @@ export class WecomGatewayService {
         allowed_users_json = excluded.allowed_users_json,
         callback_verified_at = NULL,
         updated_at = excluded.updated_at
-    `).run(corpId, corpSecret, agentId, callbackToken, encodingAesKey, JSON.stringify(allowedUsers), now, now);
+    `).run(
+      corpId,
+      this.credentials.encrypt(corpSecret),
+      agentId,
+      this.credentials.encrypt(callbackToken),
+      this.credentials.encrypt(encodingAesKey),
+      JSON.stringify(allowedUsers),
+      now,
+      now,
+    );
     this.tokenCache = undefined;
     return { status: this.status(), callbackToken, encodingAesKey };
   }
@@ -162,7 +174,11 @@ export class WecomGatewayService {
       UPDATE wecom_gateway_credentials
       SET callback_token = ?, encoding_aes_key = ?, callback_verified_at = NULL, updated_at = ?
       WHERE id = 1
-    `).run(callbackToken, encodingAesKey, new Date().toISOString());
+    `).run(
+      this.credentials.encrypt(callbackToken),
+      this.credentials.encrypt(encodingAesKey),
+      new Date().toISOString(),
+    );
     return { status: this.status(), callbackToken, encodingAesKey };
   }
 
@@ -290,10 +306,10 @@ export class WecomGatewayService {
     try { allowedUsers = normalizeList(JSON.parse(row.allowed_users_json)); } catch { /* use empty allowlist */ }
     return {
       corpId: row.corp_id,
-      corpSecret: row.corp_secret,
+      corpSecret: this.credentials.decrypt(row.corp_secret),
       agentId: row.agent_id,
-      callbackToken: row.callback_token,
-      encodingAesKey: row.encoding_aes_key,
+      callbackToken: this.credentials.decrypt(row.callback_token),
+      encodingAesKey: this.credentials.decrypt(row.encoding_aes_key),
       allowedUsers,
       callbackVerified: Boolean(row.callback_verified_at),
     };

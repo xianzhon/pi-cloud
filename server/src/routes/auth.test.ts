@@ -169,6 +169,153 @@ describe('authRoutes', () => {
     expect(audit.statusCode).toBe(401);
   });
 
+  it('requires the password to enable 2FA', async () => {
+    ({ app, tempDir, db, totp } = await buildApp());
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    const setup = await totp!.createSetup();
+    const code = generateSync({ secret: setup.secret });
+
+    const rejected = await app.inject({
+      method: 'POST',
+      url: '/api/auth/2fa/enable',
+      headers: { cookie },
+      payload: { secret: setup.secret, code },
+    });
+    expect(rejected.statusCode).toBe(401);
+    expect(totp!.getStatus().enabled).toBe(false);
+
+    const enabled = await app.inject({
+      method: 'POST',
+      url: '/api/auth/2fa/enable',
+      headers: { cookie },
+      payload: { secret: setup.secret, code, password: 'secret' },
+    });
+    expect(enabled.statusCode).toBe(200);
+    expect(totp!.getStatus().enabled).toBe(true);
+  });
+
+  it('requires the password and current TOTP code to reset or disable 2FA', async () => {
+    ({ app, tempDir, db, totp } = await buildApp());
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    const originalSetup = await totp!.createSetup();
+    const originalCode = generateSync({ secret: originalSetup.secret });
+    totp!.enable(originalSetup.secret, originalCode);
+    const replacementSetup = await totp!.createSetup();
+    const replacementCode = generateSync({ secret: replacementSetup.secret });
+
+    const resetWithoutCurrentCode = await app.inject({
+      method: 'POST',
+      url: '/api/auth/2fa/enable',
+      headers: { cookie },
+      payload: { secret: replacementSetup.secret, code: replacementCode, password: 'secret' },
+    });
+    expect(resetWithoutCurrentCode.statusCode).toBe(401);
+    expect(totp!.verify(originalCode)).toBe(true);
+
+    const reset = await app.inject({
+      method: 'POST',
+      url: '/api/auth/2fa/enable',
+      headers: { cookie },
+      payload: { secret: replacementSetup.secret, code: replacementCode, password: 'secret', totpCode: originalCode },
+    });
+    expect(reset.statusCode).toBe(200);
+    expect(totp!.verify(replacementCode)).toBe(true);
+
+    const disableWithoutPassword = await app.inject({
+      method: 'POST',
+      url: '/api/auth/2fa/disable',
+      headers: { cookie },
+      payload: { totpCode: replacementCode },
+    });
+    expect(disableWithoutPassword.statusCode).toBe(401);
+    expect(totp!.getStatus().enabled).toBe(true);
+
+    const disabled = await app.inject({
+      method: 'POST',
+      url: '/api/auth/2fa/disable',
+      headers: { cookie },
+      payload: { password: 'secret', totpCode: replacementCode },
+    });
+    expect(disabled.statusCode).toBe(200);
+    expect(totp!.getStatus().enabled).toBe(false);
+  });
+
+  it('allows password-only 2FA recovery when SKIP_2FA_VERIFY is active', async () => {
+    ({ app, tempDir, db, totp } = await buildApp({ skip2faVerify: true }));
+    const originalSetup = await totp!.createSetup();
+    totp!.enable(originalSetup.secret, generateSync({ secret: originalSetup.secret }));
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    const auditClear = await app.inject({
+      method: 'DELETE',
+      url: '/api/auth/audit',
+      headers: { cookie },
+      payload: { password: 'secret' },
+    });
+    expect(auditClear.statusCode).toBe(401);
+
+    const replacementSetup = await totp!.createSetup();
+    const replacementCode = generateSync({ secret: replacementSetup.secret });
+
+    const resetWithoutPassword = await app.inject({
+      method: 'POST',
+      url: '/api/auth/2fa/enable',
+      headers: { cookie },
+      payload: { secret: replacementSetup.secret, code: replacementCode },
+    });
+    expect(resetWithoutPassword.statusCode).toBe(401);
+
+    const reset = await app.inject({
+      method: 'POST',
+      url: '/api/auth/2fa/enable',
+      headers: { cookie },
+      payload: { secret: replacementSetup.secret, code: replacementCode, password: 'secret' },
+    });
+    expect(reset.statusCode).toBe(200);
+    expect(totp!.verify(replacementCode)).toBe(true);
+
+    const disabled = await app.inject({
+      method: 'POST',
+      url: '/api/auth/2fa/disable',
+      headers: { cookie },
+      payload: { password: 'secret' },
+    });
+    expect(disabled.statusCode).toBe(200);
+    expect(totp!.getStatus().enabled).toBe(false);
+
+    const bypassEvents = db!.prepare("SELECT metadata FROM audit_events WHERE type = 'sensitive_action_totp_bypassed'").all() as Array<{ metadata: string }>;
+    expect(bypassEvents.map((event) => JSON.parse(event.metadata).action)).toEqual(['totp_enable', 'totp_disable']);
+  });
+
+  it('requires the password and current TOTP code before clearing audit logs', async () => {
+    ({ app, tempDir, db, totp } = await buildApp());
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    const setup = await totp!.createSetup();
+    const code = generateSync({ secret: setup.secret });
+    totp!.enable(setup.secret, code);
+
+    const rejected = await app.inject({
+      method: 'DELETE',
+      url: '/api/auth/audit',
+      headers: { cookie },
+      payload: { password: 'secret' },
+    });
+    expect(rejected.statusCode).toBe(401);
+    expect((db!.prepare('SELECT COUNT(*) AS count FROM audit_events').get() as { count: number }).count).toBeGreaterThan(0);
+
+    const cleared = await app.inject({
+      method: 'DELETE',
+      url: '/api/auth/audit',
+      headers: { cookie },
+      payload: { password: 'secret', totpCode: code },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect((db!.prepare('SELECT COUNT(*) AS count FROM audit_events').get() as { count: number }).count).toBe(0);
+  });
+
   it('returns default preferences for authenticated users', async () => {
     ({ app, tempDir, db, totp } = await buildApp());
     const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });

@@ -1,4 +1,5 @@
 import type { PiCloudDatabase } from '../db/database';
+import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
 
 export interface GiteaSettings {
   serverUrl: string;
@@ -14,12 +15,16 @@ const SERVER_URL_KEY = 'gitea.serverUrl';
 const TOKEN_KEY = 'gitea.token';
 
 export class GiteaSettingsStore {
-  constructor(private readonly db: PiCloudDatabase) {}
+  private readonly credentials: CredentialCipher;
+
+  constructor(private readonly db: PiCloudDatabase) {
+    this.credentials = credentialCipher(db);
+  }
 
   get(): GiteaSettings {
     return {
       serverUrl: this.value(SERVER_URL_KEY) || '',
-      token: this.value(TOKEN_KEY) || '',
+      token: this.credentials.decryptOrDefault(this.value(TOKEN_KEY)),
     };
   }
 
@@ -37,7 +42,7 @@ export class GiteaSettingsStore {
     if (!serverUrl) throw new Error('Gitea server URL is required');
     if (!token) throw new Error('Gitea token is required');
     this.set(SERVER_URL_KEY, serverUrl);
-    this.set(TOKEN_KEY, token);
+    this.set(TOKEN_KEY, this.credentials.encrypt(token));
     return this.get();
   }
 

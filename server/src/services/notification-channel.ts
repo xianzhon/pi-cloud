@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PiCloudDatabase } from '../db/database.js';
+import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
 
 export interface NotificationChannel {
   id: string;
@@ -16,16 +17,20 @@ interface ChannelRow {
 }
 
 export class NotificationChannelService {
-  constructor(private readonly db: PiCloudDatabase) {}
+  private readonly credentials: CredentialCipher;
+
+  constructor(private readonly db: PiCloudDatabase) {
+    this.credentials = credentialCipher(db);
+  }
 
   list(): NotificationChannel[] {
     return (this.db.prepare('SELECT id, type, name, config_json FROM notification_channels ORDER BY created_at').all() as ChannelRow[])
-      .map(publicChannel);
+      .map((row) => this.publicChannel(row));
   }
 
   saveWecom(input: { id?: string; name?: string; botKey?: string }): NotificationChannel {
     const existing = input.id ? this.getRow(input.id) : undefined;
-    const botKey = input.botKey?.trim() || readBotKey(existing);
+    const botKey = input.botKey?.trim() || this.readBotKey(existing);
     if (!botKey) throw new Error('WeCom bot key is required');
     const id = existing?.id ?? randomUUID();
     const now = new Date().toISOString();
@@ -34,8 +39,8 @@ export class NotificationChannelService {
       INSERT INTO notification_channels (id, type, name, config_json, created_at, updated_at)
       VALUES (?, 'wecom', ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET name = excluded.name, config_json = excluded.config_json, updated_at = excluded.updated_at
-    `).run(id, name, JSON.stringify({ botKey }), now, now);
-    return publicChannel(this.getRow(id)!);
+    `).run(id, name, JSON.stringify({ botKey: this.credentials.encrypt(botKey) }), now, now);
+    return this.publicChannel(this.getRow(id)!);
   }
 
   delete(id: string): void {
@@ -48,7 +53,7 @@ export class NotificationChannelService {
     const row = this.getRow(id);
     if (!row) throw new Error('Notification channel not found');
     if (row.type !== 'wecom') throw new Error(`Unsupported notification channel: ${row.type}`);
-    const botKey = readBotKey(row);
+    const botKey = this.readBotKey(row);
     if (!botKey) throw new Error('WeCom bot key is not configured');
     const response = await fetch(`https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${encodeURIComponent(botKey)}`, {
       method: 'POST',
@@ -64,19 +69,19 @@ export class NotificationChannelService {
   private getRow(id: string): ChannelRow | undefined {
     return this.db.prepare('SELECT id, type, name, config_json FROM notification_channels WHERE id = ?').get(id) as ChannelRow | undefined;
   }
-}
 
-function readBotKey(row: ChannelRow | undefined): string {
-  if (!row) {
-    return '';
+  private readBotKey(row: ChannelRow | undefined): string {
+    if (!row) return '';
+    let value: string | undefined;
+    try {
+      value = (JSON.parse(row.config_json) as { botKey?: string }).botKey;
+    } catch {
+      return '';
+    }
+    return this.credentials.decryptOrDefault(value);
   }
-  try {
-    return (JSON.parse(row.config_json) as { botKey?: string }).botKey || '';
-  } catch {
-    return '';
-  }
-}
 
-function publicChannel(row: ChannelRow): NotificationChannel {
-  return { id: row.id, type: 'wecom', name: row.name, configured: Boolean(readBotKey(row)) };
+  private publicChannel(row: ChannelRow): NotificationChannel {
+    return { id: row.id, type: 'wecom', name: row.name, configured: Boolean(this.readBotKey(row)) };
+  }
 }

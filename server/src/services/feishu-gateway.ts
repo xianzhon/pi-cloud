@@ -145,7 +145,11 @@ export class FeishuGatewayService {
   }
 
   private verifyToken(payload: Record<string, unknown>, config: FeishuGatewayConfig): void {
-    if (!config.verificationToken) return;
+    if (!config.verificationToken) {
+      const error = new Error('Feishu verification token is not configured');
+      (error as Error & { statusCode?: number }).statusCode = 503;
+      throw error;
+    }
     const token = stringValue(payload.token) || stringValue(asRecord(payload.header).token);
     if (token === config.verificationToken) return;
     console.warn('[feishu-gateway] verification token mismatch', {

@@ -23,6 +23,7 @@ describe('ReviewSourceStore', () => {
     try { fs.unlinkSync(dbPath); } catch {}
     try { fs.unlinkSync(`${dbPath}-wal`); } catch {}
     try { fs.unlinkSync(`${dbPath}-shm`); } catch {}
+    try { fs.unlinkSync(`${dbPath}.credentials.key`); } catch {}
   });
 
   it('creates and lists a source', () => {

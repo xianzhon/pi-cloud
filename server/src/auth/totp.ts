@@ -1,9 +1,14 @@
 import { generateSecret, generateURI, verifySync } from 'otplib';
 import qrcode from 'qrcode';
 import type { PiCloudDatabase } from '../db/database';
+import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
 
 export class TotpService {
-  constructor(private db: PiCloudDatabase, private issuer: string, private username: string) {}
+  private readonly credentials: CredentialCipher;
+
+  constructor(private db: PiCloudDatabase, private issuer: string, private username: string) {
+    this.credentials = credentialCipher(db);
+  }
 
   getStatus(): { enabled: boolean } {
     return { enabled: this.getValue('totp.enabled') === 'true' };
@@ -20,16 +25,16 @@ export class TotpService {
     const valid = verifySync({ token: code, secret }).valid;
     if (!valid) return false;
 
-    this.setValue('totp.secret', secret);
+    this.setValue('totp.secret', this.credentials.encrypt(secret));
     this.setValue('totp.enabled', 'true');
     return true;
   }
 
   verify(code: string): boolean {
     if (!this.getStatus().enabled) return true;
-    const secret = this.getValue('totp.secret');
-    if (!secret) return false;
-    return verifySync({ token: code, secret }).valid;
+    const storedSecret = this.getValue('totp.secret');
+    if (!storedSecret) return false;
+    return verifySync({ token: code, secret: this.credentials.decrypt(storedSecret) }).valid;
   }
 
   disable(): void {

@@ -56,6 +56,17 @@ describe('FeishuGatewayService', () => {
     });
   });
 
+  it('fails closed when token verification is called without a configured token', () => {
+    const service = createService(openPiCloudDatabase(':memory:') as any);
+
+    expect(() => (service as any).verifyToken({}, minimalConfig())).toThrow(
+      expect.objectContaining({
+        message: 'Feishu verification token is not configured',
+        statusCode: 503,
+      }),
+    );
+  });
+
   it('rejects encrypted callbacks when the encrypt key is missing', async () => {
     process.env.PI_CLOUD_FEISHU_APP_ID = 'cli_test';
     process.env.PI_CLOUD_FEISHU_APP_SECRET = 'secret_test';
