@@ -149,6 +149,15 @@ describe('PdfPreview', () => {
     expect(wrapper.find('[aria-label="Draw on image"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="Export annotated image"]').exists()).toBe(true);
 
+    const toneControl = wrapper.get('[aria-label="Image color"]');
+    await toneControl.setValue('warm');
+    await flushPromises();
+    expect(wrapper.get('.pdf-pages').classes()).toContain('tone-warm');
+    expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('\\"pageTone\\": \\"warm\\"'),
+    }));
+
     const viewport = wrapper.get('.pdf-viewport');
     const wheelEvent = (ctrlKey: boolean): WheelEvent => {
       const event = new Event('wheel', { cancelable: true }) as WheelEvent;

@@ -435,6 +435,7 @@ export default {
       fitPdfToWidth: '使 PDF 适合视口宽度',
       fitPdfToHeight: '使 PDF 适合视口高度',
       pdfPageTone: 'PDF 页面颜色',
+      imageTone: '图片颜色',
       pdfPageToneOriginal: '原始',
       pdfPageToneWarm: '暖色',
       pdfPageToneGray: '灰色',

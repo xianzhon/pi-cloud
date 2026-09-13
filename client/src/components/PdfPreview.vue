@@ -199,12 +199,12 @@
         :aria-label="t('components.editorPanel.zoomIn')"
         @click="setScale(scale + scaleStep)"
       ><PhPlus :size="18" /></button>
-      <label v-if="!isImage" class="pdf-tone-control">
+      <label class="pdf-tone-control">
         <span class="pdf-tone-swatch" :class="`tone-${pageTone}`" aria-hidden="true" />
         <select
           v-model="pageTone"
           :disabled="loading"
-          :aria-label="t('components.editorPanel.pdfPageTone')"
+          :aria-label="t(isImage ? 'components.editorPanel.imageTone' : 'components.editorPanel.pdfPageTone')"
           @change="savePageTone"
         >
           <option v-for="option in pageToneOptions" :key="option.value" :value="option.value">

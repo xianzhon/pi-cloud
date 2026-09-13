@@ -435,6 +435,7 @@ export default {
       fitPdfToWidth: 'Fit PDF to viewport width',
       fitPdfToHeight: 'Fit PDF to viewport height',
       pdfPageTone: 'PDF page color',
+      imageTone: 'Image color',
       pdfPageToneOriginal: 'Original',
       pdfPageToneWarm: 'Warm',
       pdfPageToneGray: 'Gray',
