@@ -52,6 +52,7 @@ const context = {
   ellipse: vi.fn(),
   stroke: vi.fn(),
   fillText: vi.fn(),
+  drawImage: vi.fn(),
   save: vi.fn(),
   restore: vi.fn(),
   lineCap: '',
@@ -105,7 +106,7 @@ describe('PdfPreview', () => {
       cMapUrl: '/pdfjs/cmaps/',
       cMapPacked: true,
     });
-    expect(fetch).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.document.pdf.annotations.json');
+    expect(fetch).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.annotations%2Fdocument.pdf.annotations.json');
     expect(pdfjsMock.getPage).toHaveBeenCalledWith(1);
     expect(wrapper.find('.pdf-page-status').text()).toBe('1/2');
 
@@ -117,6 +118,80 @@ describe('PdfPreview', () => {
     await wrapper.find('[aria-label="Zoom in"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('110%');
+  });
+
+  it('loads and annotates an image using the PDF toolset', async () => {
+    class MockImage {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload?: () => void;
+      onerror?: () => void;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    }
+    vi.stubGlobal('Image', MockImage);
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/files/read')) return { ok: false, status: 404 } as Response;
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    }));
+
+    const wrapper = mount(PdfPreview, {
+      props: {
+        src: '/api/files/raw?path=image.png',
+        filePath: '/project/image.png',
+        kind: 'image',
+      },
+    });
+    await flushPromises();
+
+    expect(pdfjsMock.getDocument).not.toHaveBeenCalled();
+    expect(wrapper.find('.pdf-page-status').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Draw on image"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Export annotated image"]').exists()).toBe(true);
+
+    const viewport = wrapper.get('.pdf-viewport');
+    const wheelEvent = (ctrlKey: boolean): WheelEvent => {
+      const event = new Event('wheel', { cancelable: true }) as WheelEvent;
+      Object.defineProperties(event, {
+        deltaY: { value: -100 },
+        ctrlKey: { value: ctrlKey },
+      });
+      return event;
+    };
+    const regularScroll = wheelEvent(false);
+    viewport.element.dispatchEvent(regularScroll);
+    expect(regularScroll.defaultPrevented).toBe(false);
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('100%');
+
+    const modifierZoom = wheelEvent(true);
+    viewport.element.dispatchEvent(modifierZoom);
+    await flushPromises();
+    expect(modifierZoom.defaultPrevented).toBe(true);
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('105%');
+
+    for (let step = 0; step < 20; step++) await wrapper.get('[aria-label="Zoom out"]').trigger('click');
+    expect(wrapper.get('.pdf-zoom-level').text()).toBe('5%');
+
+    const canvas = wrapper.get('.pdf-annotation-canvas');
+    await wrapper.get('[aria-label="Add text"]').trigger('click');
+    await canvas.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    await canvas.trigger('pointerup', { pointerId: 1, clientX: 10, clientY: 10 });
+    expect(wrapper.get('.pdf-text-editor').attributes('style')).toContain('font-size: 16px');
+    await wrapper.get('.pdf-text-editor').trigger('keydown', { key: 'Escape' });
+
+    await wrapper.get('[aria-label="Highlight image"]').trigger('click');
+    expect(canvas.classes()).toContain('highlighter');
+    await wrapper.get('[aria-label="Draw on image"]').trigger('click');
+    expect(canvas.classes()).toContain('pen');
+    await canvas.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    await canvas.trigger('pointermove', { pointerId: 1, clientX: 20, clientY: 20 });
+    await canvas.trigger('pointerup', { pointerId: 1, clientX: 20, clientY: 20 });
+    await flushPromises();
+
+    expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('/project/.annotations/image.png.annotations.json'),
+    }));
   });
 
   it('loads a PDF without an outline', async () => {
@@ -429,6 +504,9 @@ describe('PdfPreview', () => {
   it('loads annotations from the legacy visible sidecar name', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (url) => {
+      if (String(url).includes('%2Fproject%2F.annotations%2Fdocument.pdf.annotations.json')) {
+        return { ok: false, status: 404 } as Response;
+      }
       if (String(url).includes('%2Fproject%2F.document.pdf.annotations.json')) {
         return { ok: false, status: 404 } as Response;
       }
@@ -787,7 +865,7 @@ describe('PdfPreview', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:annotated-pdf');
   });
 
-  it('draws and saves annotations in a hidden sidecar file', async () => {
+  it('draws and saves annotations in the hidden annotations directory', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (url, init) => {
       if (String(url).startsWith('/api/files/read')) return { ok: false, status: 404 } as Response;
@@ -809,7 +887,7 @@ describe('PdfPreview', () => {
     const writeCall = fetchMock.mock.calls.find(([url]) => url === '/api/files/write');
     expect(writeCall).toBeDefined();
     const body = JSON.parse(String(writeCall?.[1]?.body));
-    expect(body.path).toBe('/project/.document.pdf.annotations.json');
+    expect(body.path).toBe('/project/.annotations/document.pdf.annotations.json');
     expect(JSON.parse(body.content).pages['1'][0].points).toEqual([
       { x: 0.1, y: 0.1 },
       { x: 0.2, y: 0.2 },

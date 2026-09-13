@@ -465,6 +465,18 @@ describe('fileRoutes', () => {
     await expect(fs.readFile(filePath, 'utf8')).resolves.toBe('updated');
   });
 
+  it('creates parent directories when writing file contents', async () => {
+    const filePath = path.join(tempDir, 'screenshots', '.annotations', 'image.png.annotations.json');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/files/write',
+      payload: { path: filePath, content: '{"version":1}' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await expect(fs.readFile(filePath, 'utf8')).resolves.toBe('{"version":1}');
+  });
+
   it('creates a binary file from base64 without overwriting it', async () => {
     const filePath = path.join(tempDir, 'document.pdf');
     const content = Buffer.from('%PDF-1.7\n\0binary');

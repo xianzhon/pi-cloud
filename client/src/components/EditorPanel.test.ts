@@ -19,9 +19,9 @@ vi.mock('../utils/markdownPdfExport', () => ({
 vi.mock('./PdfPreview.vue', () => ({
   default: {
     name: 'PdfPreviewStub',
-    props: ['src', 'filePath', 'initialScale'],
+    props: ['src', 'filePath', 'initialScale', 'kind'],
     emits: ['scale-change'],
-    template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-initial-scale="initialScale" />',
+    template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-initial-scale="initialScale" :data-kind="kind" />',
   },
 }));
 
@@ -584,7 +584,7 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.pdf-preview-test').attributes('data-initial-scale')).toBe('1.5');
   });
 
-  it('zooms and drag-pans an image preview, then resets it', async () => {
+  it('opens image files in the annotation preview', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).startsWith('/api/files/tree')) {
         return { ok: true, json: async () => ({ tree: [] }) };
@@ -599,40 +599,12 @@ describe('EditorPanel', () => {
     await wrapper.vm.openFile('/project/large.png');
     await wrapper.vm.$nextTick();
 
-    const viewport = wrapper.find('.image-preview-viewport');
-    const image = wrapper.find('.image-preview img');
-    Object.defineProperties(viewport.element, {
-      clientWidth: { value: 400 },
-      clientHeight: { value: 300 },
+    expect(wrapper.find('.pdf-preview-test').attributes()).toMatchObject({
+      'data-kind': 'image',
+      'data-src': '/api/files/raw?path=%2Fproject%2Flarge.png',
+      'data-file-path': '/project/large.png',
     });
-    Object.defineProperties(image.element, {
-      offsetWidth: { value: 800 },
-      offsetHeight: { value: 600 },
-    });
-
-    await wrapper.find('[aria-label="Zoom in"]').trigger('click');
-    expect(wrapper.find('.image-zoom-level').text()).toBe('125%');
-    expect(image.attributes('style')).toContain('scale(1.25)');
-
-    await viewport.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 200, clientY: 150 });
-    await viewport.trigger('pointermove', { pointerId: 1, clientX: 80, clientY: 70 });
-    await viewport.trigger('pointerup', { pointerId: 1, clientX: 80, clientY: 70 });
-    expect(image.attributes('style')).toContain('calc(50% + -120px)');
-    expect(image.attributes('style')).toContain('calc(50% + -80px)');
-
-    await viewport.trigger('dblclick');
-    expect(wrapper.find('.image-zoom-level').text()).toBe('100%');
-    expect(image.attributes('style')).toContain('scale(1)');
-    expect(image.attributes('style')).toContain('calc(50% + 0px)');
-
-    await viewport.trigger('pointerdown', { button: 0, pointerId: 2, clientX: 100, clientY: 150 });
-    await viewport.trigger('pointerdown', { button: 0, pointerId: 3, clientX: 300, clientY: 150 });
-    await viewport.trigger('pointermove', { pointerId: 2, clientX: 0, clientY: 150 });
-    expect(wrapper.find('.image-zoom-level').text()).toBe('150%');
-    expect(image.attributes('style')).toContain('scale(1.5)');
-
-    await viewport.trigger('pointerup', { pointerId: 2, clientX: 0, clientY: 150 });
-    await viewport.trigger('pointerup', { pointerId: 3, clientX: 300, clientY: 150 });
+    expect(wrapper.find('.editor-container').classes()).toContain('hidden');
   });
 
   it('defaults to a narrower editor width, resizes from its left edge, and relayouts Monaco', async () => {

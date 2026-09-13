@@ -6,7 +6,7 @@
       :class="{ vertical: toolbarVertical }"
       :style="toolbarStyle"
       role="toolbar"
-      :aria-label="t('components.editorPanel.pdfAnnotationControls')"
+      :aria-label="t(isImage ? 'components.editorPanel.imageAnnotationControls' : 'components.editorPanel.pdfAnnotationControls')"
       @mouseover="showTooltip"
       @mouseout="clearTooltip"
       @focusin="showTooltip"
@@ -23,23 +23,23 @@
         @pointerdown="startToolbarDrag"
         @keydown="moveToolbarWithKeyboard"
       ><PhDotsSixVertical :size="19" weight="bold" /></div>
-      <div class="pdf-toolbar-group" role="group" :aria-label="t('components.editorPanel.pdfAnnotationControls')">
+      <div class="pdf-toolbar-group" role="group" :aria-label="t(isImage ? 'components.editorPanel.imageAnnotationControls' : 'components.editorPanel.pdfAnnotationControls')">
         <button
           type="button"
           :class="{ active: tool === 'pen' }"
           :aria-pressed="tool === 'pen'"
-          :aria-label="t('components.editorPanel.pdfPen')"
+          :aria-label="t(isImage ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen')"
           aria-keyshortcuts="1"
-          :data-tooltip="t('components.editorPanel.pdfPen')"
+          :data-tooltip="t(isImage ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen')"
           @click="toggleTool('pen')"
         ><PhPencilSimple :size="19" /><span class="pdf-tool-shortcut">1</span></button>
         <button
           type="button"
           :class="{ active: tool === 'highlighter' }"
           :aria-pressed="tool === 'highlighter'"
-          :aria-label="t('components.editorPanel.pdfHighlighter')"
+          :aria-label="t(isImage ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter')"
           aria-keyshortcuts="2"
-          :data-tooltip="t('components.editorPanel.pdfHighlighter')"
+          :data-tooltip="t(isImage ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter')"
           @click="toggleTool('highlighter')"
         ><PhHighlighter :size="19" /><span class="pdf-tool-shortcut">2</span></button>
         <button
@@ -70,18 +70,18 @@
           type="button"
           :class="{ active: tool === 'whiteout' }"
           :aria-pressed="tool === 'whiteout'"
-          :aria-label="t('components.editorPanel.pdfWhiteout')"
+          :aria-label="t(isImage ? 'components.editorPanel.imageWhiteout' : 'components.editorPanel.pdfWhiteout')"
           aria-keyshortcuts="9"
-          :data-tooltip="t('components.editorPanel.pdfWhiteout')"
+          :data-tooltip="t(isImage ? 'components.editorPanel.imageWhiteout' : 'components.editorPanel.pdfWhiteout')"
           @click="toggleTool('whiteout')"
         ><PhRectangle :size="19" weight="fill" /><span class="pdf-tool-shortcut">9</span></button>
         <button
           type="button"
           :class="{ active: tool === 'eraser' }"
           :aria-pressed="tool === 'eraser'"
-          :aria-label="t('components.editorPanel.pdfEraser')"
+          :aria-label="t(isImage ? 'components.editorPanel.imageEraser' : 'components.editorPanel.pdfEraser')"
           aria-keyshortcuts="0"
-          :data-tooltip="t('components.editorPanel.pdfEraser')"
+          :data-tooltip="t(isImage ? 'components.editorPanel.imageEraser' : 'components.editorPanel.pdfEraser')"
           @click="toggleTool('eraser')"
         ><PhEraser :size="19" /><span class="pdf-tool-shortcut">0</span></button>
         <label class="pdf-control-label" :data-tooltip="t('components.editorPanel.pdfPenColor')">
@@ -150,24 +150,26 @@
       role="tooltip"
       :style="{ left: `${activeTooltip.left}px`, top: `${activeTooltip.top}px` }"
     >{{ activeTooltip.text }}</div>
-    <div class="pdf-navigation-toolbar" role="toolbar" :aria-label="t('components.editorPanel.pdfControls')">
+    <div class="pdf-navigation-toolbar" role="toolbar" :aria-label="t(isImage ? 'components.editorPanel.imageControls' : 'components.editorPanel.pdfControls')">
       <button
+        v-if="!isImage"
         type="button"
         :disabled="loading || pageNumber <= 1"
         :aria-label="t('components.editorPanel.previousPage')"
         @click="goToPage(pageNumber - 1)"
       ><PhCaretLeft :size="18" weight="bold" /></button>
-      <span class="pdf-page-status">
+      <span v-if="!isImage" class="pdf-page-status">
         {{ t('components.editorPanel.pdfPageStatus', { page: pageNumber, pages: pageCount || 1 }) }}
       </span>
       <button
+        v-if="!isImage"
         type="button"
         :disabled="loading || pageNumber >= pageCount"
         :aria-label="t('components.editorPanel.nextPage')"
         @click="goToPage(pageNumber + 1)"
       ><PhCaretRight :size="18" weight="bold" /></button>
       <button
-        v-if="outline.length"
+        v-if="!isImage && outline.length"
         type="button"
         :class="{ active: showOutline }"
         :aria-pressed="showOutline"
@@ -178,26 +180,26 @@
       ><PhList :size="18" /></button>
       <button
         type="button"
-        :disabled="loading || scale <= MIN_SCALE"
+        :disabled="loading || scale <= minScale"
         :aria-label="t('components.editorPanel.zoomOut')"
-        @click="setScale(scale - SCALE_STEP)"
+        @click="setScale(scale - scaleStep)"
       ><PhMinus :size="18" /></button>
       <button
         type="button"
         class="pdf-zoom-level"
         :disabled="loading"
-        :aria-label="t('components.editorPanel.resetPdfZoom')"
+        :aria-label="t(isImage ? 'components.editorPanel.resetImageZoom' : 'components.editorPanel.resetPdfZoom')"
         @click="setScale(1)"
       >
         {{ Math.round(scale * 100) }}%
       </button>
       <button
         type="button"
-        :disabled="loading || scale >= MAX_SCALE"
+        :disabled="loading || scale >= maxScale"
         :aria-label="t('components.editorPanel.zoomIn')"
-        @click="setScale(scale + SCALE_STEP)"
+        @click="setScale(scale + scaleStep)"
       ><PhPlus :size="18" /></button>
-      <label class="pdf-tone-control">
+      <label v-if="!isImage" class="pdf-tone-control">
         <span class="pdf-tone-swatch" :class="`tone-${pageTone}`" aria-hidden="true" />
         <select
           v-model="pageTone"
@@ -213,9 +215,11 @@
       <button
         type="button"
         :disabled="loading"
-        :aria-label="t(nextFitMode === 'width'
-          ? 'components.editorPanel.fitPdfToWidth'
-          : 'components.editorPanel.fitPdfToHeight')"
+        :aria-label="t(isImage
+          ? 'components.editorPanel.fitImageToWindow'
+          : nextFitMode === 'width'
+            ? 'components.editorPanel.fitPdfToWidth'
+            : 'components.editorPanel.fitPdfToHeight')"
         @click="fitPdfToViewport"
       ><component
         :is="nextFitMode === 'width' ? PhArrowsOutLineHorizontal : PhArrowsOutLineVertical"
@@ -225,9 +229,9 @@
         type="button"
         :disabled="loading || exporting"
         :aria-label="t(exporting
-          ? 'components.editorPanel.exportingAnnotatedPdf'
-          : 'components.editorPanel.exportAnnotatedPdf')"
-        @click="exportAnnotatedPdf"
+          ? isImage ? 'components.editorPanel.exportingAnnotatedImage' : 'components.editorPanel.exportingAnnotatedPdf'
+          : isImage ? 'components.editorPanel.exportAnnotatedImage' : 'components.editorPanel.exportAnnotatedPdf')"
+        @click="exportAnnotatedDocument"
       ><PhDownloadSimple :size="18" /></button>
       <span v-if="exportError" class="pdf-export-error" role="alert">{{ exportError }}</span>
     </div>
@@ -242,7 +246,7 @@
       @scroll="handleViewportScroll"
       @wheel="handleZoomWheel"
     >
-      <div v-if="loading" class="pdf-message" role="status">{{ t('components.editorPanel.loadingPdf') }}</div>
+      <div v-if="loading" class="pdf-message" role="status">{{ t(isImage ? 'components.editorPanel.loadingImage' : 'components.editorPanel.loadingPdf') }}</div>
       <div v-else-if="error" class="pdf-message pdf-error" role="alert">{{ error }}</div>
       <div v-show="!loading && !error" class="pdf-pages continuous" :class="`tone-${pageTone}`">
         <div
@@ -257,7 +261,13 @@
           <canvas
             :ref="element => setCanvasElement(page, element, true)"
             class="pdf-annotation-canvas"
-            :class="{ enabled: tool !== 'pan', erasing: tool === 'eraser', moving: tool === 'move' }"
+            :class="{
+              enabled: tool !== 'pan',
+              pen: tool === 'pen',
+              highlighter: tool === 'highlighter',
+              erasing: tool === 'eraser',
+              moving: tool === 'move',
+            }"
             @pointerdown="startAnnotation($event, page)"
             @pointermove="continueAnnotation"
             @pointerup="finishAnnotation"
@@ -347,8 +357,9 @@ interface AnnotationStroke {
   width: number;
   points: AnnotationPoint[];
   text?: string;
+  fontSize?: number;
 }
-interface TextEditorState { page: string; point: AnnotationPoint; index?: number; text: string; color: string }
+interface TextEditorState { page: string; point: AnnotationPoint; index?: number; text: string; color: string; fontSize: number }
 interface TooltipState { text: string; left: number; top: number }
 interface ToolbarPosition { left: number; top: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
@@ -376,12 +387,21 @@ interface PdfOutlineItem {
   level: number;
 }
 
-const props = defineProps<{ src: string; filePath: string; initialScale?: number }>();
+const props = withDefaults(defineProps<{
+  src: string;
+  filePath: string;
+  initialScale?: number;
+  kind?: 'pdf' | 'image';
+}>(), { kind: 'pdf' });
 const emit = defineEmits<{ 'scale-change': [scale: number] }>();
 const t = i18n.global.t;
+const isImage = computed(() => props.kind === 'image');
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.1;
+const minScale = computed(() => isImage.value ? 0.05 : MIN_SCALE);
+const maxScale = computed(() => isImage.value ? 8 : MAX_SCALE);
+const scaleStep = computed(() => isImage.value ? 0.05 : SCALE_STEP);
 const TOOLBAR_INSET = 12;
 const VIEW_SAVE_DELAY = 300;
 const ZOOM_RENDER_DELAY = 120;
@@ -470,7 +490,7 @@ const textEditorStyle = computed(() => {
     maxWidth: `${(1 - editor.point.x) * 100}%`,
     height: `${lines.length * 1.25 + 0.25}em`,
     color: editor.color,
-    fontSize: `${16 * scale.value}px`,
+    fontSize: `${editor.fontSize * scale.value}px`,
   };
 });
 const saveStateLabel = computed(() => {
@@ -488,6 +508,7 @@ const pagesToDisplay = computed(() => Array.from({ length: pageCount.value }, (_
 const defaultPageSize = ref({ width: 612, height: 792 });
 const pageSizes = ref<Record<number, { width: number; height: number }>>({});
 let document: PDFDocumentProxy | undefined;
+let imageDocument: HTMLImageElement | undefined;
 let loadingTask: PDFDocumentLoadingTask | undefined;
 let pageObserver: IntersectionObserver | undefined;
 const visiblePages = new Set<number>();
@@ -631,13 +652,17 @@ function cloneAnnotations(value = annotations.value): AnnotationDocument {
 
 function annotationFilePath(filePath = props.filePath): string {
   const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  const separator = filePath[separatorIndex] || '/';
   const directory = filePath.slice(0, separatorIndex + 1);
   const filename = filePath.slice(separatorIndex + 1);
-  return `${directory}.${filename}.annotations.json`;
+  return `${directory}.annotations${separator}${filename}.annotations.json`;
 }
 
-function legacyAnnotationFilePath(): string {
-  return `${props.filePath}.annotations.json`;
+function legacyAnnotationFilePaths(): string[] {
+  const separatorIndex = Math.max(props.filePath.lastIndexOf('/'), props.filePath.lastIndexOf('\\'));
+  const directory = props.filePath.slice(0, separatorIndex + 1);
+  const filename = props.filePath.slice(separatorIndex + 1);
+  return [`${directory}.${filename}.annotations.json`, `${props.filePath}.annotations.json`];
 }
 
 function setPageElement(page: number, element: unknown): void {
@@ -671,7 +696,7 @@ function setTextEditorElement(element: unknown): void {
 }
 
 function clampScale(value: number): number {
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
+  return Math.min(maxScale.value, Math.max(minScale.value, value));
 }
 
 function setScale(value: number): void {
@@ -708,6 +733,11 @@ function fitPdfToViewport(): void {
   const availableWidth = viewport.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   const availableHeight = viewport.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
   const pageSize = pageSizes.value[pageNumber.value] || defaultPageSize.value;
+  if (isImage.value) {
+    if (!(availableWidth > 0) || !(availableHeight > 0)) return;
+    setScale(Math.min(1, availableWidth / pageSize.width, availableHeight / pageSize.height));
+    return;
+  }
   const fitMode = nextFitMode.value;
   const fittedScale = fitMode === 'width'
     ? availableWidth / pageSize.width
@@ -759,12 +789,9 @@ function savePageTone(): void {
 
 function handleZoomWheel(event: WheelEvent): void {
   if (!event.ctrlKey && !event.metaKey) return;
-
-  // Keep modifier-wheel zoom scoped to the PDF instead of letting the browser
-  // zoom the entire application. Regular wheel scrolling remains unchanged.
   event.preventDefault();
   if (loading.value || event.deltaY === 0) return;
-  setScale(scale.value + (event.deltaY < 0 ? SCALE_STEP : -SCALE_STEP));
+  setScale(scale.value + (event.deltaY < 0 ? scaleStep.value : -scaleStep.value));
 }
 
 async function goToPage(page: number): Promise<void> {
@@ -877,7 +904,7 @@ function drawAnnotation(
     }
     context.ellipse((startX + endX) / 2, (startY + endY) / 2, radiusX, radiusY, 0, 0, Math.PI * 2);
   } else if (type === 'text') {
-    const fontSize = 16 * drawingScale;
+    const fontSize = (stroke.fontSize ?? 16) * drawingScale;
     context.font = `${fontSize}px sans-serif`;
     context.textBaseline = 'top';
     for (const [index, line] of (stroke.text || '').split('\n').entries()) {
@@ -890,13 +917,31 @@ function drawAnnotation(
   context.restore();
 }
 
-async function exportAnnotatedPdf(): Promise<void> {
+async function exportAnnotatedDocument(): Promise<void> {
   if (exporting.value) return;
   commitTextAnnotation();
   exporting.value = true;
   exportError.value = '';
 
   try {
+    if (isImage.value) {
+      const image = imageDocument;
+      if (!image) throw new Error('Image is unavailable');
+      const canvas = window.document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Canvas is unavailable');
+      context.drawImage(image, 0, 0);
+      for (const stroke of currentPageStrokes.value) drawAnnotation(context, canvas, stroke, 1);
+      const filename = props.filePath.split(/[\\/]/).pop() || 'image.png';
+      const link = window.document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = `${filename.replace(/\.[^.]+$/, '')}-annotated.png`;
+      link.click();
+      return;
+    }
+
     const response = await fetch(props.src);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -931,7 +976,9 @@ async function exportAnnotatedPdf(): Promise<void> {
     link.click();
     URL.revokeObjectURL(url);
   } catch {
-    exportError.value = t('components.editorPanel.exportAnnotatedPdfFailed');
+    exportError.value = t(isImage.value
+      ? 'components.editorPanel.exportAnnotatedImageFailed'
+      : 'components.editorPanel.exportAnnotatedPdfFailed');
   } finally {
     exporting.value = false;
   }
@@ -978,11 +1025,31 @@ function drawArrowHead(
 
 async function renderPage(pageNumberToRender: number): Promise<void> {
   const pdf = document;
+  const image = imageDocument;
   const canvas = canvasElements.get(pageNumberToRender);
   const annotationCanvas = annotationCanvasElements.get(pageNumberToRender);
-  if (!pdf || !canvas || !annotationCanvas) return;
+  if ((!pdf && !image) || !canvas || !annotationCanvas) return;
 
   const generation = renderGeneration;
+  if (image) {
+    const viewport = {
+      width: image.naturalWidth * scale.value,
+      height: image.naturalHeight * scale.value,
+    };
+    const pixelRatio = Math.min(
+      window.devicePixelRatio || 1,
+      Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, viewport.width * viewport.height)),
+    );
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error(t('components.editorPanel.imageRenderFailed'));
+    canvas.width = annotationCanvas.width = Math.max(1, Math.floor(viewport.width * pixelRatio));
+    canvas.height = annotationCanvas.height = Math.max(1, Math.floor(viewport.height * pixelRatio));
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    drawAnnotations(pageNumberToRender);
+    return;
+  }
+  if (!pdf) return;
+
   const request = (renderRequests.get(pageNumberToRender) || 0) + 1;
   renderRequests.set(pageNumberToRender, request);
   renderTasks.get(pageNumberToRender)?.cancel();
@@ -1062,7 +1129,7 @@ async function loadAnnotations(version: number): Promise<void> {
   undoStack.value = [];
   redoStack.value = [];
   try {
-    for (const filePath of [annotationFilePath(), legacyAnnotationFilePath()]) {
+    for (const filePath of [annotationFilePath(), ...legacyAnnotationFilePaths()]) {
       const response = await fetch(`/api/files/read?path=${encodeURIComponent(filePath)}`);
       if (version !== loadVersion) return;
       if (response.status === 404) continue;
@@ -1076,8 +1143,17 @@ async function loadAnnotations(version: number): Promise<void> {
       return;
     }
   } catch (loadError) {
-    if (version === loadVersion) console.error('Failed to load PDF annotations:', loadError);
+    if (version === loadVersion) console.error('Failed to load annotations:', loadError);
   }
+}
+
+function loadImage(): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Image failed to load'));
+    image.src = props.src;
+  });
 }
 
 async function loadPdf(): Promise<void> {
@@ -1099,9 +1175,28 @@ async function loadPdf(): Promise<void> {
   loadingTask = undefined;
   await previousLoadingTask?.destroy();
   document = undefined;
+  imageDocument = undefined;
 
   try {
     const annotationPromise = loadAnnotations(version);
+    if (isImage.value) {
+      const loadedImage = await loadImage();
+      await annotationPromise;
+      if (version !== loadVersion) return;
+      imageDocument = loadedImage;
+      pageCount.value = 1;
+      defaultPageSize.value = { width: loadedImage.naturalWidth, height: loadedImage.naturalHeight };
+      restoreViewState(annotations.value.view);
+      await nextTick();
+      if (version !== loadVersion) return;
+      if (!annotations.value.view) fitPdfToViewport();
+      keepToolbarInBounds();
+      loadedFilePath = props.filePath;
+      loading.value = false;
+      await renderVisiblePages();
+      return;
+    }
+
     const pdfjs = await import('pdfjs-dist');
     pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
     const task = pdfjs.getDocument({
@@ -1137,9 +1232,9 @@ async function loadPdf(): Promise<void> {
     if (pageNumber.value > 1) pageElements.get(pageNumber.value)?.scrollIntoView({ block: 'start' });
   } catch (loadError) {
     if (version !== loadVersion) return;
-    console.error('Failed to load PDF:', loadError);
+    console.error(`Failed to load ${isImage.value ? 'image' : 'PDF'}:`, loadError);
     loading.value = false;
-    error.value = t('components.editorPanel.pdfLoadFailed');
+    error.value = t(isImage.value ? 'components.editorPanel.imageLoadFailed' : 'components.editorPanel.pdfLoadFailed');
   }
 }
 
@@ -1215,8 +1310,9 @@ function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoin
     const textScale = scale.value * (window.devicePixelRatio || 1);
     const textLines = (stroke.text || '').split('\n');
     const longestLine = Math.max(...textLines.map(line => line.length), 1);
-    const textWidth = type === 'text' ? longestLine * 10 * textScale : 0;
-    const textHeight = type === 'text' ? textLines.length * 20 * textScale : 0;
+    const fontSize = (stroke.fontSize ?? 16) * textScale;
+    const textWidth = type === 'text' ? longestLine * fontSize * 0.625 : 0;
+    const textHeight = type === 'text' ? textLines.length * fontSize * 1.25 : 0;
     return target.x >= Math.min(start.x, end.x) - threshold
       && target.x <= Math.max(start.x, end.x + textWidth) + threshold
       && target.y >= Math.min(start.y, end.y) - threshold
@@ -1336,6 +1432,8 @@ function startTextAnnotation(point: AnnotationPoint): void {
     index: existing ? index : undefined,
     text: existing?.text || '',
     color: existing?.color || penColor.value,
+    // Image pixels may greatly outnumber screen pixels, so size new text for the current view.
+    fontSize: existing?.fontSize ?? (isImage.value ? 16 / scale.value : 16),
   };
   drawAnnotations();
   void nextTick(() => {
@@ -1357,6 +1455,7 @@ function commitTextAnnotation(): void {
     annotations.value.pages[editor.page] ||= [];
     annotations.value.pages[editor.page].push({
       type: 'text', color: editor.color, width: penWidth.value, points: [editor.point], text,
+      fontSize: editor.fontSize,
     });
   } else {
     const annotation = strokes[editor.index];
@@ -1471,7 +1570,7 @@ async function saveAnnotations(filePath = props.filePath): Promise<void> {
       saveState.value = 'saved';
     }
   } catch (saveError) {
-    console.error('Failed to save PDF annotations:', saveError);
+    console.error('Failed to save annotations:', saveError);
     if (version === saveVersion) saveState.value = 'error';
   }
   clearTimeout(statusTimer);
@@ -1970,6 +2069,14 @@ onUnmounted(() => {
   cursor: crosshair;
   pointer-events: auto;
   touch-action: none;
+}
+
+.pdf-annotation-canvas.pen {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='m4 24 3.5-8.5L19 4l5 5-11.5 11.5z' fill='white' stroke='%23111827' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='m7.5 15.5 5 5M17 6l5 5' stroke='%23111827' stroke-width='1.5'/%3E%3C/svg%3E") 4 24, crosshair;
+}
+
+.pdf-annotation-canvas.highlighter {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='m4 23 4-8L18 5l5 5-10 10z' fill='%23facc15' stroke='%23111827' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='m8 15 5 5M16 7l5 5' stroke='%23111827' stroke-width='1.5'/%3E%3Cpath d='M3 25h10' stroke='%23facc15' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") 4 23, crosshair;
 }
 
 .pdf-annotation-canvas.erasing {

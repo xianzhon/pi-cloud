@@ -39,30 +39,30 @@ There is no separate Save command for PDF annotations.
 
 ## Storage Location
 
-Pi Cloud writes annotations to a JSON sidecar file beside the PDF:
+Pi Cloud writes PDF and image annotations to a JSON sidecar in a hidden `.annotations` subdirectory:
 
 ```text
-<PDF directory>/.<PDF filename>.annotations.json
+<document directory>/.annotations/<document filename>.annotations.json
 ```
 
 For example:
 
 ```text
 /books/example.pdf
-/books/.example.pdf.annotations.json
+/books/.annotations/example.pdf.annotations.json
 ```
 
-The leading `.` makes the sidecar hidden in the default Pi Cloud file-tree view. Enable **Show hidden files** in the file tree when you need to see or manage it. The sidecar contains vector strokes grouped by PDF page, and the original `example.pdf` remains unchanged.
+The leading `.` makes the directory hidden in the default Pi Cloud file-tree view. Enable **Show hidden files** in the file tree when you need to see or manage it. The sidecar contains vector annotations grouped by page, and the original document remains unchanged.
 
-Sidecars created by earlier Pi Cloud versions used the visible name `example.pdf.annotations.json`. These files are still loaded for compatibility. After the next annotation change, Pi Cloud saves the annotations under the new hidden name; the old file can then be removed manually.
+Sidecars created by earlier Pi Cloud versions used `.<document filename>.annotations.json` or the visible `<document filename>.annotations.json` beside the document. These files are still loaded for compatibility. After the next annotation change, Pi Cloud saves the annotations in `.annotations`; the old file can then be removed manually.
 
-The sidecar is a regular workspace file and is subject to the same allowed-root and filesystem permissions as other editor files. Pi Cloud must have write permission in the PDF's directory to save annotations.
+The sidecar is a regular workspace file and is subject to the same allowed-root and filesystem permissions as other editor files. Pi Cloud must have write permission in the document's directory to create `.annotations` and save annotations.
 
 ## Back Up, Move, or Share Annotations
 
-Keep the PDF and its sidecar file together when backing up, copying, moving, renaming, or sharing an annotated document. Pi Cloud matches them by filename and location; moving or renaming only the PDF does not automatically move or rename its sidecar.
+Keep the document and its `.annotations` sidecar file together when backing up, copying, moving, renaming, or sharing an annotated document. Pi Cloud matches them by filename and location; moving or renaming only the document does not automatically move or rename its sidecar.
 
-To remove all saved annotations, show hidden files, delete the corresponding `.<PDF filename>.annotations.json` sidecar, and reopen the PDF.
+To remove all saved annotations, show hidden files, delete the corresponding `.annotations/<document filename>.annotations.json` sidecar, and reopen the document.
 
 ## Current Limitations
 

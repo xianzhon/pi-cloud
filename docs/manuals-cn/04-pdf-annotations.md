@@ -39,34 +39,34 @@ PDF 标注不需要使用单独的“保存”命令。
 
 ## 保存位置
 
-Pi Cloud 会在 PDF 旁边写入一个 JSON 边车文件（sidecar file）：
+Pi Cloud 会将 PDF 和图片标注保存为独立的 JSON 标注文件，并存放在隐藏的 `.annotations` 子目录中：
 
 ```text
-<PDF 所在目录>/.<PDF 文件名>.annotations.json
+<文档所在目录>/.annotations/<文档文件名>.annotations.json
 ```
 
 例如：
 
 ```text
 /books/example.pdf
-/books/.example.pdf.annotations.json
+/books/.annotations/example.pdf.annotations.json
 ```
 
-文件名前的 `.` 会让边车文件在 Pi Cloud 的默认文件树视图中隐藏。如需查看或管理该文件，请在文件树中启用**显示隐藏文件**。边车文件按 PDF 页码保存矢量笔画，原始的 `example.pdf` 文件不会发生变化。
+目录名前的 `.` 会让该目录在 Pi Cloud 的默认文件树视图中隐藏。如需查看或管理该目录，请在文件树中启用**显示隐藏文件**。标注文件按页保存矢量标注，原始文档不会发生变化。
 
-旧版 Pi Cloud 创建的边车文件使用可见名称 `example.pdf.annotations.json`。为保持兼容，Pi Cloud 仍会读取这种文件；下一次修改标注后，标注会保存到新的隐藏文件中，随后可以手动删除旧文件。
+旧版 Pi Cloud 将标注文件直接保存在文档旁边，名称为 `.<文档文件名>.annotations.json` 或可见的 `<文档文件名>.annotations.json`。为保持兼容，Pi Cloud 仍会读取这些文件；下一次修改标注后，标注会保存到 `.annotations` 中，随后可以手动删除旧文件。
 
-边车文件是普通的工作区文件，与编辑器中的其他文件遵循相同的允许根目录和文件系统权限限制。Pi Cloud 必须拥有 PDF 所在目录的写入权限才能保存标注。
+标注文件是普通的工作区文件，与编辑器中的其他文件遵循相同的允许根目录和文件系统权限限制。Pi Cloud 必须拥有文档所在目录的写入权限，才能创建 `.annotations` 并保存标注。
 
 ## 备份、移动或分享标注
 
-备份、复制、移动、重命名或分享带标注的文档时，请始终同时处理 PDF 及其边车文件。Pi Cloud 根据文件名和所在位置匹配两者；只移动或重命名 PDF 不会自动处理对应的边车文件。
+备份、复制、移动、重命名或分享带标注的文档时，请始终同时处理原文档及 `.annotations` 目录中对应的标注文件。Pi Cloud 根据文件名和所在位置匹配两者；只移动或重命名原文档不会自动处理对应的标注文件。
 
-如需删除所有已保存的标注，请先显示隐藏文件，删除对应的 `.<PDF 文件名>.annotations.json` 边车文件，然后重新打开 PDF。
+如需删除所有已保存的标注，请先显示隐藏文件，删除对应的 `.annotations/<文档文件名>.annotations.json` 标注文件，然后重新打开文档。
 
 ## 当前限制
 
 - 标注仅由 Pi Cloud 显示，不会嵌入 PDF。
-- 使用其他 PDF 阅读器打开原始 PDF 时，不会显示边车文件中的标注。
+- 使用其他 PDF 阅读器打开原始 PDF 时，不会显示另行保存的标注。
 - 当前不支持将标注导出或合并到新的 PDF。
 - 当前不支持将单个标注导出为其他标注格式。

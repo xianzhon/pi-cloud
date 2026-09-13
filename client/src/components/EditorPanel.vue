@@ -280,58 +280,12 @@
         :initial-scale="activeTabInfo?.pdfScale"
         @scale-change="setActivePdfScale"
       />
-      <div v-else-if="activeImageSrc" class="image-preview">
-        <div class="image-preview-toolbar" role="group" :aria-label="t('components.editorPanel.imageZoomControls')">
-          <button
-            type="button"
-            :disabled="imageZoom <= MIN_IMAGE_ZOOM"
-            :aria-label="t('components.editorPanel.zoomOut')"
-            :title="t('components.editorPanel.zoomOut')"
-            @click="zoomImage(-IMAGE_ZOOM_STEP)"
-          >
-            <PhMinus :size="16" weight="bold" />
-          </button>
-          <button
-            type="button"
-            class="image-zoom-level"
-            :aria-label="t('components.editorPanel.resetImageZoom')"
-            :title="t('components.editorPanel.fitImageToWindow')"
-            @click="resetImageView"
-          >
-            {{ imageZoomPercent }}%
-          </button>
-          <button
-            type="button"
-            :disabled="imageZoom >= MAX_IMAGE_ZOOM"
-            :aria-label="t('components.editorPanel.zoomIn')"
-            :title="t('components.editorPanel.zoomIn')"
-            @click="zoomImage(IMAGE_ZOOM_STEP)"
-          >
-            <PhPlus :size="16" weight="bold" />
-          </button>
-        </div>
-        <div
-          ref="imagePreviewEl"
-          class="image-preview-viewport"
-          :class="{ 'can-pan': imageZoom > 1, 'is-dragging': isImageDragging }"
-          :title="t('components.editorPanel.imagePanHint')"
-          @wheel.prevent="handleImageWheel"
-          @pointerdown="handleImagePointerDown"
-          @pointermove="handleImagePointerMove"
-          @pointerup="handleImagePointerEnd"
-          @pointercancel="handleImagePointerEnd"
-          @dblclick="resetImageView"
-        >
-          <img
-            ref="imageEl"
-            :src="activeImageSrc"
-            :alt="activeTab"
-            :style="imageStyle"
-            draggable="false"
-            @load="resetImageView"
-          />
-        </div>
-      </div>
+      <PdfPreview
+        v-else-if="activeImageSrc && activeTab"
+        kind="image"
+        :src="activeImageSrc"
+        :file-path="activeTab"
+      />
       <div
         class="editor-container"
         :class="{ hidden: (activeIsPreviewable && activePreviewMode === 'preview') || !!activeImageSrc || !!activePdfSrc || (activeIsVirtual && diffViewMode === 'split') }"
@@ -456,7 +410,7 @@ import { i18n } from '../i18n';
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/basic-languages/monaco.contribution';
-import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhMinus, PhPlus, PhList, PhDownloadSimple } from '@phosphor-icons/vue';
+import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
@@ -647,26 +601,6 @@ const splitDiffContainer = ref<HTMLElement>();
 const markdownPreviewEl = ref<HTMLElement>();
 const markdownPreviewLayoutEl = ref<HTMLElement>();
 const fileTreeEl = ref<HTMLElement>();
-const imagePreviewEl = ref<HTMLElement>();
-const imageEl = ref<HTMLImageElement>();
-const MIN_IMAGE_ZOOM = 0.25;
-const MAX_IMAGE_ZOOM = 8;
-const IMAGE_ZOOM_STEP = 0.25;
-type ImagePoint = { x: number; y: number };
-type ImagePinch = { distance: number; centerX: number; centerY: number };
-
-const imageZoom = ref(1);
-const imagePan = ref<ImagePoint>({ x: 0, y: 0 });
-const isImageDragging = ref(false);
-const imagePointers = new Map<number, ImagePoint>();
-let imagePanStart: { pointerId: number; pointerX: number; pointerY: number; panX: number; panY: number } | undefined;
-let imagePinch: ImagePinch | undefined;
-const imageZoomPercent = computed(() => Math.round(imageZoom.value * 100));
-const imageStyle = computed<CSSProperties>(() => ({
-  left: `calc(50% + ${imagePan.value.x}px)`,
-  top: `calc(50% + ${imagePan.value.y}px)`,
-  transform: `translate(-50%, -50%) scale(${imageZoom.value})`,
-}));
 const defaultEditorWidth = '50vw';
 const editorWidthPx = ref<number>();
 const editorWidthCss = computed(() => editorWidthPx.value ? `${editorWidthPx.value}px` : defaultEditorWidth);
@@ -1069,146 +1003,6 @@ function renderHtmlPreview(html: string, filePath: string): string {
 
   const doctype = /^\s*<!doctype\s+html[^>]*>/i.test(html) ? '<!DOCTYPE html>' : '';
   return `${doctype}${document.documentElement.outerHTML}`;
-}
-
-function clampImagePan(pan = imagePan.value): { x: number; y: number } {
-  const viewport = imagePreviewEl.value;
-  const image = imageEl.value;
-  if (!viewport || !image) return pan;
-
-  const maxX = Math.max(0, (image.offsetWidth * imageZoom.value - viewport.clientWidth) / 2);
-  const maxY = Math.max(0, (image.offsetHeight * imageZoom.value - viewport.clientHeight) / 2);
-  return {
-    x: Math.max(-maxX, Math.min(maxX, pan.x)),
-    y: Math.max(-maxY, Math.min(maxY, pan.y)),
-  };
-}
-
-function setImageZoom(nextZoom: number, focalPoint?: { x: number; y: number }): void {
-  const previousZoom = imageZoom.value;
-  const zoom = Math.max(MIN_IMAGE_ZOOM, Math.min(MAX_IMAGE_ZOOM, nextZoom));
-  if (zoom === previousZoom) return;
-
-  if (focalPoint && imagePreviewEl.value) {
-    const bounds = imagePreviewEl.value.getBoundingClientRect();
-    const pointX = focalPoint.x - bounds.left - bounds.width / 2;
-    const pointY = focalPoint.y - bounds.top - bounds.height / 2;
-    const zoomRatio = zoom / previousZoom;
-    // Offset the pan so the pixel beneath the pointer stays stationary while zooming.
-    imagePan.value = {
-      x: pointX - (pointX - imagePan.value.x) * zoomRatio,
-      y: pointY - (pointY - imagePan.value.y) * zoomRatio,
-    };
-  }
-
-  imageZoom.value = zoom;
-  imagePan.value = clampImagePan();
-}
-
-function zoomImage(amount: number): void {
-  setImageZoom(imageZoom.value + amount);
-}
-
-function handleImageWheel(event: WheelEvent): void {
-  setImageZoom(
-    imageZoom.value + (event.deltaY < 0 ? IMAGE_ZOOM_STEP : -IMAGE_ZOOM_STEP),
-    { x: event.clientX, y: event.clientY },
-  );
-}
-
-function resetImageView(): void {
-  imageZoom.value = 1;
-  imagePan.value = { x: 0, y: 0 };
-  isImageDragging.value = false;
-  imagePointers.clear();
-  imagePanStart = undefined;
-  imagePinch = undefined;
-}
-
-function getImagePinch(): ImagePinch | undefined {
-  const [first, second] = imagePointers.values();
-  if (!first || !second) return undefined;
-  return {
-    distance: Math.hypot(second.x - first.x, second.y - first.y),
-    centerX: (first.x + second.x) / 2,
-    centerY: (first.y + second.y) / 2,
-  };
-}
-
-function startImagePan(pointerId: number, pointer: ImagePoint): void {
-  imagePanStart = {
-    pointerId,
-    pointerX: pointer.x,
-    pointerY: pointer.y,
-    panX: imagePan.value.x,
-    panY: imagePan.value.y,
-  };
-  isImageDragging.value = true;
-}
-
-function handleImagePointerDown(event: PointerEvent): void {
-  if (event.button !== 0) return;
-  const pointer = { x: event.clientX, y: event.clientY };
-  imagePointers.set(event.pointerId, pointer);
-  (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
-
-  if (imagePointers.size === 2) {
-    imagePinch = getImagePinch();
-    imagePanStart = undefined;
-    isImageDragging.value = false;
-  } else if (imagePointers.size === 1 && imageZoom.value > 1) {
-    startImagePan(event.pointerId, pointer);
-  }
-}
-
-function handleImagePointerMove(event: PointerEvent): void {
-  if (!imagePointers.has(event.pointerId)) return;
-  imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-
-  if (imagePinch) {
-    const pinch = getImagePinch();
-    if (!pinch) return;
-    if (imagePinch.distance > 0) {
-      // Moving the pinch center and then zooming around it keeps the touched image point under the fingers.
-      imagePan.value = {
-        x: imagePan.value.x + pinch.centerX - imagePinch.centerX,
-        y: imagePan.value.y + pinch.centerY - imagePinch.centerY,
-      };
-      setImageZoom(imageZoom.value * pinch.distance / imagePinch.distance, {
-        x: pinch.centerX,
-        y: pinch.centerY,
-      });
-    }
-    imagePinch = pinch;
-    return;
-  }
-
-  if (!imagePanStart || imagePanStart.pointerId !== event.pointerId) return;
-  imagePan.value = clampImagePan({
-    x: imagePanStart.panX + event.clientX - imagePanStart.pointerX,
-    y: imagePanStart.panY + event.clientY - imagePanStart.pointerY,
-  });
-}
-
-function handleImagePointerEnd(event: PointerEvent): void {
-  if (!imagePointers.delete(event.pointerId)) return;
-  (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
-
-  if (imagePinch) {
-    imagePinch = getImagePinch();
-    if (imagePinch) return;
-
-    const [remaining] = imagePointers.entries();
-    if (remaining && imageZoom.value > 1) startImagePan(...remaining);
-    else {
-      imagePanStart = undefined;
-      isImageDragging.value = false;
-    }
-    return;
-  }
-
-  if (imagePanStart?.pointerId === event.pointerId) imagePanStart = undefined;
-  if (!imagePanStart) isImageDragging.value = false;
 }
 
 function setActivePreviewMode(mode: PreviewMode) {
@@ -3061,7 +2855,6 @@ function showActiveEditor(path = activeTab.value): void {
 }
 
 watch(activeTab, (path) => {
-  resetImageView();
   showActiveEditor(path);
 });
 
@@ -3701,83 +3494,6 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   display: none;
 }
 
-.image-preview {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  background: var(--bg-primary);
-}
-
-.image-preview-toolbar {
-  position: absolute;
-  top: 0.75rem;
-  left: 50%;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  transform: translateX(-50%);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-md);
-}
-
-.image-preview-toolbar button {
-  height: 30px;
-  min-width: 34px;
-  padding: 0 0.55rem;
-  border: 0;
-  border-right: 1px solid var(--border);
-  color: var(--text-primary);
-  background: transparent;
-  cursor: pointer;
-}
-
-.image-preview-toolbar button:last-child {
-  border-right: 0;
-}
-
-.image-preview-toolbar button:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-
-.image-preview-toolbar button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.image-preview-toolbar .image-zoom-level {
-  min-width: 64px;
-  font-variant-numeric: tabular-nums;
-}
-
-.image-preview-viewport {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  touch-action: none;
-}
-
-.image-preview-viewport.can-pan {
-  cursor: grab;
-}
-
-.image-preview-viewport.is-dragging {
-  cursor: grabbing;
-}
-
-.image-preview img {
-  position: absolute;
-  max-width: calc(100% - 2rem);
-  max-height: calc(100% - 2rem);
-  object-fit: contain;
-  user-select: none;
-  transform-origin: center;
-  will-change: transform;
-}
-
 .html-preview {
   flex: 1 1 auto;
   min-width: 0;
@@ -4097,8 +3813,7 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
   .editor-container,
   .markdown-preview,
-  .html-preview,
-  .image-preview {
+  .html-preview {
     min-height: 0;
   }
 }

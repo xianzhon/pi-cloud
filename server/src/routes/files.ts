@@ -515,6 +515,7 @@ export async function fileRoutes(app: FastifyInstance) {
   app.post('/write', async (req) => {
     const { path: filePath, content } = req.body as { path: string; content: string };
     const resolvedPath = await resolveAllowedPath(filePath);
+    await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
     await fs.writeFile(resolvedPath, content, 'utf-8');
     const stats = await fs.stat(resolvedPath);
     app.authServices?.audit.record({
