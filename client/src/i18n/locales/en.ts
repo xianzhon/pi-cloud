@@ -1006,6 +1006,7 @@ export default {
       removeFromGroup: 'Remove from group',
       projectSessionsTooltip: 'Show sessions for the selected project only',
       allSessionsTooltip: 'Show all session history across projects',
+      pinnedSessionsTooltip: 'Show sessions and files pinned in the selected profile',
       noSessionsFound: 'No sessions found',
       switchToThisProject: 'Switch to this project',
       openProjectInNewTab: 'Open project in new tab',

@@ -1006,6 +1006,7 @@ export default {
       removeFromGroup: '从当前分组移除',
       projectSessionsTooltip: '仅显示所选项目的会话',
       allSessionsTooltip: '显示所有项目的会话历史',
+      pinnedSessionsTooltip: '显示所选配置文件中置顶的会话和文件',
       noSessionsFound: '未找到会话',
       switchToThisProject: '切换到这个项目',
       openProjectInNewTab: '在新选项卡中打开项目',

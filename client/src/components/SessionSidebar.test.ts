@@ -1159,6 +1159,19 @@ describe('SessionSidebar', () => {
     expect(localStorage.getItem('pi-cloud-project-path-mru:default')).toBeNull();
   });
 
+  it('describes pinned sessions and files as profile-scoped', async () => {
+    mockFetchWithNoSessions(['/project']);
+    const wrapper = mountSidebar();
+
+    await vi.waitFor(() => expect(wrapper.findAll('.scope-toggle button')).toHaveLength(3));
+    await wrapper.findAll('.scope-toggle button')[2].trigger('mouseenter');
+
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('.session-tooltip')?.textContent)
+        .toContain('Show sessions and files pinned in the selected profile');
+    });
+  });
+
   it('renders pinned sessions in collapsible groups and creates groups', async () => {
     const pinnedSession = {
       id: 'session-1', path: '/project', cwd: '/project', name: 'Pinned session',

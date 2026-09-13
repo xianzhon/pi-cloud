@@ -84,6 +84,9 @@
       <button
         :class="{ active: scope === 'pinned' }"
         @click="scope = 'pinned'; loadSessions()"
+        @mouseenter="showTooltip($event, t('components.sessionSidebar.pinnedSessionsTooltip'), 'top')"
+        @mouseleave="hideTooltip"
+        @touchstart="hideTooltip"
       >
         {{ t('components.sessionSidebar.pinned') }}
       </button>
