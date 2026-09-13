@@ -142,8 +142,11 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 }
 ```
+
+Pi Cloud 每 25 秒发送一次 WebSocket ping 帧。请确保反向代理、CDN 和负载均衡器的 WebSocket 空闲超时时间明显高于此间隔。
 
 通过 HTTPS 反向代理部署时，请在 `.env` 中设置 `PI_CLOUD_TRUST_PROXY=true` 和 `PI_CLOUD_COOKIE_SECURE=true`。

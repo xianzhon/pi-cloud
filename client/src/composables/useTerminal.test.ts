@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyTerminalTheme, connectTerminal, createTerminalInstance, disconnectTerminal, disposeTerminal, fitTerminal, openTerminal } from './useTerminal';
 
 const { MockTerminal } = vi.hoisted(() => {
@@ -32,11 +32,11 @@ class MockWebSocket {
   readyState = MockWebSocket.OPEN;
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((event: { code: number; reason: string }) => void) | null = null;
   send = vi.fn();
   close = vi.fn(() => {
     this.readyState = 3;
-    this.onclose?.();
+    this.onclose?.({ code: 1000, reason: '' });
   });
 
   constructor(public readonly url: string) {}
@@ -48,24 +48,32 @@ describe('useTerminal', () => {
     vi.stubGlobal('WebSocket', MockWebSocket);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('uses the bundled Nerd Font before system fallbacks', () => {
     const instance = createTerminalInstance();
 
     expect(instance.terminal.options.fontFamily).toContain("'Pi Terminal Nerd Font'");
   });
 
-  it('notifies unexpected websocket disconnects so the stale tab can be removed', () => {
+  it('notifies unexpected websocket disconnects and starts reconnecting', () => {
+    vi.useFakeTimers();
     const instance = createTerminalInstance();
     const onDisconnect = vi.fn();
 
     connectTerminal(instance, 'client-1', '/workspace', undefined, undefined, onDisconnect);
 
     const socket = instance.socket as unknown as MockWebSocket;
-    socket.onclose?.();
+    socket.onclose?.({ code: 1006, reason: 'network lost' });
 
     expect(onDisconnect).toHaveBeenCalledTimes(1);
     expect(instance.socket).toBeNull();
-    expect(instance.terminalId.value).toBeUndefined();
+    expect(instance.connectionState.value).toBe('reconnecting');
+    vi.runOnlyPendingTimers();
+    expect(instance.socket).not.toBeNull();
+    vi.useRealTimers();
   });
 
   it('opens, fits, themes, and disposes terminal instances', () => {
@@ -100,7 +108,7 @@ describe('useTerminal', () => {
     socket.onmessage?.({ data: JSON.stringify({ type: 'exit', terminalId: 't1', exitCode: 2 }) });
     onData('ls');
     onResize({ cols: 100, rows: 40 });
-    expect(socket.url).toContain('clientId=client id&cwd=%2Fa%20b');
+    expect(socket.url).toContain('clientId=client+id&cwd=%2Fa+b');
     expect(created).toHaveBeenCalledWith('t1', 'bash');
     expect(exited).toHaveBeenCalledWith('t1', 2);
     expect(socket.send).toHaveBeenCalledTimes(3);
@@ -122,13 +130,31 @@ describe('useTerminal', () => {
     expect(socket.send).not.toHaveBeenCalled();
   });
 
-  it('does not notify expected websocket closes', () => {
+  it('reattaches with the server terminal id after a connection loss', () => {
+    vi.useFakeTimers();
+    const instance = createTerminalInstance();
+    connectTerminal(instance, 'client-1', '/workspace');
+    const socket = instance.socket as unknown as MockWebSocket;
+    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 'term-1', shell: 'bash' }) });
+
+    socket.onclose?.({ code: 1006, reason: '' });
+    vi.runOnlyPendingTimers();
+
+    expect((instance.socket as unknown as MockWebSocket).url).toContain('terminalId=term-1');
+    expect(instance.terminalId.value).toBe('term-1');
+    vi.useRealTimers();
+  });
+
+  it('does not notify expected websocket closes and explicitly disposes the PTY', () => {
     const instance = createTerminalInstance();
     const onDisconnect = vi.fn();
 
     connectTerminal(instance, 'client-1', '/workspace', undefined, undefined, onDisconnect);
-    disconnectTerminal(instance);
+    const socket = instance.socket as unknown as MockWebSocket;
+    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 'term-1', shell: 'bash' }) });
+    disconnectTerminal(instance, true);
 
+    expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'dispose', terminalId: 'term-1' }));
     expect(onDisconnect).not.toHaveBeenCalled();
   });
 });

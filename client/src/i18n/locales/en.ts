@@ -1536,6 +1536,11 @@ export default {
       closePanel: 'Close panel',
       restore: 'Restore',
       maximize: 'Maximize',
+      connecting: 'Connecting…',
+      reconnecting: 'Reconnecting…',
+      disconnected: 'Disconnected',
+      retry: 'Retry',
+      close: 'Close',
     },
   },
   settings: {

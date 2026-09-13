@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const spawn = vi.fn(() => ({
-  onData: vi.fn(),
+  onData: vi.fn(() => ({ dispose: vi.fn() })),
+  onExit: vi.fn(() => ({ dispose: vi.fn() })),
   write: vi.fn(),
   resize: vi.fn(),
   kill: vi.fn(),
@@ -18,6 +19,7 @@ describe('TerminalManager', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
@@ -56,5 +58,33 @@ describe('TerminalManager', () => {
       expect.objectContaining({ cwd: 'D:\\develop\\project' }),
     );
     expect(terminal.shell).toBe('cmd.exe');
+  });
+
+  it('reattaches an owned terminal and disposes it after the disconnect grace period', () => {
+    vi.useFakeTimers();
+    const manager = new TerminalManager(1_000);
+    const firstAttachment = Symbol('first');
+    const terminal = manager.create('client-1', '/workspace', 'me', firstAttachment);
+
+    manager.detach(terminal.id, firstAttachment);
+    const onData = vi.mocked(terminal.pty.onData).mock.calls[0][0];
+    onData('output while offline');
+    expect(manager.attach(terminal.id, 'client-1', 'other-user', Symbol('invalid'))).toBeUndefined();
+
+    const secondAttachment = Symbol('second');
+    expect(manager.attach(terminal.id, 'client-1', 'me', secondAttachment)).toBe(terminal);
+    expect(manager.setOutputHandler(terminal.id, secondAttachment, vi.fn())).toBe('output while offline');
+    vi.advanceTimersByTime(1_000);
+    expect(terminal.pty.kill).not.toHaveBeenCalled();
+
+    // A close from the replaced socket must not detach the active connection.
+    manager.detach(terminal.id, firstAttachment);
+    vi.advanceTimersByTime(1_000);
+    expect(terminal.pty.kill).not.toHaveBeenCalled();
+
+    manager.detach(terminal.id, secondAttachment);
+    vi.advanceTimersByTime(1_000);
+    expect(terminal.pty.kill).toHaveBeenCalledOnce();
+    expect(manager.get(terminal.id)).toBeUndefined();
   });
 });

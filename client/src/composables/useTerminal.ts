@@ -6,8 +6,10 @@ import '@xterm/xterm/css/xterm.css'
 import type { ITheme } from '@xterm/xterm'
 
 export type TerminalThemeName = 'dark' | 'light'
+export type TerminalConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 
 const expectedSocketCloses = new WeakSet<WebSocket>()
+const reconnectDelays = [0, 1_000, 2_000, 5_000, 10_000, 30_000]
 
 const terminalFontFamily = [
   // Prefer Nerd Font variants for shell prompts that use Powerline/private-use glyphs,
@@ -54,17 +56,19 @@ export function applyTerminalTheme(instance: TerminalInstance, theme: TerminalTh
 
 export interface TerminalInstance {
   terminalId: Ref<string | undefined>
+  connectionState: Ref<TerminalConnectionState>
   terminal: Terminal
   fitAddon: FitAddon
   socket: WebSocket | null
   isOpen: boolean
   disposables: { dispose(): void }[]
+  reconnectTimer: ReturnType<typeof setTimeout> | null
+  reconnectAttempt: number
+  reconnectNow: (() => void) | null
+  disposalUrl: string | null
 }
 
-/**
- * Create a single terminal instance bound to a container element.
- * Each call creates an independent terminal with its own WebSocket connection.
- */
+/** Create a single terminal instance bound to a container element. */
 export function createTerminalInstance(): TerminalInstance {
   const terminalId = ref<string>()
   const terminal = new Terminal({
@@ -80,17 +84,19 @@ export function createTerminalInstance(): TerminalInstance {
 
   return {
     terminalId,
+    connectionState: ref('disconnected'),
     terminal,
     fitAddon,
     socket: null,
     isOpen: false,
     disposables: [],
+    reconnectTimer: null,
+    reconnectAttempt: 0,
+    reconnectNow: null,
+    disposalUrl: null,
   }
 }
 
-/**
- * Open the terminal in a container element and fit it.
- */
 export function openTerminal(instance: TerminalInstance, container: HTMLElement) {
   if (!instance.isOpen) {
     instance.terminal.open(container)
@@ -100,16 +106,11 @@ export function openTerminal(instance: TerminalInstance, container: HTMLElement)
   instance.terminal.focus()
 }
 
-/**
- * Fit the terminal to its container.
- */
 export function fitTerminal(instance: TerminalInstance) {
   instance.fitAddon.fit()
 }
 
-/**
- * Connect the terminal to the backend via WebSocket.
- */
+/** Connect to a new PTY, then automatically reattach to it after connection loss. */
 export function connectTerminal(
   instance: TerminalInstance,
   clientId: string,
@@ -117,109 +118,179 @@ export function connectTerminal(
   onCreated?: (terminalId: string, shell: string) => void,
   onExit?: (terminalId: string, exitCode: number) => void,
   onDisconnect?: () => void,
+  onConnectionState?: (state: TerminalConnectionState) => void,
 ) {
-  // Close existing socket if any
   if (instance.socket) {
     expectedSocketCloses.add(instance.socket)
     instance.socket.close()
     instance.socket = null
   }
-  instance.terminalId.value = undefined
+  if (instance.reconnectTimer) clearTimeout(instance.reconnectTimer)
+  instance.reconnectTimer = null
+  instance.reconnectAttempt = 0
 
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const wsUrl = `${protocol}://${window.location.host}/ws/terminal?clientId=${clientId}${cwd ? `&cwd=${encodeURIComponent(cwd)}` : ''}`
-
-  const socket = new WebSocket(wsUrl)
-  instance.socket = socket
-
-  socket.onopen = () => {
-    console.log('[Terminal] Connected')
+  const setConnectionState = (state: TerminalConnectionState) => {
+    instance.connectionState.value = state
+    onConnectionState?.(state)
   }
 
-  socket.onmessage = (event) => {
-    const message = JSON.parse(event.data)
+  const openSocket = () => {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const params = new URLSearchParams({ clientId })
+    if (cwd) params.set('cwd', cwd)
+    if (instance.terminalId.value) params.set('terminalId', instance.terminalId.value)
 
-    switch (message.type) {
-      case 'created':
-        instance.terminalId.value = message.terminalId
-        onCreated?.(message.terminalId, message.shell || 'bash')
-        // Send initial size to PTY
-        instance.fitAddon.fit()
-        socket?.send(JSON.stringify({
-          type: 'resize',
-          terminalId: message.terminalId,
-          cols: instance.terminal.cols,
-          rows: instance.terminal.rows,
-        }))
-        break
-      case 'output':
-        instance.terminal.write(message.data)
-        break
-      case 'exit':
-        instance.terminal.write(`\r\nProcess exited with code ${message.exitCode}\r\n`)
-        onExit?.(message.terminalId, message.exitCode)
-        break
-    }
-  }
+    setConnectionState(instance.terminalId.value ? 'reconnecting' : 'connecting')
+    const socket = new WebSocket(`${protocol}://${window.location.host}/ws/terminal?${params}`)
+    instance.socket = socket
 
-  socket.onclose = () => {
-    console.log('[Terminal] Disconnected')
-    const expectedClose = expectedSocketCloses.has(socket)
-    if (instance.socket === socket) {
-      instance.socket = null
-      instance.terminalId.value = undefined
+    socket.onopen = () => {
+      console.log('[Terminal] Connected')
     }
-    if (!expectedClose) {
-      instance.terminal.write('\r\n[terminal disconnected - create a new terminal tab to continue]\r\n')
+
+    socket.onmessage = (event) => {
+      let message: any
+      try {
+        message = JSON.parse(event.data)
+      } catch (error) {
+        console.error('[Terminal] Invalid server message', error)
+        return
+      }
+
+      switch (message.type) {
+        case 'created':
+        case 'reattached':
+          instance.terminalId.value = message.terminalId
+          const disposalParams = new URLSearchParams({ clientId, terminalId: message.terminalId })
+          instance.disposalUrl = `${protocol}://${window.location.host}/ws/terminal?${disposalParams}`
+          instance.reconnectAttempt = 0
+          setConnectionState('connected')
+          onCreated?.(message.terminalId, message.shell || 'bash')
+          instance.fitAddon.fit()
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+              type: 'resize',
+              terminalId: message.terminalId,
+              cols: instance.terminal.cols,
+              rows: instance.terminal.rows,
+            }))
+          }
+          break
+        case 'output':
+          instance.terminal.write(message.data)
+          break
+        case 'exit':
+          instance.terminal.write(`\r\nProcess exited with code ${message.exitCode}\r\n`)
+          onExit?.(message.terminalId, message.exitCode)
+          break
+        case 'error':
+          console.error('[Terminal]', message.message)
+          break
+      }
+    }
+
+    socket.onerror = (error) => {
+      console.error('[Terminal] WebSocket error', error)
+    }
+
+    socket.onclose = (event) => {
+      const expectedClose = expectedSocketCloses.has(socket)
+      if (instance.socket === socket) instance.socket = null
+      console.log(`[Terminal] Disconnected (${event.code}${event.reason ? `: ${event.reason}` : ''})`)
+      if (expectedClose) return
+
       onDisconnect?.()
+      if (event.code === 4404) {
+        setConnectionState('disconnected')
+        return
+      }
+
+      setConnectionState('reconnecting')
+      const delay = reconnectDelays[Math.min(instance.reconnectAttempt, reconnectDelays.length - 1)]
+      instance.reconnectAttempt += 1
+      instance.reconnectTimer = setTimeout(() => {
+        instance.reconnectTimer = null
+        openSocket()
+      }, delay)
     }
   }
 
-  // Dispose previous handlers to avoid duplicates
+  instance.reconnectNow = () => {
+    if (instance.reconnectTimer) clearTimeout(instance.reconnectTimer)
+    instance.reconnectTimer = null
+    instance.reconnectAttempt = 0
+    if (instance.socket) {
+      expectedSocketCloses.add(instance.socket)
+      instance.socket.close()
+      instance.socket = null
+    }
+    openSocket()
+  }
+
+  // Handlers refer to instance.socket so they continue to work after reattachment.
   instance.disposables.forEach(d => d.dispose())
-  instance.disposables = []
+  instance.disposables = [
+    instance.terminal.onData((data) => {
+      const socket = instance.socket
+      if (socket?.readyState === WebSocket.OPEN && instance.terminalId.value) {
+        socket.send(JSON.stringify({ type: 'input', terminalId: instance.terminalId.value, data }))
+      }
+    }),
+    instance.terminal.onResize(({ cols, rows }) => {
+      const socket = instance.socket
+      if (socket?.readyState === WebSocket.OPEN && instance.terminalId.value) {
+        socket.send(JSON.stringify({ type: 'resize', terminalId: instance.terminalId.value, cols, rows }))
+      }
+    }),
+  ]
 
-  const dataDisposable = instance.terminal.onData((data) => {
-    if (socket?.readyState === WebSocket.OPEN && instance.terminalId.value) {
-      socket.send(JSON.stringify({
-        type: 'input',
-        terminalId: instance.terminalId.value,
-        data,
-      }))
-    }
-  })
-
-  const resizeDisposable = instance.terminal.onResize(({ cols, rows }) => {
-    if (socket?.readyState === WebSocket.OPEN && instance.terminalId.value) {
-      socket.send(JSON.stringify({
-        type: 'resize',
-        terminalId: instance.terminalId.value,
-        cols,
-        rows,
-      }))
-    }
-  })
-
-  instance.disposables.push(dataDisposable, resizeDisposable)
+  openSocket()
 }
 
-/**
- * Disconnect the terminal's WebSocket.
- */
-export function disconnectTerminal(instance: TerminalInstance) {
+export function retryTerminal(instance: TerminalInstance) {
+  instance.reconnectNow?.()
+}
+
+/** Disconnect the socket. Set terminate for an explicit user close. */
+export function disconnectTerminal(instance: TerminalInstance, terminate = false) {
+  if (instance.reconnectTimer) clearTimeout(instance.reconnectTimer)
+  instance.reconnectTimer = null
+  instance.reconnectNow = null
+
+  const terminalId = instance.terminalId.value
   if (instance.socket) {
-    expectedSocketCloses.add(instance.socket)
-    instance.socket.close()
+    const socket = instance.socket
+    expectedSocketCloses.add(socket)
+    if (terminate && socket.readyState === WebSocket.OPEN && terminalId) {
+      socket.send(JSON.stringify({ type: 'dispose', terminalId }))
+    }
+    socket.close()
     instance.socket = null
+  } else if (terminate && terminalId && instance.disposalUrl) {
+    // Reattach briefly so Close remains destructive even while the main socket is offline.
+    const disposalSocket = new WebSocket(instance.disposalUrl)
+    disposalSocket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data)
+        if (message.type === 'reattached' && disposalSocket.readyState === WebSocket.OPEN) {
+          disposalSocket.send(JSON.stringify({ type: 'dispose', terminalId }))
+          disposalSocket.close()
+        }
+      } catch {
+        disposalSocket.close()
+      }
+    }
+    disposalSocket.onerror = () => disposalSocket.close()
   }
-  instance.terminalId.value = undefined
+  instance.connectionState.value = 'disconnected'
+  if (terminate) {
+    instance.terminalId.value = undefined
+    instance.disposalUrl = null
+  }
 }
 
-/**
- * Fully dispose of the terminal instance.
- */
-export function disposeTerminal(instance: TerminalInstance) {
-  disconnectTerminal(instance)
+export function disposeTerminal(instance: TerminalInstance, terminate = true) {
+  disconnectTerminal(instance, terminate)
   instance.disposables.forEach(d => d.dispose())
   instance.disposables = []
   if (instance.isOpen) {
@@ -228,9 +299,7 @@ export function disposeTerminal(instance: TerminalInstance) {
   }
 }
 
-/**
- * Legacy composable for a single terminal (backward compatible).
- */
+/** Legacy composable for a single terminal (backward compatible). */
 export function useTerminal(containerRef: Ref<HTMLElement | null>) {
   const instance = createTerminalInstance()
 
@@ -239,9 +308,7 @@ export function useTerminal(containerRef: Ref<HTMLElement | null>) {
   }
 
   function open() {
-    if (containerRef.value) {
-      openTerminal(instance, containerRef.value)
-    }
+    if (containerRef.value) openTerminal(instance, containerRef.value)
   }
 
   function fit() {
@@ -261,6 +328,7 @@ export function useTerminal(containerRef: Ref<HTMLElement | null>) {
   return {
     terminal: instance.terminal,
     terminalId: instance.terminalId,
+    connectionState: instance.connectionState,
     connect,
     disconnect,
     open,
