@@ -44,9 +44,13 @@ vi.mock('monaco-editor', () => ({
       layout: vi.fn(),
     })),
     createDiffEditor: vi.fn(() => {
-      const originalEditor = { updateOptions: vi.fn() };
+      const originalEditor = {
+        updateOptions: vi.fn(),
+        createDecorationsCollection: vi.fn(() => ({ set: vi.fn(), clear: vi.fn() })),
+      };
       const modifiedEditor = {
         updateOptions: vi.fn(),
+        createDecorationsCollection: vi.fn(() => ({ set: vi.fn(), clear: vi.fn() })),
         revealLineInCenter: vi.fn(),
         setPosition: vi.fn(),
         focus: vi.fn(),
@@ -245,7 +249,7 @@ describe('EditorPanel', () => {
     expect(options.lineNumbers(6)).toBe('  49   49');
   });
 
-  it('uses GitHub Primer colors and a solid empty-side background', async () => {
+  it('uses GitHub Primer colors and a visible empty-side pattern', async () => {
     mockFileTreeFetch();
     mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
     await flushPromises();
@@ -254,10 +258,37 @@ describe('EditorPanel', () => {
       colors: expect.objectContaining({
         'diffEditor.insertedLineBackground': '#dafbe1',
         'diffEditor.removedLineBackground': '#ffebe9',
-        'diffEditor.diagonalFill': '#f6f8fa',
+        'diffEditor.diagonalFill': '#eef1f4',
       }),
     }));
-    expect(editorPanelSource).toContain('background-image: none;');
+    expect(editorPanelSource).not.toContain('background-image: none;');
+  });
+
+  it('uses the changed file language for single-file split diffs', async () => {
+    mockFileTreeFetch();
+    vi.mocked(monaco.languages.getLanguages).mockReturnValue([
+      { id: 'typescript', extensions: ['.ts'] },
+    ] as any);
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+
+    await wrapper.vm.openVirtualDiff({
+      cwd: '/project',
+      scope: 'src/file.ts',
+      content: [
+        'diff --git a/src/file.ts b/src/file.ts',
+        '--- a/src/file.ts',
+        '+++ b/src/file.ts',
+        '@@ -1 +1 @@',
+        '-const oldValue = 1;',
+        '+const newValue = 1;',
+      ].join('\n'),
+    });
+
+    const splitModelCalls = vi.mocked(monaco.editor.createModel).mock.calls.filter(([, , uri]) =>
+      String((uri as { path?: string }).path).includes('side='),
+    );
+    expect(splitModelCalls).toHaveLength(2);
+    expect(splitModelCalls.every(([, language]) => language === 'typescript')).toBe(true);
   });
 
   it('toggles virtual diffs between unified and split views', async () => {
@@ -276,7 +307,13 @@ describe('EditorPanel', () => {
     await flushPromises();
 
     const createDiffEditor = vi.mocked(monaco.editor.createDiffEditor);
-    expect(createDiffEditor.mock.calls.at(-1)?.[1]).toMatchObject({ wordWrap: 'on' });
+    expect(createDiffEditor.mock.calls.at(-1)?.[1]).toMatchObject({
+      wordWrap: 'off',
+      renderIndicators: true,
+      hideUnchangedRegions: { enabled: true, contextLineCount: 3 },
+    });
+    expect(editorPanelSource).not.toContain('git-diff-gutter-added');
+    expect(editorPanelSource).not.toContain('git-diff-gutter-removed');
 
     const diffEditor = createDiffEditor.mock.results.at(-1)?.value as any;
     expect(diffEditor.setModel.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -285,6 +322,8 @@ describe('EditorPanel', () => {
     });
     expect(diffEditor.getOriginalEditor().updateOptions).toHaveBeenCalled();
     expect(diffEditor.getModifiedEditor().updateOptions).toHaveBeenCalled();
+    expect(diffEditor.getOriginalEditor().createDecorationsCollection).toHaveBeenCalled();
+    expect(diffEditor.getModifiedEditor().createDecorationsCollection).toHaveBeenCalled();
   });
 
   it('opens a multi-file patch in one tab with file navigation', async () => {
@@ -330,12 +369,14 @@ describe('EditorPanel', () => {
       '+new two',
     ].join('\n'));
     expect(editorPanelSource).toContain(':deep(.git-diff-file-header)');
-    expect(wrapper.findAll('.tab').map(tab => tab.text())).toEqual(['Git diff · working tree']);
+    expect(wrapper.find('.tab').text()).toContain('Git diff · working tree');
+    expect(wrapper.find('.tab-diff-stats').text()).toContain('+2');
+    expect(wrapper.find('.tab-diff-stats').text()).toContain('−2');
     const navigation = wrapper.find('.diff-file-select');
     await navigation.get('input').trigger('click');
     expect(navigation.findAll('.custom-select-option').map(option => option.text())).toEqual([
-      'src/one.ts',
-      'src/two.ts',
+      'src/one.ts  +1 −1',
+      'src/two.ts  +1 −1',
     ]);
 
     await navigation.findAll('.custom-select-option')[1].trigger('click');
