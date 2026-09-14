@@ -1,5 +1,5 @@
 // server/src/routes/git.ts
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -26,6 +26,8 @@ class OversizedGitOutputError extends Error {
 interface GitStatusFile {
   path: string;
   status: string;
+  staged: boolean;
+  unstaged: boolean;
 }
 
 type GitDiffScope = 'all' | 'staged' | 'unstaged';
@@ -108,10 +110,17 @@ function parseStatusFiles(status: string): GitStatusFile[] {
   const lines = status.split('\n').map((line) => line.trimEnd()).filter(Boolean);
   if (lines.length > MAX_STATUS_FILES) throw new OversizedGitOutputError();
   return lines.map((line) => {
+    const indexStatus = line[0] || ' ';
+    const worktreeStatus = line[1] || ' ';
     const status = line.slice(0, 2).trim() || line.slice(0, 2);
     const rawPath = line.slice(3);
     const path = rawPath.includes(' -> ') ? rawPath.split(' -> ').pop() || rawPath : rawPath;
-    return { path, status };
+    return {
+      path,
+      status,
+      staged: indexStatus !== ' ' && indexStatus !== '?',
+      unstaged: worktreeStatus !== ' ' || indexStatus === '?',
+    };
   });
 }
 
@@ -219,6 +228,134 @@ function parseDiffScope(scope: string | undefined): GitDiffScope {
   if (!scope || scope === 'all') return 'all';
   if (scope === 'staged' || scope === 'unstaged') return scope;
   throw new Error('Invalid diff scope. Use all, staged, or unstaged.');
+}
+
+function validateGitPath(path: string | undefined): string {
+  const value = path?.trim();
+  if (!value || value.startsWith('/') || value.split(/[\\/]/).includes('..')) {
+    throw new Error('A repository-relative file path is required');
+  }
+  return value;
+}
+
+function runGitWithInput(cwd: string, args: string[], input: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, { cwd });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let outputBytes = 0;
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      outputBytes += chunk.length;
+      if (outputBytes > MAX_SLASH_COMMAND_OUTPUT_BYTES) child.kill();
+      else stdout.push(chunk);
+    });
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (outputBytes > MAX_SLASH_COMMAND_OUTPUT_BYTES) return reject(new OversizedGitOutputError());
+      if (code === 0) return resolve(Buffer.concat(stdout).toString());
+      reject(new Error(Buffer.concat(stderr).toString().trim() || `git exited with code ${code}`));
+    });
+    child.stdin.end(input);
+  });
+}
+
+interface DiffHunk {
+  header: string;
+  lines: string[];
+}
+
+function parsePatchHunks(diff: string): { prefix: string[]; hunks: DiffHunk[] } {
+  const prefix: string[] = [];
+  const hunks: DiffHunk[] = [];
+  let current: DiffHunk | undefined;
+
+  const lines = diff.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  for (const line of lines) {
+    if (line.startsWith('@@ ')) {
+      current = { header: line, lines: [] };
+      hunks.push(current);
+    } else if (current) {
+      current.lines.push(line);
+    } else {
+      prefix.push(line);
+    }
+  }
+  return { prefix, hunks };
+}
+
+function hunkText(hunk: DiffHunk): string {
+  return [hunk.header, ...hunk.lines].join('\n').replace(/\n+$/, '');
+}
+
+function partialHunk(hunk: DiffHunk, selectedLines: number[]): DiffHunk {
+  const selected = new Set(selectedLines);
+  const changed = hunk.lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line, index }) => selected.has(index) && (line.startsWith('+') || line.startsWith('-')) && !line.startsWith('+++') && !line.startsWith('---'));
+  if (!changed.length) throw new Error('Select at least one added or removed line');
+
+  const match = hunk.header.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/);
+  if (!match) throw new Error('Unsupported diff hunk');
+  const lines = hunk.lines.flatMap((line, index) => {
+    if (line.startsWith('-') && !selected.has(index)) return [` ${line.slice(1)}`];
+    if (line.startsWith('+') && !selected.has(index)) return [];
+    return [line];
+  });
+  const oldCount = lines.filter(line => line.startsWith(' ') || line.startsWith('-')).length;
+  const newCount = lines.filter(line => line.startsWith(' ') || line.startsWith('+')).length;
+  const count = (value: number) => value === 1 ? '' : `,${value}`;
+  return {
+    header: `@@ -${match[1]}${count(oldCount)} +${match[2]}${count(newCount)} @@${match[3]}`,
+    lines,
+  };
+}
+
+async function getIndexPatch(cwd: string, path: string, scope: 'staged' | 'unstaged'): Promise<string> {
+  let diff = await getDiff(cwd, ['--', path], scope);
+  if (scope === 'unstaged') {
+    diff = await appendUntrackedDiff(cwd, diff, [], path, MAX_SLASH_COMMAND_OUTPUT_BYTES);
+  }
+  return diff;
+}
+
+async function updateIndex(cwd: string, body: {
+  path?: string;
+  scope?: string;
+  mode?: string;
+  hunkIndex?: number;
+  selectedLines?: number[];
+  expectedHunk?: string;
+}): Promise<void> {
+  const path = validateGitPath(body.path);
+  const scope = body.scope === 'staged' || body.scope === 'unstaged' ? body.scope : undefined;
+  if (!scope) throw new Error('scope must be staged or unstaged');
+  if (body.mode === 'file') {
+    if (scope === 'unstaged') {
+      await runGit(cwd, ['add', '--', path]);
+    } else {
+      const hasHead = await runGit(cwd, ['rev-parse', '--verify', 'HEAD']).then(() => true, () => false);
+      await runGit(cwd, hasHead ? ['reset', '-q', 'HEAD', '--', path] : ['rm', '--cached', '-q', '--', path]);
+    }
+    return;
+  }
+  if (body.mode !== 'hunk' && body.mode !== 'lines') throw new Error('mode must be file, hunk, or lines');
+  if (!Number.isInteger(body.hunkIndex) || (body.hunkIndex as number) < 0) throw new Error('A valid hunk index is required');
+
+  const diff = await getIndexPatch(cwd, path, scope);
+  const { prefix, hunks } = parsePatchHunks(diff);
+  const hunk = hunks[body.hunkIndex as number];
+  if (!hunk) throw new Error('The selected hunk no longer exists');
+  if (body.expectedHunk !== hunkText(hunk)) throw new Error('The selected hunk changed. Refresh and try again.');
+  const selectedHunk = body.mode === 'lines' ? partialHunk(hunk, body.selectedLines || []) : hunk;
+  // A selected hunk may not include the source diff's trailing newline, but git apply
+  // requires every patch line, including the last one, to be newline-terminated.
+  const patch = `${[...prefix, selectedHunk.header, ...selectedHunk.lines].join('\n')}\n`;
+  const args = ['apply', '--cached', '--recount', '--unidiff-zero', '--whitespace=nowarn'];
+  if (scope === 'staged') args.push('--reverse');
+  await runGitWithInput(cwd, args, patch);
 }
 
 function parseCommit(commit: string) {
@@ -761,6 +898,27 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to run git amend';
       return reply.status(400).send({ error: errorMessage });
+    }
+  });
+
+  app.post('/index', async (req, reply) => {
+    const body = (req.body || {}) as {
+      cwd?: string;
+      path?: string;
+      scope?: string;
+      mode?: string;
+      hunkIndex?: number;
+      selectedLines?: number[];
+      expectedHunk?: string;
+    };
+    const resolvedCwd = await resolveGitCwd(body.cwd);
+
+    try {
+      await updateIndex(resolvedCwd, body);
+      return { cwd: resolvedCwd, path: body.path, scope: body.scope, mode: body.mode };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update the Git index';
+      return reply.status(400).send({ error: message });
     }
   });
 

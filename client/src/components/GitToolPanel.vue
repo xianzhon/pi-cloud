@@ -17,6 +17,16 @@
       <button
         type="button"
         class="git-tool-action tooltip"
+        :data-tooltip="t('components.gitToolPanel.changesView')"
+        :aria-label="t('components.gitToolPanel.changesView')"
+        :disabled="!isRepository"
+        @click="emit('changes')"
+      >
+        <PhGitDiff :size="17" weight="bold" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="git-tool-action tooltip"
         :data-tooltip="t('components.gitToolPanel.history')"
         :aria-label="t('components.gitToolPanel.history')"
         :disabled="!isRepository"
@@ -88,7 +98,7 @@ const MIN_PANEL_HEIGHT = 120;
 const MAX_PANEL_HEIGHT_RATIO = 0.75;
 
 const props = defineProps<{ cwd: string }>();
-const emit = defineEmits<{ command: [command: string]; history: [] }>();
+const emit = defineEmits<{ command: [command: string]; changes: []; history: [] }>();
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
 const files = ref<GitStatusFile[]>([]);

@@ -27,13 +27,14 @@ describe('GitToolPanel', () => {
     expect(actions.every(button => button.text() === '')).toBe(true);
     expect(actions.every(button => button.classes().includes('tooltip'))).toBe(true);
     expect(actions.map(button => button.attributes('data-tooltip'))).toEqual([
-      'History', 'Refresh', 'Commit', 'PR', 'Push', 'Pull', 'Branch', 'Show diff',
+      'Git Changes', 'History', 'Refresh', 'Commit', 'PR', 'Push', 'Pull', 'Branch', 'Show diff',
     ]);
     expect(actions.every(button => button.attributes('title') === undefined)).toBe(true);
 
     const commands = ['/commit', '/pr', '/push', '/pull', '/branch', '/diff'];
     for (const button of actions) await button.trigger('click');
 
+    expect(wrapper.emitted('changes')).toHaveLength(1);
     expect(wrapper.emitted('history')).toHaveLength(1);
     expect(wrapper.emitted('command')?.map(([command]) => command)).toEqual(commands);
   });
@@ -46,14 +47,15 @@ describe('GitToolPanel', () => {
     expect(wrapper.text()).toContain('This folder is not a Git repository.');
     const actions = wrapper.findAll('.git-tool-action');
     expect(actions[0].attributes('disabled')).toBeDefined();
-    expect(actions[1].attributes('disabled')).toBeUndefined();
-    expect(actions.slice(2).every(action => action.attributes('disabled') !== undefined)).toBe(true);
+    expect(actions[1].attributes('disabled')).toBeDefined();
+    expect(actions[2].attributes('disabled')).toBeUndefined();
+    expect(actions.slice(3).every(action => action.attributes('disabled') !== undefined)).toBe(true);
 
     vi.mocked(fetch).mockResolvedValue(response({
       isRepository: true,
       files: [{ status: 'M', path: 'src/changed.ts' }],
     }));
-    await actions[1].trigger('click');
+    await actions[2].trigger('click');
     await flushPromises();
 
     expect(wrapper.text()).toContain('src/changed.ts');

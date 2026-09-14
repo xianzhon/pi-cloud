@@ -131,7 +131,7 @@ describe('gitRoutes status and diff', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
     } finally {
       await app.close();
       await rm(cwd, { recursive: true, force: true });
@@ -152,7 +152,7 @@ describe('gitRoutes status and diff', () => {
       });
 
       expect(preview.statusCode).toBe(200);
-      expect(preview.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(preview.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
 
       const response = await app.inject({
         method: 'POST',
@@ -161,7 +161,7 @@ describe('gitRoutes status and diff', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
       expect(await git(cwd, 'status', '--porcelain')).toBe('?? unstaged.txt');
     } finally {
       await app.close();
@@ -183,9 +183,85 @@ describe('gitRoutes status and diff', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
       expect(await git(cwd, 'log', '-1', '--pretty=%s')).toBe('Commit staged change');
       expect(await git(cwd, 'status', '--porcelain')).toBe('');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('stages and unstages a file through the index endpoint', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+
+      const stage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'README.md', scope: 'unstaged', mode: 'file' },
+      });
+      expect(stage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached')).toContain('+changed');
+
+      const unstage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'README.md', scope: 'staged', mode: 'file' },
+      });
+      expect(unstage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached')).toBe('');
+      expect(await git(cwd, 'diff')).toContain('+changed');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('unstages and restages selected lines from a non-final hunk', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      const original = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);
+      await writeFile(join(cwd, 'README.md'), `${original.join('\n')}\n`);
+      await git(cwd, 'add', 'README.md');
+      await git(cwd, 'commit', '-m', 'Add lines');
+      const changed = [...original];
+      changed[0] = 'first changed';
+      changed[11] = 'last changed';
+      await writeFile(join(cwd, 'README.md'), `${changed.join('\n')}\n`);
+      await git(cwd, 'add', 'README.md');
+
+      const stagedDiff = await git(cwd, 'diff', '--cached', '--', 'README.md');
+      const firstHunkStart = stagedDiff.indexOf('@@ ');
+      const firstHunkEnd = stagedDiff.indexOf('@@ ', firstHunkStart + 3);
+      const firstHunk = stagedDiff.slice(firstHunkStart, firstHunkEnd).trimEnd();
+      const selectedLines = firstHunk.split('\n').slice(1)
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => line === '-line 1' || line === '+first changed')
+        .map(({ index }) => index);
+      const unstage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'README.md', scope: 'staged', mode: 'lines', hunkIndex: 0, selectedLines, expectedHunk: firstHunk },
+      });
+      expect(unstage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached')).not.toContain('first changed');
+      expect(await git(cwd, 'diff', '--cached')).toContain('last changed');
+      expect(await git(cwd, 'diff')).toContain('first changed');
+
+      const unstagedDiff = await git(cwd, 'diff', '--', 'README.md');
+      const unstagedHunk = unstagedDiff.slice(unstagedDiff.indexOf('@@ ')).trimEnd();
+      const stage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'README.md', scope: 'unstaged', mode: 'lines', hunkIndex: 0, selectedLines, expectedHunk: unstagedHunk },
+      });
+      expect(stage.statusCode, stage.body).toBe(200);
+      expect(await git(cwd, 'diff')).toBe('');
+      expect(await git(cwd, 'diff', '--cached')).toContain('first changed');
     } finally {
       await app.close();
       await rm(cwd, { recursive: true, force: true });
@@ -598,7 +674,7 @@ describe('gitRoutes branch', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
       const prompt = completeSimpleMock.mock.calls[0][1].messages[0].content;
       expect(prompt).toContain('+staged change');
       expect(prompt).not.toContain('+unstaged change');

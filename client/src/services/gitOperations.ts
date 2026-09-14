@@ -32,6 +32,17 @@ export function createGitOperations() {
     getStatus(options: { cwd: string; message?: string; stagedOnly?: boolean }) {
       return requestJson(`/api/git/status?${queryString(options)}`);
     },
+    updateIndex(options: {
+      cwd: string;
+      path: string;
+      scope: 'staged' | 'unstaged';
+      mode: 'file' | 'hunk' | 'lines';
+      hunkIndex?: number;
+      selectedLines?: number[];
+      expectedHunk?: string;
+    }) {
+      return postJson('/api/git/index', options);
+    },
     sync(command: 'push' | 'pull', cwd: string) {
       return postJson(`/api/git/${command}`, { cwd });
     },
