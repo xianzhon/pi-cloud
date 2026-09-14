@@ -700,7 +700,7 @@ describe('ChatPanel', () => {
         return new Response(JSON.stringify({
           cwd: '/repo',
           oversized: true,
-          maxBytes: 256 * 1024,
+          maxBytes: 1024 * 1024,
           message: 'The Git output is too large to show safely. Inspect it with Git in the terminal or another Git client.',
         }), { status: 200 });
       }

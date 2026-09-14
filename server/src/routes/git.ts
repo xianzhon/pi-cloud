@@ -12,10 +12,12 @@ import type { PiSessionService } from '../services/session-manager.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
 
 const execFileAsync = promisify(execFile);
-export const MAX_SLASH_COMMAND_OUTPUT_BYTES = 256 * 1024;
+export const MAX_SLASH_COMMAND_OUTPUT_BYTES = 1024 * 1024;
 const MAX_STATUS_FILES = 1_000;
 const GIT_HISTORY_PAGE_SIZE = 10;
 const GIT_HISTORY_FIELDS = 8;
+const GIT_INDEX_LOCK_RETRY_DELAYS_MS = [50, 100, 200, 400];
+const gitIndexUpdates = new Map<string, Promise<void>>();
 
 class OversizedGitOutputError extends Error {
   constructor() {
@@ -38,13 +40,43 @@ function isMaxBufferError(error: unknown) {
     || (error instanceof Error && error.message.includes('maxBuffer length exceeded'));
 }
 
+function isGitIndexLockError(error: unknown) {
+  const result = error as { stderr?: string | Buffer };
+  const details = `${error instanceof Error ? error.message : ''}\n${result?.stderr?.toString() || ''}`;
+  return details.includes('index.lock') && details.includes('File exists');
+}
+
+// Wait briefly for an active Git writer, but leave persistent stale locks for the user to resolve safely.
+async function retryGitIndexLock<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const delay = GIT_INDEX_LOCK_RETRY_DELAYS_MS[attempt];
+      if (!isGitIndexLockError(error) || delay === undefined) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 async function resolveGitCwd(cwd: string | undefined): Promise<string> {
   return resolveAllowedPath(cwd || '.');
 }
 
+async function serializeGitIndexUpdate(cwd: string, operation: () => Promise<void>): Promise<void> {
+  const previous = gitIndexUpdates.get(cwd) || Promise.resolve();
+  const current = previous.catch(() => {}).then(operation);
+  gitIndexUpdates.set(cwd, current);
+  try {
+    await current;
+  } finally {
+    if (gitIndexUpdates.get(cwd) === current) gitIndexUpdates.delete(cwd);
+  }
+}
+
 async function runGit(cwd: string, args: string[], maxBuffer = MAX_SLASH_COMMAND_OUTPUT_BYTES) {
   try {
-    const { stdout } = await execFileAsync('git', args, { cwd, maxBuffer });
+    const { stdout } = await retryGitIndexLock(() => execFileAsync('git', args, { cwd, maxBuffer }));
     return stdout;
   } catch (error) {
     if (isMaxBufferError(error)) throw new OversizedGitOutputError();
@@ -239,7 +271,7 @@ function validateGitPath(path: string | undefined): string {
 }
 
 function runGitWithInput(cwd: string, args: string[], input: string): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return retryGitIndexLock(() => new Promise((resolve, reject) => {
     const child = spawn('git', args, { cwd });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
@@ -258,7 +290,7 @@ function runGitWithInput(cwd: string, args: string[], input: string): Promise<st
       reject(new Error(Buffer.concat(stderr).toString().trim() || `git exited with code ${code}`));
     });
     child.stdin.end(input);
-  });
+  }));
 }
 
 interface DiffHunk {
@@ -924,7 +956,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     const resolvedCwd = await resolveGitCwd(body.cwd);
 
     try {
-      await updateIndex(resolvedCwd, body);
+      await serializeGitIndexUpdate(resolvedCwd, () => updateIndex(resolvedCwd, body));
       return { cwd: resolvedCwd, path: body.path, scope: body.scope, mode: body.mode };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update the Git index';

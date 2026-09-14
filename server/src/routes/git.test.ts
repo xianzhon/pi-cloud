@@ -244,6 +244,32 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('serializes staging requests and retries a briefly held index lock', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    const lockPath = join(cwd, '.git', 'index.lock');
+    let releaseLock: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      await writeFile(join(cwd, 'second.txt'), 'second\n');
+      await writeFile(lockPath, '');
+      releaseLock = setTimeout(() => void rm(lockPath, { force: true }), 75);
+
+      const responses = await Promise.all(['README.md', 'second.txt'].map(path => app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path, scope: 'unstaged', mode: 'file' },
+      })));
+
+      expect(responses.map(response => response.statusCode), responses.map(response => response.body).join('\n')).toEqual([200, 200]);
+      expect(await git(cwd, 'diff', '--cached', '--name-only')).toBe('README.md\nsecond.txt');
+    } finally {
+      if (releaseLock) clearTimeout(releaseLock);
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('stages and unstages all files through the index endpoint', async () => {
     const cwd = await createRepo();
     const app = await buildApp();
@@ -392,7 +418,7 @@ describe('gitRoutes status and diff', () => {
     const cwd = await createRepo();
     const app = await buildApp();
     try {
-      await writeFile(join(cwd, 'README.md'), `${'large change '.repeat(30_000)}\n`);
+      await writeFile(join(cwd, 'README.md'), `${'large change '.repeat(100_000)}\n`);
 
       const response = await app.inject({
         method: 'GET',
@@ -402,7 +428,7 @@ describe('gitRoutes status and diff', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.body.length).toBeLessThan(2_000);
-      expect(body).toMatchObject({ oversized: true, maxBytes: 256 * 1024 });
+      expect(body).toMatchObject({ oversized: true, maxBytes: 1024 * 1024 });
       expect(body).not.toHaveProperty('diff');
       expect(body.message).toContain('too large to show safely');
       expect(body.message).toContain('terminal or another Git client');
@@ -419,9 +445,9 @@ describe('gitRoutes status and diff', () => {
       await writeFile(join(cwd, 'SECOND.md'), 'initial\n');
       await git(cwd, 'add', 'SECOND.md');
       await git(cwd, 'commit', '-m', 'Add second file');
-      await writeFile(join(cwd, 'README.md'), 'staged line\n'.repeat(11_000));
+      await writeFile(join(cwd, 'README.md'), 'staged line\n'.repeat(50_000));
       await git(cwd, 'add', 'README.md');
-      await writeFile(join(cwd, 'SECOND.md'), 'worktree line\n'.repeat(11_000));
+      await writeFile(join(cwd, 'SECOND.md'), 'worktree line\n'.repeat(50_000));
 
       const stagedResponse = await app.inject({ method: 'GET', url: `/api/git/diff?cwd=${encodeURIComponent(cwd)}&scope=staged` });
       const unstagedResponse = await app.inject({ method: 'GET', url: `/api/git/diff?cwd=${encodeURIComponent(cwd)}&scope=unstaged` });
@@ -429,7 +455,7 @@ describe('gitRoutes status and diff', () => {
 
       expect(stagedResponse.json().oversized).toBeUndefined();
       expect(unstagedResponse.json().oversized).toBeUndefined();
-      expect(combinedResponse.json()).toMatchObject({ oversized: true, maxBytes: 256 * 1024 });
+      expect(combinedResponse.json()).toMatchObject({ oversized: true, maxBytes: 1024 * 1024 });
       expect(combinedResponse.json()).not.toHaveProperty('diff');
     } finally {
       await app.close();
