@@ -347,6 +347,36 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('unstages selected lines from a newly added staged file', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      const path = 'unicode-示例/readme.md';
+      await mkdir(join(cwd, 'unicode-示例'));
+      await writeFile(join(cwd, path), 'one\ntwo\nthree\n');
+      await git(cwd, 'add', '--', path);
+
+      const stagedDiff = await git(cwd, 'diff', '--cached', '--', path);
+      const stagedHunk = stagedDiff.slice(stagedDiff.indexOf('@@ ')).trimEnd();
+      const selectedLines = stagedHunk.split('\n').slice(1)
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => line === '+two')
+        .map(({ index }) => index);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path, scope: 'staged', mode: 'lines', hunkIndex: 0, selectedLines, expectedHunk: stagedHunk },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(await git(cwd, 'show', `:${path}`)).toBe('one\nthree');
+      expect(await git(cwd, 'diff', '--', path)).toContain('+two');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('includes staged-only content in git diff output by default', async () => {
     const cwd = await createRepo();
     const app = await buildApp();

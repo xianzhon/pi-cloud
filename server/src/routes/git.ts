@@ -322,7 +322,7 @@ function hunkText(hunk: DiffHunk): string {
   return [hunk.header, ...hunk.lines].join('\n').replace(/\n+$/, '');
 }
 
-function partialHunk(hunk: DiffHunk, selectedLines: number[]): DiffHunk {
+function partialHunk(hunk: DiffHunk, selectedLines: number[], unstaging: boolean): DiffHunk {
   const selected = new Set(selectedLines);
   const changed = hunk.lines
     .map((line, index) => ({ line, index }))
@@ -332,8 +332,8 @@ function partialHunk(hunk: DiffHunk, selectedLines: number[]): DiffHunk {
   const match = hunk.header.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/);
   if (!match) throw new Error('Unsupported diff hunk');
   const lines = hunk.lines.flatMap((line, index) => {
-    if (line.startsWith('-') && !selected.has(index)) return [` ${line.slice(1)}`];
-    if (line.startsWith('+') && !selected.has(index)) return [];
+    if (line.startsWith('-') && !selected.has(index)) return unstaging ? [] : [` ${line.slice(1)}`];
+    if (line.startsWith('+') && !selected.has(index)) return unstaging ? [` ${line.slice(1)}`] : [];
     return [line];
   });
   const oldCount = lines.filter(line => line.startsWith(' ') || line.startsWith('-')).length;
@@ -343,6 +343,20 @@ function partialHunk(hunk: DiffHunk, selectedLines: number[]): DiffHunk {
     header: `@@ -${match[1]}${count(oldCount)} +${match[2]}${count(newCount)} @@${match[3]}`,
     lines,
   };
+}
+
+function normalizePartialNewFilePrefix(prefix: string[], hunk: DiffHunk): string[] {
+  if (!prefix.some(line => line.startsWith('new file mode ')) || !hunk.lines.some(line => line.startsWith(' '))) return prefix;
+  // Reversing a creation patch would remove the index entry, but unselected lines must remain staged.
+  // Represent it as a regular modification once the partial hunk has remaining file content.
+  const newPath = prefix.find(line => line.startsWith('+++ '))?.slice(4);
+  if (!newPath) throw new Error('Unsupported new file patch');
+  const oldPath = newPath.startsWith('"b/') ? `"a/${newPath.slice(3)}` : `a/${newPath.slice(2)}`;
+  return prefix.flatMap((line) => {
+    if (line.startsWith('new file mode ') || line.startsWith('index ')) return [];
+    if (line === '--- /dev/null') return [`--- ${oldPath}`];
+    return [line];
+  });
 }
 
 async function getIndexPatch(cwd: string, path: string, scope: 'staged' | 'unstaged'): Promise<string> {
@@ -390,10 +404,11 @@ async function updateIndex(cwd: string, body: {
   const hunk = hunks[body.hunkIndex as number];
   if (!hunk) throw new Error('The selected hunk no longer exists');
   if (body.expectedHunk !== hunkText(hunk)) throw new Error('The selected hunk changed. Refresh and try again.');
-  const selectedHunk = body.mode === 'lines' ? partialHunk(hunk, body.selectedLines || []) : hunk;
+  const selectedHunk = body.mode === 'lines' ? partialHunk(hunk, body.selectedLines || [], scope === 'staged') : hunk;
+  const patchPrefix = body.mode === 'lines' && scope === 'staged' ? normalizePartialNewFilePrefix(prefix, selectedHunk) : prefix;
   // A selected hunk may not include the source diff's trailing newline, but git apply
   // requires every patch line, including the last one, to be newline-terminated.
-  const patch = `${[...prefix, selectedHunk.header, ...selectedHunk.lines].join('\n')}\n`;
+  const patch = `${[...patchPrefix, selectedHunk.header, ...selectedHunk.lines].join('\n')}\n`;
   const args = ['apply', '--cached', '--recount', '--unidiff-zero', '--whitespace=nowarn'];
   if (scope === 'staged') args.push('--reverse');
   await runGitWithInput(cwd, args, patch);
