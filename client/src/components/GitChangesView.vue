@@ -31,7 +31,6 @@
                     </button>
                   </h3>
                   <div class="git-change-list">
-                    <p v-if="!unstagedFiles.length" class="git-change-empty">{{ t('components.gitChanges.none') }}</p>
                     <button
                       v-for="file in unstagedFiles"
                       :key="`unstaged:${file.path}`"
@@ -40,7 +39,20 @@
                       :class="{ 'is-selected': selected?.scope === 'unstaged' && selected.path === file.path }"
                       @click="selectFile(file.path, 'unstaged')"
                     >
-                      <span class="git-change-status">{{ file.status }}</span>
+                      <span
+                        class="git-change-status-icon"
+                        role="img"
+                        :class="fileStatusKind(file, 'unstaged')"
+                        :title="fileStatusLabel(file, 'unstaged')"
+                        :aria-label="fileStatusLabel(file, 'unstaged')"
+                      >
+                        <PhFile :size="19" weight="duotone" />
+                        <span class="git-change-status-badge" aria-hidden="true">
+                          <PhPencilSimple v-if="fileStatusKind(file, 'unstaged') === 'modified'" :size="10" weight="bold" />
+                          <PhQuestion v-else-if="fileStatusKind(file, 'unstaged') === 'untracked'" :size="10" weight="bold" />
+                          <PhX v-else :size="10" weight="bold" />
+                        </span>
+                      </span>
                       <span class="git-change-path">{{ file.path }}</span>
                       <span
                         class="git-change-file-action"
@@ -71,7 +83,6 @@
                     </button>
                   </h3>
                   <div class="git-change-list">
-                    <p v-if="!stagedFiles.length" class="git-change-empty">{{ t('components.gitChanges.none') }}</p>
                     <button
                       v-for="file in stagedFiles"
                       :key="`staged:${file.path}`"
@@ -80,7 +91,15 @@
                       :class="{ 'is-selected': selected?.scope === 'staged' && selected.path === file.path }"
                       @click="selectFile(file.path, 'staged')"
                     >
-                      <span class="git-change-status">{{ file.status }}</span>
+                      <span
+                        class="git-change-status-icon staged"
+                        role="img"
+                        :title="fileStatusLabel(file, 'staged')"
+                        :aria-label="fileStatusLabel(file, 'staged')"
+                      >
+                        <PhFile :size="19" weight="duotone" />
+                        <span class="git-change-status-badge" aria-hidden="true"><PhCheck :size="10" weight="bold" /></span>
+                      </span>
                       <span class="git-change-path">{{ file.path }}</span>
                       <span
                         class="git-change-file-action"
@@ -111,7 +130,7 @@
                 <header class="git-changes-detail-header">
                   <div>
                     <strong :title="selected.path">{{ selected.path }}</strong>
-                    <span :class="selected.scope">{{ t(selected.scope === 'staged' ? 'components.gitChanges.staged' : 'components.gitChanges.unstaged') }}</span>
+                    <span class="git-change-detail-status" :class="selectedStatusKind">{{ selectedStatusLabel }}</span>
                   </div>
                   <button type="button" :disabled="updating" @click="mutateFile(selected.path, selected.scope)">
                     {{ t(selected.scope === 'staged' ? 'components.gitChanges.unstageFile' : 'components.gitChanges.stageFile') }}
@@ -173,12 +192,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { PhArrowClockwise, PhGitDiff, PhMinus, PhPlus, PhX } from '@phosphor-icons/vue';
+import { PhArrowClockwise, PhCheck, PhFile, PhGitDiff, PhMinus, PhPencilSimple, PhPlus, PhQuestion, PhX } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
 import { diffLineClass } from '../utils/gitDiff';
 
 type DiffScope = 'staged' | 'unstaged';
+type FileStatusKind = 'modified' | 'untracked' | 'missing' | 'staged';
 
 interface GitStatusFile {
   path: string;
@@ -237,6 +257,13 @@ const unstagedFiles = computed(() => files.value.filter(file => file.unstaged));
 const stagedFiles = computed(() => files.value.filter(file => file.staged));
 const parsedDiff = computed(() => parseDiff(diffContent.value));
 const renderLines = computed(() => parsedDiff.value.lines);
+const selectedFile = computed(() => files.value.find(file => file.path === selected.value?.path));
+const selectedStatusKind = computed(() => selectedFile.value && selected.value
+  ? fileStatusKind(selectedFile.value, selected.value.scope)
+  : 'modified');
+const selectedStatusLabel = computed(() => selectedFile.value && selected.value
+  ? fileStatusLabel(selectedFile.value, selected.value.scope)
+  : '');
 const commitButtonLabel = computed(() => {
   if (committing.value) return t('components.gitChanges.committing');
   return t(amend.value ? 'components.gitChanges.amend' : 'components.gitChanges.commit');
@@ -422,6 +449,23 @@ async function commitChanges(): Promise<void> {
   } finally {
     committing.value = false;
   }
+}
+
+function fileStatusKind(file: GitStatusFile, scope: DiffScope): FileStatusKind {
+  if (scope === 'staged') return 'staged';
+  if (file.status === '??') return 'untracked';
+  if (file.status.endsWith('D')) return 'missing';
+  return 'modified';
+}
+
+function fileStatusLabel(file: GitStatusFile, scope: DiffScope): string {
+  const key: Record<FileStatusKind, string> = {
+    modified: 'modifiedNotStaged',
+    untracked: 'untrackedNotStaged',
+    missing: 'missing',
+    staged: 'stagedForCommit',
+  };
+  return t(`components.gitChanges.${key[fileStatusKind(file, scope)]}`);
 }
 
 function selectedLineIndexes(clicked: RenderLine): number[] {
@@ -625,11 +669,22 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--git-deleted) 15%, var(--bg-elevated));
   font-size: 0.78rem;
-  text-transform: uppercase;
 }
 
 .git-change-group h3 b {
+  display: inline-flex;
+  min-width: 2em;
+  height: 2em;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 0 0.35em;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+  font-size: 0.85em;
   font-weight: 600;
+  line-height: 1;
 }
 
 .git-change-group h3 button {
@@ -687,11 +742,42 @@ onBeforeUnmount(() => {
   box-shadow: inset 3px 0 var(--accent);
 }
 
-.git-change-status {
-  width: 1.5rem;
-  flex: 0 0 auto;
+.git-change-status-icon {
+  position: relative;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
   color: var(--accent);
-  font-weight: 700;
+}
+
+.git-change-status-icon.untracked {
+  color: var(--warning);
+}
+
+.git-change-status-icon.missing {
+  color: var(--git-deleted);
+}
+
+.git-change-status-icon.staged {
+  color: var(--git-added);
+}
+
+.git-change-status-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--bg-secondary);
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  color: currentColor;
 }
 
 .git-change-path {
@@ -794,12 +880,22 @@ onBeforeUnmount(() => {
   font-size: 0.7rem;
 }
 
-.git-changes-detail-header span.unstaged {
+.git-change-detail-status.modified {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.git-change-detail-status.untracked {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.git-change-detail-status.missing {
   color: var(--git-deleted);
   background: color-mix(in srgb, var(--git-deleted) 12%, transparent);
 }
 
-.git-changes-detail-header span.staged {
+.git-change-detail-status.staged {
   color: var(--git-added);
   background: color-mix(in srgb, var(--git-added) 12%, transparent);
 }
