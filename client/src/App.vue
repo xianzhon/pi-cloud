@@ -395,6 +395,7 @@
       v-if="showGitChanges"
       :visible="showGitChanges"
       :cwd="activeProjectPath"
+      :session-id="activeSessionId"
       @close="showGitChanges = false"
     />
 

@@ -169,6 +169,30 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('amends with staged changes without including unstaged files when requested', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'staged change\n');
+      await git(cwd, 'add', 'README.md');
+      await writeFile(join(cwd, 'unstaged.txt'), 'unstaged change\n');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/amend',
+        payload: { cwd, message: 'Amended commit', stagedOnly: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
+      expect(await git(cwd, 'log', '-1', '--pretty=%s')).toBe('Amended commit');
+      expect(await git(cwd, 'status', '--porcelain')).toBe('?? unstaged.txt');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('commits staged-only changes', async () => {
     const cwd = await createRepo();
     const app = await buildApp();
@@ -214,6 +238,35 @@ describe('gitRoutes status and diff', () => {
       expect(unstage.statusCode).toBe(200);
       expect(await git(cwd, 'diff', '--cached')).toBe('');
       expect(await git(cwd, 'diff')).toContain('+changed');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('stages and unstages all files through the index endpoint', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      await writeFile(join(cwd, 'new.txt'), 'new\n');
+
+      const stage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, scope: 'unstaged', mode: 'all' },
+      });
+      expect(stage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached', '--name-only')).toBe('README.md\nnew.txt');
+
+      const unstage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, scope: 'staged', mode: 'all' },
+      });
+      expect(unstage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached')).toBe('');
+      expect(await git(cwd, 'status', '--porcelain')).toContain('?? new.txt');
     } finally {
       await app.close();
       await rm(cwd, { recursive: true, force: true });

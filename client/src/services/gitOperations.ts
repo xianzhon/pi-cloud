@@ -34,9 +34,9 @@ export function createGitOperations() {
     },
     updateIndex(options: {
       cwd: string;
-      path: string;
+      path?: string;
       scope: 'staged' | 'unstaged';
-      mode: 'file' | 'hunk' | 'lines';
+      mode: 'all' | 'file' | 'hunk' | 'lines';
       hunkIndex?: number;
       selectedLines?: number[];
       expectedHunk?: string;

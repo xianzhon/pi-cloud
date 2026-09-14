@@ -329,9 +329,18 @@ async function updateIndex(cwd: string, body: {
   selectedLines?: number[];
   expectedHunk?: string;
 }): Promise<void> {
-  const path = validateGitPath(body.path);
   const scope = body.scope === 'staged' || body.scope === 'unstaged' ? body.scope : undefined;
   if (!scope) throw new Error('scope must be staged or unstaged');
+  if (body.mode === 'all') {
+    if (scope === 'unstaged') {
+      await runGit(cwd, ['add', '-A']);
+    } else {
+      const hasHead = await runGit(cwd, ['rev-parse', '--verify', 'HEAD']).then(() => true, () => false);
+      await runGit(cwd, hasHead ? ['reset', '-q', 'HEAD', '--', '.'] : ['rm', '--cached', '-r', '-q', '--', '.']);
+    }
+    return;
+  }
+  const path = validateGitPath(body.path);
   if (body.mode === 'file') {
     if (scope === 'unstaged') {
       await runGit(cwd, ['add', '--', path]);
@@ -341,7 +350,7 @@ async function updateIndex(cwd: string, body: {
     }
     return;
   }
-  if (body.mode !== 'hunk' && body.mode !== 'lines') throw new Error('mode must be file, hunk, or lines');
+  if (body.mode !== 'hunk' && body.mode !== 'lines') throw new Error('mode must be all, file, hunk, or lines');
   if (!Number.isInteger(body.hunkIndex) || (body.hunkIndex as number) < 0) throw new Error('A valid hunk index is required');
 
   const diff = await getIndexPatch(cwd, path, scope);
@@ -872,7 +881,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
   });
 
   app.post('/amend', async (req, reply) => {
-    const body = (req.body || {}) as { cwd?: string; message?: string; sessionId?: string };
+    const body = (req.body || {}) as { cwd?: string; message?: string; sessionId?: string; stagedOnly?: boolean };
     const resolvedCwd = await resolveGitCwd(body.cwd);
     const message = body.message?.trim();
 
@@ -882,9 +891,10 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
 
     try {
       await ensureHasCommit(resolvedCwd);
-      await runGit(resolvedCwd, ['add', '-A']);
+      const onlyStaged = body.stagedOnly === true;
+      if (!onlyStaged) await runGit(resolvedCwd, ['add', '-A']);
       const status = await runGit(resolvedCwd, ['status', '--porcelain']);
-      const files = parseStatusFiles(status);
+      const files = parseStatusFiles(onlyStaged ? getStagedStatus(status) : status);
       const output = await runGit(resolvedCwd, ['commit', '--amend', '--allow-empty', '-m', message]);
       const commit = (await runGit(resolvedCwd, ['rev-parse', 'HEAD'])).trim();
       recordCommitActivity(options, { sessionId: body.sessionId, cwd: resolvedCwd, message, commit, files, mode: 'amend' });

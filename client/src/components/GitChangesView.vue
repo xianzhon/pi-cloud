@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="git-changes-backdrop">
-      <section class="git-changes-dialog" role="dialog" aria-modal="true" :aria-labelledby="titleId">
+      <section ref="dialog" class="git-changes-dialog" role="dialog" aria-modal="true" :aria-labelledby="titleId">
         <header class="git-changes-header">
           <div>
             <h2 :id="titleId"><PhGitDiff :size="20" weight="fill" /> {{ t('components.gitChanges.title') }}</h2>
@@ -17,96 +17,139 @@
           </div>
         </header>
 
-        <div class="git-changes-body">
-          <aside class="git-changes-files">
-            <div v-if="loading" class="git-changes-state">{{ t('components.gitChanges.loading') }}</div>
-            <div v-else-if="statusError" class="git-changes-state is-error" role="alert">{{ statusError }}</div>
-            <template v-else>
-              <section class="git-change-group">
-                <h3>{{ t('components.gitChanges.unstagedChanges') }} <span>{{ unstagedFiles.length }}</span></h3>
-                <p v-if="!unstagedFiles.length" class="git-change-empty">{{ t('components.gitChanges.none') }}</p>
-                <button
-                  v-for="file in unstagedFiles"
-                  :key="`unstaged:${file.path}`"
-                  type="button"
-                  class="git-change-file"
-                  :class="{ 'is-selected': selected?.scope === 'unstaged' && selected.path === file.path }"
-                  @click="selectFile(file.path, 'unstaged')"
-                >
-                  <span class="git-change-status">{{ file.status }}</span>
-                  <span class="git-change-path">{{ file.path }}</span>
-                  <span
-                    class="git-change-file-action"
-                    role="button"
-                    tabindex="0"
-                    :title="t('components.gitChanges.stageFile')"
-                    :aria-label="t('components.gitChanges.stageFileNamed', { path: file.path })"
-                    @click.stop="mutateFile(file.path, 'unstaged')"
-                    @keydown.enter.stop="mutateFile(file.path, 'unstaged')"
-                  ><PhPlus :size="15" weight="bold" /></span>
-                </button>
-              </section>
+        <div class="git-changes-content">
+          <div class="git-changes-body" :style="{ gridTemplateColumns: `${filesWidth}px 5px minmax(0, 1fr)` }">
+            <aside ref="filesPane" class="git-changes-files">
+              <div v-if="loading" class="git-changes-state">{{ t('components.gitChanges.loading') }}</div>
+              <div v-else-if="statusError" class="git-changes-state is-error" role="alert">{{ statusError }}</div>
+              <template v-else>
+                <section class="git-change-group" :style="{ height: `${unstagedHeight}px` }">
+                  <h3>
+                    <span>{{ t('components.gitChanges.unstagedChanges') }} <b>{{ unstagedFiles.length }}</b></span>
+                    <button type="button" :disabled="updating || !unstagedFiles.length" @click="mutateAll('unstaged')">
+                      {{ t('components.gitChanges.stageAll') }}
+                    </button>
+                  </h3>
+                  <div class="git-change-list">
+                    <p v-if="!unstagedFiles.length" class="git-change-empty">{{ t('components.gitChanges.none') }}</p>
+                    <button
+                      v-for="file in unstagedFiles"
+                      :key="`unstaged:${file.path}`"
+                      type="button"
+                      class="git-change-file"
+                      :class="{ 'is-selected': selected?.scope === 'unstaged' && selected.path === file.path }"
+                      @click="selectFile(file.path, 'unstaged')"
+                    >
+                      <span class="git-change-status">{{ file.status }}</span>
+                      <span class="git-change-path">{{ file.path }}</span>
+                      <span
+                        class="git-change-file-action"
+                        role="button"
+                        tabindex="0"
+                        :title="t('components.gitChanges.stageFile')"
+                        :aria-label="t('components.gitChanges.stageFileNamed', { path: file.path })"
+                        @click.stop="mutateFile(file.path, 'unstaged')"
+                        @keydown.enter.stop="mutateFile(file.path, 'unstaged')"
+                      ><PhPlus :size="15" weight="bold" /></span>
+                    </button>
+                  </div>
+                </section>
 
-              <section class="git-change-group is-staged">
-                <h3>{{ t('components.gitChanges.stagedChanges') }} <span>{{ stagedFiles.length }}</span></h3>
-                <p v-if="!stagedFiles.length" class="git-change-empty">{{ t('components.gitChanges.none') }}</p>
-                <button
-                  v-for="file in stagedFiles"
-                  :key="`staged:${file.path}`"
-                  type="button"
-                  class="git-change-file"
-                  :class="{ 'is-selected': selected?.scope === 'staged' && selected.path === file.path }"
-                  @click="selectFile(file.path, 'staged')"
-                >
-                  <span class="git-change-status">{{ file.status }}</span>
-                  <span class="git-change-path">{{ file.path }}</span>
-                  <span
-                    class="git-change-file-action"
-                    role="button"
-                    tabindex="0"
-                    :title="t('components.gitChanges.unstageFile')"
-                    :aria-label="t('components.gitChanges.unstageFileNamed', { path: file.path })"
-                    @click.stop="mutateFile(file.path, 'staged')"
-                    @keydown.enter.stop="mutateFile(file.path, 'staged')"
-                  ><PhMinus :size="15" weight="bold" /></span>
-                </button>
-              </section>
-            </template>
-          </aside>
+                <div
+                  class="git-changes-resizer is-horizontal"
+                  role="separator"
+                  aria-orientation="horizontal"
+                  :aria-label="t('components.gitChanges.resizeLists')"
+                  @pointerdown="startResize($event, 'lists')"
+                ></div>
 
-          <main class="git-changes-detail">
-            <div v-if="!selected" class="git-changes-state">{{ t('components.gitChanges.selectFile') }}</div>
-            <template v-else>
-              <header class="git-changes-detail-header">
-                <div>
-                  <strong>{{ selected.path }}</strong>
-                  <span :class="selected.scope">{{ t(selected.scope === 'staged' ? 'components.gitChanges.staged' : 'components.gitChanges.unstaged') }}</span>
+                <section class="git-change-group is-staged">
+                  <h3>
+                    <span>{{ t('components.gitChanges.stagedChanges') }} <b>{{ stagedFiles.length }}</b></span>
+                    <button type="button" :disabled="updating || !stagedFiles.length" @click="mutateAll('staged')">
+                      {{ t('components.gitChanges.unstageAll') }}
+                    </button>
+                  </h3>
+                  <div class="git-change-list">
+                    <p v-if="!stagedFiles.length" class="git-change-empty">{{ t('components.gitChanges.none') }}</p>
+                    <button
+                      v-for="file in stagedFiles"
+                      :key="`staged:${file.path}`"
+                      type="button"
+                      class="git-change-file"
+                      :class="{ 'is-selected': selected?.scope === 'staged' && selected.path === file.path }"
+                      @click="selectFile(file.path, 'staged')"
+                    >
+                      <span class="git-change-status">{{ file.status }}</span>
+                      <span class="git-change-path">{{ file.path }}</span>
+                      <span
+                        class="git-change-file-action"
+                        role="button"
+                        tabindex="0"
+                        :title="t('components.gitChanges.unstageFile')"
+                        :aria-label="t('components.gitChanges.unstageFileNamed', { path: file.path })"
+                        @click.stop="mutateFile(file.path, 'staged')"
+                        @keydown.enter.stop="mutateFile(file.path, 'staged')"
+                      ><PhMinus :size="15" weight="bold" /></span>
+                    </button>
+                  </div>
+                </section>
+              </template>
+            </aside>
+
+            <div
+              class="git-changes-resizer is-vertical"
+              role="separator"
+              aria-orientation="vertical"
+              :aria-label="t('components.gitChanges.resizePanes')"
+              @pointerdown="startResize($event, 'panes')"
+            ></div>
+
+            <main class="git-changes-detail">
+              <div v-if="!selected" class="git-changes-state">{{ t('components.gitChanges.selectFile') }}</div>
+              <template v-else>
+                <header class="git-changes-detail-header">
+                  <div>
+                    <strong :title="selected.path">{{ selected.path }}</strong>
+                    <span :class="selected.scope">{{ t(selected.scope === 'staged' ? 'components.gitChanges.staged' : 'components.gitChanges.unstaged') }}</span>
+                  </div>
+                  <button type="button" :disabled="updating" @click="mutateFile(selected.path, selected.scope)">
+                    {{ t(selected.scope === 'staged' ? 'components.gitChanges.unstageFile' : 'components.gitChanges.stageFile') }}
+                  </button>
+                </header>
+                <div v-if="diffLoading" class="git-changes-state">{{ t('components.gitChanges.loadingDiff') }}</div>
+                <div v-else-if="diffError" class="git-changes-state is-error" role="alert">{{ diffError }}</div>
+                <div v-else-if="!renderLines.length" class="git-changes-state">{{ t('components.gitChanges.noPatch') }}</div>
+                <div v-else ref="diffRoot" class="git-changes-diff" @contextmenu="closeContextMenu">
+                  <pre><span
+                    v-for="(line, index) in renderLines"
+                    :key="index"
+                    class="git-changes-line"
+                    :class="diffLineClass(line.text)"
+                    :data-hunk-index="line.hunkIndex"
+                    :data-hunk-line-index="line.hunkLineIndex"
+                    @contextmenu.stop.prevent="openContextMenu($event, line)"
+                  >{{ line.text }}{{ '\n' }}</span></pre>
                 </div>
-                <button type="button" :disabled="updating" @click="mutateFile(selected.path, selected.scope)">
-                  {{ t(selected.scope === 'staged' ? 'components.gitChanges.unstageFile' : 'components.gitChanges.stageFile') }}
-                </button>
-              </header>
-              <div v-if="diffLoading" class="git-changes-state">{{ t('components.gitChanges.loadingDiff') }}</div>
-              <div v-else-if="diffError" class="git-changes-state is-error" role="alert">{{ diffError }}</div>
-              <div v-else-if="!renderLines.length" class="git-changes-state">{{ t('components.gitChanges.noPatch') }}</div>
-              <div
-                v-else
-                ref="diffRoot"
-                class="git-changes-diff"
-                @contextmenu="closeContextMenu"
-              >
-                <pre><span
-                  v-for="(line, index) in renderLines"
-                  :key="index"
-                  class="git-changes-line"
-                  :class="diffLineClass(line.text)"
-                  :data-hunk-index="line.hunkIndex"
-                  :data-hunk-line-index="line.hunkLineIndex"
-                  @contextmenu.stop.prevent="openContextMenu($event, line)"
-                >{{ line.text }}{{ '\n' }}</span></pre>
-              </div>
-            </template>
-          </main>
+              </template>
+            </main>
+          </div>
+
+          <footer class="git-commit-panel">
+            <label class="git-amend-option">
+              <input v-model="amend" type="checkbox" :disabled="committing" @change="toggleAmend" />
+              <span>{{ t('components.gitChanges.amendLastCommit') }}</span>
+            </label>
+            <label for="git-changes-commit-message">{{ t('components.gitChanges.commitMessage') }}</label>
+            <div class="git-commit-controls">
+              <textarea id="git-changes-commit-message" v-model="commitMessage" rows="3" :disabled="committing"></textarea>
+              <button type="button" :disabled="committing || !commitMessage.trim() || (!amend && !stagedFiles.length)" @click="commitChanges">
+                {{ commitButtonLabel }}
+              </button>
+            </div>
+            <p v-if="commitError" class="git-commit-result is-error" role="alert">{{ commitError }}</p>
+            <p v-else-if="commitResult" class="git-commit-result" role="status">{{ commitResult }}</p>
+          </footer>
         </div>
       </section>
 
@@ -160,7 +203,7 @@ interface DiffHunk {
   lines: string[];
 }
 
-const props = defineProps<{ visible: boolean; cwd: string }>();
+const props = defineProps<{ visible: boolean; cwd: string; sessionId?: string }>();
 const emit = defineEmits<{ close: [] }>();
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
@@ -174,15 +217,30 @@ const diffLoading = ref(false);
 const updating = ref(false);
 const statusError = ref('');
 const diffError = ref('');
+const dialog = ref<HTMLElement>();
 const diffRoot = ref<HTMLElement>();
+const filesPane = ref<HTMLElement>();
 const contextMenu = ref<{ x: number; y: number; hunkIndex: number; selectedLines: number[] }>();
+const filesWidth = ref(360);
+const unstagedHeight = ref(320);
+const amend = ref(false);
+const commitMessage = ref('');
+const normalCommitMessage = ref('');
+const committing = ref(false);
+const commitError = ref('');
+const commitResult = ref('');
 let requestId = 0;
 let diffRequestId = 0;
+let resizeMode: 'panes' | 'lists' | undefined;
 
 const unstagedFiles = computed(() => files.value.filter(file => file.unstaged));
 const stagedFiles = computed(() => files.value.filter(file => file.staged));
 const parsedDiff = computed(() => parseDiff(diffContent.value));
 const renderLines = computed(() => parsedDiff.value.lines);
+const commitButtonLabel = computed(() => {
+  if (committing.value) return t('components.gitChanges.committing');
+  return t(amend.value ? 'components.gitChanges.amend' : 'components.gitChanges.commit');
+});
 
 function parseDiff(content: string): { lines: RenderLine[]; hunks: DiffHunk[] } {
   const lines: RenderLine[] = [];
@@ -279,7 +337,7 @@ async function updateIndex(options: Parameters<ReturnType<typeof createGitOperat
   try {
     await gitOperations.updateIndex(options);
     window.dispatchEvent(new CustomEvent('refresh-git-status'));
-    await refresh({ path: options.path, scope: options.scope });
+    await refresh(options.path ? { path: options.path, scope: options.scope } : selected.value);
   } catch (cause) {
     diffError.value = cause instanceof Error ? cause.message : t('components.gitChanges.updateFailed');
   } finally {
@@ -290,6 +348,80 @@ async function updateIndex(options: Parameters<ReturnType<typeof createGitOperat
 function mutateFile(path: string, scope: DiffScope): void {
   if (updating.value) return;
   void updateIndex({ cwd: props.cwd, path, scope, mode: 'file' });
+}
+
+function mutateAll(scope: DiffScope): void {
+  if (updating.value) return;
+  void updateIndex({ cwd: props.cwd, scope, mode: 'all' });
+}
+
+function startResize(event: PointerEvent, mode: 'panes' | 'lists'): void {
+  event.preventDefault();
+  resizeMode = mode;
+  document.body.classList.add(mode === 'panes' ? 'is-resizing-columns' : 'is-resizing-rows');
+}
+
+function resize(event: PointerEvent): void {
+  if (resizeMode === 'panes') {
+    if (!dialog.value) return;
+    filesWidth.value = Math.max(220, Math.min(
+      event.clientX - dialog.value.getBoundingClientRect().left,
+      dialog.value.clientWidth - 320,
+    ));
+  } else if (resizeMode === 'lists' && filesPane.value) {
+    const top = filesPane.value.getBoundingClientRect().top;
+    unstagedHeight.value = Math.max(110, Math.min(event.clientY - top, filesPane.value.clientHeight - 115));
+  }
+}
+
+function stopResize(): void {
+  resizeMode = undefined;
+  document.body.classList.remove('is-resizing-columns', 'is-resizing-rows');
+}
+
+async function toggleAmend(): Promise<void> {
+  commitError.value = '';
+  commitResult.value = '';
+  if (!amend.value) {
+    commitMessage.value = normalCommitMessage.value;
+    return;
+  }
+  normalCommitMessage.value = commitMessage.value;
+  try {
+    const result = await gitOperations.getAmendStatus({ cwd: props.cwd });
+    if (amend.value) commitMessage.value = typeof result.message === 'string' ? result.message : '';
+  } catch (cause) {
+    amend.value = false;
+    commitError.value = cause instanceof Error ? cause.message : t('components.gitChanges.amendFailed');
+  }
+}
+
+async function commitChanges(): Promise<void> {
+  if (committing.value || !commitMessage.value.trim()) return;
+  committing.value = true;
+  commitError.value = '';
+  commitResult.value = '';
+  try {
+    const result = await gitOperations.saveCommit(amend.value ? 'amend' : 'commit', {
+      cwd: props.cwd,
+      message: commitMessage.value,
+      sessionId: props.sessionId,
+      stagedOnly: true,
+    });
+    const successKey = amend.value ? 'components.gitChanges.amendSucceeded' : 'components.gitChanges.commitSucceeded';
+    commitResult.value = t(successKey, {
+      commit: typeof result.commit === 'string' ? result.commit.slice(0, 7) : '',
+    });
+    commitMessage.value = '';
+    normalCommitMessage.value = '';
+    amend.value = false;
+    window.dispatchEvent(new CustomEvent('refresh-git-status'));
+    await refresh();
+  } catch (cause) {
+    commitError.value = cause instanceof Error ? cause.message : t('components.gitChanges.commitFailed');
+  } finally {
+    committing.value = false;
+  }
 }
 
 function selectedLineIndexes(clicked: RenderLine): number[] {
@@ -354,10 +486,15 @@ watch(() => [props.visible, props.cwd] as const, ([visible]) => {
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown);
   window.addEventListener('pointerdown', closeContextMenu);
+  window.addEventListener('pointermove', resize);
+  window.addEventListener('pointerup', stopResize);
 });
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('pointerdown', closeContextMenu);
+  window.removeEventListener('pointermove', resize);
+  window.removeEventListener('pointerup', stopResize);
+  stopResize();
 });
 </script>
 
@@ -374,8 +511,10 @@ onBeforeUnmount(() => {
 }
 
 .git-changes-dialog {
+  display: flex;
   width: min(1500px, 94vw);
   height: 94vh;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -442,34 +581,80 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
 }
 
+.git-changes-content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
 .git-changes-body {
   display: grid;
-  grid-template-columns: minmax(240px, 24%) 1fr;
-  height: calc(100% - 68px);
+  min-height: 220px;
+  flex: 1;
 }
 
 .git-changes-files {
-  overflow: auto;
-  border-right: 1px solid var(--border);
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg-secondary);
 }
 
-.git-change-group h3 {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+.git-change-group {
   display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.git-change-group:first-child {
+  flex: 0 0 auto;
+}
+
+.git-change-group h3 {
+  display: flex;
+  min-height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin: 0;
-  padding: 9px 12px;
+  padding: 5px 8px 5px 12px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--git-deleted) 15%, var(--bg-elevated));
   font-size: 0.78rem;
   text-transform: uppercase;
 }
 
+.git-change-group h3 b {
+  font-weight: 600;
+}
+
+.git-change-group h3 button {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  text-transform: none;
+}
+
+.git-change-group h3 button:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
 .git-change-group.is-staged h3 {
   background: color-mix(in srgb, var(--git-added) 15%, var(--bg-elevated));
+}
+
+.git-change-list {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
 }
 
 .git-change-empty {
@@ -481,8 +666,8 @@ onBeforeUnmount(() => {
 
 .git-change-file {
   display: flex;
-  width: 100%;
-  min-width: 0;
+  width: max-content;
+  min-width: 100%;
   align-items: center;
   gap: 7px;
   padding: 7px 8px;
@@ -510,10 +695,7 @@ onBeforeUnmount(() => {
 }
 
 .git-change-path {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 1 0 auto;
   white-space: nowrap;
 }
 
@@ -530,6 +712,56 @@ onBeforeUnmount(() => {
 .git-change-file-action:hover {
   background: var(--bg-elevated);
   color: var(--accent);
+}
+
+.git-changes-resizer {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 5px;
+  background: var(--border);
+  touch-action: none;
+}
+
+.git-changes-resizer::after {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--text-muted);
+  content: '';
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.git-changes-resizer:hover::after {
+  opacity: 0.75;
+}
+
+.git-changes-resizer.is-vertical {
+  cursor: col-resize;
+}
+
+.git-changes-resizer.is-vertical::after {
+  inset: 35% 1px;
+}
+
+.git-changes-resizer.is-horizontal {
+  width: 100%;
+  cursor: row-resize;
+}
+
+.git-changes-resizer.is-horizontal::after {
+  inset: 1px 35%;
+}
+
+:global(body.is-resizing-columns),
+:global(body.is-resizing-columns *) {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+:global(body.is-resizing-rows),
+:global(body.is-resizing-rows *) {
+  cursor: row-resize !important;
+  user-select: none !important;
 }
 
 .git-changes-detail {
@@ -652,6 +884,67 @@ onBeforeUnmount(() => {
   background: var(--bg-surface);
 }
 
+.git-commit-panel {
+  flex: 0 0 auto;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.git-commit-panel > label:not(.git-amend-option) {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.git-amend-option {
+  display: flex;
+  float: right;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.git-commit-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.git-commit-controls textarea {
+  min-height: 66px;
+  flex: 1;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.git-commit-controls button {
+  min-width: 100px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+.git-commit-result {
+  margin: 7px 0 0;
+  color: var(--git-added);
+  font-size: 0.75rem;
+}
+
+.git-commit-result.is-error {
+  color: var(--error);
+}
+
 @media (max-width: 768px) {
   .git-changes-backdrop {
     padding: 0;
@@ -665,7 +958,11 @@ onBeforeUnmount(() => {
   }
 
   .git-changes-body {
-    grid-template-columns: minmax(150px, 38%) 1fr;
+    grid-template-columns: minmax(150px, 38%) 5px minmax(0, 1fr) !important;
+  }
+
+  .git-commit-controls button {
+    min-width: 78px;
   }
 }
 </style>
