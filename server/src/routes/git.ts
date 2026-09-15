@@ -17,7 +17,7 @@ const MAX_STATUS_FILES = 1_000;
 const GIT_HISTORY_PAGE_SIZE = 10;
 const GIT_HISTORY_FIELDS = 8;
 const GIT_INDEX_LOCK_RETRY_DELAYS_MS = [50, 100, 200, 400];
-const gitIndexUpdates = new Map<string, Promise<void>>();
+const gitIndexOperations = new Map<string, Promise<unknown>>();
 
 class OversizedGitOutputError extends Error {
   constructor() {
@@ -63,14 +63,14 @@ async function resolveGitCwd(cwd: string | undefined): Promise<string> {
   return resolveAllowedPath(cwd || '.');
 }
 
-async function serializeGitIndexUpdate(cwd: string, operation: () => Promise<void>): Promise<void> {
-  const previous = gitIndexUpdates.get(cwd) || Promise.resolve();
+async function serializeGitIndexOperation<T>(cwd: string, operation: () => Promise<T>): Promise<T> {
+  const previous = gitIndexOperations.get(cwd) || Promise.resolve();
   const current = previous.catch(() => {}).then(operation);
-  gitIndexUpdates.set(cwd, current);
+  gitIndexOperations.set(cwd, current);
   try {
-    await current;
+    return await current;
   } finally {
-    if (gitIndexUpdates.get(cwd) === current) gitIndexUpdates.delete(cwd);
+    if (gitIndexOperations.get(cwd) === current) gitIndexOperations.delete(cwd);
   }
 }
 
@@ -277,12 +277,13 @@ function runGitWithInput(cwd: string, args: string[], input: string): Promise<st
     const stderr: Buffer[] = [];
     let outputBytes = 0;
 
-    child.stdout.on('data', (chunk: Buffer) => {
+    const collectOutput = (chunks: Buffer[], chunk: Buffer) => {
       outputBytes += chunk.length;
       if (outputBytes > MAX_SLASH_COMMAND_OUTPUT_BYTES) child.kill();
-      else stdout.push(chunk);
-    });
-    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+      else chunks.push(chunk);
+    };
+    child.stdout.on('data', (chunk: Buffer) => collectOutput(stdout, chunk));
+    child.stderr.on('data', (chunk: Buffer) => collectOutput(stderr, chunk));
     child.on('error', reject);
     child.on('close', (code) => {
       if (outputBytes > MAX_SLASH_COMMAND_OUTPUT_BYTES) return reject(new OversizedGitOutputError());
@@ -885,24 +886,24 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     }
 
     try {
-      const onlyStaged = body.stagedOnly === true;
-      if (!onlyStaged) await runGit(resolvedCwd, ['add', '-A']);
-      const workingTreeStatus = await runGit(resolvedCwd, ['status', '--porcelain']);
-      const files = parseStatusFiles(onlyStaged ? getStagedStatus(workingTreeStatus) : workingTreeStatus);
-      if (!files.length) {
-        return reply.status(400).send({ error: 'No changes to commit' });
-      }
+      return await serializeGitIndexOperation(resolvedCwd, async () => {
+        const onlyStaged = body.stagedOnly === true;
+        if (!onlyStaged) await runGit(resolvedCwd, ['add', '-A']);
+        const workingTreeStatus = await runGit(resolvedCwd, ['status', '--porcelain']);
+        const files = parseStatusFiles(onlyStaged ? getStagedStatus(workingTreeStatus) : workingTreeStatus);
+        if (!files.length) throw new Error('No changes to commit');
 
-      const output = await runGit(resolvedCwd, ['commit', '-m', message]);
-      const commit = (await runGit(resolvedCwd, ['rev-parse', 'HEAD'])).trim();
-      recordCommitActivity(options, { sessionId: body.sessionId, cwd: resolvedCwd, message, commit, files, mode: 'commit' });
-      return {
-        cwd: resolvedCwd,
-        message,
-        files,
-        commit,
-        output,
-      };
+        const output = await runGit(resolvedCwd, ['commit', '-m', message]);
+        const commit = (await runGit(resolvedCwd, ['rev-parse', 'HEAD'])).trim();
+        recordCommitActivity(options, { sessionId: body.sessionId, cwd: resolvedCwd, message, commit, files, mode: 'commit' });
+        return {
+          cwd: resolvedCwd,
+          message,
+          files,
+          commit,
+          output,
+        };
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to run git commit';
       return reply.status(400).send({ error: errorMessage });
@@ -940,21 +941,23 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     }
 
     try {
-      await ensureHasCommit(resolvedCwd);
-      const onlyStaged = body.stagedOnly === true;
-      if (!onlyStaged) await runGit(resolvedCwd, ['add', '-A']);
-      const status = await runGit(resolvedCwd, ['status', '--porcelain']);
-      const files = parseStatusFiles(onlyStaged ? getStagedStatus(status) : status);
-      const output = await runGit(resolvedCwd, ['commit', '--amend', '--allow-empty', '-m', message]);
-      const commit = (await runGit(resolvedCwd, ['rev-parse', 'HEAD'])).trim();
-      recordCommitActivity(options, { sessionId: body.sessionId, cwd: resolvedCwd, message, commit, files, mode: 'amend' });
-      return {
-        cwd: resolvedCwd,
-        message,
-        files,
-        commit,
-        output,
-      };
+      return await serializeGitIndexOperation(resolvedCwd, async () => {
+        await ensureHasCommit(resolvedCwd);
+        const onlyStaged = body.stagedOnly === true;
+        if (!onlyStaged) await runGit(resolvedCwd, ['add', '-A']);
+        const status = await runGit(resolvedCwd, ['status', '--porcelain']);
+        const files = parseStatusFiles(onlyStaged ? getStagedStatus(status) : status);
+        const output = await runGit(resolvedCwd, ['commit', '--amend', '--allow-empty', '-m', message]);
+        const commit = (await runGit(resolvedCwd, ['rev-parse', 'HEAD'])).trim();
+        recordCommitActivity(options, { sessionId: body.sessionId, cwd: resolvedCwd, message, commit, files, mode: 'amend' });
+        return {
+          cwd: resolvedCwd,
+          message,
+          files,
+          commit,
+          output,
+        };
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to run git amend';
       return reply.status(400).send({ error: errorMessage });
@@ -974,7 +977,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     const resolvedCwd = await resolveGitCwd(body.cwd);
 
     try {
-      await serializeGitIndexUpdate(resolvedCwd, () => updateIndex(resolvedCwd, body));
+      await serializeGitIndexOperation(resolvedCwd, () => updateIndex(resolvedCwd, body));
       return { cwd: resolvedCwd, path: body.path, scope: body.scope, mode: body.mode };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update the Git index';

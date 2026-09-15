@@ -43,7 +43,7 @@ describe('GitChangesView', () => {
     expect(document.body.textContent).toContain('Unstaged Changes');
     expect(document.body.textContent).toContain('Staged Changes');
 
-    (document.querySelector('.git-change-file-action') as HTMLElement).click();
+    (document.querySelector('.git-change-status-icon') as HTMLElement).click();
     await flushPromises();
 
     expect(fetch).toHaveBeenCalledWith('/api/git/index', expect.objectContaining({
@@ -79,7 +79,9 @@ describe('GitChangesView', () => {
     await flushPromises();
     expect(document.querySelector<HTMLTextAreaElement>('#git-changes-commit-message')?.value).toBe('Previous message');
 
-    (document.querySelector<HTMLButtonElement>('.git-commit-controls button') as HTMLButtonElement).click();
+    const amendButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.git-commit-actions button'))
+      .find(button => button.textContent?.includes('Amend'))!;
+    amendButton.click();
     await flushPromises();
     expect(fetch).toHaveBeenCalledWith('/api/git/amend', expect.objectContaining({
       method: 'POST',

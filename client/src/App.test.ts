@@ -726,7 +726,7 @@ describe('App routing', () => {
     });
   });
 
-  it('shows the Git tool by default and dispatches toolbar actions through the chat composer', async () => {
+  it('shows the Git tool by default and opens Git history', async () => {
     localStorage.setItem('pi-cloud-sidebar-collapsed', 'false');
     vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => {
       if (String(url).startsWith('/api/git/status')) {
@@ -747,9 +747,6 @@ describe('App routing', () => {
 
     await wrapper.get('.git-tool-action[aria-label="Refresh"]').trigger('click');
     expect(submitExternalPrompt).not.toHaveBeenCalled();
-
-    await wrapper.get('.git-tool-action[aria-label="Show diff"]').trigger('click');
-    expect(submitExternalPrompt).toHaveBeenCalledWith('/diff', { hideCommandMessage: true });
 
     await wrapper.get('.git-tool-action[aria-label="History"]').trigger('click');
     await flushPromises();

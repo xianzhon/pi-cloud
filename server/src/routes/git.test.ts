@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -265,6 +265,52 @@ describe('gitRoutes status and diff', () => {
       expect(await git(cwd, 'diff', '--cached', '--name-only')).toBe('README.md\nsecond.txt');
     } finally {
       if (releaseLock) clearTimeout(releaseLock);
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['commit', 'amend'] as const)('serializes index updates during %s', async (operation) => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    const hookPath = join(cwd, '.git', 'hooks', 'pre-commit');
+    const hookStartedPath = join(cwd, 'hook-started');
+    try {
+      await writeFile(join(cwd, 'README.md'), 'committed change\n');
+      await git(cwd, 'add', 'README.md');
+      await writeFile(join(cwd, 'second.txt'), 'staged after commit\n');
+      await writeFile(hookPath, `#!/bin/sh\ntouch "${hookStartedPath}"\nsleep 1\n`);
+      await chmod(hookPath, 0o755);
+
+      const commitResponse = app.inject({
+        method: 'POST',
+        url: `/api/git/${operation}`,
+        payload: { cwd, message: `${operation} change`, stagedOnly: true },
+      });
+
+      let hookStarted = false;
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        try {
+          await access(hookStartedPath);
+          hookStarted = true;
+          break;
+        } catch {
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+      }
+      expect(hookStarted).toBe(true);
+
+      const indexResponse = app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'second.txt', scope: 'unstaged', mode: 'file' },
+      });
+      const [commit, index] = await Promise.all([commitResponse, indexResponse]);
+
+      expect(commit.statusCode, commit.body).toBe(200);
+      expect(index.statusCode, index.body).toBe(200);
+      expect(await git(cwd, 'diff', '--cached', '--name-only')).toBe('second.txt');
+    } finally {
       await app.close();
       await rm(cwd, { recursive: true, force: true });
     }
