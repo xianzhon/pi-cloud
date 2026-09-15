@@ -57,6 +57,7 @@ import { ProjectHistoryStore } from './services/project-history-store.js';
 import { ProjectTaskStore } from './services/project-task-store.js';
 import { SkillPresetStore } from './services/skill-preset-store.js';
 import { CommitMessagePromptStore } from './services/commit-message-prompt-store.js';
+import { ChangeReasonPromptStore } from './services/change-reason-prompt-store.js';
 import { ProjectTaskStarter } from './services/project-task-starter.js';
 import { RepositoryCloner } from './services/repository-cloner.js';
 import { FeishuGatewayService } from './services/feishu-gateway.js';
@@ -404,6 +405,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     prefix: '/api/git',
     activityStore: sessionActivityStore,
     commitMessagePrompts: new CommitMessagePromptStore(db),
+    changeReasonPrompts: new ChangeReasonPromptStore(db),
   });
   await app.register(slashCommandRoutes, { prefix: '/api/slash-commands' });
   await app.register(changelogRoutes, { prefix: '/api/changelog' });

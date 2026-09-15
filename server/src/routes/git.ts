@@ -7,6 +7,7 @@ import { completeSimple, type AssistantMessage, type TextContent } from '@earend
 import { ModelRegistry, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import type { FastifyInstance } from 'fastify';
 import type { SessionActivityStore } from '../services/session-activity-store.js';
+import { DEFAULT_CHANGE_REASON_SYSTEM_PROMPT, type ChangeReasonPromptStore } from '../services/change-reason-prompt-store.js';
 import { CommitMessagePromptStore, DEFAULT_COMMIT_MESSAGE_PROMPTS, type CommitMessagePrompts } from '../services/commit-message-prompt-store.js';
 import type { PiSessionService } from '../services/session-manager.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
@@ -573,9 +574,9 @@ async function generateBranchNameWithAi(sessionService: PiSessionService, client
   return name;
 }
 
-async function explainChangeWithAi(sessionService: PiSessionService, clientId: string, cwd: string, path: string, hunk: string, status: string, diff: string) {
+async function explainChangeWithAi(sessionService: PiSessionService, clientId: string, cwd: string, path: string, hunk: string, status: string, diff: string, systemPrompt: string) {
   const response = await completeWithClientModel(sessionService, clientId, 'No available AI model configured for change explanations', {
-    systemPrompt: 'You explain what a selected code change does and why it is needed within the complete pending change set.',
+    systemPrompt,
     messages: [{ role: 'user', content: changeReasonPrompt(path, hunk, status, diff), timestamp: Date.now() }],
     tools: [],
   }, {
@@ -656,6 +657,7 @@ function parseChangedRanges(diff: string): Record<string, GitChangeRange[]> {
 export interface GitRouteOptions {
   activityStore?: Pick<SessionActivityStore, 'recordCommit' | 'recordBranchDeleted'>;
   commitMessagePrompts?: Pick<CommitMessagePromptStore, 'get' | 'save'>;
+  changeReasonPrompts?: Pick<ChangeReasonPromptStore, 'get' | 'save'>;
 }
 
 function recordCommitActivity(options: GitRouteOptions, input: Parameters<SessionActivityStore['recordCommit']>[0]) {
@@ -678,11 +680,17 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
   app.get('/commit-message-prompts', async (req) => {
     const { cwd } = req.query as { cwd?: string };
     const resolvedCwd = await resolveGitCwd(cwd);
-    return options.commitMessagePrompts?.get(resolvedCwd) || {
+    const commitMessage = options.commitMessagePrompts?.get(resolvedCwd) || {
       global: {},
       project: {},
       effective: DEFAULT_COMMIT_MESSAGE_PROMPTS,
     };
+    const changeReason = options.changeReasonPrompts?.get(resolvedCwd) || {
+      global: {},
+      project: {},
+      effective: { systemPrompt: DEFAULT_CHANGE_REASON_SYSTEM_PROMPT },
+    };
+    return { ...commitMessage, changeReason };
   });
 
   app.put('/commit-message-prompts', async (req, reply) => {
@@ -701,6 +709,33 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     return options.commitMessagePrompts?.save(body.scope, resolvedCwd, {
       userPrompt: body.userPrompt,
     }) || { global: {}, project: {}, effective: DEFAULT_COMMIT_MESSAGE_PROMPTS };
+  });
+
+  app.get('/change-reason-prompts', async (req) => {
+    const { cwd } = req.query as { cwd?: string };
+    const resolvedCwd = await resolveGitCwd(cwd);
+    return options.changeReasonPrompts?.get(resolvedCwd) || {
+      global: {},
+      project: {},
+      effective: { systemPrompt: DEFAULT_CHANGE_REASON_SYSTEM_PROMPT },
+    };
+  });
+
+  app.put('/change-reason-prompts', async (req, reply) => {
+    const body = (req.body || {}) as { cwd?: string; scope?: unknown; systemPrompt?: unknown };
+    if (body.scope !== 'global' && body.scope !== 'project') {
+      return reply.status(400).send({ error: 'scope must be global or project' });
+    }
+    if (typeof body.systemPrompt !== 'string') {
+      return reply.status(400).send({ error: 'systemPrompt must be provided as a string' });
+    }
+
+    const resolvedCwd = await resolveGitCwd(body.cwd);
+    return options.changeReasonPrompts?.save(body.scope, resolvedCwd, body.systemPrompt) || {
+      global: {},
+      project: {},
+      effective: { systemPrompt: DEFAULT_CHANGE_REASON_SYSTEM_PROMPT },
+    };
   });
 
   app.get('/status', async (req, reply) => {
@@ -872,7 +907,8 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
       if (body.expectedHunk !== currentHunk) throw new Error('The selected hunk changed. Refresh and try again.');
 
       const fullDiff = await appendUntrackedDiff(resolvedCwd, trackedDiff, [], undefined, MAX_SLASH_COMMAND_OUTPUT_BYTES);
-      const reason = await explainChangeWithAi(app.services.sessions, body.clientId, resolvedCwd, path, currentHunk, status, fullDiff);
+      const systemPrompt = options.changeReasonPrompts?.get(resolvedCwd).effective.systemPrompt || DEFAULT_CHANGE_REASON_SYSTEM_PROMPT;
+      const reason = await explainChangeWithAi(app.services.sessions, body.clientId, resolvedCwd, path, currentHunk, status, fullDiff, systemPrompt);
       return { cwd: resolvedCwd, path, scope, hunkIndex: body.hunkIndex, reason };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to explain change';
