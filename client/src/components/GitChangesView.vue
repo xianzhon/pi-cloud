@@ -653,10 +653,6 @@ onBeforeUnmount(() => {
 }
 
 .git-changes-header h2 {
-  margin: 0;
-}
-
-.git-changes-header h2 {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -801,13 +797,6 @@ onBeforeUnmount(() => {
   min-height: 0;
   flex: 1;
   overflow: auto;
-}
-
-.git-change-empty {
-  margin: 0;
-  padding: 12px;
-  color: var(--text-muted);
-  font-size: 0.78rem;
 }
 
 .git-change-file {
@@ -1163,7 +1152,6 @@ onBeforeUnmount(() => {
   font: inherit;
 }
 
-
 .git-commit-result {
   margin: 7px 0 0;
   color: var(--git-added);
@@ -1194,12 +1182,7 @@ onBeforeUnmount(() => {
     flex-direction: column;
   }
 
-  .git-commit-editor {
-    order: 1;
-  }
-
   .git-commit-actions {
-    order: 2;
     width: 100%;
     flex-basis: auto;
     flex-direction: row;

@@ -322,7 +322,7 @@ function hunkText(hunk: DiffHunk): string {
   return [hunk.header, ...hunk.lines].join('\n').replace(/\n+$/, '');
 }
 
-function partialHunk(hunk: DiffHunk, selectedLines: number[], unstaging: boolean): DiffHunk {
+function partialHunk(hunk: DiffHunk, selectedLines: number[], isUnstaging: boolean): DiffHunk {
   const selected = new Set(selectedLines);
   const changed = hunk.lines
     .map((line, index) => ({ line, index }))
@@ -332,15 +332,18 @@ function partialHunk(hunk: DiffHunk, selectedLines: number[], unstaging: boolean
   const match = hunk.header.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/);
   if (!match) throw new Error('Unsupported diff hunk');
   const lines = hunk.lines.flatMap((line, index) => {
-    if (line.startsWith('-') && !selected.has(index)) return unstaging ? [] : [` ${line.slice(1)}`];
-    if (line.startsWith('+') && !selected.has(index)) return unstaging ? [` ${line.slice(1)}`] : [];
+    if (line.startsWith('-') && !selected.has(index)) return isUnstaging ? [] : [` ${line.slice(1)}`];
+    if (line.startsWith('+') && !selected.has(index)) return isUnstaging ? [` ${line.slice(1)}`] : [];
     return [line];
   });
   const oldCount = lines.filter(line => line.startsWith(' ') || line.startsWith('-')).length;
   const newCount = lines.filter(line => line.startsWith(' ') || line.startsWith('+')).length;
-  const count = (value: number) => value === 1 ? '' : `,${value}`;
+  function formatCount(value: number): string {
+    return value === 1 ? '' : `,${value}`;
+  }
+
   return {
-    header: `@@ -${match[1]}${count(oldCount)} +${match[2]}${count(newCount)} @@${match[3]}`,
+    header: `@@ -${match[1]}${formatCount(oldCount)} +${match[2]}${formatCount(newCount)} @@${match[3]}`,
     lines,
   };
 }

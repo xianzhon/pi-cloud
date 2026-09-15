@@ -27,11 +27,11 @@ describe('GitToolPanel', () => {
     expect(actions.every(button => button.text() === '')).toBe(true);
     expect(actions.every(button => button.classes().includes('tooltip'))).toBe(true);
     expect(actions.map(button => button.attributes('data-tooltip'))).toEqual([
-      'Git Changes', 'History', 'Refresh', 'Commit', 'PR', 'Push', 'Pull', 'Branch', 'Show diff',
+      'Git Changes', 'History', 'Refresh', 'PR', 'Pull', 'Branch',
     ]);
     expect(actions.every(button => button.attributes('title') === undefined)).toBe(true);
 
-    const commands = ['/commit', '/pr', '/push', '/pull', '/branch', '/diff'];
+    const commands = ['/pr', '/pull', '/branch'];
     for (const button of actions) await button.trigger('click');
 
     expect(wrapper.emitted('changes')).toHaveLength(1);
@@ -62,14 +62,6 @@ describe('GitToolPanel', () => {
     expect(wrapper.findAll('.git-tool-action').every(action => action.attributes('disabled') === undefined)).toBe(true);
   });
 
-  it('disables commit when the working tree has no changed files', async () => {
-    const wrapper = mount(GitToolPanel, { props: { cwd: '/workspace' } });
-    await flushPromises();
-
-    const commit = wrapper.find('.git-tool-action[aria-label="Commit"]');
-    expect(commit.attributes('disabled')).toBeDefined();
-  });
-
   it('refreshes when an agent turn completes', async () => {
     const wrapper = mount(GitToolPanel, { props: { cwd: '/workspace' } });
     await flushPromises();
@@ -82,40 +74,20 @@ describe('GitToolPanel', () => {
     wrapper.unmount();
   });
 
-  it('opens files and file diffs in the editor', async () => {
-    vi.mocked(fetch).mockImplementation(async (input) => {
-      const url = String(input);
-      if (url.includes('/api/git/diff')) {
-        return response({ cwd: '/workspace', diff: 'diff --git a/src/app.ts b/src/app.ts' });
-      }
-      return response({ files: [{ status: 'M', path: 'src/app.ts' }] });
-    });
+  it('opens changed files in the editor', async () => {
+    vi.mocked(fetch).mockResolvedValue(response({ files: [{ status: 'M', path: 'src/app.ts' }] }));
     const openFile = vi.fn();
-    const openDiff = vi.fn();
     window.addEventListener('open-file-in-editor', openFile);
-    window.addEventListener('open-virtual-diff-in-editor', openDiff);
     const wrapper = mount(GitToolPanel, { props: { cwd: '/workspace' } });
     await flushPromises();
 
-    const fileDiff = wrapper.find('.git-file-diff');
-    expect(fileDiff.attributes('aria-label')).toBe('Show diff for src/app.ts');
-    expect(fileDiff.attributes('data-tooltip')).toBeUndefined();
-    expect(fileDiff.attributes('title')).toBeUndefined();
-
+    expect(wrapper.find('.git-file-diff').exists()).toBe(false);
     await wrapper.find('.git-file-open').trigger('click');
-    await fileDiff.trigger('click');
-    await flushPromises();
 
     expect((openFile.mock.calls[0][0] as CustomEvent).detail).toEqual({ path: 'src/app.ts', kind: 'path' });
-    expect(fetch).toHaveBeenCalledWith('/api/git/diff?cwd=%2Fworkspace&path=src%2Fapp.ts');
-    expect((openDiff.mock.calls[0][0] as CustomEvent).detail).toEqual({
-      cwd: '/workspace',
-      scope: 'src/app.ts',
-      content: 'diff --git a/src/app.ts b/src/app.ts',
-    });
+    expect(fetch).not.toHaveBeenCalledWith('/api/git/diff?cwd=%2Fworkspace&path=src%2Fapp.ts');
 
     window.removeEventListener('open-file-in-editor', openFile);
-    window.removeEventListener('open-virtual-diff-in-editor', openDiff);
   });
 
   it('resizes the panel by dragging its top edge', async () => {

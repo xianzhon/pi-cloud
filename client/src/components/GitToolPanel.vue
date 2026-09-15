@@ -39,7 +39,7 @@
         :key="action.command"
         type="button"
         class="git-tool-action tooltip"
-        :disabled="(!isRepository && action.command !== '/status') || (action.command === '/commit' && files.length === 0)"
+        :disabled="!isRepository && action.command !== '/status'"
         :data-tooltip="action.label"
         :aria-label="action.label"
         @click="runAction(action.command)"
@@ -59,15 +59,6 @@
             <span class="git-file-status">{{ file.status }}</span>
             <span class="git-file-path">{{ file.path }}</span>
           </button>
-          <button
-            class="git-file-diff"
-            type="button"
-            :disabled="diffLoadingPath === file.path"
-            :aria-label="t('components.gitToolPanel.showDiffFor', { path: file.path })"
-            @click="openDiff(file.path)"
-          >
-            <PhGitDiff :size="16" weight="bold" aria-hidden="true" />
-          </button>
         </li>
       </ul>
     </div>
@@ -80,10 +71,8 @@ import {
   PhArrowsClockwise,
   PhClockCounterClockwise,
   PhGitBranch,
-  PhGitCommit,
   PhGitDiff,
   PhGitPullRequest,
-  PhUploadSimple,
   PhDownloadSimple,
 } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
@@ -105,7 +94,6 @@ const files = ref<GitStatusFile[]>([]);
 const isRepository = ref(true);
 const loading = ref(false);
 const error = ref('');
-const diffLoadingPath = ref('');
 const panelHeight = ref(240);
 const resizing = ref(false);
 let requestId = 0;
@@ -114,12 +102,9 @@ let resizeStartHeight = 0;
 
 const actions = computed(() => [
   { command: '/status', label: t('components.gitToolPanel.refresh'), icon: PhArrowsClockwise },
-  { command: '/commit', label: t('components.gitToolPanel.commit'), icon: PhGitCommit },
   { command: '/pr', label: t('components.gitToolPanel.pr'), icon: PhGitPullRequest },
-  { command: '/push', label: t('components.gitToolPanel.push'), icon: PhUploadSimple },
   { command: '/pull', label: t('components.gitToolPanel.pull'), icon: PhDownloadSimple },
   { command: '/branch', label: t('components.gitToolPanel.branch'), icon: PhGitBranch },
-  { command: '/diff', label: t('components.gitToolPanel.showDiff'), icon: PhGitDiff },
 ] as const);
 
 async function refresh(): Promise<void> {
@@ -161,25 +146,6 @@ function openFile(path: string): void {
   window.dispatchEvent(new CustomEvent('open-file-in-editor', {
     detail: { path, kind: 'path' },
   }));
-}
-
-async function openDiff(path: string): Promise<void> {
-  diffLoadingPath.value = path;
-  try {
-    const result = await gitOperations.getDiff({ cwd: props.cwd, path });
-    if (typeof result.diff !== 'string' || !result.diff.trim()) return;
-    window.dispatchEvent(new CustomEvent('open-virtual-diff-in-editor', {
-      detail: {
-        cwd: result.cwd || props.cwd,
-        scope: path,
-        content: result.diff,
-      },
-    }));
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : t('components.gitToolPanel.loadFailed');
-  } finally {
-    diffLoadingPath.value = '';
-  }
 }
 
 function resize(event: PointerEvent): void {
@@ -379,28 +345,6 @@ defineExpose({ refresh });
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.git-file-diff {
-  display: inline-flex;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-tertiary);
-  opacity: 0.65;
-}
-
-.git-tool-files li:hover .git-file-diff,
-.git-file-diff:focus-visible {
-  opacity: 1;
-}
-
-.git-file-diff:hover:not(:disabled) {
-  color: var(--accent);
-  background: var(--bg-hover);
 }
 
 .git-tool-state {
