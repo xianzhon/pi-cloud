@@ -13,7 +13,7 @@ import type { PiSessionService } from '../services/session-manager.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
 
 const execFileAsync = promisify(execFile);
-export const MAX_SLASH_COMMAND_OUTPUT_BYTES = 1024 * 1024;
+export const MAX_GIT_OUTPUT_BYTES = 1024 * 1024;
 const MAX_STATUS_FILES = 1_000;
 const GIT_HISTORY_PAGE_SIZE = 10;
 const GIT_HISTORY_FIELDS = 8;
@@ -22,7 +22,7 @@ const gitIndexOperations = new Map<string, Promise<unknown>>();
 
 class OversizedGitOutputError extends Error {
   constructor() {
-    super(`The Git output is too large to show safely (limit: ${MAX_SLASH_COMMAND_OUTPUT_BYTES / 1024} KiB). Inspect it with Git in the terminal or another Git client.`);
+    super(`The Git output is too large to show safely (limit: ${MAX_GIT_OUTPUT_BYTES / 1024} KiB). Inspect it with Git in the terminal or another Git client.`);
   }
 }
 
@@ -75,7 +75,7 @@ async function serializeGitIndexOperation<T>(cwd: string, operation: () => Promi
   }
 }
 
-async function runGit(cwd: string, args: string[], maxBuffer = MAX_SLASH_COMMAND_OUTPUT_BYTES) {
+async function runGit(cwd: string, args: string[], maxBuffer = MAX_GIT_OUTPUT_BYTES) {
   try {
     const { stdout } = await retryGitIndexLock(() => execFileAsync('git', args, { cwd, maxBuffer }));
     return stdout;
@@ -110,7 +110,7 @@ async function runGitWithOutput(cwd: string, args: string[]) {
   try {
     const { stdout, stderr } = await execFileAsync('git', args, {
       cwd,
-      maxBuffer: MAX_SLASH_COMMAND_OUTPUT_BYTES,
+      maxBuffer: MAX_GIT_OUTPUT_BYTES,
     });
     return joinGitOutput(stdout, stderr);
   } catch (error) {
@@ -244,7 +244,7 @@ async function appendUntrackedDiff(cwd: string, diff: string, args: string[], pa
   return output;
 }
 
-async function getCombinedDiff(cwd: string, args: string[], maxBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES) {
+async function getCombinedDiff(cwd: string, args: string[], maxBytes = MAX_GIT_OUTPUT_BYTES) {
   const unstaged = await runGit(cwd, ['diff', ...args], maxBytes);
   const remainingBytes = maxBytes - Buffer.byteLength(unstaged);
   // Reserve the separator inserted by joinGitOutput when both scopes have content.
@@ -280,14 +280,14 @@ function runGitWithInput(cwd: string, args: string[], input: string): Promise<st
 
     const collectOutput = (chunks: Buffer[], chunk: Buffer) => {
       outputBytes += chunk.length;
-      if (outputBytes > MAX_SLASH_COMMAND_OUTPUT_BYTES) child.kill();
+      if (outputBytes > MAX_GIT_OUTPUT_BYTES) child.kill();
       else chunks.push(chunk);
     };
     child.stdout.on('data', (chunk: Buffer) => collectOutput(stdout, chunk));
     child.stderr.on('data', (chunk: Buffer) => collectOutput(stderr, chunk));
     child.on('error', reject);
     child.on('close', (code) => {
-      if (outputBytes > MAX_SLASH_COMMAND_OUTPUT_BYTES) return reject(new OversizedGitOutputError());
+      if (outputBytes > MAX_GIT_OUTPUT_BYTES) return reject(new OversizedGitOutputError());
       if (code === 0) return resolve(Buffer.concat(stdout).toString());
       reject(new Error(Buffer.concat(stderr).toString().trim() || `git exited with code ${code}`));
     });
@@ -308,7 +308,7 @@ function parsePatchHunks(diff: string): { prefix: string[]; hunks: DiffHunk[] } 
   const lines = diff.split('\n');
   if (lines.at(-1) === '') lines.pop();
   for (const line of lines) {
-    if (line.startsWith('@@ ')) {
+    if (/^@@+ /.test(line)) {
       current = { header: line, lines: [] };
       hunks.push(current);
     } else if (current) {
@@ -367,9 +367,18 @@ function normalizePartialNewFilePrefix(prefix: string[], hunk: DiffHunk): string
 async function getIndexPatch(cwd: string, path: string, scope: 'staged' | 'unstaged'): Promise<string> {
   let diff = await getDiff(cwd, ['--', path], scope);
   if (scope === 'unstaged') {
-    diff = await appendUntrackedDiff(cwd, diff, [], path, MAX_SLASH_COMMAND_OUTPUT_BYTES);
+    diff = await appendUntrackedDiff(cwd, diff, [], path, MAX_GIT_OUTPUT_BYTES);
   }
   return diff;
+}
+
+async function unstageIndexPath(cwd: string, path: string, recursive = false): Promise<void> {
+  const hasHead = await runGit(cwd, ['rev-parse', '--verify', 'HEAD']).then(() => true, () => false);
+  if (hasHead) {
+    await runGit(cwd, ['reset', '-q', 'HEAD', '--', path]);
+    return;
+  }
+  await runGit(cwd, ['rm', '--cached', ...(recursive ? ['-r'] : []), '-q', '--', path]);
 }
 
 async function updateIndex(cwd: string, body: {
@@ -386,8 +395,7 @@ async function updateIndex(cwd: string, body: {
     if (scope === 'unstaged') {
       await runGit(cwd, ['add', '-A']);
     } else {
-      const hasHead = await runGit(cwd, ['rev-parse', '--verify', 'HEAD']).then(() => true, () => false);
-      await runGit(cwd, hasHead ? ['reset', '-q', 'HEAD', '--', '.'] : ['rm', '--cached', '-r', '-q', '--', '.']);
+      await unstageIndexPath(cwd, '.', true);
     }
     return;
   }
@@ -396,8 +404,7 @@ async function updateIndex(cwd: string, body: {
     if (scope === 'unstaged') {
       await runGit(cwd, ['add', '--', path]);
     } else {
-      const hasHead = await runGit(cwd, ['rev-parse', '--verify', 'HEAD']).then(() => true, () => false);
-      await runGit(cwd, hasHead ? ['reset', '-q', 'HEAD', '--', path] : ['rm', '--cached', '-q', '--', path]);
+      await unstageIndexPath(cwd, path);
     }
     return;
   }
@@ -452,7 +459,7 @@ function parseGitHistory(output: string) {
   return commits;
 }
 
-function getDiff(cwd: string, args: string[], scope: GitDiffScope, maxBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES) {
+function getDiff(cwd: string, args: string[], scope: GitDiffScope, maxBytes = MAX_GIT_OUTPUT_BYTES) {
   if (scope === 'staged') return runGit(cwd, ['diff', '--cached', ...args], maxBytes);
   if (scope === 'unstaged') return runGit(cwd, ['diff', ...args], maxBytes);
   return getCombinedDiff(cwd, args, maxBytes);
@@ -478,8 +485,9 @@ function aiGenerationSessionId(prefix: string, cwd: string) {
   return `${prefix}:${createHash('sha256').update(cwd).digest('hex').slice(0, 32)}`;
 }
 
-function changeReasonPrompt(path: string, hunk: string, status: string, diff: string) {
-  return `Explain the selected code change using the complete pending change set as context.
+function changeReasonPrompt(path: string, hunk: string, status: string, diff: string, historical = false) {
+  const changeSet = historical ? 'commit' : 'pending change set';
+  return `Explain the selected code change using the complete ${changeSet} as context.
 Describe both what the selected change does and why it is needed or how it supports the
 larger change. Focus on behavior and intent rather than restating individual lines. Base the
 explanation on evidence in the full diff, and clearly identify any motivation that must be
@@ -492,12 +500,12 @@ Selected file: ${path}
 ${hunk}
 --- END SELECTED GIT HUNK ---
 
-Complete pending status:
+Complete ${historical ? 'commit file status' : 'pending status'}:
 --- BEGIN GIT STATUS ---
 ${status.trim() || '(empty)'}
 --- END GIT STATUS ---
 
-Complete pending diff (staged, unstaged, and untracked files):
+Complete ${historical ? 'commit' : 'pending diff (staged, unstaged, and untracked files)'}:
 --- BEGIN FULL GIT DIFF ---
 ${diff.trim() || '(empty)'}
 --- END FULL GIT DIFF ---`;
@@ -574,10 +582,10 @@ async function generateBranchNameWithAi(sessionService: PiSessionService, client
   return name;
 }
 
-async function explainChangeWithAi(sessionService: PiSessionService, clientId: string, cwd: string, path: string, hunk: string, status: string, diff: string, systemPrompt: string) {
+async function explainChangeWithAi(sessionService: PiSessionService, clientId: string, cwd: string, path: string, hunk: string, status: string, diff: string, systemPrompt: string, historical = false) {
   const response = await completeWithClientModel(sessionService, clientId, 'No available AI model configured for change explanations', {
     systemPrompt,
-    messages: [{ role: 'user', content: changeReasonPrompt(path, hunk, status, diff), timestamp: Date.now() }],
+    messages: [{ role: 'user', content: changeReasonPrompt(path, hunk, status, diff, historical), timestamp: Date.now() }],
     tools: [],
   }, {
     maxTokens: 320,
@@ -885,6 +893,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
       scope?: string;
       hunkIndex?: number;
       expectedHunk?: string;
+      commit?: string;
     };
     const resolvedCwd = await resolveGitCwd(body.cwd);
 
@@ -892,24 +901,41 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
 
     try {
       const path = validateGitPath(body.path);
-      const scope = parseDiffScope(body.scope);
-      if (scope === 'all') throw new Error('scope must be staged or unstaged');
       if (!Number.isInteger(body.hunkIndex) || (body.hunkIndex as number) < 0) throw new Error('A valid hunk index is required');
 
-      const [fileDiff, status, trackedDiff] = await Promise.all([
-        getIndexPatch(resolvedCwd, path, scope),
-        runGit(resolvedCwd, ['status', '--porcelain']),
-        getCombinedDiff(resolvedCwd, []),
-      ]);
+      const commit = body.commit ? parseCommit(body.commit) : undefined;
+      let scope: GitDiffScope | `commit-${string}`;
+      let fileDiff: string;
+      let status: string;
+      let fullDiff: string;
+      if (commit) {
+        scope = `commit-${commit}`;
+        [fileDiff, status, fullDiff] = await Promise.all([
+          runGit(resolvedCwd, ['show', '--format=', '--patch', commit, '--', path]),
+          runGit(resolvedCwd, ['show', '--format=', '--name-status', commit]),
+          runGit(resolvedCwd, ['show', '--format=', '--patch', commit]),
+        ]);
+      } else {
+        scope = parseDiffScope(body.scope);
+        if (scope === 'all') throw new Error('scope must be staged or unstaged');
+        const [currentFileDiff, currentStatus, trackedDiff] = await Promise.all([
+          getIndexPatch(resolvedCwd, path, scope),
+          runGit(resolvedCwd, ['status', '--porcelain']),
+          getCombinedDiff(resolvedCwd, []),
+        ]);
+        fileDiff = currentFileDiff;
+        status = currentStatus;
+        fullDiff = await appendUntrackedDiff(resolvedCwd, trackedDiff, [], undefined, MAX_GIT_OUTPUT_BYTES);
+      }
+
       const hunk = parsePatchHunks(fileDiff).hunks[body.hunkIndex as number];
       if (!hunk) throw new Error('The selected hunk no longer exists');
       const currentHunk = hunkText(hunk);
       if (body.expectedHunk !== currentHunk) throw new Error('The selected hunk changed. Refresh and try again.');
 
-      const fullDiff = await appendUntrackedDiff(resolvedCwd, trackedDiff, [], undefined, MAX_SLASH_COMMAND_OUTPUT_BYTES);
       const systemPrompt = options.changeReasonPrompts?.get(resolvedCwd).effective.systemPrompt || DEFAULT_CHANGE_REASON_SYSTEM_PROMPT;
-      const reason = await explainChangeWithAi(app.services.sessions, body.clientId, resolvedCwd, path, currentHunk, status, fullDiff, systemPrompt);
-      return { cwd: resolvedCwd, path, scope, hunkIndex: body.hunkIndex, reason };
+      const reason = await explainChangeWithAi(app.services.sessions, body.clientId, resolvedCwd, path, currentHunk, status, fullDiff, systemPrompt, Boolean(commit));
+      return { cwd: resolvedCwd, path, scope, commit, hunkIndex: body.hunkIndex, reason };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to explain change';
       return reply.status(400).send({ error: errorMessage });
@@ -1130,7 +1156,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
       // start additional Git work when the diff is already too large to display.
       if (commit) {
         const diff = await runGit(resolvedCwd, ['show', '--format=', '--patch', commit]);
-        const remainingBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES - Buffer.byteLength(diff);
+        const remainingBytes = MAX_GIT_OUTPUT_BYTES - Buffer.byteLength(diff);
         const stat = remainingBytes > 0
           ? await runGit(resolvedCwd, ['show', '--format=', '--stat', commit], remainingBytes)
           : '';
@@ -1141,9 +1167,9 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
       const pathArgs = path ? ['--', path] : [];
       let diff = await getDiff(resolvedCwd, pathArgs, scope);
       if (includeUntracked === 'true' && scope !== 'staged') {
-        diff = await appendUntrackedDiff(resolvedCwd, diff, [], path, MAX_SLASH_COMMAND_OUTPUT_BYTES);
+        diff = await appendUntrackedDiff(resolvedCwd, diff, [], path, MAX_GIT_OUTPUT_BYTES);
       }
-      const remainingBytes = MAX_SLASH_COMMAND_OUTPUT_BYTES - Buffer.byteLength(diff);
+      const remainingBytes = MAX_GIT_OUTPUT_BYTES - Buffer.byteLength(diff);
       let stat = remainingBytes > 0 ? await getDiff(resolvedCwd, ['--stat', ...pathArgs], scope, remainingBytes) : '';
       if (includeUntracked === 'true' && scope !== 'staged' && remainingBytes > 0) {
         stat = await appendUntrackedDiff(resolvedCwd, stat, ['--stat'], path, remainingBytes);
@@ -1155,7 +1181,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
           cwd: resolvedCwd,
           scope: rawCommit ? `commit-${rawCommit}` : rawScope || 'all',
           oversized: true,
-          maxBytes: MAX_SLASH_COMMAND_OUTPUT_BYTES,
+          maxBytes: MAX_GIT_OUTPUT_BYTES,
           message: error.message,
         };
       }

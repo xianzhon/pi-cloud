@@ -112,16 +112,39 @@
                     </button>
                   </h4>
                   <div v-show="!collapsedDiffFiles.has(file.name)" :id="`${diffFileId(fileIndex)}-content`" class="git-diff-content">
-                    <pre v-if="diffViewMode === 'unified'"><span
-                      v-for="(line, lineIndex) in file.lines"
-                      :key="lineIndex"
-                      class="git-diff-line"
-                      :class="diffLineClass(line)"
-                    >{{ line }}{{ '\n' }}</span></pre>
-                    <div v-else class="git-split-diff">
-                      <div v-for="(row, rowIndex) in pairDiffLines(file.lines)" :key="rowIndex" class="git-split-row">
-                        <span class="git-diff-line" :class="row.left == null ? 'is-empty' : diffLineClass(row.left)">{{ row.left ?? '' }}</span>
-                        <span class="git-diff-line" :class="row.right == null ? 'is-empty' : diffLineClass(row.right)">{{ row.right ?? '' }}</span>
+                    <div :class="{ 'git-split-diff': diffViewMode === 'split' }">
+                      <div
+                        v-for="(block, blockIndex) in diffBlocks(file.lines)"
+                        :key="blockIndex"
+                        class="git-history-diff-block"
+                      >
+                        <div v-if="block.hunkIndex !== undefined" class="git-history-hunk-header git-diff-line is-hunk">
+                          <span>{{ block.lines[0] }}</span>
+                          <button
+                            type="button"
+                            class="git-change-reason-button"
+                            :disabled="!props.clientId || reasonLoadingKey !== undefined"
+                            @click="toggleChangeReason(fileIndex, block.hunkIndex, block.lines)"
+                          ><PhLightbulb :size="13" weight="bold" />{{ reasonLoadingKey === reasonKey(fileIndex, block.hunkIndex) ? t('components.gitChanges.explainingChange') : t('components.gitChanges.showChangeReason') }}</button>
+                        </div>
+                        <pre v-if="diffViewMode === 'unified'" :class="{ 'has-hunk-header': block.hunkIndex !== undefined }"><span
+                          v-for="(line, lineIndex) in block.hunkIndex === undefined ? block.lines : block.lines.slice(1)"
+                          :key="lineIndex"
+                          class="git-diff-line"
+                          :class="diffLineClass(line)"
+                        >{{ line }}{{ '\n' }}</span></pre>
+                        <template v-else>
+                          <div v-for="(row, rowIndex) in pairDiffLines(block.hunkIndex === undefined ? block.lines : block.lines.slice(1))" :key="rowIndex" class="git-split-row">
+                            <span class="git-diff-line" :class="row.left == null ? 'is-empty' : diffLineClass(row.left)">{{ row.left ?? '' }}</span>
+                            <span class="git-diff-line" :class="row.right == null ? 'is-empty' : diffLineClass(row.right)">{{ row.right ?? '' }}</span>
+                          </div>
+                        </template>
+                        <aside
+                          v-if="block.hunkIndex !== undefined && expandedReasonKey === reasonKey(fileIndex, block.hunkIndex) && (changeReasons[expandedReasonKey] || changeReasonErrors[expandedReasonKey])"
+                          class="git-change-reason"
+                          :class="{ 'is-error': changeReasonErrors[expandedReasonKey] }"
+                          :role="changeReasonErrors[expandedReasonKey] ? 'alert' : 'status'"
+                        ><strong>{{ t('components.gitChanges.changeReason') }}</strong>{{ changeReasonErrors[expandedReasonKey] || changeReasons[expandedReasonKey] }}</aside>
                       </div>
                     </div>
                   </div>
@@ -137,10 +160,15 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { PhArrowClockwise, PhCaretDown, PhCaretLeft, PhCaretRight, PhGitCommit, PhX } from '@phosphor-icons/vue';
+import { PhArrowClockwise, PhCaretDown, PhCaretLeft, PhCaretRight, PhGitCommit, PhLightbulb, PhX } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
 import { diffLineClass, pairDiffLines, parseDiffFiles } from '../utils/gitDiff';
+
+interface DiffBlock {
+  hunkIndex?: number;
+  lines: string[];
+}
 
 interface GitCommit {
   hash: string;
@@ -153,7 +181,7 @@ interface GitCommit {
   authoredAt: string;
 }
 
-const props = defineProps<{ visible: boolean; cwd: string }>();
+const props = defineProps<{ visible: boolean; cwd: string; clientId?: string }>();
 const emit = defineEmits<{ close: [] }>();
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
@@ -172,8 +200,13 @@ const diffStat = ref('');
 const diffContent = ref('');
 const collapsedDiffFiles = ref(new Set<string>());
 const diffViewMode = ref<'unified' | 'split'>('unified');
+const changeReasons = ref<Record<string, string>>({});
+const changeReasonErrors = ref<Record<string, string>>({});
+const reasonLoadingKey = ref<string>();
+const expandedReasonKey = ref<string>();
 let historyRequestId = 0;
 let diffRequestId = 0;
+let reasonRequestId = 0;
 
 const diffFiles = computed(() => parseDiffFiles(diffContent.value, t('components.gitHistory.changes')));
 const diffTotals = computed(() => diffFiles.value.reduce((totals, file) => ({
@@ -185,6 +218,67 @@ const allDiffFilesCollapsed = computed(() => diffFiles.value.length > 0
 
 function diffFileId(index: number): string {
   return `git-history-diff-file-${index}`;
+}
+
+function reasonKey(fileIndex: number, hunkIndex: number): string {
+  return `${fileIndex}:${hunkIndex}`;
+}
+
+function diffBlocks(lines: string[]): DiffBlock[] {
+  const blocks: DiffBlock[] = [];
+  let hunkIndex = -1;
+  for (const line of lines) {
+    if (/^@@+ /.test(line)) {
+      hunkIndex += 1;
+      blocks.push({ hunkIndex, lines: [line] });
+    } else if (blocks.length) {
+      blocks.at(-1)!.lines.push(line);
+    } else {
+      blocks.push({ lines: [line] });
+    }
+  }
+  return blocks;
+}
+
+function resetChangeReasons(): void {
+  ++reasonRequestId;
+  changeReasons.value = {};
+  changeReasonErrors.value = {};
+  reasonLoadingKey.value = undefined;
+  expandedReasonKey.value = undefined;
+}
+
+async function toggleChangeReason(fileIndex: number, hunkIndex: number, lines: string[]): Promise<void> {
+  const key = reasonKey(fileIndex, hunkIndex);
+  if (expandedReasonKey.value === key) {
+    expandedReasonKey.value = undefined;
+    return;
+  }
+  expandedReasonKey.value = key;
+  const commit = selectedCommit.value;
+  const file = diffFiles.value[fileIndex];
+  if (changeReasons.value[key] || !props.clientId || !commit || !file) return;
+
+  const currentRequestId = ++reasonRequestId;
+  delete changeReasonErrors.value[key];
+  reasonLoadingKey.value = key;
+  try {
+    const result = await gitOperations.explainChange({
+      cwd: props.cwd,
+      clientId: props.clientId,
+      path: file.name,
+      commit: commit.hash,
+      hunkIndex,
+      expectedHunk: lines.join('\n').replace(/\n+$/, ''),
+    });
+    if (currentRequestId === reasonRequestId) changeReasons.value[key] = typeof result.reason === 'string' ? result.reason : '';
+  } catch (cause) {
+    if (currentRequestId === reasonRequestId) {
+      changeReasonErrors.value[key] = cause instanceof Error ? cause.message : t('components.gitChanges.explainChangeFailed');
+    }
+  } finally {
+    if (currentRequestId === reasonRequestId) reasonLoadingKey.value = undefined;
+  }
 }
 
 function toggleDiffFile(name: string): void {
@@ -216,6 +310,7 @@ async function loadDiff(commit: GitCommit): Promise<void> {
   diffStat.value = '';
   diffContent.value = '';
   collapsedDiffFiles.value = new Set();
+  resetChangeReasons();
   try {
     const result = await gitOperations.getDiff({ cwd: props.cwd, commit: commit.hash });
     if (requestId !== diffRequestId) return;
@@ -279,6 +374,7 @@ watch(() => [props.visible, props.cwd] as const, ([visible]) => {
   else {
     ++historyRequestId;
     ++diffRequestId;
+    resetChangeReasons();
   }
 }, { immediate: true });
 
@@ -636,6 +732,62 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   padding: 8px 0;
 }
 
+.git-diff-file pre.has-hunk-header {
+  padding-top: 0;
+}
+
+.git-split-diff .git-history-diff-block {
+  display: contents;
+}
+
+.git-history-hunk-header {
+  align-items: center;
+  gap: 14px;
+}
+
+.git-split-diff .git-history-hunk-header,
+.git-split-diff .git-change-reason {
+  grid-column: 1 / -1;
+}
+
+.git-change-reason-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font: 0.7rem var(--font-sans);
+}
+
+.git-change-reason-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.git-change-reason {
+  width: clamp(280px, 32vw, 420px);
+  margin: 8px 14px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font: 0.78rem/1.5 var(--font-sans);
+  white-space: pre-wrap;
+}
+
+.git-change-reason strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-primary);
+}
+
+.git-change-reason.is-error {
+  border-left-color: var(--danger, #f87171);
+  color: var(--danger, #f87171);
+}
+
 .git-split-diff {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -663,6 +815,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   min-height: 18px;
   padding: 0 10px;
   white-space: pre;
+}
+
+.git-diff-line.git-history-hunk-header {
+  display: flex;
 }
 
 .git-diff-line.is-added {

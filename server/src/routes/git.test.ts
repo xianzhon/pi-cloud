@@ -804,6 +804,42 @@ describe('gitRoutes branch', () => {
     }
   });
 
+  it('explains a verified hunk from a historical commit', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'This commit updates the documented behavior.' }],
+      stopReason: 'stop',
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      api: 'mock-api', provider: 'mock', model: 'model', timestamp: Date.now(),
+    });
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'historical change\n');
+      await git(cwd, 'add', 'README.md');
+      await git(cwd, 'commit', '-m', 'Update documentation');
+      const commit = await git(cwd, 'rev-parse', 'HEAD');
+      const diff = await git(cwd, 'show', '--format=', '--patch', commit, '--', 'README.md');
+      const hunk = diff.slice(diff.indexOf('@@ '));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/change-reason',
+        payload: { cwd, clientId: 'client-1', path: 'README.md', commit, hunkIndex: 0, expectedHunk: hunk },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ commit, scope: `commit-${commit}`, reason: 'This commit updates the documented behavior.' });
+      const prompt = completeSimpleMock.mock.calls[0][1].messages[0].content;
+      expect(prompt).toContain('complete commit as context');
+      expect(prompt).toContain('Complete commit file status:');
+      expect(prompt).toContain('historical change');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('rejects a stale hunk before requesting an explanation', async () => {
     const cwd = await createRepo();
     const app = await buildApp();

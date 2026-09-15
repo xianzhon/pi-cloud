@@ -68,7 +68,8 @@ export function createGitOperations() {
       cwd: string;
       clientId: string;
       path: string;
-      scope: 'staged' | 'unstaged';
+      scope?: 'staged' | 'unstaged';
+      commit?: string;
       hunkIndex: number;
       expectedHunk: string;
     }) {

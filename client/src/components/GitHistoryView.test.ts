@@ -109,6 +109,47 @@ describe('GitHistoryView', () => {
     expect(wrapper.findAll('.git-diff-file h4 button[aria-expanded="true"]')).toHaveLength(2);
   });
 
+  it('explains an individual commit diff hunk on demand', async () => {
+    const onlyCommit = commit('e'.repeat(40), 'Explained change');
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/history')) return response({ branch: 'main', page: 0, hasPrevious: false, hasNext: false, commits: [onlyCommit] });
+      if (url.includes('/diff')) {
+        return response({
+          stat: '1 file changed',
+          diff: 'diff --git a/app.ts b/app.ts\n--- a/app.ts\n+++ b/app.ts\n@@ -1 +1 @@\n-old\n+new\n@@ -4 +4 @@\n-before\n+after',
+        });
+      }
+      expect(url).toBe('/api/git/change-reason');
+      expect(JSON.parse(String(init?.body))).toEqual({
+        cwd: '/workspace',
+        clientId: 'client-1',
+        path: 'app.ts',
+        commit: onlyCommit.hash,
+        hunkIndex: 0,
+        expectedHunk: '@@ -1 +1 @@\n-old\n+new',
+      });
+      return response({ reason: 'What: Updates the value.\n\nWhy: Keeps behavior current.' });
+    });
+
+    const wrapper = mount(GitHistoryView, {
+      props: { visible: true, cwd: '/workspace', clientId: 'client-1' },
+      global: { stubs: { Teleport: true } },
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll('.git-change-reason-button')).toHaveLength(2);
+    const hunkHeaders = wrapper.findAll('.git-history-hunk-header');
+    expect(hunkHeaders).toHaveLength(2);
+    expect(hunkHeaders[0].text()).toContain('@@ -1 +1 @@');
+    expect(hunkHeaders[0].find('.git-change-reason-button').exists()).toBe(true);
+
+    await wrapper.findAll<HTMLButtonElement>('.git-change-reason-button')[0].trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('.git-change-reason').text()).toContain('Updates the value');
+  });
+
   it('shows empty history and oversized patch states without closing', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ branch: 'main', page: 0, hasPrevious: false, hasNext: false, commits: [] }));
     const emptyWrapper = mount(GitHistoryView, {

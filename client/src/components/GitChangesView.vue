@@ -475,7 +475,7 @@ async function refresh(preferred = selected.value): Promise<void> {
   }
 }
 
-async function updateIndex(options: Parameters<ReturnType<typeof createGitOperations>['updateIndex']>[0]): Promise<void> {
+async function applyIndexUpdate(options: Parameters<ReturnType<typeof createGitOperations>['updateIndex']>[0]): Promise<void> {
   updating.value = true;
   diffError.value = '';
   try {
@@ -491,12 +491,12 @@ async function updateIndex(options: Parameters<ReturnType<typeof createGitOperat
 
 function mutateFile(path: string, scope: DiffScope): void {
   if (updating.value) return;
-  void updateIndex({ cwd: props.cwd, path, scope, mode: 'file' });
+  void applyIndexUpdate({ cwd: props.cwd, path, scope, mode: 'file' });
 }
 
 function mutateAll(scope: DiffScope): void {
   if (updating.value) return;
-  void updateIndex({ cwd: props.cwd, scope, mode: 'all' });
+  void applyIndexUpdate({ cwd: props.cwd, scope, mode: 'all' });
 }
 
 function startResize(event: PointerEvent, mode: 'panes' | 'lists'): void {
@@ -663,7 +663,7 @@ function mutateSelection(mode: 'hunk' | 'lines'): void {
     ...(mode === 'lines' ? { selectedLines: contextMenu.value.selectedLines } : {}),
   } as const;
   closeContextMenu();
-  void updateIndex(options);
+  void applyIndexUpdate(options);
 }
 
 function handleKeydown(event: KeyboardEvent): void {

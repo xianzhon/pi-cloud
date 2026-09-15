@@ -404,6 +404,7 @@
       v-if="showGitHistory"
       :visible="showGitHistory"
       :cwd="activeProjectPath"
+      :client-id="clientId"
       @close="showGitHistory = false"
     />
 
