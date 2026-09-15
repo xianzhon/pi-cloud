@@ -24,6 +24,7 @@ describe('GitChangesView', () => {
       }
       if (url.includes('/api/git/branches')) return response({ current: 'main' });
       if (url.includes('/api/git/diff')) return response({ diff: patch });
+      if (url.includes('/api/git/change-reason')) return response({ reason: 'This updates the displayed value.' });
       if (url.includes('/api/git/amend-status')) return response({ message: 'Previous message' });
       if (url.includes('/api/git/commit') || url.includes('/api/git/amend')) return response({ commit: '1234567890' });
       return response({});
@@ -88,6 +89,33 @@ describe('GitChangesView', () => {
       body: JSON.stringify({ cwd: '/workspace', message: 'Previous message', sessionId: 'session-1', stagedOnly: true }),
     }));
     expect(document.body.textContent).toContain('Amended commit 1234567.');
+    wrapper.unmount();
+  });
+
+  it('explains the reason for an individual diff hunk on demand', async () => {
+    const wrapper = mount(GitChangesView, { props: { visible: true, cwd: '/workspace', clientId: 'client-1' } });
+    await flushPromises();
+
+    const explainButton = document.querySelector<HTMLButtonElement>('.git-change-reason-button')!;
+    expect(explainButton.textContent).toContain('Why this change?');
+    explainButton.click();
+    await flushPromises();
+
+    expect(fetch).toHaveBeenCalledWith('/api/git/change-reason', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        cwd: '/workspace',
+        clientId: 'client-1',
+        path: 'src/app.ts',
+        scope: 'unstaged',
+        hunkIndex: 0,
+        expectedHunk: '@@ -1 +1 @@\n-old\n+new',
+      }),
+    }));
+    const reasonPanels = document.querySelectorAll('.git-change-reason');
+    expect(reasonPanels).toHaveLength(1);
+    expect(reasonPanels[0].textContent).toContain('This updates the displayed value.');
+    expect(reasonPanels[0].closest('.git-changes-diff-block')?.querySelectorAll('.git-changes-line')).toHaveLength(3);
     wrapper.unmount();
   });
 

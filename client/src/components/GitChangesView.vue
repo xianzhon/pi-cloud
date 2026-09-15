@@ -136,15 +136,32 @@
                 <div v-else-if="diffError" class="git-changes-state is-error" role="alert">{{ diffError }}</div>
                 <div v-else-if="!renderLines.length" class="git-changes-state">{{ t('components.gitChanges.noPatch') }}</div>
                 <div v-else ref="diffRoot" class="git-changes-diff" @contextmenu="closeContextMenu">
-                  <pre><span
-                    v-for="(line, index) in renderLines"
-                    :key="index"
-                    class="git-changes-line"
-                    :class="isNewFileSelection() ? '' : diffLineClass(line.text)"
-                    :data-hunk-index="line.hunkIndex"
-                    :data-hunk-line-index="line.hunkLineIndex"
-                    @contextmenu.stop.prevent="openContextMenu($event, line)"
-                  >{{ line.text }}{{ '\n' }}</span></pre>
+                  <div
+                    v-for="(block, blockIndex) in renderBlocks"
+                    :key="blockIndex"
+                    class="git-changes-diff-block"
+                  >
+                    <pre><template v-for="(line, index) in block.lines" :key="index"><span
+                      class="git-changes-line"
+                      :class="isNewFileSelection() ? '' : diffLineClass(line.text)"
+                      :data-hunk-index="line.hunkIndex"
+                      :data-hunk-line-index="line.hunkLineIndex"
+                      @contextmenu.stop.prevent="openContextMenu($event, line)"
+                    ><span>{{ line.text }}</span><button
+                      v-if="isHunkStart(line)"
+                      type="button"
+                      class="git-change-reason-button"
+                      :disabled="!props.clientId || reasonLoadingHunk !== undefined"
+                      @click.stop="toggleChangeReason(line.hunkIndex as number)"
+                      @contextmenu.stop
+                    ><PhLightbulb :size="13" weight="bold" />{{ reasonLoadingHunk === line.hunkIndex ? t('components.gitChanges.explainingChange') : t('components.gitChanges.showChangeReason') }}</button>{{ '\n' }}</span></template></pre>
+                    <aside
+                      v-if="block.hunkIndex !== undefined && expandedReasonHunk === block.hunkIndex && (changeReasons[block.hunkIndex] || changeReasonErrors[block.hunkIndex])"
+                      class="git-change-reason"
+                      :class="{ 'is-error': changeReasonErrors[block.hunkIndex] }"
+                      :role="changeReasonErrors[block.hunkIndex] ? 'alert' : 'status'"
+                    ><strong>{{ t('components.gitChanges.changeReason') }}</strong>{{ changeReasonErrors[block.hunkIndex] || changeReasons[block.hunkIndex] }}</aside>
+                  </div>
                 </div>
               </template>
               <footer class="git-commit-panel">
@@ -203,7 +220,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { PhCheck, PhFile, PhFileText, PhFolder, PhGitBranch, PhGitDiff, PhQuestion, PhRobot, PhX } from '@phosphor-icons/vue';
+import { PhCheck, PhFile, PhFileText, PhFolder, PhGitBranch, PhGitDiff, PhLightbulb, PhQuestion, PhRobot, PhX } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
 import { diffLineClass } from '../utils/gitDiff';
@@ -234,6 +251,11 @@ interface DiffHunk {
   lines: string[];
 }
 
+interface RenderBlock {
+  hunkIndex?: number;
+  lines: RenderLine[];
+}
+
 const props = defineProps<{ visible: boolean; cwd: string; sessionId?: string; clientId?: string }>();
 const emit = defineEmits<{ close: [] }>();
 const t = i18n.global.t;
@@ -262,8 +284,13 @@ const syncing = ref(false);
 const generatingMessage = ref(false);
 const commitError = ref('');
 const commitResult = ref('');
+const changeReasons = ref<Record<number, string>>({});
+const changeReasonErrors = ref<Record<number, string>>({});
+const reasonLoadingHunk = ref<number>();
+const expandedReasonHunk = ref<number>();
 let requestId = 0;
 let diffRequestId = 0;
+let reasonRequestId = 0;
 let resizeMode: 'panes' | 'lists' | undefined;
 
 const unstagedFiles = computed(() => files.value.filter(file => file.unstaged));
@@ -273,13 +300,19 @@ const renderLines = computed(() => {
   if (isNewFileSelection()) {
     return parsedDiff.value.lines
       .filter(line => line.hunkLineIndex !== undefined && line.text.startsWith('+') && !line.text.startsWith('+++'))
-      .map(line => ({ text: line.text.slice(1), hunkIndex: undefined, hunkLineIndex: undefined }));
+      .map(line => ({ ...line, text: line.text.slice(1) }));
   }
   if (isMissingSelection()) {
     return parsedDiff.value.lines.filter(line => !/^(diff --git |index |--- |\+\+\+ )/.test(line.text));
   }
   return parsedDiff.value.lines;
 });
+const renderBlocks = computed(() => renderLines.value.reduce<RenderBlock[]>((blocks, line) => {
+  const previous = blocks.at(-1);
+  if (previous && previous.hunkIndex === line.hunkIndex) previous.lines.push(line);
+  else blocks.push({ hunkIndex: line.hunkIndex, lines: [line] });
+  return blocks;
+}, []));
 const selectedFile = computed(() => files.value.find(file => file.path === selected.value?.path));
 const selectedStatusKind = computed(() => selectedFile.value && selected.value
   ? fileStatusKind(selectedFile.value, selected.value.scope)
@@ -337,6 +370,52 @@ function isChangedLine(line: RenderLine): boolean {
       || (line.text.startsWith('-') && !line.text.startsWith('---')));
 }
 
+function isHunkStart(line: RenderLine): boolean {
+  return line.hunkIndex !== undefined
+    && (line.text.startsWith('@@ ') || (isNewFileSelection() && line.hunkLineIndex === 0));
+}
+
+function resetChangeReasons(): void {
+  ++reasonRequestId;
+  changeReasons.value = {};
+  changeReasonErrors.value = {};
+  reasonLoadingHunk.value = undefined;
+  expandedReasonHunk.value = undefined;
+}
+
+async function toggleChangeReason(hunkIndex: number): Promise<void> {
+  if (expandedReasonHunk.value === hunkIndex) {
+    expandedReasonHunk.value = undefined;
+    return;
+  }
+  expandedReasonHunk.value = hunkIndex;
+  if (changeReasons.value[hunkIndex] || !props.clientId || !selected.value) return;
+
+  const currentRequestId = ++reasonRequestId;
+  const currentSelection = { ...selected.value };
+  delete changeReasonErrors.value[hunkIndex];
+  reasonLoadingHunk.value = hunkIndex;
+  try {
+    const result = await gitOperations.explainChange({
+      cwd: props.cwd,
+      clientId: props.clientId,
+      path: currentSelection.path,
+      scope: currentSelection.scope,
+      hunkIndex,
+      expectedHunk: expectedHunk(parsedDiff.value.hunks[hunkIndex]),
+    });
+    if (currentRequestId === reasonRequestId) {
+      changeReasons.value[hunkIndex] = typeof result.reason === 'string' ? result.reason : '';
+    }
+  } catch (cause) {
+    if (currentRequestId === reasonRequestId) {
+      changeReasonErrors.value[hunkIndex] = cause instanceof Error ? cause.message : t('components.gitChanges.explainChangeFailed');
+    }
+  } finally {
+    if (currentRequestId === reasonRequestId) reasonLoadingHunk.value = undefined;
+  }
+}
+
 async function loadDiff(): Promise<void> {
   if (!selected.value) return;
   const current = { ...selected.value };
@@ -344,6 +423,7 @@ async function loadDiff(): Promise<void> {
   diffLoading.value = true;
   diffError.value = '';
   contextMenu.value = undefined;
+  resetChangeReasons();
   try {
     const result = await gitOperations.getDiff({
       cwd: props.cwd,
@@ -976,14 +1056,30 @@ onBeforeUnmount(() => {
   background: var(--bg-primary);
 }
 
-.git-changes-diff pre {
+.git-changes-diff-block {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  align-items: flex-start;
+}
+
+.git-changes-diff-block:last-child {
+  padding-bottom: 30vh;
+}
+
+.git-changes-diff-block pre {
   min-width: max-content;
+  flex: 1;
   margin: 0;
-  padding: 8px 0 30vh;
+  padding: 0;
   font-family: var(--font-mono);
   font-size: 0.8rem;
   line-height: 1.55;
   user-select: text;
+}
+
+.git-changes-diff-block:first-child pre {
+  padding-top: 8px;
 }
 
 .git-changes-line {
@@ -1010,6 +1106,47 @@ onBeforeUnmount(() => {
 
 .git-changes-line.is-metadata {
   color: var(--text-muted);
+}
+
+.git-change-reason-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 14px;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font: 0.7rem var(--font-sans);
+  vertical-align: middle;
+}
+
+.git-change-reason-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.git-change-reason {
+  width: clamp(280px, 32vw, 420px);
+  flex: 0 0 auto;
+  margin: 8px 14px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font: 0.78rem/1.5 var(--font-sans);
+  white-space: pre-wrap;
+}
+
+.git-change-reason strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-primary);
+}
+
+.git-change-reason.is-error {
+  border-left-color: var(--error);
+  color: var(--error);
 }
 
 .git-changes-state {

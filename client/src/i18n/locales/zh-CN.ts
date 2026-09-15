@@ -126,6 +126,10 @@ export default {
       unstageLines: '取消暂存所选行',
       stageHunk: '暂存区块',
       unstageHunk: '取消暂存区块',
+      showChangeReason: '为何进行此更改？',
+      explainingChange: '正在解释…',
+      changeReason: '可能的原因',
+      explainChangeFailed: '无法解释此更改',
     },
     gitHistory: {
       title: 'Git 历史记录',

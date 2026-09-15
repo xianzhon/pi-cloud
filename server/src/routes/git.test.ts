@@ -764,6 +764,66 @@ describe('gitRoutes branch', () => {
     }
   });
 
+  it('explains a verified diff hunk with AI', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'This change updates the documented behavior.' }],
+      stopReason: 'stop',
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      api: 'mock-api', provider: 'mock', model: 'model', timestamp: Date.now(),
+    });
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      await writeFile(join(cwd, 'related.txt'), 'supporting change\n');
+      const diff = await git(cwd, 'diff', '--', 'README.md');
+      const hunk = diff.slice(diff.indexOf('@@ '));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/change-reason',
+        payload: { cwd, clientId: 'client-1', path: 'README.md', scope: 'unstaged', hunkIndex: 0, expectedHunk: hunk },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().reason).toBe('This change updates the documented behavior.');
+      const request = completeSimpleMock.mock.calls[0][1];
+      expect(request.systemPrompt).toContain('complete pending change set');
+      expect(request.messages[0].content).toContain('Selected file: README.md');
+      expect(request.messages[0].content).toContain(hunk);
+      expect(request.messages[0].content).toContain('?? related.txt');
+      expect(request.messages[0].content).toContain('supporting change');
+      expect(request.messages[0].content).toContain('What:');
+      expect(request.messages[0].content).toContain('Why:');
+      expect(completeSimpleMock.mock.calls[0][2]).toMatchObject({ maxTokens: 320 });
+      expect(completeSimpleMock.mock.calls[0][2].sessionId).toMatch(/^change-reason:[a-f0-9]{32}$/);
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a stale hunk before requesting an explanation', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/change-reason',
+        payload: { cwd, clientId: 'client-1', path: 'README.md', scope: 'unstaged', hunkIndex: 0, expectedHunk: '@@ stale @@' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('selected hunk changed');
+      expect(completeSimpleMock).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('generates a commit message with AI from staged and unstaged changes', async () => {
     completeSimpleMock.mockResolvedValueOnce({
       role: 'assistant',

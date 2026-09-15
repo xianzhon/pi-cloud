@@ -126,6 +126,10 @@ export default {
       unstageLines: 'Unstage Selected Lines',
       stageHunk: 'Stage Hunk',
       unstageHunk: 'Unstage Hunk',
+      showChangeReason: 'Why this change?',
+      explainingChange: 'Explaining…',
+      changeReason: 'Likely reason',
+      explainChangeFailed: 'Failed to explain this change',
     },
     gitHistory: {
       title: 'Git History',

@@ -64,6 +64,16 @@ export function createGitOperations() {
     generateCommitMessage(options: { cwd: string; clientId: string; stagedOnly?: boolean }) {
       return requestJson(`/api/git/commit-message?${queryString(options)}`);
     },
+    explainChange(options: {
+      cwd: string;
+      clientId: string;
+      path: string;
+      scope: 'staged' | 'unstaged';
+      hunkIndex: number;
+      expectedHunk: string;
+    }) {
+      return postJson('/api/git/change-reason', options);
+    },
     saveCommit(mode: 'commit' | 'amend', options: { cwd: string; message: string; sessionId?: string; stagedOnly?: boolean }) {
       const { stagedOnly, ...body } = options;
       return postJson(mode === 'amend' ? '/api/git/amend' : '/api/git/commit', {
