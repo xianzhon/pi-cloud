@@ -454,7 +454,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 }
 
 .git-history-detail-header {
-  flex: 0 0 auto;
+  height: 164px;
+  flex: 0 0 164px;
+  box-sizing: border-box;
+  overflow: auto;
   padding: 16px 18px;
   border-bottom: 1px solid var(--border);
 }
