@@ -41,6 +41,7 @@ describe('GitChangesView', () => {
     await flushPromises();
 
     expect(document.querySelectorAll('.git-change-file')).toHaveLength(2);
+    expect(document.querySelector('.git-changes-header')?.textContent).toContain('Git Commit');
     expect(document.body.textContent).toContain('Unstaged Changes');
     expect(document.body.textContent).toContain('Staged Changes');
 
@@ -87,15 +88,26 @@ describe('GitChangesView', () => {
     wrapper.unmount();
   });
 
-  it('commits staged files and loads the previous message for amend', async () => {
-    const wrapper = mount(GitChangesView, { props: { visible: true, cwd: '/workspace', sessionId: 'session-1' } });
+  it('uses the session title as the commit message and restores it after viewing amend', async () => {
+    const wrapper = mount(GitChangesView, {
+      props: { visible: true, cwd: '/workspace', sessionId: 'session-1', sessionTitle: 'Improve Git workflow' },
+    });
     await flushPromises();
+
+    const message = document.querySelector<HTMLTextAreaElement>('#git-changes-commit-message')!;
+    expect(message.value).toBe('Improve Git workflow');
 
     const amend = document.querySelector<HTMLInputElement>('.git-amend-option input')!;
     amend.click();
     await flushPromises();
-    expect(document.querySelector<HTMLTextAreaElement>('#git-changes-commit-message')?.value).toBe('Previous message');
+    expect(message.value).toBe('Previous message');
 
+    amend.click();
+    await flushPromises();
+    expect(message.value).toBe('Improve Git workflow');
+
+    amend.click();
+    await flushPromises();
     const amendButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.git-commit-actions button'))
       .find(button => button.textContent?.includes('Amend'))!;
     amendButton.click();

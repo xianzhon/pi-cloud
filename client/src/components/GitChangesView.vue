@@ -5,7 +5,7 @@
         <header class="git-changes-header">
           <div>
             <h2 :id="titleId">
-              <PhGitDiff :size="20" weight="fill" />
+              <PhGitCommit :size="20" weight="fill" />
               <span>{{ t('components.gitChanges.title') }}</span>
               <span class="git-changes-location">
                 <span class="git-changes-branch"><PhGitBranch :size="15" weight="bold" /> {{ branch || 'HEAD' }}</span>
@@ -220,7 +220,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { PhCheck, PhFile, PhFileText, PhFolder, PhGitBranch, PhGitDiff, PhLightbulb, PhQuestion, PhRobot, PhX } from '@phosphor-icons/vue';
+import { PhCheck, PhFile, PhFileText, PhFolder, PhGitBranch, PhGitCommit, PhLightbulb, PhQuestion, PhRobot, PhX } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
 import { diffLineClass } from '../utils/gitDiff';
@@ -256,7 +256,7 @@ interface RenderBlock {
   lines: RenderLine[];
 }
 
-const props = defineProps<{ visible: boolean; cwd: string; sessionId?: string; clientId?: string }>();
+const props = defineProps<{ visible: boolean; cwd: string; sessionId?: string; sessionTitle?: string; clientId?: string }>();
 const emit = defineEmits<{ close: [] }>();
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
@@ -278,8 +278,9 @@ const contextMenu = ref<{ x: number; y: number; hunkIndex: number; selectedLines
 const filesWidth = ref(360);
 const unstagedHeight = ref(320);
 const amend = ref(false);
-const commitMessage = ref('');
-const normalCommitMessage = ref('');
+const initialCommitMessage = props.sessionTitle?.trim() || '';
+const commitMessage = ref(initialCommitMessage);
+const normalCommitMessage = ref(initialCommitMessage);
 const committing = ref(false);
 const syncing = ref(false);
 const generatingMessage = ref(false);

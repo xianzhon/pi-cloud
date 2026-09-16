@@ -22,7 +22,7 @@
         :disabled="!isRepository"
         @click="emit('changes')"
       >
-        <PhGitDiff :size="17" weight="bold" aria-hidden="true" />
+        <PhGitCommit :size="17" weight="bold" aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -71,7 +71,7 @@ import {
   PhArrowsClockwise,
   PhClockCounterClockwise,
   PhGitBranch,
-  PhGitDiff,
+  PhGitCommit,
   PhGitPullRequest,
   PhDownloadSimple,
 } from '@phosphor-icons/vue';

@@ -396,6 +396,7 @@
       :visible="showGitChanges"
       :cwd="activeProjectPath"
       :session-id="activeSessionId"
+      :session-title="sessionTitle"
       :client-id="clientId"
       @close="showGitChanges = false"
     />

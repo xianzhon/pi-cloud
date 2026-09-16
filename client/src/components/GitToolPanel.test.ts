@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import { PhGitCommit } from '@phosphor-icons/vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GitToolPanel from './GitToolPanel.vue';
 
@@ -27,8 +28,9 @@ describe('GitToolPanel', () => {
     expect(actions.every(button => button.text() === '')).toBe(true);
     expect(actions.every(button => button.classes().includes('tooltip'))).toBe(true);
     expect(actions.map(button => button.attributes('data-tooltip'))).toEqual([
-      'Git Changes', 'History', 'Refresh', 'PR', 'Pull', 'Branch',
+      'Git Commit', 'History', 'Refresh', 'PR', 'Pull', 'Branch',
     ]);
+    expect(actions[0].findComponent(PhGitCommit).exists()).toBe(true);
     expect(actions.every(button => button.attributes('title') === undefined)).toBe(true);
 
     const commands = ['/pr', '/pull', '/branch'];
