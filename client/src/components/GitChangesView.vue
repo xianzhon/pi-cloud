@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="git-changes-backdrop">
+    <div v-if="visible" ref="backdrop" class="git-changes-backdrop">
       <section ref="dialog" class="git-changes-dialog" role="dialog" aria-modal="true" :aria-labelledby="titleId">
         <header class="git-changes-header">
           <div>
@@ -270,6 +270,7 @@ const diffLoading = ref(false);
 const updating = ref(false);
 const statusError = ref('');
 const diffError = ref('');
+const backdrop = ref<HTMLElement>();
 const dialog = ref<HTMLElement>();
 const diffRoot = ref<HTMLElement>();
 const filesPane = ref<HTMLElement>();
@@ -502,7 +503,7 @@ function mutateAll(scope: DiffScope): void {
 function startResize(event: PointerEvent, mode: 'panes' | 'lists'): void {
   event.preventDefault();
   resizeMode = mode;
-  document.body.classList.add(mode === 'panes' ? 'is-resizing-columns' : 'is-resizing-rows');
+  backdrop.value?.classList.add(mode === 'panes' ? 'git-changes-resizing-columns' : 'git-changes-resizing-rows');
 }
 
 function resize(event: PointerEvent): void {
@@ -520,7 +521,7 @@ function resize(event: PointerEvent): void {
 
 function stopResize(): void {
   resizeMode = undefined;
-  document.body.classList.remove('is-resizing-columns', 'is-resizing-rows');
+  backdrop.value?.classList.remove('git-changes-resizing-columns', 'git-changes-resizing-rows');
 }
 
 async function toggleAmend(): Promise<void> {
@@ -685,12 +686,14 @@ onMounted(() => {
   window.addEventListener('pointerdown', closeContextMenu);
   window.addEventListener('pointermove', resize);
   window.addEventListener('pointerup', stopResize);
+  window.addEventListener('pointercancel', stopResize);
 });
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('pointerdown', closeContextMenu);
   window.removeEventListener('pointermove', resize);
   window.removeEventListener('pointerup', stopResize);
+  window.removeEventListener('pointercancel', stopResize);
   stopResize();
 });
 </script>
@@ -984,14 +987,14 @@ onBeforeUnmount(() => {
   inset: 1px 35%;
 }
 
-:global(body.is-resizing-columns),
-:global(body.is-resizing-columns *) {
+.git-changes-backdrop.git-changes-resizing-columns,
+.git-changes-backdrop.git-changes-resizing-columns * {
   cursor: col-resize !important;
   user-select: none !important;
 }
 
-:global(body.is-resizing-rows),
-:global(body.is-resizing-rows *) {
+.git-changes-backdrop.git-changes-resizing-rows,
+.git-changes-backdrop.git-changes-resizing-rows * {
   cursor: row-resize !important;
   user-select: none !important;
 }

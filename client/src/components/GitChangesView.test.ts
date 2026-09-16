@@ -71,6 +71,22 @@ describe('GitChangesView', () => {
     wrapper.unmount();
   });
 
+  it('keeps list resize styling inside the dialog backdrop', async () => {
+    const wrapper = mount(GitChangesView, { props: { visible: true, cwd: '/workspace' } });
+    await flushPromises();
+
+    const backdrop = document.querySelector('.git-changes-backdrop')!;
+    const listSeparator = document.querySelector('.git-changes-resizer.is-horizontal')!;
+    listSeparator.dispatchEvent(new PointerEvent('pointerdown'));
+
+    expect(backdrop.classList.contains('git-changes-resizing-rows')).toBe(true);
+    expect(document.body.classList.contains('is-resizing-rows')).toBe(false);
+
+    window.dispatchEvent(new PointerEvent('pointercancel'));
+    expect(backdrop.classList.contains('git-changes-resizing-rows')).toBe(false);
+    wrapper.unmount();
+  });
+
   it('commits staged files and loads the previous message for amend', async () => {
     const wrapper = mount(GitChangesView, { props: { visible: true, cwd: '/workspace', sessionId: 'session-1' } });
     await flushPromises();
