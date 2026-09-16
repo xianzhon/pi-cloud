@@ -405,6 +405,7 @@ const minScale = computed(() => isImage.value ? 0.05 : MIN_SCALE);
 const maxScale = computed(() => isImage.value ? 8 : MAX_SCALE);
 const scaleStep = computed(() => isImage.value ? 0.05 : SCALE_STEP);
 const TOOLBAR_INSET = 12;
+const TEXT_BOUNDARY_INSET = 0.01;
 const VIEW_SAVE_DELAY = 300;
 const ZOOM_RENDER_DELAY = 120;
 const MAX_CANVAS_PIXELS = 16_000_000;
@@ -488,8 +489,8 @@ const textEditorStyle = computed(() => {
   return {
     left: `${editor.point.x * 100}%`,
     top: `${editor.point.y * 100}%`,
-    width: `${Math.max(12, longestLine + 2)}ch`,
-    maxWidth: `${(1 - editor.point.x) * 100}%`,
+    width: `${Math.max(24, longestLine + 2)}ch`,
+    maxWidth: `${Math.max(0, 1 - editor.point.x - TEXT_BOUNDARY_INSET) * 100}%`,
     color: editor.color,
     fontSize: `${editor.fontSize * scale.value}px`,
   };
@@ -881,6 +882,34 @@ function drawVisibleAnnotations(): void {
   pagesToDisplay.value.forEach(page => drawAnnotations(page));
 }
 
+function wrapTextLines(context: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const availableWidth = Math.max(1, maxWidth);
+  return text.split('\n').flatMap((sourceLine) => {
+    if (!sourceLine || context.measureText(sourceLine).width <= availableWidth) return [sourceLine];
+    const lines: string[] = [];
+    let line = '';
+    for (const segment of sourceLine.match(/\S+\s*/g) || []) {
+      const candidate = line + segment;
+      if (line && context.measureText(candidate).width > availableWidth) {
+        lines.push(line.trimEnd());
+        line = segment.trimStart();
+      } else {
+        line = candidate;
+      }
+
+      // A single oversized word still needs character wrapping to stay on the page.
+      while (context.measureText(line).width > availableWidth) {
+        let splitAt = 1;
+        while (splitAt < line.length && context.measureText(line.slice(0, splitAt + 1)).width <= availableWidth) splitAt += 1;
+        lines.push(line.slice(0, splitAt).trimEnd());
+        line = line.slice(splitAt).trimStart();
+      }
+    }
+    lines.push(line.trimEnd());
+    return lines;
+  });
+}
+
 function drawAnnotation(
   context: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -931,7 +960,8 @@ function drawAnnotation(
     const fontSize = (stroke.fontSize ?? 16) * drawingScale;
     context.font = `${fontSize}px sans-serif`;
     context.textBaseline = 'top';
-    for (const [index, line] of (stroke.text || '').split('\n').entries()) {
+    const lines = wrapTextLines(context, stroke.text || '', canvas.width * (1 - start.x - TEXT_BOUNDARY_INSET));
+    for (const [index, line] of lines.entries()) {
       context.fillText(line, startX, startY + index * fontSize * 1.25);
     }
     context.restore();
@@ -1377,10 +1407,13 @@ function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoin
     const start = points[0];
     const end = points.at(-1) || start;
     const textScale = scale.value * (window.devicePixelRatio || 1);
-    const textLines = (stroke.text || '').split('\n');
-    const longestLine = Math.max(...textLines.map(line => line.length), 1);
     const fontSize = (stroke.fontSize ?? 16) * textScale;
-    const textWidth = type === 'text' ? longestLine * fontSize * 0.625 : 0;
+    const context = type === 'text' ? canvas.getContext('2d') : null;
+    if (context) context.font = `${fontSize}px sans-serif`;
+    const textLines = context
+      ? wrapTextLines(context, stroke.text || '', canvas.width * (1 - stroke.points[0].x - TEXT_BOUNDARY_INSET))
+      : (stroke.text || '').split('\n');
+    const textWidth = context ? Math.max(...textLines.map(line => context.measureText(line).width), 0) : 0;
     const textHeight = type === 'text' ? textLines.length * fontSize * 1.25 : 0;
     return target.x >= Math.min(start.x, end.x) - threshold
       && target.x <= Math.max(start.x, end.x + textWidth) + threshold
@@ -2159,7 +2192,7 @@ onUnmounted(() => {
   position: absolute;
   z-index: 1;
   box-sizing: border-box;
-  min-width: 12rem;
+  min-width: 0;
   min-height: 1.5em;
   padding: 0 2px;
   border: 1px solid currentColor;
@@ -2167,6 +2200,7 @@ onUnmounted(() => {
   outline: none;
   background: rgb(255 255 255 / 90%);
   overflow: hidden;
+  overflow-wrap: anywhere;
   resize: none;
   font-family: sans-serif;
   line-height: 1.25;

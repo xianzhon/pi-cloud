@@ -52,6 +52,7 @@ const context = {
   ellipse: vi.fn(),
   stroke: vi.fn(),
   fillText: vi.fn(),
+  measureText: vi.fn((text: string) => ({ width: text.length * 10 }) as TextMetrics),
   drawImage: vi.fn(),
   save: vi.fn(),
   restore: vi.fn(),
@@ -767,11 +768,14 @@ describe('MediaAnnotationPreview', () => {
     const textEditor = wrapper.get<HTMLTextAreaElement>('.pdf-text-editor');
     Object.defineProperty(textEditor.element, 'scrollHeight', { configurable: true, value: 72 });
     expect(textEditor.attributes('aria-label')).toBe('Enter annotation text');
+    expect(textEditor.attributes('style')).toContain('width: 24ch');
     await textEditor.setValue('Review this');
     await textEditor.trigger('keydown', { key: 'Enter', shiftKey: true });
     expect(wrapper.find('.pdf-text-editor').exists()).toBe(true);
-    await textEditor.setValue('Review this\non two lines');
-    expect(textEditor.attributes('style')).toContain('width: 14ch');
+    const longLine = 'this is a long text, cool, is it? how does it work?';
+    await textEditor.setValue(`${longLine}\non two lines`);
+    expect(textEditor.attributes('style')).toContain('width: 53ch');
+    expect(textEditor.attributes('style')).toContain('max-width: 59%');
     expect(textEditor.element.style.height).toBe('72px');
     await textEditor.trigger('keydown', { key: 'Enter', ctrlKey: true });
     await flushPromises();
@@ -781,11 +785,12 @@ describe('MediaAnnotationPreview', () => {
     const latestBody = JSON.parse(String(latestWrite?.[1]?.body));
     expect(JSON.parse(latestBody.content).pages['1'][1]).toMatchObject({
       type: 'text',
-      text: 'Review this\non two lines',
+      text: `${longLine}\non two lines`,
       points: [{ x: 0.4, y: 0.4 }],
     });
-    expect(context.fillText).toHaveBeenCalledWith('Review this', 240, 320);
-    expect(context.fillText).toHaveBeenCalledWith('on two lines', 240, 340);
+    expect(context.fillText).toHaveBeenCalledWith('this is a long text, cool, is it?', 240, 320);
+    expect(context.fillText).toHaveBeenCalledWith('how does it work?', 240, 340);
+    expect(context.fillText).toHaveBeenCalledWith('on two lines', 240, 360);
   });
 
   it('covers PDF content with a saved white rectangle', async () => {
