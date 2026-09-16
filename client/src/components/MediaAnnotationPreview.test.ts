@@ -765,13 +765,14 @@ describe('MediaAnnotationPreview', () => {
     await canvas.trigger('pointerup', { pointerId: 2, clientX: 240, clientY: 320 });
 
     const textEditor = wrapper.get<HTMLTextAreaElement>('.pdf-text-editor');
+    Object.defineProperty(textEditor.element, 'scrollHeight', { configurable: true, value: 72 });
     expect(textEditor.attributes('aria-label')).toBe('Enter annotation text');
     await textEditor.setValue('Review this');
     await textEditor.trigger('keydown', { key: 'Enter', shiftKey: true });
     expect(wrapper.find('.pdf-text-editor').exists()).toBe(true);
     await textEditor.setValue('Review this\non two lines');
     expect(textEditor.attributes('style')).toContain('width: 14ch');
-    expect(textEditor.attributes('style')).toContain('height: 2.75em');
+    expect(textEditor.element.style.height).toBe('72px');
     await textEditor.trigger('keydown', { key: 'Enter', ctrlKey: true });
     await flushPromises();
     expect(wrapper.find('.pdf-text-editor').exists()).toBe(false);

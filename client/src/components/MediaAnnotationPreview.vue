@@ -280,6 +280,7 @@
             :aria-label="t('components.editorPanel.pdfTextPrompt')"
             :placeholder="t('components.editorPanel.pdfTextPrompt')"
             :style="textEditorStyle"
+            @input="scheduleTextEditorResize"
             @pointerdown.stop
             @keydown="handleTextEditorKeydown"
             @blur="commitTextAnnotation"
@@ -489,7 +490,6 @@ const textEditorStyle = computed(() => {
     top: `${editor.point.y * 100}%`,
     width: `${Math.max(12, longestLine + 2)}ch`,
     maxWidth: `${(1 - editor.point.x) * 100}%`,
-    height: `${lines.length * 1.25 + 0.25}em`,
     color: editor.color,
     fontSize: `${editor.fontSize * scale.value}px`,
   };
@@ -700,6 +700,17 @@ function setCanvasElement(page: number, element: unknown, annotation: boolean): 
 
 function setTextEditorElement(element: unknown): void {
   textEditorEl.value = element instanceof HTMLTextAreaElement ? element : undefined;
+}
+
+function resizeTextEditor(): void {
+  const element = textEditorEl.value;
+  if (!element) return;
+  element.style.height = 'auto';
+  element.style.height = `${element.scrollHeight}px`;
+}
+
+function scheduleTextEditorResize(): void {
+  void nextTick(resizeTextEditor);
 }
 
 function clampScale(value: number): number {
@@ -1495,6 +1506,7 @@ function startTextAnnotation(point: AnnotationPoint): void {
   };
   drawAnnotations();
   void nextTick(() => {
+    resizeTextEditor();
     textEditorEl.value?.focus();
     textEditorEl.value?.select();
   });
@@ -2146,7 +2158,9 @@ onUnmounted(() => {
 .pdf-text-editor {
   position: absolute;
   z-index: 1;
+  box-sizing: border-box;
   min-width: 12rem;
+  min-height: 1.5em;
   padding: 0 2px;
   border: 1px solid currentColor;
   border-radius: 2px;
