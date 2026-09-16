@@ -1052,14 +1052,15 @@ onBeforeUnmount(() => {
 .git-changes-diff {
   min-height: 0;
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: var(--bg-primary);
 }
 
 .git-changes-diff-block {
   display: flex;
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
   align-items: flex-start;
 }
 
@@ -1068,7 +1069,7 @@ onBeforeUnmount(() => {
 }
 
 .git-changes-diff-block pre {
-  min-width: max-content;
+  min-width: 0;
   flex: 1;
   margin: 0;
   padding: 0;
@@ -1086,7 +1087,8 @@ onBeforeUnmount(() => {
   display: block;
   min-height: 1.55em;
   padding: 0 14px;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .git-changes-line.is-added {

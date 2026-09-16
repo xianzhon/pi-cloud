@@ -817,11 +817,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   display: block;
   min-height: 18px;
   padding: 0 10px;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .git-diff-line.git-history-hunk-header {
   display: flex;
+}
+
+.git-history-hunk-header > span {
+  min-width: 0;
 }
 
 .git-diff-line.is-added {
