@@ -120,6 +120,7 @@
           v-if="showGitTool && !isReviewMode"
           :cwd="activeProjectPath"
           @command="submitGitCommand"
+          @changes="openGitChanges"
           @history="openGitHistory"
         />
       </template>
@@ -390,10 +391,21 @@
       @workspace-state-changed="handleEditorWorkspaceStateChanged"
     />
 
+    <LazyGitChangesView
+      v-if="showGitChanges"
+      :visible="showGitChanges"
+      :cwd="activeProjectPath"
+      :session-id="activeSessionId"
+      :session-title="sessionTitle"
+      :client-id="clientId"
+      @close="showGitChanges = false"
+    />
+
     <LazyGitHistoryView
       v-if="showGitHistory"
       :visible="showGitHistory"
       :cwd="activeProjectPath"
+      :client-id="clientId"
       @close="showGitHistory = false"
     />
 
@@ -621,6 +633,7 @@ function importEditorPanel() {
 }
 const loadEditorPanel = () => (editorPanelPromise ??= importEditorPanel());
 const LazyEditorPanel = defineAsyncComponent(loadEditorPanel);
+const LazyGitChangesView = defineAsyncComponent(() => import('./components/GitChangesView.vue').then((module) => module.default));
 const LazyGitHistoryView = defineAsyncComponent(() => import('./components/GitHistoryView.vue').then((module) => module.default));
 const LazySettingsDialog = defineAsyncComponent(() => import('./components/SettingsDialog.vue').then((module) => module.default));
 const LazyMemoryCenter = defineAsyncComponent(() => import('./components/MemoryCenter.vue').then((module) => module.default));
@@ -865,6 +878,7 @@ const editorFeatureLoaded = ref(showEditor.value);
 const editorMaximized = ref(restoredWorkspaceState?.editorMaximized ?? false);
 const activeEditorFile = ref(restoredWorkspaceState?.activeEditorFile);
 const showGitTool = ref(true);
+const showGitChanges = ref(false);
 const showGitHistory = ref(false);
 const isFullscreen = ref(false);
 const fullscreenLabel = computed(() => t(isFullscreen.value ? 'app.exitFullscreen' : 'app.fullscreen'));
@@ -1065,7 +1079,10 @@ watch([isAuthenticated, activeProjectPath], async ([authenticated, projectPath])
 }, { immediate: true });
 
 watch(activeProjectPath, (projectPath, previousProjectPath) => {
-  if (previousProjectPath && projectPath !== previousProjectPath) showGitHistory.value = false;
+  if (previousProjectPath && projectPath !== previousProjectPath) {
+    showGitChanges.value = false;
+    showGitHistory.value = false;
+  }
 });
 
 // Wait for the sidebar to resolve the project before choosing the terminal cwd.
@@ -1732,8 +1749,15 @@ function handleReviewSessionSelected(event: { sourceId: string; sessionId: strin
   void router.push({ path: `/sessions/${event.sessionId}`, query });
 }
 
+function openGitChanges(): void {
+  showMobileSidebar.value = false;
+  showGitHistory.value = false;
+  showGitChanges.value = true;
+}
+
 function openGitHistory(): void {
   showMobileSidebar.value = false;
+  showGitChanges.value = false;
   showGitHistory.value = true;
 }
 
@@ -1941,6 +1965,7 @@ function hasBlockingOverlayOpen() {
   return showSearch.value
     || showSettings.value
     || showMemoryCenter.value
+    || showGitChanges.value
     || showGitHistory.value
     || showNewSessionDialog.value
     || showDeleteConfirm.value

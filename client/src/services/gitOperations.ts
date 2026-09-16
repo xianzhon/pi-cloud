@@ -32,6 +32,17 @@ export function createGitOperations() {
     getStatus(options: { cwd: string; message?: string; stagedOnly?: boolean }) {
       return requestJson(`/api/git/status?${queryString(options)}`);
     },
+    updateIndex(options: {
+      cwd: string;
+      path?: string;
+      scope: 'staged' | 'unstaged';
+      mode: 'all' | 'file' | 'hunk' | 'lines';
+      hunkIndex?: number;
+      selectedLines?: number[];
+      expectedHunk?: string;
+    }) {
+      return postJson('/api/git/index', options);
+    },
     sync(command: 'push' | 'pull', cwd: string) {
       return postJson(`/api/git/${command}`, { cwd });
     },
@@ -52,6 +63,17 @@ export function createGitOperations() {
     },
     generateCommitMessage(options: { cwd: string; clientId: string; stagedOnly?: boolean }) {
       return requestJson(`/api/git/commit-message?${queryString(options)}`);
+    },
+    explainChange(options: {
+      cwd: string;
+      clientId: string;
+      path: string;
+      scope?: 'staged' | 'unstaged';
+      commit?: string;
+      hunkIndex: number;
+      expectedHunk: string;
+    }) {
+      return postJson('/api/git/change-reason', options);
     },
     saveCommit(mode: 'commit' | 'amend', options: { cwd: string; message: string; sessionId?: string; stagedOnly?: boolean }) {
       const { stagedOnly, ...body } = options;

@@ -44,6 +44,15 @@ export function parseDiffFiles(diff: string, fallbackName: string, options: Pars
   return files;
 }
 
+export function shouldHideDiffHeaderLine(line: string, preserveIndex = false): boolean {
+  return line.startsWith('diff --git ')
+    || line.startsWith('diff --cc ')
+    || line.startsWith('diff --combined ')
+    || (!preserveIndex && line.startsWith('index '))
+    || line.startsWith('--- ')
+    || line.startsWith('+++ ');
+}
+
 export function diffLineClass(line: string): string {
   if (line.startsWith('@@')) return 'is-hunk';
   if (line.startsWith('+') && !line.startsWith('+++')) return 'is-added';

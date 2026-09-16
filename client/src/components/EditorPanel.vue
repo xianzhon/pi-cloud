@@ -24,6 +24,10 @@
         >
           <PhPushPinSimple v-if="tab.pinned" class="tab-pin" :size="13" weight="fill" :aria-label="t('components.editorPanel.pinnedTab')" />
           <span class="tab-label">{{ tab.name }}{{ dirtyPaths.has(tab.path) ? ' •' : '' }}</span>
+          <span v-if="tab.diffStats" class="tab-diff-stats">
+            <span class="additions">+{{ tab.diffStats.additions }}</span>
+            <span class="deletions">−{{ tab.diffStats.deletions }}</span>
+          </span>
           <button @click.stop="closeTab(tab.path)"><PhX :size="14" /></button>
         </div>
       </div>
@@ -575,6 +579,7 @@ interface Tab {
   path: string;
   kind: 'text' | 'image' | 'pdf' | 'archive';
   virtual?: boolean;
+  diffStats?: { additions: number; deletions: number };
   pinned?: boolean;
   previewScale?: number;
 }
@@ -699,16 +704,21 @@ let splitDiffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
 let statusClearTimer: ReturnType<typeof setTimeout> | undefined;
 let autoRefreshTimer: ReturnType<typeof setInterval> | undefined;
 const models = new Map<string, monaco.editor.ITextModel>();
-const splitDiffModels = new Map<string, {
+interface SplitDiffModelSet {
   original: monaco.editor.ITextModel;
   modified: monaco.editor.ITextModel;
   oldLineNumbers: string[];
   newLineNumbers: string[];
-}>();
+  originalLineKinds: Array<'hunk' | undefined>;
+  modifiedLineKinds: Array<'hunk' | undefined>;
+}
+const splitDiffModels = new Map<string, SplitDiffModelSet>();
 interface DiffFileSection {
   name: string;
   line: number;
   modifiedLine: number;
+  additions: number;
+  deletions: number;
 }
 const virtualDiffFiles = new Map<string, DiffFileSection[]>();
 const modelListeners = new Map<string, monaco.IDisposable>();
@@ -716,13 +726,15 @@ const fileTimestamps = new Map<string, number>();
 const gitChanges = ref(new Map<string, GitChangeRange[]>());
 let gitChangeDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
 let diffDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
+let originalSplitDiffDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
+let modifiedSplitDiffDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
 const activeIsDirty = computed(() => !!activeTab.value && dirtyPaths.value.has(activeTab.value));
 const activeTabInfo = computed(() => tabs.value.find(tab => tab.path === activeTab.value));
 const activeIsVirtual = computed(() => !!activeTabInfo.value?.virtual);
 const activeVirtualFiles = computed(() => activeTab.value ? virtualDiffFiles.get(activeTab.value) || [] : []);
 const activeVirtualFileOptions = computed<CustomSelectOption[]>(() => activeVirtualFiles.value.map((file, index) => ({
   value: String(index),
-  label: file.name,
+  label: `${file.name}  +${file.additions} −${file.deletions}`,
 })));
 const activeDiffFileIndex = ref('0');
 const diffViewMode = ref<'unified' | 'split'>('unified');
@@ -961,7 +973,12 @@ function monacoLanguageForFile(filePath: string): string | undefined {
   if (filename === '.gitignore' || filename === '.dockerignore') {
     return IGNORE_LANGUAGE_ID;
   }
-  return lowerPath.endsWith('.vue') ? 'html' : undefined;
+  if (lowerPath.endsWith('.vue')) return 'html';
+
+  return monaco.languages.getLanguages().find(language =>
+    language.filenames?.some(name => name.toLowerCase() === filename)
+    || language.extensions?.some(extension => lowerPath.endsWith(extension.toLowerCase())),
+  )?.id;
 }
 
 function isMarkdownFile(filePath: string): boolean {
@@ -1447,7 +1464,7 @@ function registerMonacoThemes(): void {
       'diffEditor.removedTextBackground': '#ffcecb',
       'diffEditorGutter.insertedLineBackground': '#aceebb',
       'diffEditorGutter.removedLineBackground': '#ffcecb',
-      'diffEditor.diagonalFill': '#f6f8fa',
+      'diffEditor.diagonalFill': '#eef1f4',
       'diffEditor.border': '#d0d7de',
     },
   });
@@ -1462,7 +1479,7 @@ function registerMonacoThemes(): void {
       'diffEditor.removedTextBackground': '#f8514966',
       'diffEditorGutter.insertedLineBackground': '#2ea04366',
       'diffEditorGutter.removedLineBackground': '#f8514966',
-      'diffEditor.diagonalFill': '#161b22',
+      'diffEditor.diagonalFill': '#20252c',
       'diffEditor.border': '#30363d',
     },
   });
@@ -1512,21 +1529,27 @@ function splitDiffContent(content: string): {
   modified: string;
   oldLineNumbers: string[];
   newLineNumbers: string[];
+  originalLineKinds: Array<'hunk' | undefined>;
+  modifiedLineKinds: Array<'hunk' | undefined>;
 } {
   const original: string[] = [];
   const modified: string[] = [];
   const oldLineNumbers: string[] = [];
   const newLineNumbers: string[] = [];
+  const originalLineKinds: Array<'hunk' | undefined> = [];
+  const modifiedLineKinds: Array<'hunk' | undefined> = [];
   let oldLine: number | undefined;
   let newLine: number | undefined;
 
-  const appendOriginal = (line: string, label = '') => {
+  const appendOriginal = (line: string, label = '', kind?: 'hunk') => {
     original.push(line);
     oldLineNumbers.push(label);
+    originalLineKinds.push(kind);
   };
-  const appendModified = (line: string, label = '') => {
+  const appendModified = (line: string, label = '', kind?: 'hunk') => {
     modified.push(line);
     newLineNumbers.push(label);
+    modifiedLineKinds.push(kind);
   };
 
   for (const line of content.split('\n')) {
@@ -1539,8 +1562,8 @@ function splitDiffContent(content: string): {
     } else if (hunk) {
       oldLine = Number(hunk[1]);
       newLine = Number(hunk[2]);
-      appendOriginal(line);
-      appendModified(line);
+      appendOriginal(line, '', 'hunk');
+      appendModified(line, '', 'hunk');
     } else if (oldLine === undefined || newLine === undefined || ![' ', '+', '-'].includes(line[0] || '')) {
       appendOriginal(line);
       appendModified(line);
@@ -1559,10 +1582,12 @@ function splitDiffContent(content: string): {
     modified: modified.join('\n'),
     oldLineNumbers,
     newLineNumbers,
+    originalLineKinds,
+    modifiedLineKinds,
   };
 }
 
-function updateSplitDiffModels(path: string, content: string): void {
+function updateSplitDiffModels(path: string, content: string, language?: string): void {
   const split = splitDiffContent(content);
   const existing = splitDiffModels.get(path);
   if (existing) {
@@ -1570,15 +1595,42 @@ function updateSplitDiffModels(path: string, content: string): void {
     existing.modified.setValue(split.modified);
     existing.oldLineNumbers = split.oldLineNumbers;
     existing.newLineNumbers = split.newLineNumbers;
+    existing.originalLineKinds = split.originalLineKinds;
+    existing.modifiedLineKinds = split.modifiedLineKinds;
+    monaco.editor.setModelLanguage(existing.original, language || 'plaintext');
+    monaco.editor.setModelLanguage(existing.modified, language || 'plaintext');
     return;
   }
 
   splitDiffModels.set(path, {
-    original: monaco.editor.createModel(split.original, 'plaintext', monaco.Uri.parse(`${path}?side=original`)),
-    modified: monaco.editor.createModel(split.modified, 'plaintext', monaco.Uri.parse(`${path}?side=modified`)),
+    original: monaco.editor.createModel(split.original, language || 'plaintext', monaco.Uri.parse(`${path}?side=original`)),
+    modified: monaco.editor.createModel(split.modified, language || 'plaintext', monaco.Uri.parse(`${path}?side=modified`)),
     oldLineNumbers: split.oldLineNumbers,
     newLineNumbers: split.newLineNumbers,
+    originalLineKinds: split.originalLineKinds,
+    modifiedLineKinds: split.modifiedLineKinds,
   });
+}
+
+function applySplitDiffDecorations(splitModels?: SplitDiffModelSet): void {
+  if (!splitDiffEditor || !splitModels) {
+    originalSplitDiffDecorations?.clear();
+    modifiedSplitDiffDecorations?.clear();
+    return;
+  }
+
+  const decorationsFor = (kinds: Array<'hunk' | undefined>) => kinds.flatMap((kind, index) => {
+    if (!kind) return [];
+    return [{
+      range: new monaco.Range(index + 1, 1, index + 1, 1),
+      options: { isWholeLine: true, className: 'git-diff-hunk' },
+    }];
+  });
+
+  originalSplitDiffDecorations ||= splitDiffEditor.getOriginalEditor().createDecorationsCollection();
+  modifiedSplitDiffDecorations ||= splitDiffEditor.getModifiedEditor().createDecorationsCollection();
+  originalSplitDiffDecorations.set(decorationsFor(splitModels.originalLineKinds));
+  modifiedSplitDiffDecorations.set(decorationsFor(splitModels.modifiedLineKinds));
 }
 
 function applyDiffDecorations(filePath = activeTab.value): void {
@@ -1721,7 +1773,7 @@ function virtualDiffPath(cwd: string, scope: string, fileIndex?: number): string
   return fileIndex === undefined ? path : `${path}?file=${fileIndex}`;
 }
 
-function splitDiffFiles(content: string): Array<{ name: string; content: string }> {
+function splitDiffFiles(content: string): Array<{ name: string; content: string; additions: number; deletions: number }> {
   const sections: string[][] = [];
   let current: string[] | undefined;
 
@@ -1734,7 +1786,12 @@ function splitDiffFiles(content: string): Array<{ name: string; content: string 
   }
   if (current) sections.push(current);
   if (sections.length === 1 && !sections[0].some(line => line.startsWith('diff --git '))) {
-    return [{ name: '', content }];
+    return [{
+      name: '',
+      content,
+      additions: content.split('\n').filter(line => line.startsWith('+') && !line.startsWith('+++')).length,
+      deletions: content.split('\n').filter(line => line.startsWith('-') && !line.startsWith('---')).length,
+    }];
   }
 
   return sections.map((lines, index) => {
@@ -1743,11 +1800,13 @@ function splitDiffFiles(content: string): Array<{ name: string; content: string 
     return {
       name: newPath || oldPath || t('components.editorPanel.diffFile', { index: index + 1 }),
       content: lines.join('\n'),
+      additions: lines.filter(line => line.startsWith('+') && !line.startsWith('+++')).length,
+      deletions: lines.filter(line => line.startsWith('-') && !line.startsWith('---')).length,
     };
   });
 }
 
-function formatDiffFiles(content: string): Array<{ name: string; content: string }> {
+function formatDiffFiles(content: string): Array<{ name: string; content: string; additions: number; deletions: number }> {
   return splitDiffFiles(content).map(file => {
     if (!file.content.startsWith('diff --git ')) return file;
 
@@ -1783,12 +1842,19 @@ function openVirtualDiff({ cwd, scope, content }: { cwd: string; scope: string; 
   const model = models.get(path);
   if (model) model.setValue(displayContent);
   else models.set(path, monaco.editor.createModel(displayContent, 'diff', monaco.Uri.parse(path)));
-  updateSplitDiffModels(path, displayContent);
+  const splitLanguage = files.length === 1 ? monacoLanguageForFile(files[0].name || scope) : undefined;
+  updateSplitDiffModels(path, displayContent, splitLanguage);
 
   let line = 1;
   let modifiedLine = 1;
   virtualDiffFiles.set(path, files.map((file, index) => {
-    const section = { name: file.name, line, modifiedLine };
+    const section = {
+      name: file.name,
+      line,
+      modifiedLine,
+      additions: file.additions,
+      deletions: file.deletions,
+    };
     const separatorLines = index < files.length - 1 ? 1 : 0;
     line += file.content.split('\n').length + separatorLines;
     modifiedLine += splitDiffContent(file.content).modified.split('\n').length + separatorLines;
@@ -1796,9 +1862,17 @@ function openVirtualDiff({ cwd, scope, content }: { cwd: string; scope: string; 
   }));
 
   const name = t('components.editorPanel.gitDiffScope', { scope });
+  const diffStats = files.reduce((total, file) => ({
+    additions: total.additions + file.additions,
+    deletions: total.deletions + file.deletions,
+  }), { additions: 0, deletions: 0 });
   const existingTab = tabs.value.find(tab => tab.path === path);
-  if (existingTab) existingTab.name = name;
-  else tabs.value.push({ name, path, kind: 'text', virtual: true });
+  if (existingTab) {
+    existingTab.name = name;
+    existingTab.diffStats = diffStats;
+  } else {
+    tabs.value.push({ name, path, kind: 'text', virtual: true, diffStats });
+  }
 
   activeTab.value = path;
   activeDiffFileIndex.value = '0';
@@ -1806,6 +1880,7 @@ function openVirtualDiff({ cwd, scope, content }: { cwd: string; scope: string; 
   nextTick(() => {
     editor?.focus();
     applyDiffDecorations(path);
+    if (diffViewMode.value === 'split') applySplitDiffDecorations(splitDiffModels.get(path));
   });
 }
 
@@ -2856,6 +2931,7 @@ function showActiveEditor(path = activeTab.value): void {
       lineNumbers: lineNumber => splitModels.newLineNumbers[lineNumber - 1] || '',
     });
   }
+  applySplitDiffDecorations(useSplitView ? splitModels : undefined);
   previewVersion.value++;
   nextTick(() => {
     editor?.layout();
@@ -2961,9 +3037,11 @@ onMounted(() => {
       originalEditable: false,
       renderSideBySide: true,
       minimap: { enabled: false },
-      wordWrap: 'on',
+      wordWrap: 'off',
       folding: false,
+      renderIndicators: true,
       renderLineHighlight: 'none',
+      hideUnchangedRegions: { enabled: true, contextLineCount: 3 },
       fontSize: 14,
       fontFamily: "'Fira Code', 'Consolas', monospace",
     });
@@ -3002,8 +3080,12 @@ onUnmounted(() => {
   fileTimestamps.clear();
   gitChangeDecorations?.clear();
   diffDecorations?.clear();
+  originalSplitDiffDecorations?.clear();
+  modifiedSplitDiffDecorations?.clear();
   gitChangeDecorations = null;
   diffDecorations = null;
+  originalSplitDiffDecorations = null;
+  modifiedSplitDiffDecorations = null;
   editor?.dispose();
   splitDiffEditor?.dispose();
   stopEditorResize();
@@ -3127,6 +3209,21 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tab-diff-stats {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.tab-diff-stats .additions {
+  color: var(--git-added);
+}
+
+.tab-diff-stats .deletions {
+  color: var(--git-deleted);
 }
 
 .tab button {
@@ -3764,12 +3861,6 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 :deep(.git-diff-file-header) {
   color: var(--diff-meta-text);
   font-weight: 600;
-}
-
-/* GitHub uses a quiet solid fill where one side has no corresponding lines. */
-:deep(.monaco-editor .diagonal-fill) {
-  background-color: var(--diff-empty-bg);
-  background-image: none;
 }
 
 /* ── Mobile ────────────────────────────────────────────────────────────── */

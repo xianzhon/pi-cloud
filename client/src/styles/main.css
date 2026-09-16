@@ -48,6 +48,7 @@
   --text-primary: #e4e4ef;
   --text-secondary: #8b8ba0;
   --text-tertiary: #5c5c72;
+  --font-mono: 'Pi Terminal Nerd Font', 'MesloLGL Nerd Font Mono', 'MesloLGM Nerd Font Mono', 'Symbols Nerd Font Mono', 'Fira Code', 'Noto Sans Mono', 'SFMono-Regular', 'Roboto Mono', 'Cascadia Mono', 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace;
 
   /* Accent */
   --accent: #6c8cff;

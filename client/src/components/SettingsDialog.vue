@@ -525,6 +525,34 @@
                   </div>
                   <p v-if="commitPromptsSaved" class="git-save-success" role="status">{{ t('components.settingsDialog.commitMessagePromptsSaved') }}</p>
                 </section>
+
+                <section class="settings-card change-reason-prompt-settings" aria-labelledby="change-reason-prompt-settings-title">
+                  <div class="settings-card-copy">
+                    <h4 id="change-reason-prompt-settings-title">{{ t('components.settingsDialog.changeReasonPrompt') }}</h4>
+                    <p>{{ t('components.settingsDialog.changeReasonPromptDescription') }}</p>
+                  </div>
+                  <div v-if="changeReasonPromptError" class="settings-error-text" role="alert">{{ changeReasonPromptError }}</div>
+                  <div class="commit-prompt-grid">
+                    <fieldset class="commit-prompt-scope">
+                      <legend>{{ t('components.settingsDialog.globalPrompts') }}</legend>
+                      <label class="git-settings-field">{{ t('components.settingsDialog.systemPrompt') }}
+                        <textarea v-model="globalChangeReasonSystemPrompt" class="settings-input change-reason-prompt-textarea" :placeholder="effectiveChangeReasonSystemPrompt" />
+                      </label>
+                      <button type="button" class="settings-action-btn compact-action" :disabled="changeReasonPromptSaving" @click="saveChangeReasonPrompt('global')">{{ t('components.settingsDialog.saveGlobalPrompts') }}</button>
+                    </fieldset>
+                    <fieldset class="commit-prompt-scope">
+                      <legend>
+                        {{ t('components.settingsDialog.projectPrompts') }}
+                        <span class="commit-prompt-project-name">({{ projectName }})</span>
+                      </legend>
+                      <label class="git-settings-field">{{ t('components.settingsDialog.systemPrompt') }}
+                        <textarea v-model="projectChangeReasonSystemPrompt" class="settings-input change-reason-prompt-textarea" :placeholder="t('components.settingsDialog.inheritGlobalPrompt')" />
+                      </label>
+                      <button type="button" class="settings-action-btn compact-action" :disabled="changeReasonPromptSaving" @click="saveChangeReasonPrompt('project')">{{ t('components.settingsDialog.saveProjectPrompts') }}</button>
+                    </fieldset>
+                  </div>
+                  <p v-if="changeReasonPromptSaved" class="git-save-success" role="status">{{ t('components.settingsDialog.changeReasonPromptSaved') }}</p>
+                </section>
               </template>
 
               <template v-if="activeSection === 'gateway'">
@@ -986,6 +1014,12 @@ const effectiveUserPrompt = ref('');
 const commitPromptsSaving = ref(false);
 const commitPromptsSaved = ref(false);
 const commitPromptError = ref('');
+const globalChangeReasonSystemPrompt = ref('');
+const projectChangeReasonSystemPrompt = ref('');
+const effectiveChangeReasonSystemPrompt = ref('');
+const changeReasonPromptSaving = ref(false);
+const changeReasonPromptSaved = ref(false);
+const changeReasonPromptError = ref('');
 
 interface GitSettingsSavePayload {
   gitea?: { serverUrl: string; token: string };
@@ -1149,16 +1183,30 @@ function saveGitSettings() {
   emit('saveGitSettings', payload);
 }
 
+interface ChangeReasonPromptResponse {
+  global: { systemPrompt?: string };
+  project: { systemPrompt?: string };
+  effective: { systemPrompt: string };
+}
+
 interface CommitPromptResponse {
   global: { userPrompt?: string };
   project: { userPrompt?: string };
   effective: { userPrompt: string };
+  changeReason?: ChangeReasonPromptResponse;
+}
+
+function applyChangeReasonPrompts(data: ChangeReasonPromptResponse) {
+  globalChangeReasonSystemPrompt.value = data.global.systemPrompt || '';
+  projectChangeReasonSystemPrompt.value = data.project.systemPrompt || '';
+  effectiveChangeReasonSystemPrompt.value = data.effective.systemPrompt;
 }
 
 function applyCommitPrompts(data: CommitPromptResponse) {
   globalUserPrompt.value = data.global.userPrompt || '';
   projectUserPrompt.value = data.project.userPrompt || '';
   effectiveUserPrompt.value = data.effective.userPrompt;
+  if (data.changeReason) applyChangeReasonPrompts(data.changeReason);
 }
 
 async function loadCommitPrompts() {
@@ -1190,6 +1238,31 @@ async function saveCommitPrompts(scope: 'global' | 'project') {
     commitPromptError.value = error instanceof Error ? error.message : 'Failed to save commit message prompts';
   } finally {
     commitPromptsSaving.value = false;
+  }
+}
+
+async function saveChangeReasonPrompt(scope: 'global' | 'project') {
+  changeReasonPromptSaving.value = true;
+  changeReasonPromptError.value = '';
+  changeReasonPromptSaved.value = false;
+  try {
+    const response = await fetch('/api/git/change-reason-prompts', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cwd: props.projectPath,
+        scope,
+        systemPrompt: scope === 'global' ? globalChangeReasonSystemPrompt.value : projectChangeReasonSystemPrompt.value,
+      }),
+    });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Failed to save change explanation prompt');
+    applyChangeReasonPrompts(await response.json());
+    changeReasonPromptSaved.value = true;
+    window.setTimeout(() => { changeReasonPromptSaved.value = false; }, 1800);
+  } catch (error) {
+    changeReasonPromptError.value = error instanceof Error ? error.message : 'Failed to save change explanation prompt';
+  } finally {
+    changeReasonPromptSaving.value = false;
   }
 }
 
@@ -1616,7 +1689,8 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
-.commit-prompt-settings {
+.commit-prompt-settings,
+.change-reason-prompt-settings {
   align-items: stretch;
   flex-direction: column;
 }
@@ -1658,7 +1732,8 @@ const emit = defineEmits<{
   justify-self: end;
 }
 
-.commit-prompt-textarea {
+.commit-prompt-textarea,
+.change-reason-prompt-textarea {
   min-height: 11rem;
   line-height: 1.45;
   resize: vertical;

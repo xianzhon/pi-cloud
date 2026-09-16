@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -131,7 +131,7 @@ describe('gitRoutes status and diff', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
     } finally {
       await app.close();
       await rm(cwd, { recursive: true, force: true });
@@ -152,7 +152,7 @@ describe('gitRoutes status and diff', () => {
       });
 
       expect(preview.statusCode).toBe(200);
-      expect(preview.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(preview.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
 
       const response = await app.inject({
         method: 'POST',
@@ -161,7 +161,31 @@ describe('gitRoutes status and diff', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
+      expect(await git(cwd, 'status', '--porcelain')).toBe('?? unstaged.txt');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('amends with staged changes without including unstaged files when requested', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'staged change\n');
+      await git(cwd, 'add', 'README.md');
+      await writeFile(join(cwd, 'unstaged.txt'), 'unstaged change\n');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/amend',
+        payload: { cwd, message: 'Amended commit', stagedOnly: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
+      expect(await git(cwd, 'log', '-1', '--pretty=%s')).toBe('Amended commit');
       expect(await git(cwd, 'status', '--porcelain')).toBe('?? unstaged.txt');
     } finally {
       await app.close();
@@ -183,9 +207,216 @@ describe('gitRoutes status and diff', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
       expect(await git(cwd, 'log', '-1', '--pretty=%s')).toBe('Commit staged change');
       expect(await git(cwd, 'status', '--porcelain')).toBe('');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('stages and unstages a file through the index endpoint', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+
+      const stage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'README.md', scope: 'unstaged', mode: 'file' },
+      });
+      expect(stage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached')).toContain('+changed');
+
+      const unstage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'README.md', scope: 'staged', mode: 'file' },
+      });
+      expect(unstage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached')).toBe('');
+      expect(await git(cwd, 'diff')).toContain('+changed');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('serializes staging requests and retries a briefly held index lock', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    const lockPath = join(cwd, '.git', 'index.lock');
+    let releaseLock: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      await writeFile(join(cwd, 'second.txt'), 'second\n');
+      await writeFile(lockPath, '');
+      releaseLock = setTimeout(() => void rm(lockPath, { force: true }), 75);
+
+      const responses = await Promise.all(['README.md', 'second.txt'].map(path => app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path, scope: 'unstaged', mode: 'file' },
+      })));
+
+      expect(responses.map(response => response.statusCode), responses.map(response => response.body).join('\n')).toEqual([200, 200]);
+      expect(await git(cwd, 'diff', '--cached', '--name-only')).toBe('README.md\nsecond.txt');
+    } finally {
+      if (releaseLock) clearTimeout(releaseLock);
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['commit', 'amend'] as const)('serializes index updates during %s', async (operation) => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    const hookPath = join(cwd, '.git', 'hooks', 'pre-commit');
+    const hookStartedPath = join(cwd, 'hook-started');
+    try {
+      await writeFile(join(cwd, 'README.md'), 'committed change\n');
+      await git(cwd, 'add', 'README.md');
+      await writeFile(join(cwd, 'second.txt'), 'staged after commit\n');
+      await writeFile(hookPath, `#!/bin/sh\ntouch "${hookStartedPath}"\nsleep 1\n`);
+      await chmod(hookPath, 0o755);
+
+      const commitResponse = app.inject({
+        method: 'POST',
+        url: `/api/git/${operation}`,
+        payload: { cwd, message: `${operation} change`, stagedOnly: true },
+      });
+
+      let hookStarted = false;
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        try {
+          await access(hookStartedPath);
+          hookStarted = true;
+          break;
+        } catch {
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+      }
+      expect(hookStarted).toBe(true);
+
+      const indexResponse = app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'second.txt', scope: 'unstaged', mode: 'file' },
+      });
+      const [commit, index] = await Promise.all([commitResponse, indexResponse]);
+
+      expect(commit.statusCode, commit.body).toBe(200);
+      expect(index.statusCode, index.body).toBe(200);
+      expect(await git(cwd, 'diff', '--cached', '--name-only')).toBe('second.txt');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('stages and unstages all files through the index endpoint', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      await writeFile(join(cwd, 'new.txt'), 'new\n');
+
+      const stage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, scope: 'unstaged', mode: 'all' },
+      });
+      expect(stage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached', '--name-only')).toBe('README.md\nnew.txt');
+
+      const unstage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, scope: 'staged', mode: 'all' },
+      });
+      expect(unstage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached')).toBe('');
+      expect(await git(cwd, 'status', '--porcelain')).toContain('?? new.txt');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('unstages and restages selected lines from a non-final hunk', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      const original = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);
+      await writeFile(join(cwd, 'README.md'), `${original.join('\n')}\n`);
+      await git(cwd, 'add', 'README.md');
+      await git(cwd, 'commit', '-m', 'Add lines');
+      const changed = [...original];
+      changed[0] = 'first changed';
+      changed[11] = 'last changed';
+      await writeFile(join(cwd, 'README.md'), `${changed.join('\n')}\n`);
+      await git(cwd, 'add', 'README.md');
+
+      const stagedDiff = await git(cwd, 'diff', '--cached', '--', 'README.md');
+      const firstHunkStart = stagedDiff.indexOf('@@ ');
+      const firstHunkEnd = stagedDiff.indexOf('@@ ', firstHunkStart + 3);
+      const firstHunk = stagedDiff.slice(firstHunkStart, firstHunkEnd).trimEnd();
+      const selectedLines = firstHunk.split('\n').slice(1)
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => line === '-line 1' || line === '+first changed')
+        .map(({ index }) => index);
+      const unstage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'README.md', scope: 'staged', mode: 'lines', hunkIndex: 0, selectedLines, expectedHunk: firstHunk },
+      });
+      expect(unstage.statusCode).toBe(200);
+      expect(await git(cwd, 'diff', '--cached')).not.toContain('first changed');
+      expect(await git(cwd, 'diff', '--cached')).toContain('last changed');
+      expect(await git(cwd, 'diff')).toContain('first changed');
+
+      const unstagedDiff = await git(cwd, 'diff', '--', 'README.md');
+      const unstagedHunk = unstagedDiff.slice(unstagedDiff.indexOf('@@ ')).trimEnd();
+      const stage = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path: 'README.md', scope: 'unstaged', mode: 'lines', hunkIndex: 0, selectedLines, expectedHunk: unstagedHunk },
+      });
+      expect(stage.statusCode, stage.body).toBe(200);
+      expect(await git(cwd, 'diff')).toBe('');
+      expect(await git(cwd, 'diff', '--cached')).toContain('first changed');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('unstages selected lines from a newly added staged file', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      const path = 'unicode-示例/readme.md';
+      await mkdir(join(cwd, 'unicode-示例'));
+      await writeFile(join(cwd, path), 'one\ntwo\nthree\n');
+      await git(cwd, 'add', '--', path);
+
+      const stagedDiff = await git(cwd, 'diff', '--cached', '--', path);
+      const stagedHunk = stagedDiff.slice(stagedDiff.indexOf('@@ ')).trimEnd();
+      const selectedLines = stagedHunk.split('\n').slice(1)
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => line === '+two')
+        .map(({ index }) => index);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/index',
+        payload: { cwd, path, scope: 'staged', mode: 'lines', hunkIndex: 0, selectedLines, expectedHunk: stagedHunk },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(await git(cwd, 'show', `:${path}`)).toBe('one\nthree');
+      expect(await git(cwd, 'diff', '--', path)).toContain('+two');
     } finally {
       await app.close();
       await rm(cwd, { recursive: true, force: true });
@@ -263,7 +494,7 @@ describe('gitRoutes status and diff', () => {
     const cwd = await createRepo();
     const app = await buildApp();
     try {
-      await writeFile(join(cwd, 'README.md'), `${'large change '.repeat(30_000)}\n`);
+      await writeFile(join(cwd, 'README.md'), `${'large change '.repeat(100_000)}\n`);
 
       const response = await app.inject({
         method: 'GET',
@@ -273,7 +504,7 @@ describe('gitRoutes status and diff', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.body.length).toBeLessThan(2_000);
-      expect(body).toMatchObject({ oversized: true, maxBytes: 256 * 1024 });
+      expect(body).toMatchObject({ oversized: true, maxBytes: 1024 * 1024 });
       expect(body).not.toHaveProperty('diff');
       expect(body.message).toContain('too large to show safely');
       expect(body.message).toContain('terminal or another Git client');
@@ -290,9 +521,9 @@ describe('gitRoutes status and diff', () => {
       await writeFile(join(cwd, 'SECOND.md'), 'initial\n');
       await git(cwd, 'add', 'SECOND.md');
       await git(cwd, 'commit', '-m', 'Add second file');
-      await writeFile(join(cwd, 'README.md'), 'staged line\n'.repeat(11_000));
+      await writeFile(join(cwd, 'README.md'), 'staged line\n'.repeat(50_000));
       await git(cwd, 'add', 'README.md');
-      await writeFile(join(cwd, 'SECOND.md'), 'worktree line\n'.repeat(11_000));
+      await writeFile(join(cwd, 'SECOND.md'), 'worktree line\n'.repeat(50_000));
 
       const stagedResponse = await app.inject({ method: 'GET', url: `/api/git/diff?cwd=${encodeURIComponent(cwd)}&scope=staged` });
       const unstagedResponse = await app.inject({ method: 'GET', url: `/api/git/diff?cwd=${encodeURIComponent(cwd)}&scope=unstaged` });
@@ -300,7 +531,7 @@ describe('gitRoutes status and diff', () => {
 
       expect(stagedResponse.json().oversized).toBeUndefined();
       expect(unstagedResponse.json().oversized).toBeUndefined();
-      expect(combinedResponse.json()).toMatchObject({ oversized: true, maxBytes: 256 * 1024 });
+      expect(combinedResponse.json()).toMatchObject({ oversized: true, maxBytes: 1024 * 1024 });
       expect(combinedResponse.json()).not.toHaveProperty('diff');
     } finally {
       await app.close();
@@ -533,6 +764,102 @@ describe('gitRoutes branch', () => {
     }
   });
 
+  it('explains a verified diff hunk with AI', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'This change updates the documented behavior.' }],
+      stopReason: 'stop',
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      api: 'mock-api', provider: 'mock', model: 'model', timestamp: Date.now(),
+    });
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      await writeFile(join(cwd, 'related.txt'), 'supporting change\n');
+      const diff = await git(cwd, 'diff', '--', 'README.md');
+      const hunk = diff.slice(diff.indexOf('@@ '));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/change-reason',
+        payload: { cwd, clientId: 'client-1', path: 'README.md', scope: 'unstaged', hunkIndex: 0, expectedHunk: hunk },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().reason).toBe('This change updates the documented behavior.');
+      const request = completeSimpleMock.mock.calls[0][1];
+      expect(request.systemPrompt).toContain('complete pending change set');
+      expect(request.messages[0].content).toContain('Selected file: README.md');
+      expect(request.messages[0].content).toContain(hunk);
+      expect(request.messages[0].content).toContain('?? related.txt');
+      expect(request.messages[0].content).toContain('supporting change');
+      expect(request.messages[0].content).toContain('What:');
+      expect(request.messages[0].content).toContain('Why:');
+      expect(completeSimpleMock.mock.calls[0][2]).toMatchObject({ maxTokens: 320 });
+      expect(completeSimpleMock.mock.calls[0][2].sessionId).toMatch(/^change-reason:[a-f0-9]{32}$/);
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('explains a verified hunk from a historical commit', async () => {
+    completeSimpleMock.mockResolvedValueOnce({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'This commit updates the documented behavior.' }],
+      stopReason: 'stop',
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      api: 'mock-api', provider: 'mock', model: 'model', timestamp: Date.now(),
+    });
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'historical change\n');
+      await git(cwd, 'add', 'README.md');
+      await git(cwd, 'commit', '-m', 'Update documentation');
+      const commit = await git(cwd, 'rev-parse', 'HEAD');
+      const diff = await git(cwd, 'show', '--format=', '--patch', commit, '--', 'README.md');
+      const hunk = diff.slice(diff.indexOf('@@ '));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/change-reason',
+        payload: { cwd, clientId: 'client-1', path: 'README.md', commit, hunkIndex: 0, expectedHunk: hunk },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ commit, scope: `commit-${commit}`, reason: 'This commit updates the documented behavior.' });
+      const prompt = completeSimpleMock.mock.calls[0][1].messages[0].content;
+      expect(prompt).toContain('complete commit as context');
+      expect(prompt).toContain('Complete commit file status:');
+      expect(prompt).toContain('historical change');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a stale hunk before requesting an explanation', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'changed\n');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/git/change-reason',
+        payload: { cwd, clientId: 'client-1', path: 'README.md', scope: 'unstaged', hunkIndex: 0, expectedHunk: '@@ stale @@' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('selected hunk changed');
+      expect(completeSimpleMock).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('generates a commit message with AI from staged and unstaged changes', async () => {
     completeSimpleMock.mockResolvedValueOnce({
       role: 'assistant',
@@ -598,7 +925,7 @@ describe('gitRoutes branch', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M' }]);
+      expect(response.json().files).toEqual([{ path: 'README.md', status: 'M', staged: true, unstaged: false }]);
       const prompt = completeSimpleMock.mock.calls[0][1].messages[0].content;
       expect(prompt).toContain('+staged change');
       expect(prompt).not.toContain('+unstaged change');

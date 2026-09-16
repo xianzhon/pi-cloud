@@ -18,6 +18,43 @@ describe('gitOperations', () => {
     expect(fetch).toHaveBeenCalledWith('/api/git/history?cwd=%2Fwork+tree&page=2');
   });
 
+  it('sends index updates as JSON', async () => {
+    const options = {
+      cwd: '/workspace',
+      path: 'src/app.ts',
+      scope: 'unstaged' as const,
+      mode: 'lines' as const,
+      hunkIndex: 0,
+      selectedLines: [1, 2],
+      expectedHunk: '@@ -1 +1 @@\n-old\n+new',
+    };
+    await createGitOperations().updateIndex(options);
+
+    expect(fetch).toHaveBeenCalledWith('/api/git/index', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+  });
+
+  it('sends change explanation requests as JSON', async () => {
+    const options = {
+      cwd: '/workspace',
+      clientId: 'client-1',
+      path: 'src/app.ts',
+      scope: 'unstaged' as const,
+      hunkIndex: 0,
+      expectedHunk: '@@ -1 +1 @@\n-old\n+new',
+    };
+    await createGitOperations().explainChange(options);
+
+    expect(fetch).toHaveBeenCalledWith('/api/git/change-reason', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+  });
+
   it('sends branch switching options as JSON', async () => {
     await createGitOperations().switchBranch({
       cwd: '/workspace', name: 'feature/test', pull: true, deleteOriginal: false, sessionId: 'session-1',

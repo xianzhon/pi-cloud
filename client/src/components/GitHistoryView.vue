@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="git-history-backdrop">
-      <section class="git-history-dialog" role="dialog" aria-modal="true" :aria-labelledby="titleId">
+      <section ref="dialogEl" class="git-history-dialog" role="dialog" aria-modal="true" :aria-labelledby="titleId">
         <header class="git-history-header">
           <div>
             <h2 :id="titleId"><PhGitCommit :size="20" weight="fill" /> {{ t('components.gitHistory.title') }}</h2>
@@ -17,7 +17,7 @@
           </div>
         </header>
 
-        <div class="git-history-body">
+        <div class="git-history-body" :style="{ gridTemplateColumns: `${listPaneWidth}px 5px minmax(0, 1fr)` }">
           <aside class="git-history-list-pane">
             <div v-if="historyLoading" class="git-history-state">{{ t('components.gitHistory.loadingHistory') }}</div>
             <div v-else-if="historyError" class="git-history-state is-error" role="alert">{{ historyError }}</div>
@@ -48,10 +48,22 @@
             </footer>
           </aside>
 
-          <main class="git-history-detail">
+          <div
+            class="git-history-pane-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            :aria-label="t('components.gitHistory.resizePanes')"
+            :aria-valuenow="listPaneWidth"
+            @pointerdown.prevent="startPaneResize"
+          />
+
+          <main ref="detailEl" class="git-history-detail">
             <div v-if="!selectedCommit" class="git-history-state">{{ t('components.gitHistory.selectCommit') }}</div>
             <template v-else>
-              <header class="git-history-detail-header">
+              <header
+                class="git-history-detail-header"
+                :style="{ height: `${detailHeaderHeight}px`, flexBasis: `${detailHeaderHeight}px` }"
+              >
                 <h3>{{ selectedCommit.subject }}</h3>
                 <p>
                   <strong>{{ selectedCommit.authorName }}</strong>
@@ -63,6 +75,14 @@
                 <p v-if="selectedCommit.body.trim()" class="git-history-message">{{ selectedCommit.body.trim() }}</p>
                 <pre v-if="diffStat" class="git-history-stat">{{ diffStat }}</pre>
               </header>
+              <div
+                class="git-history-detail-resize-handle"
+                role="separator"
+                aria-orientation="horizontal"
+                :aria-label="t('components.gitHistory.resizeDetails')"
+                :aria-valuenow="detailHeaderHeight"
+                @pointerdown.prevent="startDetailHeaderResize"
+              />
 
               <div v-if="diffLoading" class="git-history-diff-state">{{ t('components.gitHistory.loadingDiff') }}</div>
               <div v-else-if="diffError" class="git-history-diff-state is-error" role="alert">{{ diffError }}</div>
@@ -112,16 +132,39 @@
                     </button>
                   </h4>
                   <div v-show="!collapsedDiffFiles.has(file.name)" :id="`${diffFileId(fileIndex)}-content`" class="git-diff-content">
-                    <pre v-if="diffViewMode === 'unified'"><span
-                      v-for="(line, lineIndex) in file.lines"
-                      :key="lineIndex"
-                      class="git-diff-line"
-                      :class="diffLineClass(line)"
-                    >{{ line }}{{ '\n' }}</span></pre>
-                    <div v-else class="git-split-diff">
-                      <div v-for="(row, rowIndex) in pairDiffLines(file.lines)" :key="rowIndex" class="git-split-row">
-                        <span class="git-diff-line" :class="row.left == null ? 'is-empty' : diffLineClass(row.left)">{{ row.left ?? '' }}</span>
-                        <span class="git-diff-line" :class="row.right == null ? 'is-empty' : diffLineClass(row.right)">{{ row.right ?? '' }}</span>
+                    <div :class="{ 'git-split-diff': diffViewMode === 'split' }">
+                      <div
+                        v-for="(block, blockIndex) in diffBlocks(file.lines)"
+                        :key="blockIndex"
+                        class="git-history-diff-block"
+                      >
+                        <div v-if="block.hunkIndex !== undefined" class="git-history-hunk-header git-diff-line is-hunk">
+                          <span>{{ block.lines[0] }}</span>
+                          <button
+                            type="button"
+                            class="git-change-reason-button"
+                            :disabled="!props.clientId || reasonLoadingKey !== undefined"
+                            @click="toggleChangeReason(fileIndex, block.hunkIndex, block.lines)"
+                          ><PhLightbulb :size="13" weight="bold" />{{ reasonLoadingKey === reasonKey(fileIndex, block.hunkIndex) ? t('components.gitChanges.explainingChange') : t('components.gitChanges.showChangeReason') }}</button>
+                        </div>
+                        <pre v-if="diffViewMode === 'unified'" :class="{ 'has-hunk-header': block.hunkIndex !== undefined }"><span
+                          v-for="(line, lineIndex) in block.hunkIndex === undefined ? block.lines : block.lines.slice(1)"
+                          :key="lineIndex"
+                          class="git-diff-line"
+                          :class="diffLineClass(line)"
+                        >{{ line }}{{ '\n' }}</span></pre>
+                        <template v-else>
+                          <div v-for="(row, rowIndex) in pairDiffLines(block.hunkIndex === undefined ? block.lines : block.lines.slice(1))" :key="rowIndex" class="git-split-row">
+                            <span class="git-diff-line" :class="row.left == null ? 'is-empty' : diffLineClass(row.left)">{{ row.left ?? '' }}</span>
+                            <span class="git-diff-line" :class="row.right == null ? 'is-empty' : diffLineClass(row.right)">{{ row.right ?? '' }}</span>
+                          </div>
+                        </template>
+                        <aside
+                          v-if="block.hunkIndex !== undefined && expandedReasonKey === reasonKey(fileIndex, block.hunkIndex) && (changeReasons[expandedReasonKey] || changeReasonErrors[expandedReasonKey])"
+                          class="git-change-reason"
+                          :class="{ 'is-error': changeReasonErrors[expandedReasonKey] }"
+                          :role="changeReasonErrors[expandedReasonKey] ? 'alert' : 'status'"
+                        ><strong>{{ t('components.gitChanges.changeReason') }}</strong>{{ changeReasonErrors[expandedReasonKey] || changeReasons[expandedReasonKey] }}</aside>
                       </div>
                     </div>
                   </div>
@@ -137,10 +180,15 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { PhArrowClockwise, PhCaretDown, PhCaretLeft, PhCaretRight, PhGitCommit, PhX } from '@phosphor-icons/vue';
+import { PhArrowClockwise, PhCaretDown, PhCaretLeft, PhCaretRight, PhGitCommit, PhLightbulb, PhX } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
-import { diffLineClass, pairDiffLines, parseDiffFiles } from '../utils/gitDiff';
+import { diffLineClass, shouldHideDiffHeaderLine, pairDiffLines, parseDiffFiles } from '../utils/gitDiff';
+
+interface DiffBlock {
+  hunkIndex?: number;
+  lines: string[];
+}
 
 interface GitCommit {
   hash: string;
@@ -153,7 +201,7 @@ interface GitCommit {
   authoredAt: string;
 }
 
-const props = defineProps<{ visible: boolean; cwd: string }>();
+const props = defineProps<{ visible: boolean; cwd: string; clientId?: string }>();
 const emit = defineEmits<{ close: [] }>();
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
@@ -172,10 +220,27 @@ const diffStat = ref('');
 const diffContent = ref('');
 const collapsedDiffFiles = ref(new Set<string>());
 const diffViewMode = ref<'unified' | 'split'>('unified');
+const changeReasons = ref<Record<string, string>>({});
+const changeReasonErrors = ref<Record<string, string>>({});
+const reasonLoadingKey = ref<string>();
+const expandedReasonKey = ref<string>();
+const dialogEl = ref<HTMLElement>();
+const detailEl = ref<HTMLElement>();
+const listPaneWidth = ref(336);
+const detailHeaderHeight = ref(164);
 let historyRequestId = 0;
 let diffRequestId = 0;
+let reasonRequestId = 0;
+let resizeStartY = 0;
+let resizeStartHeight = 0;
+let resizeMode: 'panes' | 'details' | undefined;
+const MIN_LIST_PANE_WIDTH = 220;
+const MIN_DETAIL_PANE_WIDTH = 320;
+const MIN_DETAIL_HEADER_HEIGHT = 96;
+const MIN_DIFF_HEIGHT = 120;
 
-const diffFiles = computed(() => parseDiffFiles(diffContent.value, t('components.gitHistory.changes')));
+const diffFiles = computed(() => parseDiffFiles(diffContent.value, t('components.gitHistory.changes'))
+  .map(file => ({ ...file, lines: file.lines.filter(line => !shouldHideDiffHeaderLine(line, true)) })));
 const diffTotals = computed(() => diffFiles.value.reduce((totals, file) => ({
   additions: totals.additions + file.additions,
   deletions: totals.deletions + file.deletions,
@@ -185,6 +250,67 @@ const allDiffFilesCollapsed = computed(() => diffFiles.value.length > 0
 
 function diffFileId(index: number): string {
   return `git-history-diff-file-${index}`;
+}
+
+function reasonKey(fileIndex: number, hunkIndex: number): string {
+  return `${fileIndex}:${hunkIndex}`;
+}
+
+function diffBlocks(lines: string[]): DiffBlock[] {
+  const blocks: DiffBlock[] = [];
+  let hunkIndex = -1;
+  for (const line of lines) {
+    if (/^@@+ /.test(line)) {
+      hunkIndex += 1;
+      blocks.push({ hunkIndex, lines: [line] });
+    } else if (blocks.length) {
+      blocks.at(-1)!.lines.push(line);
+    } else {
+      blocks.push({ lines: [line] });
+    }
+  }
+  return blocks;
+}
+
+function resetChangeReasons(): void {
+  ++reasonRequestId;
+  changeReasons.value = {};
+  changeReasonErrors.value = {};
+  reasonLoadingKey.value = undefined;
+  expandedReasonKey.value = undefined;
+}
+
+async function toggleChangeReason(fileIndex: number, hunkIndex: number, lines: string[]): Promise<void> {
+  const key = reasonKey(fileIndex, hunkIndex);
+  if (expandedReasonKey.value === key) {
+    expandedReasonKey.value = undefined;
+    return;
+  }
+  expandedReasonKey.value = key;
+  const commit = selectedCommit.value;
+  const file = diffFiles.value[fileIndex];
+  if (changeReasons.value[key] || !props.clientId || !commit || !file) return;
+
+  const currentRequestId = ++reasonRequestId;
+  delete changeReasonErrors.value[key];
+  reasonLoadingKey.value = key;
+  try {
+    const result = await gitOperations.explainChange({
+      cwd: props.cwd,
+      clientId: props.clientId,
+      path: file.name,
+      commit: commit.hash,
+      hunkIndex,
+      expectedHunk: lines.join('\n').replace(/\n+$/, ''),
+    });
+    if (currentRequestId === reasonRequestId) changeReasons.value[key] = typeof result.reason === 'string' ? result.reason : '';
+  } catch (cause) {
+    if (currentRequestId === reasonRequestId) {
+      changeReasonErrors.value[key] = cause instanceof Error ? cause.message : t('components.gitChanges.explainChangeFailed');
+    }
+  } finally {
+    if (currentRequestId === reasonRequestId) reasonLoadingKey.value = undefined;
+  }
 }
 
 function toggleDiffFile(name: string): void {
@@ -216,6 +342,7 @@ async function loadDiff(commit: GitCommit): Promise<void> {
   diffStat.value = '';
   diffContent.value = '';
   collapsedDiffFiles.value = new Set();
+  resetChangeReasons();
   try {
     const result = await gitOperations.getDiff({ cwd: props.cwd, commit: commit.hash });
     if (requestId !== diffRequestId) return;
@@ -270,6 +397,50 @@ function refresh(): void {
   void loadPage(0);
 }
 
+function resize(event: PointerEvent): void {
+  if (resizeMode === 'panes') {
+    if (!dialogEl.value) return;
+    listPaneWidth.value = Math.max(MIN_LIST_PANE_WIDTH, Math.min(
+      event.clientX - dialogEl.value.getBoundingClientRect().left,
+      dialogEl.value.clientWidth - MIN_DETAIL_PANE_WIDTH,
+    ));
+    return;
+  }
+  if (resizeMode !== 'details') return;
+
+  const availableHeight = detailEl.value?.clientHeight || window.innerHeight * 0.8;
+  detailHeaderHeight.value = Math.min(
+    Math.max(MIN_DETAIL_HEADER_HEIGHT, availableHeight - MIN_DIFF_HEIGHT),
+    Math.max(MIN_DETAIL_HEADER_HEIGHT, resizeStartHeight + event.clientY - resizeStartY),
+  );
+}
+
+function stopResize(): void {
+  resizeMode = undefined;
+  document.body.classList.remove('is-resizing-columns', 'is-resizing-rows');
+  window.removeEventListener('pointermove', resize);
+  window.removeEventListener('pointerup', stopResize);
+  window.removeEventListener('pointercancel', stopResize);
+}
+
+function startResize(mode: 'panes' | 'details'): void {
+  resizeMode = mode;
+  document.body.classList.add(mode === 'panes' ? 'is-resizing-columns' : 'is-resizing-rows');
+  window.addEventListener('pointermove', resize);
+  window.addEventListener('pointerup', stopResize);
+  window.addEventListener('pointercancel', stopResize);
+}
+
+function startPaneResize(): void {
+  startResize('panes');
+}
+
+function startDetailHeaderResize(event: PointerEvent): void {
+  resizeStartY = event.clientY;
+  resizeStartHeight = detailHeaderHeight.value;
+  startResize('details');
+}
+
 function handleKeydown(event: KeyboardEvent): void {
   if (props.visible && event.key === 'Escape') emit('close');
 }
@@ -279,11 +450,15 @@ watch(() => [props.visible, props.cwd] as const, ([visible]) => {
   else {
     ++historyRequestId;
     ++diffRequestId;
+    resetChangeReasons();
   }
 }, { immediate: true });
 
 onMounted(() => window.addEventListener('keydown', handleKeydown));
-onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown);
+  stopResize();
+});
 </script>
 
 <style scoped>
@@ -358,7 +533,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(240px, 24%) minmax(0, 1fr);
+  grid-template-columns: 336px 5px minmax(0, 1fr);
 }
 
 .git-history-list-pane,
@@ -369,8 +544,41 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 }
 
 .git-history-list-pane {
-  border-right: 1px solid var(--border);
   background: var(--bg-secondary);
+}
+
+.git-history-pane-resize-handle {
+  position: relative;
+  z-index: 2;
+  background: var(--border);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.git-history-pane-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 35% 1px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.git-history-pane-resize-handle:hover::after {
+  opacity: 0.75;
+}
+
+:global(body.is-resizing-columns),
+:global(body.is-resizing-columns *) {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+:global(body.is-resizing-rows),
+:global(body.is-resizing-rows *) {
+  cursor: row-resize !important;
+  user-select: none !important;
 }
 
 .git-history-commits,
@@ -413,6 +621,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 .git-history-commit-meta {
   overflow: hidden;
   color: var(--text-secondary);
+  font-family: var(--font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -421,6 +630,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 .git-history-commit-meta code,
 .git-history-hash code {
   color: var(--accent);
+  font-family: var(--font-mono);
 }
 
 .git-history-pagination {
@@ -454,9 +664,34 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 }
 
 .git-history-detail-header {
-  flex: 0 0 auto;
+  box-sizing: border-box;
+  overflow: auto;
   padding: 16px 18px;
-  border-bottom: 1px solid var(--border);
+}
+
+.git-history-detail-resize-handle {
+  position: relative;
+  z-index: 2;
+  height: 9px;
+  flex: 0 0 9px;
+  cursor: row-resize;
+}
+
+.git-history-detail-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.git-history-detail-resize-handle:hover::after,
+:global(body.is-resizing-rows) .git-history-detail-resize-handle::after {
+  height: 2px;
+  background: var(--accent);
 }
 
 .git-history-detail-header h3 {
@@ -476,10 +711,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 }
 
 .git-history-stat {
-  max-height: 100px;
   margin: 10px 0 0;
-  overflow: auto;
   color: var(--text-secondary);
+  font-family: var(--font-mono);
   font-size: 11px;
   white-space: pre-wrap;
 }
@@ -487,7 +721,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 .git-history-diff {
   flex: 1;
   padding: 12px;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -633,6 +867,62 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   padding: 8px 0;
 }
 
+.git-diff-file pre.has-hunk-header {
+  padding-top: 0;
+}
+
+.git-split-diff .git-history-diff-block {
+  display: contents;
+}
+
+.git-history-hunk-header {
+  align-items: center;
+  gap: 14px;
+}
+
+.git-split-diff .git-history-hunk-header,
+.git-split-diff .git-change-reason {
+  grid-column: 1 / -1;
+}
+
+.git-change-reason-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font: 0.7rem var(--font-sans);
+}
+
+.git-change-reason-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.git-change-reason {
+  width: clamp(280px, 32vw, 420px);
+  margin: 8px 14px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font: 0.78rem/1.5 var(--font-sans);
+  white-space: pre-wrap;
+}
+
+.git-change-reason strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-primary);
+}
+
+.git-change-reason.is-error {
+  border-left-color: var(--danger, #f87171);
+  color: var(--danger, #f87171);
+}
+
 .git-split-diff {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -659,7 +949,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   display: block;
   min-height: 18px;
   padding: 0 10px;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.git-diff-line.git-history-hunk-header {
+  display: flex;
+}
+
+.git-history-hunk-header > span {
+  min-width: 0;
 }
 
 .git-diff-line.is-added {
@@ -717,8 +1016,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
   .git-history-list-pane {
     min-height: 45vh;
-    border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .git-history-pane-resize-handle {
+    display: none;
   }
 
   .git-history-detail {

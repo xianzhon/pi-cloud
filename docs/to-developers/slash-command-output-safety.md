@@ -4,8 +4,9 @@ The browser must not receive unbounded locally generated command output. Git and
 
 ## Limits
 
-- Git-backed slash command output: **256 KiB per Git process**.
-- Combined staged + unstaged diff: **256 KiB cumulative**.
+- Git route and slash-command output: **1 MiB per Git process**.
+- Combined staged + unstaged diff: **1 MiB cumulative**.
+- Pull-request generation through `GitHostingService`: **256 KiB per Git process**.
 - Changed-file previews: **1,000 files**.
 - Session tree: **1,000 entries**, with message labels clipped to 500 characters.
 - Changelog: **256 KiB**, checked from file metadata before reading.
@@ -16,12 +17,12 @@ An exceeded limit returns a small message asking the user to use the terminal, a
 
 | Command | Potential large data | Mitigation |
 | --- | --- | --- |
-| `/diff` | Full staged and unstaged patch plus stat | Cumulative 256 KiB backend cap; Git is stopped when the cap is crossed; oversized response contains no patch; frontend response-size/render guard. |
+| `/diff` | Full staged and unstaged patch plus stat | Cumulative 1 MiB backend cap; Git is stopped when the cap is crossed; oversized response contains no patch; frontend response-size/render guard. |
 | `/status` | One line per changed/untracked file | Git output cap and 1,000-file preview cap. |
-| `/commit`, `/amend` | Changed-file preview; AI-generated message uses the full diff | Status/file caps; AI input diff uses the same cumulative 256 KiB cap. The operation is not offered when its preview cannot be produced safely. |
+| `/commit`, `/amend` | Changed-file preview; AI-generated message uses the full diff | Status/file caps; AI input diff uses the same cumulative 1 MiB cap. The operation is not offered when its preview cannot be produced safely. |
 | `/pr` | Changed-file preview, commit list, and AI input diff | 256 KiB Git cap and 1,000-file preview cap in `GitHostingService`; generated PR output is model-token bounded. |
-| `/push`, `/pull` | Git progress, hooks, and error output | 256 KiB child-process output cap; excess output returns the standard terminal/Git-client fallback. |
-| `/branch` | Local branch list, status preview, and Git output | 256 KiB Git cap and 1,000 changed-file cap. |
+| `/push`, `/pull` | Git progress, hooks, and error output | 1 MiB child-process output cap; excess output returns the standard terminal/Git-client fallback. |
+| `/branch` | Local branch list, status preview, and Git output | 1 MiB Git cap and 1,000 changed-file cap. |
 | `/tree` | Entire session tree and message content | Responses over 1,000 entries are replaced by a small fallback; accepted trees contain only 500-character message previews. |
 | `/changelog` | `CHANGELOG.md` | File size is checked before reading; files over 256 KiB produce a direct-file fallback. |
 | `/session` | Session metadata and numeric aggregate statistics | Fixed-size scalar response; message bodies are not returned. |

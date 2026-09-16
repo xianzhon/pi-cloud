@@ -700,7 +700,7 @@ describe('ChatPanel', () => {
         return new Response(JSON.stringify({
           cwd: '/repo',
           oversized: true,
-          maxBytes: 256 * 1024,
+          maxBytes: 1024 * 1024,
           message: 'The Git output is too large to show safely. Inspect it with Git in the terminal or another Git client.',
         }), { status: 200 });
       }
@@ -916,7 +916,7 @@ describe('ChatPanel', () => {
         }), { status: 200 });
       }
       if (url.includes('/api/git/diff')) {
-        const stagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -1 +1 @@\n-old\n+staged change';
+        const stagedDiff = 'diff --git a/staged.ts b/staged.ts\nindex 7fb2bb2..1097f83 100644\n--- a/staged.ts\n+++ b/staged.ts\n@@ -1 +1 @@\n-old\n+staged change';
         const unstagedDiff = 'diff --git a/staged.ts b/staged.ts\n@@ -2,3 +2,2 @@\n  indented first line\n-old\n-older\n+all changes';
         const binaryDiff = 'diff --git a/image.png b/image.png\nBinary files a/image.png and b/image.png differ';
         const untrackedDiff = 'diff --git a/unstaged.ts b/unstaged.ts\nnew file mode 100644\n--- /dev/null\n+++ b/unstaged.ts\n@@ -0,0 +1 @@\n+new file';
@@ -951,6 +951,11 @@ describe('ChatPanel', () => {
     expect(document.querySelector('.commit-diff-panel')?.textContent).toContain('+new file');
     expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+all changes');
     expect(document.querySelector('.commit-diff-file')?.textContent).toContain('+staged change');
+    const renderedDiffLines = Array.from(document.querySelectorAll('.commit-diff-line'), line => line.textContent);
+    expect(renderedDiffLines).not.toContain('diff --git a/staged.ts b/staged.ts');
+    expect(renderedDiffLines).not.toContain('index 7fb2bb2..1097f83 100644');
+    expect(renderedDiffLines).not.toContain('--- a/staged.ts');
+    expect(renderedDiffLines).not.toContain('+++ b/staged.ts');
     const indentedLine = Array.from(document.querySelectorAll('.commit-diff-line'))
       .find((line) => line.textContent?.includes('indented first line'));
     expect(indentedLine?.textContent).toMatch(/^  indented first line/);
