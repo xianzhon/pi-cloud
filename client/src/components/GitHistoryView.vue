@@ -509,6 +509,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 .git-history-commit-meta {
   overflow: hidden;
   color: var(--text-secondary);
+  font-family: var(--font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -517,6 +518,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 .git-history-commit-meta code,
 .git-history-hash code {
   color: var(--accent);
+  font-family: var(--font-mono);
 }
 
 .git-history-pagination {
@@ -579,6 +581,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   margin: 10px 0 0;
   overflow: auto;
   color: var(--text-secondary);
+  font-family: var(--font-mono);
   font-size: 11px;
   white-space: pre-wrap;
 }
@@ -586,7 +589,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 .git-history-diff {
   flex: 1;
   padding: 12px;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
