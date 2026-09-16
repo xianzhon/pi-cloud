@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="git-history-backdrop">
-      <section class="git-history-dialog" role="dialog" aria-modal="true" :aria-labelledby="titleId">
+      <section ref="dialogEl" class="git-history-dialog" role="dialog" aria-modal="true" :aria-labelledby="titleId">
         <header class="git-history-header">
           <div>
             <h2 :id="titleId"><PhGitCommit :size="20" weight="fill" /> {{ t('components.gitHistory.title') }}</h2>
@@ -17,7 +17,7 @@
           </div>
         </header>
 
-        <div class="git-history-body">
+        <div class="git-history-body" :style="{ gridTemplateColumns: `${listPaneWidth}px 5px minmax(0, 1fr)` }">
           <aside class="git-history-list-pane">
             <div v-if="historyLoading" class="git-history-state">{{ t('components.gitHistory.loadingHistory') }}</div>
             <div v-else-if="historyError" class="git-history-state is-error" role="alert">{{ historyError }}</div>
@@ -48,10 +48,22 @@
             </footer>
           </aside>
 
-          <main class="git-history-detail">
+          <div
+            class="git-history-pane-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            :aria-label="t('components.gitHistory.resizePanes')"
+            :aria-valuenow="listPaneWidth"
+            @pointerdown.prevent="startPaneResize"
+          />
+
+          <main ref="detailEl" class="git-history-detail">
             <div v-if="!selectedCommit" class="git-history-state">{{ t('components.gitHistory.selectCommit') }}</div>
             <template v-else>
-              <header class="git-history-detail-header">
+              <header
+                class="git-history-detail-header"
+                :style="{ height: `${detailHeaderHeight}px`, flexBasis: `${detailHeaderHeight}px` }"
+              >
                 <h3>{{ selectedCommit.subject }}</h3>
                 <p>
                   <strong>{{ selectedCommit.authorName }}</strong>
@@ -63,6 +75,14 @@
                 <p v-if="selectedCommit.body.trim()" class="git-history-message">{{ selectedCommit.body.trim() }}</p>
                 <pre v-if="diffStat" class="git-history-stat">{{ diffStat }}</pre>
               </header>
+              <div
+                class="git-history-detail-resize-handle"
+                role="separator"
+                aria-orientation="horizontal"
+                :aria-label="t('components.gitHistory.resizeDetails')"
+                :aria-valuenow="detailHeaderHeight"
+                @pointerdown.prevent="startDetailHeaderResize"
+              />
 
               <div v-if="diffLoading" class="git-history-diff-state">{{ t('components.gitHistory.loadingDiff') }}</div>
               <div v-else-if="diffError" class="git-history-diff-state is-error" role="alert">{{ diffError }}</div>
@@ -204,9 +224,20 @@ const changeReasons = ref<Record<string, string>>({});
 const changeReasonErrors = ref<Record<string, string>>({});
 const reasonLoadingKey = ref<string>();
 const expandedReasonKey = ref<string>();
+const dialogEl = ref<HTMLElement>();
+const detailEl = ref<HTMLElement>();
+const listPaneWidth = ref(336);
+const detailHeaderHeight = ref(164);
 let historyRequestId = 0;
 let diffRequestId = 0;
 let reasonRequestId = 0;
+let resizeStartY = 0;
+let resizeStartHeight = 0;
+let resizeMode: 'panes' | 'details' | undefined;
+const MIN_LIST_PANE_WIDTH = 220;
+const MIN_DETAIL_PANE_WIDTH = 320;
+const MIN_DETAIL_HEADER_HEIGHT = 96;
+const MIN_DIFF_HEIGHT = 120;
 
 const diffFiles = computed(() => parseDiffFiles(diffContent.value, t('components.gitHistory.changes')));
 const diffTotals = computed(() => diffFiles.value.reduce((totals, file) => ({
@@ -365,6 +396,50 @@ function refresh(): void {
   void loadPage(0);
 }
 
+function resize(event: PointerEvent): void {
+  if (resizeMode === 'panes') {
+    if (!dialogEl.value) return;
+    listPaneWidth.value = Math.max(MIN_LIST_PANE_WIDTH, Math.min(
+      event.clientX - dialogEl.value.getBoundingClientRect().left,
+      dialogEl.value.clientWidth - MIN_DETAIL_PANE_WIDTH,
+    ));
+    return;
+  }
+  if (resizeMode !== 'details') return;
+
+  const availableHeight = detailEl.value?.clientHeight || window.innerHeight * 0.8;
+  detailHeaderHeight.value = Math.min(
+    Math.max(MIN_DETAIL_HEADER_HEIGHT, availableHeight - MIN_DIFF_HEIGHT),
+    Math.max(MIN_DETAIL_HEADER_HEIGHT, resizeStartHeight + event.clientY - resizeStartY),
+  );
+}
+
+function stopResize(): void {
+  resizeMode = undefined;
+  document.body.classList.remove('is-resizing-columns', 'is-resizing-rows');
+  window.removeEventListener('pointermove', resize);
+  window.removeEventListener('pointerup', stopResize);
+  window.removeEventListener('pointercancel', stopResize);
+}
+
+function startResize(mode: 'panes' | 'details'): void {
+  resizeMode = mode;
+  document.body.classList.add(mode === 'panes' ? 'is-resizing-columns' : 'is-resizing-rows');
+  window.addEventListener('pointermove', resize);
+  window.addEventListener('pointerup', stopResize);
+  window.addEventListener('pointercancel', stopResize);
+}
+
+function startPaneResize(): void {
+  startResize('panes');
+}
+
+function startDetailHeaderResize(event: PointerEvent): void {
+  resizeStartY = event.clientY;
+  resizeStartHeight = detailHeaderHeight.value;
+  startResize('details');
+}
+
 function handleKeydown(event: KeyboardEvent): void {
   if (props.visible && event.key === 'Escape') emit('close');
 }
@@ -379,7 +454,10 @@ watch(() => [props.visible, props.cwd] as const, ([visible]) => {
 }, { immediate: true });
 
 onMounted(() => window.addEventListener('keydown', handleKeydown));
-onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown);
+  stopResize();
+});
 </script>
 
 <style scoped>
@@ -454,7 +532,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(240px, 24%) minmax(0, 1fr);
+  grid-template-columns: 336px 5px minmax(0, 1fr);
 }
 
 .git-history-list-pane,
@@ -465,8 +543,41 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 }
 
 .git-history-list-pane {
-  border-right: 1px solid var(--border);
   background: var(--bg-secondary);
+}
+
+.git-history-pane-resize-handle {
+  position: relative;
+  z-index: 2;
+  background: var(--border);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.git-history-pane-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 35% 1px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.git-history-pane-resize-handle:hover::after {
+  opacity: 0.75;
+}
+
+:global(body.is-resizing-columns),
+:global(body.is-resizing-columns *) {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+:global(body.is-resizing-rows),
+:global(body.is-resizing-rows *) {
+  cursor: row-resize !important;
+  user-select: none !important;
 }
 
 .git-history-commits,
@@ -552,12 +663,34 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 }
 
 .git-history-detail-header {
-  height: 164px;
-  flex: 0 0 164px;
   box-sizing: border-box;
   overflow: auto;
   padding: 16px 18px;
-  border-bottom: 1px solid var(--border);
+}
+
+.git-history-detail-resize-handle {
+  position: relative;
+  z-index: 2;
+  height: 9px;
+  flex: 0 0 9px;
+  cursor: row-resize;
+}
+
+.git-history-detail-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.git-history-detail-resize-handle:hover::after,
+:global(body.is-resizing-rows) .git-history-detail-resize-handle::after {
+  height: 2px;
+  background: var(--accent);
 }
 
 .git-history-detail-header h3 {
@@ -577,9 +710,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 }
 
 .git-history-stat {
-  max-height: 100px;
   margin: 10px 0 0;
-  overflow: auto;
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -884,8 +1015,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
   .git-history-list-pane {
     min-height: 45vh;
-    border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .git-history-pane-resize-handle {
+    display: none;
   }
 
   .git-history-detail {

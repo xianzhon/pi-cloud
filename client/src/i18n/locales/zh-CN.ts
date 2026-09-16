@@ -145,6 +145,8 @@ export default {
       noPatch: '此提交没有可用的补丁。',
       commitDiff: '提交差异',
       changes: '变更',
+      resizePanes: '调整提交列表和详情的大小',
+      resizeDetails: '调整提交详情和差异的大小',
       previous: '上一页',
       next: '下一页',
       page: '第 {page} 页',

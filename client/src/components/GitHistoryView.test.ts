@@ -65,6 +65,39 @@ describe('GitHistoryView', () => {
     expect(wrapper.get('.git-history-next').attributes('disabled')).toBeDefined();
   });
 
+  it('resizes the commit list and commit summary panes by dragging their separators', async () => {
+    const onlyCommit = commit('f'.repeat(40), 'Resizable panes');
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response({ branch: 'main', page: 0, hasPrevious: false, hasNext: false, commits: [onlyCommit] }))
+      .mockResolvedValueOnce(response({ stat: '1 file changed', diff: 'diff --git a/app.ts b/app.ts\n@@ -1 +1 @@\n-old\n+new' }));
+
+    const wrapper = mount(GitHistoryView, {
+      props: { visible: true, cwd: '/workspace' },
+      global: { stubs: { Teleport: true } },
+    });
+    await flushPromises();
+
+    const dialog = wrapper.get<HTMLElement>('.git-history-dialog').element;
+    Object.defineProperty(dialog, 'clientWidth', { configurable: true, value: 1_000 });
+    vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({ left: 100 } as DOMRect);
+
+    wrapper.get('.git-history-pane-resize-handle').element.dispatchEvent(new PointerEvent('pointerdown'));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 500 }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('.git-history-body').attributes('style')).toContain('400px 5px');
+    window.dispatchEvent(new PointerEvent('pointerup'));
+    expect(document.body.classList.contains('is-resizing-columns')).toBe(false);
+
+    const detail = wrapper.get<HTMLElement>('.git-history-detail').element;
+    Object.defineProperty(detail, 'clientHeight', { configurable: true, value: 600 });
+    wrapper.get('.git-history-detail-resize-handle').element.dispatchEvent(new PointerEvent('pointerdown', { clientY: 164 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientY: 250 }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('.git-history-detail-header').attributes('style')).toContain('height: 250px');
+    window.dispatchEvent(new PointerEvent('pointerup'));
+    expect(document.body.classList.contains('is-resizing-rows')).toBe(false);
+  });
+
   it('shows colored change counts and collapses individual or all file diffs', async () => {
     const onlyCommit = commit('d'.repeat(40), 'File changes');
     vi.mocked(fetch)

@@ -145,6 +145,8 @@ export default {
       noPatch: 'No patch available for this commit.',
       commitDiff: 'Commit diff',
       changes: 'Changes',
+      resizePanes: 'Resize commit list and details',
+      resizeDetails: 'Resize commit details and diff',
       previous: 'Previous',
       next: 'Next',
       page: 'Page {page}',
