@@ -223,7 +223,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { PhCheck, PhFile, PhFileText, PhFolder, PhGitBranch, PhGitCommit, PhLightbulb, PhQuestion, PhRobot, PhX } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
-import { diffLineClass } from '../utils/gitDiff';
+import { diffLineClass, shouldHideDiffHeaderLine } from '../utils/gitDiff';
 
 type DiffScope = 'staged' | 'unstaged';
 type FileStatusKind = 'modified' | 'untracked' | 'missing' | 'staged';
@@ -304,10 +304,7 @@ const renderLines = computed(() => {
       .filter(line => line.hunkLineIndex !== undefined && line.text.startsWith('+') && !line.text.startsWith('+++'))
       .map(line => ({ ...line, text: line.text.slice(1) }));
   }
-  if (isMissingSelection()) {
-    return parsedDiff.value.lines.filter(line => !/^(diff --git |index |--- |\+\+\+ )/.test(line.text));
-  }
-  return parsedDiff.value.lines;
+  return parsedDiff.value.lines.filter(line => !shouldHideDiffHeaderLine(line.text));
 });
 const renderBlocks = computed(() => renderLines.value.reduce<RenderBlock[]>((blocks, line) => {
   const previous = blocks.at(-1);
@@ -334,11 +331,6 @@ function isNewFile(file: GitStatusFile): boolean {
 function isNewFileSelection(): boolean {
   return selectedStatusKind.value === 'untracked'
     || (selected.value?.scope === 'staged' && selectedFile.value !== undefined && isNewFile(selectedFile.value));
-}
-
-function isMissingSelection(): boolean {
-  return selectedStatusKind.value === 'missing'
-    || (selected.value?.scope === 'staged' && selectedFile.value?.status.includes('D') === true);
 }
 
 function parseDiff(content: string): { lines: RenderLine[]; hunks: DiffHunk[] } {

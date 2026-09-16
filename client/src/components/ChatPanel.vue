@@ -782,7 +782,7 @@ import SkillPicker from './SkillPicker.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import { exportSessionPdf, hasExportableMessages } from '../utils/sessionPdfExport';
-import { diffLineClass, pairDiffLines, parseDiffFiles } from '../utils/gitDiff';
+import { diffLineClass, shouldHideDiffHeaderLine, pairDiffLines, parseDiffFiles } from '../utils/gitDiff';
 import { getReviewTranscript } from '../services/reviewSourceService';
 import type { ReviewSessionTranscript } from '../types/reviewSource';
 import { formatFileSize, useChatAttachments, type PendingAttachment } from '../composables/useChatAttachments';
@@ -1574,7 +1574,7 @@ const commitDiffFiles = computed(() => parseDiffFiles(
   commitDiffContent.value,
   t('components.gitHistory.changes'),
   { mergeByName: true },
-));
+).map(file => ({ ...file, lines: file.lines.filter(line => !shouldHideDiffHeaderLine(line)) })));
 const allCommitDiffFilesCollapsed = computed(() => commitDiffFiles.value.length > 0
   && commitDiffFiles.value.every((file) => collapsedCommitDiffFiles.value.has(file.name)));
 const commitDiffSummary = computed(() => {

@@ -150,7 +150,7 @@ describe('GitHistoryView', () => {
       if (url.includes('/diff')) {
         return response({
           stat: '1 file changed',
-          diff: 'diff --git a/app.ts b/app.ts\n--- a/app.ts\n+++ b/app.ts\n@@ -1 +1 @@\n-old\n+new\n@@ -4 +4 @@\n-before\n+after',
+          diff: 'diff --git a/app.ts b/app.ts\nindex 7fb2bb2..1097f83 100644\n--- a/app.ts\n+++ b/app.ts\n@@ -1 +1 @@\n-old\n+new\n@@ -4 +4 @@\n-before\n+after',
         });
       }
       expect(url).toBe('/api/git/change-reason');
@@ -176,6 +176,11 @@ describe('GitHistoryView', () => {
     expect(hunkHeaders).toHaveLength(2);
     expect(hunkHeaders[0].text()).toContain('@@ -1 +1 @@');
     expect(hunkHeaders[0].find('.git-change-reason-button').exists()).toBe(true);
+    const renderedDiff = wrapper.get('.git-diff-content').text();
+    expect(renderedDiff).toContain('index 7fb2bb2..1097f83 100644');
+    expect(renderedDiff).not.toContain('diff --git');
+    expect(renderedDiff).not.toContain('--- a/app.ts');
+    expect(renderedDiff).not.toContain('+++ b/app.ts');
 
     await wrapper.findAll<HTMLButtonElement>('.git-change-reason-button')[0].trigger('click');
     await flushPromises();

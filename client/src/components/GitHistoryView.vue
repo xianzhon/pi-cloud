@@ -183,7 +183,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { PhArrowClockwise, PhCaretDown, PhCaretLeft, PhCaretRight, PhGitCommit, PhLightbulb, PhX } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
-import { diffLineClass, pairDiffLines, parseDiffFiles } from '../utils/gitDiff';
+import { diffLineClass, shouldHideDiffHeaderLine, pairDiffLines, parseDiffFiles } from '../utils/gitDiff';
 
 interface DiffBlock {
   hunkIndex?: number;
@@ -239,7 +239,8 @@ const MIN_DETAIL_PANE_WIDTH = 320;
 const MIN_DETAIL_HEADER_HEIGHT = 96;
 const MIN_DIFF_HEIGHT = 120;
 
-const diffFiles = computed(() => parseDiffFiles(diffContent.value, t('components.gitHistory.changes')));
+const diffFiles = computed(() => parseDiffFiles(diffContent.value, t('components.gitHistory.changes'))
+  .map(file => ({ ...file, lines: file.lines.filter(line => !shouldHideDiffHeaderLine(line, true)) })));
 const diffTotals = computed(() => diffFiles.value.reduce((totals, file) => ({
   additions: totals.additions + file.additions,
   deletions: totals.deletions + file.deletions,

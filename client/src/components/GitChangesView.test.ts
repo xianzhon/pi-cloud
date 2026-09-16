@@ -8,6 +8,7 @@ function response(payload: unknown): Response {
 
 const patch = [
   'diff --git a/src/app.ts b/src/app.ts',
+  'index 7fb2bb2..1097f83 100644',
   '--- a/src/app.ts',
   '+++ b/src/app.ts',
   '@@ -1 +1 @@',
@@ -44,6 +45,12 @@ describe('GitChangesView', () => {
     expect(document.querySelector('.git-changes-header')?.textContent).toContain('Git Commit');
     expect(document.body.textContent).toContain('Unstaged Changes');
     expect(document.body.textContent).toContain('Staged Changes');
+    const renderedDiff = document.querySelector('.git-changes-diff')?.textContent;
+    expect(renderedDiff).toContain('@@ -1 +1 @@');
+    expect(renderedDiff).not.toContain('diff --git');
+    expect(renderedDiff).not.toContain('index 7fb2bb2..1097f83 100644');
+    expect(renderedDiff).not.toContain('--- a/src/app.ts');
+    expect(renderedDiff).not.toContain('+++ b/src/app.ts');
 
     (document.querySelector('.git-change-status-icon') as HTMLElement).click();
     await flushPromises();
