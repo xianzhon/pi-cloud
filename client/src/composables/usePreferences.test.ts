@@ -96,6 +96,28 @@ describe('usePreferences', () => {
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences');
   });
 
+  it('migrates cached annotation shortcuts when the backend has no persisted value', async () => {
+    const cached = {
+      pen: 'A', highlighter: 'S', line: 'D', arrow: 'F', rectangle: 'G',
+      ellipse: 'H', text: 'J', move: 'K', whiteout: 'L', eraser: '0',
+    };
+    localStorage.setItem('pi-cloud.annotationToolShortcuts', JSON.stringify(cached));
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => ({
+      ok: true,
+      json: async () => init?.method === 'PATCH' ? { annotationToolShortcuts: cached } : { annotationToolShortcuts: null },
+    })));
+    const preferences = usePreferences();
+
+    await preferences.loadPreferences();
+
+    expect(preferences.annotationToolShortcuts.value).toEqual(cached);
+    expect(fetch).toHaveBeenLastCalledWith('/api/auth/preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ annotationToolShortcuts: cached }),
+    });
+  });
+
   it('ignores backend load failures and keeps the cached preference', async () => {
     localStorage.setItem('pi-cloud.showHintInfo', 'false');
     localStorage.setItem('pi-cloud.showCodeBlockLanguageHeaders', 'false');
@@ -217,6 +239,30 @@ describe('usePreferences', () => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ newSessionShortcut: 'ctrlAltN' }),
+    });
+  });
+
+  it('loads and persists annotation tool shortcuts through the backend preferences', async () => {
+    const annotationToolShortcuts = {
+      pen: 'A', highlighter: 'S', line: 'D', arrow: 'F', rectangle: 'G',
+      ellipse: 'H', text: 'J', move: 'K', whiteout: 'L', eraser: '0',
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ annotationToolShortcuts }),
+    })));
+    const preferences = usePreferences();
+
+    await preferences.loadPreferences();
+    expect(preferences.annotationToolShortcuts.value).toEqual(annotationToolShortcuts);
+    expect(JSON.parse(localStorage.getItem('pi-cloud.annotationToolShortcuts') || '{}')).toEqual(annotationToolShortcuts);
+
+    const next = { ...annotationToolShortcuts, pen: 'Q' };
+    await preferences.setAnnotationToolShortcuts(next);
+    expect(fetch).toHaveBeenCalledWith('/api/auth/preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ annotationToolShortcuts: next }),
     });
   });
 

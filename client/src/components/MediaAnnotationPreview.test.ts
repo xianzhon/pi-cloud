@@ -649,8 +649,15 @@ describe('MediaAnnotationPreview', () => {
 
     expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('aria-keyshortcuts')).toBe('A');
     expect(wrapper.get('[aria-label="Draw rectangle"]').attributes('aria-keyshortcuts')).toBe('5');
-    expect(JSON.parse(localStorage.getItem('pi-cloud.annotationToolShortcuts') || '{}')).toMatchObject({
+    await flushPromises();
+    const savedShortcuts = JSON.parse(localStorage.getItem('pi-cloud.annotationToolShortcuts') || '{}');
+    expect(savedShortcuts).toMatchObject({
       pen: 'A', highlighter: 'S', line: 'D', arrow: 'F', rectangle: '5',
+    });
+    expect(fetch).toHaveBeenLastCalledWith('/api/auth/preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ annotationToolShortcuts: savedShortcuts }),
     });
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: '1' }));
@@ -672,7 +679,9 @@ describe('MediaAnnotationPreview', () => {
     await wrapper.get('.pdf-shortcut-reset').trigger('click');
     expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('aria-keyshortcuts')).toBe('1');
     expect(wrapper.get('[aria-label="Highlight PDF"]').attributes('aria-keyshortcuts')).toBe('2');
-    expect(localStorage.getItem('pi-cloud.annotationToolShortcuts')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('pi-cloud.annotationToolShortcuts') || '{}')).toMatchObject({
+      pen: '1', highlighter: '2', whiteout: '9', eraser: '0',
+    });
   });
 
   it('loads annotations from the hidden annotation directory', async () => {

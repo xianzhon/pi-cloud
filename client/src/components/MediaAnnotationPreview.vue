@@ -345,6 +345,11 @@ import {
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { i18n } from '../i18n';
+import {
+  DEFAULT_ANNOTATION_TOOL_SHORTCUTS,
+  type AnnotationShortcutTool,
+  usePreferences,
+} from '../composables/usePreferences';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 
 interface AnnotationPoint { x: number; y: number }
@@ -362,7 +367,7 @@ interface TooltipState { text: string; left: number; top: number }
 interface ToolbarPosition { left: number; top: number }
 interface ImagePinch { initialDistance: number; initialScale: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
-type ShortcutTool = Exclude<AnnotationTool, 'pan'>;
+type ShortcutTool = AnnotationShortcutTool;
 type PdfFitMode = 'width' | 'height';
 type PdfPageTone = 'original' | 'warm' | 'gray' | 'dark';
 interface PdfViewState {
@@ -424,19 +429,6 @@ const pageToneOptions = computed<CustomSelectOption[]>(() => [
   { value: 'gray', label: t('components.editorPanel.pdfPageToneGray') },
   { value: 'dark', label: t('components.editorPanel.pdfPageToneDark') },
 ]);
-const TOOL_SHORTCUTS_KEY = 'pi-cloud.annotationToolShortcuts';
-const DEFAULT_TOOL_SHORTCUTS: Record<ShortcutTool, string> = {
-  pen: '1',
-  highlighter: '2',
-  line: '3',
-  arrow: '4',
-  rectangle: '5',
-  ellipse: '6',
-  text: '7',
-  move: '8',
-  whiteout: '9',
-  eraser: '0',
-};
 const annotationToolOptions = computed<Array<{ name: ShortcutTool; label: string; icon: object; weight?: 'fill' }>>(() => [
   { name: 'pen', label: isImage.value ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen', icon: PhPencilSimple },
   { name: 'highlighter', label: isImage.value ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter', icon: PhHighlighter },
@@ -449,7 +441,7 @@ const annotationToolOptions = computed<Array<{ name: ShortcutTool; label: string
   { name: 'whiteout', label: isImage.value ? 'components.editorPanel.imageWhiteout' : 'components.editorPanel.pdfWhiteout', icon: PhRectangle, weight: 'fill' },
   { name: 'eraser', label: isImage.value ? 'components.editorPanel.imageEraser' : 'components.editorPanel.pdfEraser', icon: PhEraser },
 ]);
-const toolShortcutKeys = ref(readToolShortcuts());
+const { annotationToolShortcuts: toolShortcutKeys, setAnnotationToolShortcuts } = usePreferences();
 const showShortcutEditor = ref(false);
 const shortcutEditorPosition = ref<ToolbarPosition>();
 const shortcutEditorStyle = computed(() => shortcutEditorPosition.value && ({
@@ -906,21 +898,6 @@ function toggleTool(nextTool: AnnotationTool): void {
   tool.value = tool.value === nextTool ? 'pan' : nextTool;
 }
 
-function readToolShortcuts(): Record<ShortcutTool, string> {
-  try {
-    const cached = JSON.parse(localStorage.getItem(TOOL_SHORTCUTS_KEY) || '{}') as Partial<Record<ShortcutTool, unknown>>;
-    const shortcuts = { ...DEFAULT_TOOL_SHORTCUTS };
-    for (const annotationTool of Object.keys(shortcuts) as ShortcutTool[]) {
-      const key = cached[annotationTool];
-      if (typeof key === 'string' && key.length === 1 && !/\s/.test(key)) shortcuts[annotationTool] = key.toUpperCase();
-    }
-    if (new Set(Object.values(shortcuts)).size === Object.keys(shortcuts).length) return shortcuts;
-  } catch {
-    // Ignore unavailable storage and invalid cached values.
-  }
-  return { ...DEFAULT_TOOL_SHORTCUTS };
-}
-
 function setToolShortcut(annotationTool: ShortcutTool, event: KeyboardEvent): void {
   if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing || event.key.length !== 1 || /\s/.test(event.key)) return;
   event.preventDefault();
@@ -930,21 +907,11 @@ function setToolShortcut(annotationTool: ShortcutTool, event: KeyboardEvent): vo
     .find(name => name !== annotationTool && toolShortcutKeys.value[name] === key);
   const nextShortcuts = { ...toolShortcutKeys.value, [annotationTool]: key };
   if (previousTool) nextShortcuts[previousTool] = previousKey;
-  toolShortcutKeys.value = nextShortcuts;
-  try {
-    localStorage.setItem(TOOL_SHORTCUTS_KEY, JSON.stringify(nextShortcuts));
-  } catch {
-    // The shortcuts still apply for the current preview when storage is unavailable.
-  }
+  void setAnnotationToolShortcuts(nextShortcuts);
 }
 
 function resetToolShortcuts(): void {
-  toolShortcutKeys.value = { ...DEFAULT_TOOL_SHORTCUTS };
-  try {
-    localStorage.removeItem(TOOL_SHORTCUTS_KEY);
-  } catch {
-    // The reset still applies for the current preview when storage is unavailable.
-  }
+  void setAnnotationToolShortcuts({ ...DEFAULT_ANNOTATION_TOOL_SHORTCUTS });
 }
 
 function handleToolShortcut(event: KeyboardEvent): void {

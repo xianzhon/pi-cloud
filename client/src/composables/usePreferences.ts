@@ -15,7 +15,14 @@ const LANGUAGE_KEY = 'pi-cloud.language';
 const SOUND_NOTIFICATION_KEY = 'pi-cloud.soundNotification';
 const AUTO_SPEAK_ASSISTANT_KEY = 'pi-cloud.autoSpeakAssistant';
 const GIT_CLONE_PARENT_PATH_KEY = 'pi-cloud.gitCloneParentPath';
+const ANNOTATION_TOOL_SHORTCUTS_KEY = 'pi-cloud.annotationToolShortcuts';
 
+export type AnnotationShortcutTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'move' | 'whiteout' | 'eraser';
+export type AnnotationToolShortcuts = Record<AnnotationShortcutTool, string>;
+export const DEFAULT_ANNOTATION_TOOL_SHORTCUTS: AnnotationToolShortcuts = {
+  pen: '1', highlighter: '2', line: '3', arrow: '4', rectangle: '5',
+  ellipse: '6', text: '7', move: '8', whiteout: '9', eraser: '0',
+};
 export type StreamingMessageBehavior = 'steer' | 'followUp';
 export type NewSessionShortcut = 'ctrlAltN' | 'ctrlMetaN' | 'disabled';
 export type FullscreenShortcut = 'f11' | 'ctrlShiftF';
@@ -39,6 +46,7 @@ type PreferencePayload = {
   soundNotification?: unknown;
   autoSpeakAssistant?: unknown;
   gitCloneParentPath?: unknown;
+  annotationToolShortcuts?: unknown;
 };
 
 function readCachedBoolean(key: string, defaultValue: boolean = true): boolean {
@@ -153,6 +161,33 @@ function cacheString(key: string, value: string): void {
   localStorage.setItem(key, value);
 }
 
+function parseAnnotationToolShortcuts(value: unknown): AnnotationToolShortcuts | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const shortcuts = { ...DEFAULT_ANNOTATION_TOOL_SHORTCUTS };
+  for (const tool of Object.keys(shortcuts) as AnnotationShortcutTool[]) {
+    const key = (value as Record<string, unknown>)[tool];
+    if (typeof key !== 'string' || key.length !== 1 || /\s/.test(key)) return;
+    shortcuts[tool] = key.toUpperCase();
+  }
+  if (new Set(Object.values(shortcuts)).size !== Object.keys(shortcuts).length) return;
+  return shortcuts;
+}
+
+function readCachedAnnotationToolShortcuts(): AnnotationToolShortcuts {
+  if (typeof localStorage === 'undefined') return { ...DEFAULT_ANNOTATION_TOOL_SHORTCUTS };
+  try {
+    return parseAnnotationToolShortcuts(JSON.parse(localStorage.getItem(ANNOTATION_TOOL_SHORTCUTS_KEY) || 'null'))
+      || { ...DEFAULT_ANNOTATION_TOOL_SHORTCUTS };
+  } catch {
+    return { ...DEFAULT_ANNOTATION_TOOL_SHORTCUTS };
+  }
+}
+
+function cacheAnnotationToolShortcuts(value: AnnotationToolShortcuts): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(ANNOTATION_TOOL_SHORTCUTS_KEY, JSON.stringify(value));
+}
+
 const showHintInfo = ref(readCachedBoolean(SHOW_HINT_INFO_KEY));
 const showCodeBlockLanguageHeaders = ref(readCachedBoolean(SHOW_CODE_BLOCK_LANGUAGE_HEADERS_KEY));
 const streamingMessageBehavior = ref<StreamingMessageBehavior>(readCachedStreamingMessageBehavior());
@@ -168,6 +203,7 @@ const language = ref<LanguagePreference>(readCachedLanguage());
 const soundNotification = ref<SoundNotificationPreference>(readCachedSoundNotification());
 const autoSpeakAssistant = ref(readCachedBoolean(AUTO_SPEAK_ASSISTANT_KEY, false));
 const gitCloneParentPath = ref(readCachedString(GIT_CLONE_PARENT_PATH_KEY, '~/git/github'));
+const annotationToolShortcuts = ref<AnnotationToolShortcuts>(readCachedAnnotationToolShortcuts());
 
 function applyPreferences(data: PreferencePayload) {
   if (typeof data.showHintInfo === 'boolean') {
@@ -230,6 +266,11 @@ function applyPreferences(data: PreferencePayload) {
     gitCloneParentPath.value = data.gitCloneParentPath;
     cacheString(GIT_CLONE_PARENT_PATH_KEY, data.gitCloneParentPath);
   }
+  const shortcuts = parseAnnotationToolShortcuts(data.annotationToolShortcuts);
+  if (shortcuts) {
+    annotationToolShortcuts.value = shortcuts;
+    cacheAnnotationToolShortcuts(shortcuts);
+  }
 }
 
 async function loadPreferences(): Promise<void> {
@@ -239,12 +280,15 @@ async function loadPreferences(): Promise<void> {
 
     const data = await response.json() as PreferencePayload;
     applyPreferences(data);
+    if (data.annotationToolShortcuts === null) {
+      await setAnnotationToolShortcuts(annotationToolShortcuts.value);
+    }
   } catch {
     // Local cache remains authoritative for immediate UI when backend sync is unavailable.
   }
 }
 
-async function patchPreferences(payload: PreferencePayload): Promise<void> {
+async function patchPreferences(payload: PreferencePayload, applyResponse = true): Promise<void> {
   try {
     const response = await fetch('/api/auth/preferences', {
       method: 'PATCH',
@@ -254,7 +298,7 @@ async function patchPreferences(payload: PreferencePayload): Promise<void> {
 
     if (!response.ok) return;
     const data = await response.json() as PreferencePayload;
-    applyPreferences(data);
+    if (applyResponse) applyPreferences(data);
   } catch {
     // Keep immediate local preferences even if DB persistence is temporarily unavailable.
   }
@@ -351,6 +395,17 @@ async function setGitCloneParentPath(value: string): Promise<void> {
   await patchPreferences({ gitCloneParentPath: next });
 }
 
+let annotationToolShortcutsPatch = Promise.resolve();
+
+async function setAnnotationToolShortcuts(value: AnnotationToolShortcuts): Promise<void> {
+  const next = { ...value };
+  annotationToolShortcuts.value = next;
+  cacheAnnotationToolShortcuts(next);
+  annotationToolShortcutsPatch = annotationToolShortcutsPatch
+    .then(() => patchPreferences({ annotationToolShortcuts: next }, false));
+  await annotationToolShortcutsPatch;
+}
+
 function resetPreferenceRefsFromCache(): void {
   showHintInfo.value = readCachedBoolean(SHOW_HINT_INFO_KEY);
   showCodeBlockLanguageHeaders.value = readCachedBoolean(SHOW_CODE_BLOCK_LANGUAGE_HEADERS_KEY);
@@ -367,6 +422,7 @@ function resetPreferenceRefsFromCache(): void {
   soundNotification.value = readCachedSoundNotification();
   autoSpeakAssistant.value = readCachedBoolean(AUTO_SPEAK_ASSISTANT_KEY, false);
   gitCloneParentPath.value = readCachedString(GIT_CLONE_PARENT_PATH_KEY, '~/git/github');
+  annotationToolShortcuts.value = readCachedAnnotationToolShortcuts();
 }
 
 export function usePreferences() {
@@ -388,6 +444,7 @@ export function usePreferences() {
     soundNotification,
     autoSpeakAssistant,
     gitCloneParentPath,
+    annotationToolShortcuts,
     loadPreferences,
     setShowHintInfo,
     setShowCodeBlockLanguageHeaders,
@@ -404,6 +461,7 @@ export function usePreferences() {
     setSoundNotification,
     setAutoSpeakAssistant,
     setGitCloneParentPath,
+    setAnnotationToolShortcuts,
   };
 }
 

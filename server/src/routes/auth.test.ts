@@ -324,7 +324,8 @@ describe('authRoutes', () => {
     const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
 
     expect(preferences.statusCode).toBe(200);
-    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+
   });
 
   it('persists hint info preference for authenticated users', async () => {
@@ -342,8 +343,8 @@ describe('authRoutes', () => {
     const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.showHintInfo') as { value: string };
 
     expect(update.statusCode).toBe(200);
-    expect(update.json()).toEqual({ showHintInfo: false, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
-    expect(preferences.json()).toEqual({ showHintInfo: false, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(update.json()).toEqual({ showHintInfo: false, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+    expect(preferences.json()).toEqual({ showHintInfo: false, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
     expect(row.value).toBe('false');
   });
 
@@ -382,8 +383,8 @@ describe('authRoutes', () => {
     const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.showCodeBlockLanguageHeaders') as { value: string };
 
     expect(update.statusCode).toBe(200);
-    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: false, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
-    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: false, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: false, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: false, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
     expect(row.value).toBe('false');
   });
 
@@ -402,8 +403,8 @@ describe('authRoutes', () => {
     const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.streamingMessageBehavior') as { value: string };
 
     expect(update.statusCode).toBe(200);
-    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'followUp', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
-    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'followUp', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'followUp', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'followUp', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
     expect(row.value).toBe('followUp');
   });
 
@@ -422,8 +423,8 @@ describe('authRoutes', () => {
     const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.newSessionShortcut') as { value: string };
 
     expect(update.statusCode).toBe(200);
-    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlAltN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
-    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlAltN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlAltN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlAltN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
     expect(row.value).toBe('ctrlAltN');
   });
 
@@ -442,9 +443,33 @@ describe('authRoutes', () => {
     const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.fullscreenShortcut') as { value: string };
 
     expect(update.statusCode).toBe(200);
-    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'ctrlShiftF', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
-    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'ctrlShiftF', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'ctrlShiftF', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'ctrlShiftF', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
     expect(row.value).toBe('ctrlShiftF');
+  });
+
+  it('persists annotation tool shortcuts for authenticated users', async () => {
+    ({ app, tempDir, db, totp } = await buildApp());
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const cookieHeader = String(login.headers['set-cookie']).split(';')[0];
+    const annotationToolShortcuts = {
+      pen: 'A', highlighter: 'S', line: 'D', arrow: 'F', rectangle: 'G',
+      ellipse: 'H', text: 'J', move: 'K', whiteout: 'L', eraser: '0',
+    };
+
+    const update = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/preferences',
+      headers: { cookie: cookieHeader },
+      payload: { annotationToolShortcuts },
+    });
+    const preferences = await app.inject({ method: 'GET', url: '/api/auth/preferences', headers: { cookie: cookieHeader } });
+    const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.annotationToolShortcuts') as { value: string };
+
+    expect(update.statusCode).toBe(200);
+    expect(update.json().annotationToolShortcuts).toEqual(annotationToolShortcuts);
+    expect(preferences.json().annotationToolShortcuts).toEqual(annotationToolShortcuts);
+    expect(JSON.parse(row.value)).toEqual(annotationToolShortcuts);
   });
 
   it('persists floating chat button preferences for authenticated users', async () => {
@@ -464,8 +489,8 @@ describe('authRoutes', () => {
     const autoExtractRow = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('memory.autoExtract') as { value: string };
 
     expect(update.statusCode).toBe(200);
-    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: false, showChatViewOptionsButton: false, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
-    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: false, showChatViewOptionsButton: false, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: false, showChatViewOptionsButton: false, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: false, showChatViewOptionsButton: false, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
     expect(goToTopRow.value).toBe('false');
     expect(viewOptionsRow.value).toBe('false');
     expect(autoExtractRow.value).toBe('false');
@@ -486,8 +511,8 @@ describe('authRoutes', () => {
     const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.theme') as { value: string };
 
     expect(update.statusCode).toBe(200);
-    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'light', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
-    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'light', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'light', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'light', language: 'en', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
     expect(row.value).toBe('light');
   });
 
@@ -506,8 +531,8 @@ describe('authRoutes', () => {
     const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.language') as { value: string };
 
     expect(update.statusCode).toBe(200);
-    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'zh-CN', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
-    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'zh-CN', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'zh-CN', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'zh-CN', soundNotification: 'beep', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
     expect(row.value).toBe('zh-CN');
   });
 
@@ -526,8 +551,8 @@ describe('authRoutes', () => {
     const row = db!.prepare('SELECT value FROM application_settings WHERE key = ?').get('ui.soundNotification') as { value: string };
 
     expect(update.statusCode).toBe(200);
-    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'chime', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
-    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'chime', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github' });
+    expect(update.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'chime', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
+    expect(preferences.json()).toEqual({ showHintInfo: true, showCodeBlockLanguageHeaders: true, streamingMessageBehavior: 'steer', editorAutoRefresh: false, confirmSessionDelete: true, newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11', showGoToTopButton: true, showChatViewOptionsButton: true, autoExtractMemory: false, theme: 'system', language: 'en', soundNotification: 'chime', autoSpeakAssistant: false, gitCloneParentPath: '~/git/github', annotationToolShortcuts: null });
     expect(row.value).toBe('chime');
   });
 
@@ -698,6 +723,14 @@ describe('authRoutes', () => {
 
     expect(update.statusCode).toBe(400);
     expect(update.json()).toEqual({ error: 'streamingMessageBehavior must be steer or followUp' });
+
+    const invalidShortcuts = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/preferences',
+      headers: { cookie: cookieHeader },
+      payload: { annotationToolShortcuts: { pen: '1' } },
+    });
+    expect(invalidShortcuts.statusCode).toBe(400);
   });
 
   it('rate limits repeated failed login attempts by IP', async () => {

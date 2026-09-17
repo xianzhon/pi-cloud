@@ -37,7 +37,26 @@ type PreferencePatchBody = {
   soundNotification?: unknown;
   autoSpeakAssistant?: unknown;
   gitCloneParentPath?: unknown;
+  annotationToolShortcuts?: unknown;
 };
+
+const DEFAULT_ANNOTATION_TOOL_SHORTCUTS = {
+  pen: '1', highlighter: '2', line: '3', arrow: '4', rectangle: '5',
+  ellipse: '6', text: '7', move: '8', whiteout: '9', eraser: '0',
+};
+type AnnotationToolShortcuts = typeof DEFAULT_ANNOTATION_TOOL_SHORTCUTS;
+
+function parseAnnotationToolShortcuts(value: unknown): AnnotationToolShortcuts | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const shortcuts = { ...DEFAULT_ANNOTATION_TOOL_SHORTCUTS };
+  for (const tool of Object.keys(shortcuts) as Array<keyof AnnotationToolShortcuts>) {
+    const key = (value as Record<string, unknown>)[tool];
+    if (typeof key !== 'string' || key.length !== 1 || /\s/.test(key)) return;
+    shortcuts[tool] = key.toUpperCase();
+  }
+  if (new Set(Object.values(shortcuts)).size !== Object.keys(shortcuts).length) return;
+  return shortcuts;
+}
 
 export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions) {
   const { config, sessions, audit, totp, rateLimiter, db } = options;
@@ -93,6 +112,16 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     return value === 'off' || value === 'chime' || value === 'ding' ? value : 'beep';
   }
 
+  function getAnnotationToolShortcuts(): AnnotationToolShortcuts | null {
+    const stored = getPreferenceValue('ui.annotationToolShortcuts');
+    if (!stored) return null;
+    try {
+      return parseAnnotationToolShortcuts(JSON.parse(stored)) || null;
+    } catch {
+      return null;
+    }
+  }
+
   function getPreferences() {
     return {
       gitCloneParentPath: getPreferenceValue('ui.gitCloneParentPath') || '~/git/github',
@@ -110,6 +139,7 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
       language: getLanguage(),
       soundNotification: getSoundNotification(),
       autoSpeakAssistant: getPreferenceValue('ui.autoSpeakAssistant') === 'true',
+      annotationToolShortcuts: getAnnotationToolShortcuts(),
     };
   }
 
@@ -288,8 +318,9 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     const hasSoundNotification = hasPreference(body, 'soundNotification');
     const hasAutoSpeakAssistant = hasPreference(body, 'autoSpeakAssistant');
     const hasGitCloneParentPath = hasPreference(body, 'gitCloneParentPath');
+    const hasAnnotationToolShortcuts = hasPreference(body, 'annotationToolShortcuts');
 
-    if (!hasShowHintInfo && !hasShowCodeBlockLanguageHeaders && !hasStreamingMessageBehavior && !hasEditorAutoRefresh && !hasConfirmSessionDelete && !hasNewSessionShortcut && !hasFullscreenShortcut && !hasShowGoToTopButton && !hasShowChatViewOptionsButton && !hasAutoExtractMemory && !hasTheme && !hasLanguage && !hasSoundNotification && !hasAutoSpeakAssistant && !hasGitCloneParentPath) {
+    if (!hasShowHintInfo && !hasShowCodeBlockLanguageHeaders && !hasStreamingMessageBehavior && !hasEditorAutoRefresh && !hasConfirmSessionDelete && !hasNewSessionShortcut && !hasFullscreenShortcut && !hasShowGoToTopButton && !hasShowChatViewOptionsButton && !hasAutoExtractMemory && !hasTheme && !hasLanguage && !hasSoundNotification && !hasAutoSpeakAssistant && !hasGitCloneParentPath && !hasAnnotationToolShortcuts) {
       return reply.status(400).send({ error: 'At least one preference must be provided' });
     }
     if (hasShowHintInfo && typeof body.showHintInfo !== 'boolean') {
@@ -337,6 +368,12 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     if (hasGitCloneParentPath && (typeof body.gitCloneParentPath !== 'string' || !body.gitCloneParentPath.trim())) {
       return reply.status(400).send({ error: 'gitCloneParentPath must be a non-empty string' });
     }
+    const parsedAnnotationToolShortcuts = hasAnnotationToolShortcuts
+      ? parseAnnotationToolShortcuts(body.annotationToolShortcuts)
+      : undefined;
+    if (hasAnnotationToolShortcuts && !parsedAnnotationToolShortcuts) {
+      return reply.status(400).send({ error: 'annotationToolShortcuts must assign each tool a unique single-character shortcut' });
+    }
 
     if (hasShowHintInfo) setPreferenceValue('ui.showHintInfo', String(body.showHintInfo));
     if (hasShowCodeBlockLanguageHeaders) setPreferenceValue('ui.showCodeBlockLanguageHeaders', String(body.showCodeBlockLanguageHeaders));
@@ -353,6 +390,7 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     if (hasSoundNotification) setPreferenceValue('ui.soundNotification', String(body.soundNotification));
     if (hasAutoSpeakAssistant) setPreferenceValue('ui.autoSpeakAssistant', String(body.autoSpeakAssistant));
     if (hasGitCloneParentPath) setPreferenceValue('ui.gitCloneParentPath', String(body.gitCloneParentPath).trim());
+    if (parsedAnnotationToolShortcuts) setPreferenceValue('ui.annotationToolShortcuts', JSON.stringify(parsedAnnotationToolShortcuts));
     return getPreferences();
   });
 
