@@ -68,6 +68,7 @@ const context = {
 
 describe('MediaAnnotationPreview', () => {
   beforeEach(() => {
+    localStorage.removeItem('pi-cloud.annotationToolShortcuts');
     pdfjsMock.document.numPages = 2;
     pdfjsMock.getOutline.mockResolvedValue([]);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
@@ -579,6 +580,99 @@ describe('MediaAnnotationPreview', () => {
     await wrapper.vm.$nextTick();
     expect(eraserButton.classes()).not.toContain('active');
     expect(wrapper.get('.pdf-annotation-canvas').classes()).not.toContain('enabled');
+  });
+
+  it('shows the shortcut settings beside the toolbar with tool icons and after the delete control', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('pdf-preview')) {
+        return { left: 20, top: 30, width: 800, height: 600, right: 820, bottom: 630, x: 20, y: 30, toJSON: () => ({}) };
+      }
+      if (this.classList.contains('pdf-toolbar')) {
+        return { left: 120, top: 42, width: 500, height: 36, right: 620, bottom: 78, x: 120, y: 42, toJSON: () => ({}) };
+      }
+      if (this.getAttribute('aria-label') === 'Customize annotation shortcuts') {
+        return { left: 560, top: 42, width: 36, height: 34, right: 596, bottom: 76, x: 560, y: 42, toJSON: () => ({}) };
+      }
+      if (this.classList.contains('pdf-shortcut-editor')) {
+        return { left: 0, top: 0, width: 280, height: 500, right: 280, bottom: 500, x: 0, y: 0, toJSON: () => ({}) };
+      }
+      return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+
+    const toolbarButtons = wrapper.get('.pdf-toolbar-group').findAll('button');
+    const deleteIndex = toolbarButtons.findIndex(button => button.attributes('aria-label') === 'Clear annotations on this page');
+    expect(toolbarButtons[deleteIndex + 1].attributes('aria-label')).toBe('Customize annotation shortcuts');
+    expect(toolbarButtons[deleteIndex + 1].find('svg').exists()).toBe(true);
+
+    await toolbarButtons[deleteIndex + 1].trigger('click');
+    const editor = wrapper.get('.pdf-shortcut-editor');
+    expect(editor.attributes('style')).toContain('left: 418px');
+    expect(editor.attributes('style')).toContain('top: 56px');
+    const shortcutTools = editor.findAll('.pdf-shortcut-tool');
+    expect(shortcutTools).toHaveLength(10);
+    expect(shortcutTools.every(tool => tool.find('svg').exists())).toBe(true);
+  });
+
+  it('customizes and persists single-key annotation shortcuts while retaining unchanged number shortcuts', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    await wrapper.get('[aria-label="Customize annotation shortcuts"]').trigger('click');
+    for (const [label, key] of [
+      ['Shortcut for Draw on PDF', 'a'],
+      ['Shortcut for Highlight PDF', 's'],
+      ['Shortcut for Draw line', 'd'],
+      ['Shortcut for Draw arrow', 'f'],
+    ]) {
+      await wrapper.get(`[aria-label="${label}"]`).trigger('keydown', { key });
+    }
+
+    for (const [key, label] of [
+      ['a', 'Draw on PDF'],
+      ['s', 'Highlight PDF'],
+      ['d', 'Draw line'],
+      ['f', 'Draw arrow'],
+      ['5', 'Draw rectangle'],
+    ]) {
+      const button = wrapper.get(`[aria-label="${label}"]`);
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true }));
+      await wrapper.vm.$nextTick();
+      expect(button.classes()).toContain('active');
+    }
+
+    expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('aria-keyshortcuts')).toBe('A');
+    expect(wrapper.get('[aria-label="Draw rectangle"]').attributes('aria-keyshortcuts')).toBe('5');
+    expect(JSON.parse(localStorage.getItem('pi-cloud.annotationToolShortcuts') || '{}')).toMatchObject({
+      pen: 'A', highlighter: 'S', line: 'D', arrow: 'F', rectangle: '5',
+    });
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '1' }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[aria-label="Draw on PDF"]').classes()).not.toContain('active');
+  });
+
+  it('swaps duplicate shortcut assignments and can reset the numeric defaults', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    await wrapper.get('[aria-label="Customize annotation shortcuts"]').trigger('click');
+    await wrapper.get('[aria-label="Shortcut for Highlight PDF"]').trigger('keydown', { key: '1' });
+    expect(wrapper.get('[aria-label="Highlight PDF"]').attributes('aria-keyshortcuts')).toBe('1');
+    expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('aria-keyshortcuts')).toBe('2');
+
+    await wrapper.get('.pdf-shortcut-reset').trigger('click');
+    expect(wrapper.get('[aria-label="Draw on PDF"]').attributes('aria-keyshortcuts')).toBe('1');
+    expect(wrapper.get('[aria-label="Highlight PDF"]').attributes('aria-keyshortcuts')).toBe('2');
+    expect(localStorage.getItem('pi-cloud.annotationToolShortcuts')).toBeNull();
   });
 
   it('loads annotations from the hidden annotation directory', async () => {

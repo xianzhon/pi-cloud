@@ -25,65 +25,21 @@
       ><PhDotsSixVertical :size="19" weight="bold" /></div>
       <div class="pdf-toolbar-group" role="group" :aria-label="t(isImage ? 'components.editorPanel.imageAnnotationControls' : 'components.editorPanel.pdfAnnotationControls')">
         <button
+          v-for="annotationTool in annotationToolOptions"
+          :key="annotationTool.name"
           type="button"
-          :class="{ active: tool === 'pen' }"
-          :aria-pressed="tool === 'pen'"
-          :aria-label="t(isImage ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen')"
-          aria-keyshortcuts="1"
-          :data-tooltip="t(isImage ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen')"
-          @click="toggleTool('pen')"
-        ><PhPencilSimple :size="19" /><span class="pdf-tool-shortcut">1</span></button>
-        <button
-          type="button"
-          :class="{ active: tool === 'highlighter' }"
-          :aria-pressed="tool === 'highlighter'"
-          :aria-label="t(isImage ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter')"
-          aria-keyshortcuts="2"
-          :data-tooltip="t(isImage ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter')"
-          @click="toggleTool('highlighter')"
-        ><PhHighlighter :size="19" /><span class="pdf-tool-shortcut">2</span></button>
-        <button
-          v-for="shapeTool in shapeTools"
-          :key="shapeTool.name"
-          type="button"
-          :class="{ active: tool === shapeTool.name }"
-          :aria-pressed="tool === shapeTool.name"
-          :aria-label="t(shapeTool.label)"
-          :aria-keyshortcuts="shapeTool.shortcut"
-          :data-tooltip="t(shapeTool.label)"
-          @click="toggleTool(shapeTool.name)"
+          :class="{ active: tool === annotationTool.name }"
+          :aria-pressed="tool === annotationTool.name"
+          :aria-label="t(annotationTool.label)"
+          :aria-keyshortcuts="toolShortcutKeys[annotationTool.name]"
+          :data-tooltip="t(annotationTool.label)"
+          @click="toggleTool(annotationTool.name)"
         ><component
-          :is="shapeTool.icon"
+          :is="annotationTool.icon"
           :size="19"
-          :class="{ 'pdf-line-icon': shapeTool.name === 'line' }"
-        /><span class="pdf-tool-shortcut">{{ shapeTool.shortcut }}</span></button>
-        <button
-          type="button"
-          :class="{ active: tool === 'move' }"
-          :aria-pressed="tool === 'move'"
-          :aria-label="t('components.editorPanel.pdfMoveAnnotation')"
-          aria-keyshortcuts="8"
-          :data-tooltip="t('components.editorPanel.pdfMoveAnnotation')"
-          @click="toggleTool('move')"
-        ><PhArrowsOutCardinal :size="19" /><span class="pdf-tool-shortcut">8</span></button>
-        <button
-          type="button"
-          :class="{ active: tool === 'whiteout' }"
-          :aria-pressed="tool === 'whiteout'"
-          :aria-label="t(isImage ? 'components.editorPanel.imageWhiteout' : 'components.editorPanel.pdfWhiteout')"
-          aria-keyshortcuts="9"
-          :data-tooltip="t(isImage ? 'components.editorPanel.imageWhiteout' : 'components.editorPanel.pdfWhiteout')"
-          @click="toggleTool('whiteout')"
-        ><PhRectangle :size="19" weight="fill" /><span class="pdf-tool-shortcut">9</span></button>
-        <button
-          type="button"
-          :class="{ active: tool === 'eraser' }"
-          :aria-pressed="tool === 'eraser'"
-          :aria-label="t(isImage ? 'components.editorPanel.imageEraser' : 'components.editorPanel.pdfEraser')"
-          aria-keyshortcuts="0"
-          :data-tooltip="t(isImage ? 'components.editorPanel.imageEraser' : 'components.editorPanel.pdfEraser')"
-          @click="toggleTool('eraser')"
-        ><PhEraser :size="19" /><span class="pdf-tool-shortcut">0</span></button>
+          :weight="annotationTool.weight"
+          :class="{ 'pdf-line-icon': annotationTool.name === 'line' }"
+        /><span class="pdf-tool-shortcut">{{ toolShortcutKeys[annotationTool.name] }}</span></button>
         <label class="pdf-control-label" :data-tooltip="t('components.editorPanel.pdfPenColor')">
           <input v-model="penColor" type="color" :aria-label="t('components.editorPanel.pdfPenColor')">
         </label>
@@ -123,6 +79,14 @@
           @click="clearPage"
         ><PhTrash :size="19" /></button>
         <button
+          ref="shortcutButtonEl"
+          type="button"
+          :class="{ active: showShortcutEditor }"
+          :aria-label="t('components.editorPanel.customizeAnnotationShortcuts')"
+          :data-tooltip="t('components.editorPanel.customizeAnnotationShortcuts')"
+          @click="toggleShortcutEditor"
+        ><PhGear :size="19" /></button>
+        <button
           type="button"
           :aria-label="t(toolbarVertical
             ? 'components.editorPanel.showPdfToolbarHorizontally'
@@ -143,6 +107,38 @@
           <span v-else-if="saveState === 'error'" aria-hidden="true">!</span>
         </span>
       </div>
+    </div>
+    <div
+      v-if="showShortcutEditor"
+      ref="shortcutEditorEl"
+      class="pdf-shortcut-editor"
+      role="dialog"
+      :style="shortcutEditorStyle"
+      :aria-label="t('components.editorPanel.annotationShortcuts')"
+      @keydown.esc="showShortcutEditor = false"
+    >
+      <div class="pdf-shortcut-editor-header">
+        <strong>{{ t('components.editorPanel.annotationShortcuts') }}</strong>
+        <button type="button" :aria-label="t('components.editorPanel.close')" @click="showShortcutEditor = false"><PhX :size="16" /></button>
+      </div>
+      <p>{{ t('components.editorPanel.annotationShortcutsDescription') }}</p>
+      <label v-for="annotationTool in annotationToolOptions" :key="annotationTool.name">
+        <span class="pdf-shortcut-tool"><component
+          :is="annotationTool.icon"
+          :size="18"
+          :weight="annotationTool.weight"
+          :class="{ 'pdf-line-icon': annotationTool.name === 'line' }"
+        />{{ t(annotationTool.label) }}</span>
+        <input
+          :value="toolShortcutKeys[annotationTool.name]"
+          readonly
+          maxlength="1"
+          :aria-label="`${t('components.editorPanel.annotationShortcutFor')} ${t(annotationTool.label)}`"
+          @focus="($event.target as HTMLInputElement).select()"
+          @keydown="setToolShortcut(annotationTool.name, $event)"
+        >
+      </label>
+      <button type="button" class="pdf-shortcut-reset" @click="resetToolShortcuts">{{ t('components.editorPanel.resetAnnotationShortcuts') }}</button>
     </div>
     <div
       v-if="activeTooltip"
@@ -334,6 +330,7 @@ import {
   PhDotsSixVertical,
   PhDownloadSimple,
   PhEraser,
+  PhGear,
   PhHighlighter,
   PhList,
   PhMinus,
@@ -365,6 +362,7 @@ interface TooltipState { text: string; left: number; top: number }
 interface ToolbarPosition { left: number; top: number }
 interface ImagePinch { initialDistance: number; initialScale: number }
 type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
+type ShortcutTool = Exclude<AnnotationTool, 'pan'>;
 type PdfFitMode = 'width' | 'height';
 type PdfPageTone = 'original' | 'warm' | 'gray' | 'dark';
 interface PdfViewState {
@@ -426,28 +424,43 @@ const pageToneOptions = computed<CustomSelectOption[]>(() => [
   { value: 'gray', label: t('components.editorPanel.pdfPageToneGray') },
   { value: 'dark', label: t('components.editorPanel.pdfPageToneDark') },
 ]);
-const shapeTools: Array<{ name: DrawingTool; label: string; icon: object; shortcut: string }> = [
-  { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus, shortcut: '3' },
-  { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight, shortcut: '4' },
-  { name: 'rectangle', label: 'components.editorPanel.pdfRectangle', icon: PhRectangle, shortcut: '5' },
-  { name: 'ellipse', label: 'components.editorPanel.pdfEllipse', icon: PhCircle, shortcut: '6' },
-  { name: 'text', label: 'components.editorPanel.pdfText', icon: PhTextT, shortcut: '7' },
-];
-const toolShortcuts: Record<string, AnnotationTool> = {
-  '0': 'eraser',
-  '1': 'pen',
-  '2': 'highlighter',
-  '3': 'line',
-  '4': 'arrow',
-  '5': 'rectangle',
-  '6': 'ellipse',
-  '7': 'text',
-  '8': 'move',
-  '9': 'whiteout',
+const TOOL_SHORTCUTS_KEY = 'pi-cloud.annotationToolShortcuts';
+const DEFAULT_TOOL_SHORTCUTS: Record<ShortcutTool, string> = {
+  pen: '1',
+  highlighter: '2',
+  line: '3',
+  arrow: '4',
+  rectangle: '5',
+  ellipse: '6',
+  text: '7',
+  move: '8',
+  whiteout: '9',
+  eraser: '0',
 };
+const annotationToolOptions = computed<Array<{ name: ShortcutTool; label: string; icon: object; weight?: 'fill' }>>(() => [
+  { name: 'pen', label: isImage.value ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen', icon: PhPencilSimple },
+  { name: 'highlighter', label: isImage.value ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter', icon: PhHighlighter },
+  { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus },
+  { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight },
+  { name: 'rectangle', label: 'components.editorPanel.pdfRectangle', icon: PhRectangle },
+  { name: 'ellipse', label: 'components.editorPanel.pdfEllipse', icon: PhCircle },
+  { name: 'text', label: 'components.editorPanel.pdfText', icon: PhTextT },
+  { name: 'move', label: 'components.editorPanel.pdfMoveAnnotation', icon: PhArrowsOutCardinal },
+  { name: 'whiteout', label: isImage.value ? 'components.editorPanel.imageWhiteout' : 'components.editorPanel.pdfWhiteout', icon: PhRectangle, weight: 'fill' },
+  { name: 'eraser', label: isImage.value ? 'components.editorPanel.imageEraser' : 'components.editorPanel.pdfEraser', icon: PhEraser },
+]);
+const toolShortcutKeys = ref(readToolShortcuts());
+const showShortcutEditor = ref(false);
+const shortcutEditorPosition = ref<ToolbarPosition>();
+const shortcutEditorStyle = computed(() => shortcutEditorPosition.value && ({
+  left: `${shortcutEditorPosition.value.left}px`,
+  top: `${shortcutEditorPosition.value.top}px`,
+}));
 
 const previewEl = ref<HTMLDivElement>();
 const toolbarEl = ref<HTMLDivElement>();
+const shortcutButtonEl = ref<HTMLButtonElement>();
+const shortcutEditorEl = ref<HTMLDivElement>();
 const viewportEl = ref<HTMLDivElement>();
 const pageElements = new Map<number, HTMLElement>();
 const canvasElements = new Map<number, HTMLCanvasElement>();
@@ -571,6 +584,7 @@ function continueToolbarDrag(event: PointerEvent): void {
     event.clientX - previewRect.left - toolbarDrag.offsetX,
     event.clientY - previewRect.top - toolbarDrag.offsetY,
   );
+  void nextTick(updateShortcutEditorPosition);
 }
 
 function moveToolbarWithKeyboard(event: KeyboardEvent): void {
@@ -584,6 +598,7 @@ function moveToolbarWithKeyboard(event: KeyboardEvent): void {
     top: toolbarRect.top - previewRect.top,
   };
   toolbarPosition.value = clampToolbarPosition(current.left + delta.left, current.top + delta.top);
+  void nextTick(updateShortcutEditorPosition);
 }
 
 function finishToolbarDrag(event?: PointerEvent): void {
@@ -598,6 +613,45 @@ function keepToolbarInBounds(): void {
   if (toolbarPosition.value) {
     toolbarPosition.value = clampToolbarPosition(toolbarPosition.value.left, toolbarPosition.value.top);
   }
+  void nextTick(updateShortcutEditorPosition);
+}
+
+function updateShortcutEditorPosition(): void {
+  if (!showShortcutEditor.value) return;
+  const previewRect = previewEl.value?.getBoundingClientRect();
+  const toolbarRect = toolbarEl.value?.getBoundingClientRect();
+  const buttonRect = shortcutButtonEl.value?.getBoundingClientRect();
+  const editorRect = shortcutEditorEl.value?.getBoundingClientRect();
+  if (!previewRect || !toolbarRect || !buttonRect || !editorRect) return;
+
+  const gap = 8;
+  const inset = 12;
+  let left: number;
+  let top: number;
+  if (toolbarVertical.value) {
+    const right = toolbarRect.right - previewRect.left + gap;
+    const leftSide = toolbarRect.left - previewRect.left - editorRect.width - gap;
+    left = right + editorRect.width <= previewRect.width - inset ? right : leftSide;
+    top = buttonRect.top + buttonRect.height / 2 - previewRect.top - editorRect.height / 2;
+  } else {
+    const below = toolbarRect.bottom - previewRect.top + gap;
+    const above = toolbarRect.top - previewRect.top - editorRect.height - gap;
+    left = buttonRect.left + buttonRect.width / 2 - previewRect.left - editorRect.width / 2;
+    top = below + editorRect.height <= previewRect.height - inset ? below : above;
+  }
+  shortcutEditorPosition.value = {
+    left: Math.max(inset, Math.min(previewRect.width - editorRect.width - inset, left)),
+    top: Math.max(inset, Math.min(previewRect.height - editorRect.height - inset, top)),
+  };
+}
+
+async function toggleShortcutEditor(): Promise<void> {
+  showShortcutEditor.value = !showShortcutEditor.value;
+  clearTooltip();
+  if (showShortcutEditor.value) {
+    await nextTick();
+    updateShortcutEditorPosition();
+  }
 }
 
 function toggleToolbarOrientation(): void {
@@ -607,6 +661,7 @@ function toggleToolbarOrientation(): void {
   if (!toolbarVertical.value) {
     // Removing the custom position restores the default top-center placement.
     toolbarPosition.value = undefined;
+    void nextTick(updateShortcutEditorPosition);
     return;
   }
 
@@ -618,6 +673,7 @@ function toggleToolbarOrientation(): void {
       TOOLBAR_INSET,
       (previewRect.height - toolbarRect.height) / 2,
     );
+    void nextTick(updateShortcutEditorPosition);
   });
 }
 
@@ -850,11 +906,54 @@ function toggleTool(nextTool: AnnotationTool): void {
   tool.value = tool.value === nextTool ? 'pan' : nextTool;
 }
 
+function readToolShortcuts(): Record<ShortcutTool, string> {
+  try {
+    const cached = JSON.parse(localStorage.getItem(TOOL_SHORTCUTS_KEY) || '{}') as Partial<Record<ShortcutTool, unknown>>;
+    const shortcuts = { ...DEFAULT_TOOL_SHORTCUTS };
+    for (const annotationTool of Object.keys(shortcuts) as ShortcutTool[]) {
+      const key = cached[annotationTool];
+      if (typeof key === 'string' && key.length === 1 && !/\s/.test(key)) shortcuts[annotationTool] = key.toUpperCase();
+    }
+    if (new Set(Object.values(shortcuts)).size === Object.keys(shortcuts).length) return shortcuts;
+  } catch {
+    // Ignore unavailable storage and invalid cached values.
+  }
+  return { ...DEFAULT_TOOL_SHORTCUTS };
+}
+
+function setToolShortcut(annotationTool: ShortcutTool, event: KeyboardEvent): void {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing || event.key.length !== 1 || /\s/.test(event.key)) return;
+  event.preventDefault();
+  const key = event.key.toUpperCase();
+  const previousKey = toolShortcutKeys.value[annotationTool];
+  const previousTool = (Object.keys(toolShortcutKeys.value) as ShortcutTool[])
+    .find(name => name !== annotationTool && toolShortcutKeys.value[name] === key);
+  const nextShortcuts = { ...toolShortcutKeys.value, [annotationTool]: key };
+  if (previousTool) nextShortcuts[previousTool] = previousKey;
+  toolShortcutKeys.value = nextShortcuts;
+  try {
+    localStorage.setItem(TOOL_SHORTCUTS_KEY, JSON.stringify(nextShortcuts));
+  } catch {
+    // The shortcuts still apply for the current preview when storage is unavailable.
+  }
+}
+
+function resetToolShortcuts(): void {
+  toolShortcutKeys.value = { ...DEFAULT_TOOL_SHORTCUTS };
+  try {
+    localStorage.removeItem(TOOL_SHORTCUTS_KEY);
+  } catch {
+    // The reset still applies for the current preview when storage is unavailable.
+  }
+}
+
 function handleToolShortcut(event: KeyboardEvent): void {
   const target = event.target;
   const isEditable = target instanceof HTMLElement
     && (target.isContentEditable || Boolean(target.closest('input, textarea, select, [contenteditable="true"]')));
-  const nextTool = toolShortcuts[event.key];
+  const key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
+  const nextTool = (Object.keys(toolShortcutKeys.value) as ShortcutTool[])
+    .find(annotationTool => toolShortcutKeys.value[annotationTool] === key);
   if (!nextTool || isEditable || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing) return;
   event.preventDefault();
   toggleTool(nextTool);
@@ -1786,6 +1885,74 @@ onUnmounted(() => {
   max-width: none;
   max-height: calc(100% - 1.5rem);
   flex-direction: column;
+}
+
+.pdf-shortcut-editor {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  width: min(280px, calc(100% - 1.5rem));
+  max-height: calc(100% - 1.5rem);
+  gap: 0.45rem;
+  padding: 0.75rem;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
+}
+
+.pdf-shortcut-editor-header,
+.pdf-shortcut-editor label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.pdf-shortcut-editor-header button {
+  display: inline-flex;
+  padding: 0.2rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.pdf-shortcut-editor p {
+  margin: 0 0 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.pdf-shortcut-editor label { font-size: 0.8rem; }
+
+.pdf-shortcut-tool {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pdf-shortcut-tool svg { flex: 0 0 auto; }
+
+.pdf-shortcut-editor input {
+  width: 2.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.pdf-shortcut-reset {
+  margin-top: 0.3rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .pdf-toolbar-drag-handle {
