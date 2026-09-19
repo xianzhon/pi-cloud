@@ -16,6 +16,7 @@ enableAutoUnmount(afterEach);
 
 describe('FolderPickerModal', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -241,6 +242,35 @@ describe('FolderPickerModal', () => {
     await wrapper.find('.history-remove-btn').trigger('click');
     await wrapper.find('.btn-confirm').trigger('click');
     await vi.waitFor(() => expect(wrapper.emitted('historyRemoved')?.[0]).toEqual(['/workspace/cloned']));
+  });
+
+  it('shows weeks and months before switching to an absolute access date', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-20T12:00:00.000Z'));
+    const dayMs = 24 * 60 * 60 * 1000;
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (input === '/api/sessions/project-history?clientId=client-1') {
+        return { ok: true, json: async () => ({
+          projects: [
+            { path: '/workspace/two-weeks', lastAccessed: Date.now() - 14 * dayMs, sessionCount: 1 },
+            { path: '/workspace/three-months', lastAccessed: Date.now() - 90 * dayMs, sessionCount: 1 },
+            { path: '/workspace/one-year', lastAccessed: Date.now() - 365 * dayMs, sessionCount: 1 },
+          ],
+        }) };
+      }
+      return { ok: true, json: async () => ({ path: '/workspace', tree: [] }) };
+    }));
+
+    const wrapper = mount(FolderPickerModal, {
+      props: { visible: true, initialPath: '/workspace', clientId: 'client-1' },
+      global: { stubs: { Teleport: true } },
+    });
+
+    await vi.waitFor(() => expect(wrapper.findAll('.project-history-row')).toHaveLength(3));
+    const accessTimes = wrapper.findAll('.project-history-meta > span:last-child').map((node) => node.text());
+    expect(accessTimes[0]).toBe('Last accessed 2 weeks ago');
+    expect(accessTimes[1]).toBe('Last accessed 3 months ago');
+    expect(accessTimes[2]).not.toContain('ago');
   });
 
   it('offers move options without a rename field for a different folder', async () => {

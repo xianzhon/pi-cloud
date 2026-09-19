@@ -303,13 +303,21 @@ describe('SessionSidebar', () => {
         id: 'session-hour', path: '/project', cwd: '/project', created: '2026-08-06T11:00:00.000Z',
         modified: '2026-08-06T11:00:00.000Z', messageCount: 1, firstMessage: 'hour',
       },
+      {
+        id: 'session-weeks', path: '/project', cwd: '/project', created: '2026-07-23T12:00:00.000Z',
+        modified: '2026-07-23T12:00:00.000Z', messageCount: 1, firstMessage: 'weeks',
+      },
+      {
+        id: 'session-months', path: '/project', cwd: '/project', created: '2026-05-08T12:00:00.000Z',
+        modified: '2026-05-08T12:00:00.000Z', messageCount: 1, firstMessage: 'months',
+      },
     ]);
     const wrapper = mountSidebar();
 
-    await vi.waitFor(() => expect(wrapper.findAll('.session-item')).toHaveLength(2));
+    await vi.waitFor(() => expect(wrapper.findAll('.session-item')).toHaveLength(4));
 
     const relativeTimes = wrapper.findAll('.session-meta > span:first-child').map((node) => node.text());
-    expect(relativeTimes).toEqual(['4分钟前', '1小时前']);
+    expect(relativeTimes).toEqual(['4分钟前', '1小时前', '2周前', '3个月前']);
     vi.useRealTimers();
   });
 

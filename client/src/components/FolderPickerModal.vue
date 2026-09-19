@@ -456,6 +456,8 @@ function formatLastAccessed(timestamp: number): string {
   else if (diffMins < 60) relativeDate = formatRelativeUnit(diffMins, 'minute');
   else if (diffHours < 24) relativeDate = formatRelativeUnit(diffHours, 'hour');
   else if (diffDays < 7) relativeDate = formatRelativeUnit(diffDays, 'day');
+  else if (diffDays < 30) relativeDate = formatRelativeUnit(Math.floor(diffDays / 7), 'week');
+  else if (diffDays < 360) relativeDate = formatRelativeUnit(Math.floor(diffDays / 30), 'month');
   else relativeDate = date.toLocaleDateString();
 
   return t('components.folderPickerModal.lastAccessed', { date: relativeDate });
@@ -467,7 +469,8 @@ function formatRelativeUnit(value: number, unit: Intl.RelativeTimeFormatUnit): s
   }
   if (unit === 'minute') return `${value}m ago`;
   if (unit === 'hour') return `${value}h ago`;
-  return `${value}d ago`;
+  if (unit === 'day') return `${value}d ago`;
+  return new Intl.RelativeTimeFormat('en', { numeric: 'always', style: 'long' }).format(-value, unit);
 }
 
 function formatAbsoluteDate(timestamp: number): string {

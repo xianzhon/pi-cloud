@@ -1147,6 +1147,8 @@ function formatDate(dateStr: string): string {
   if (diffMins < 60) return formatRelativeUnit(diffMins, 'minute');
   if (diffHours < 24) return formatRelativeUnit(diffHours, 'hour');
   if (diffDays < 7) return formatRelativeUnit(diffDays, 'day');
+  if (diffDays < 30) return formatRelativeUnit(Math.floor(diffDays / 7), 'week');
+  if (diffDays < 360) return formatRelativeUnit(Math.floor(diffDays / 30), 'month');
 
   return date.toLocaleDateString();
 }
@@ -1157,7 +1159,8 @@ function formatRelativeUnit(value: number, unit: Intl.RelativeTimeFormatUnit): s
   }
   if (unit === 'minute') return `${value}m ago`;
   if (unit === 'hour') return `${value}h ago`;
-  return `${value}d ago`;
+  if (unit === 'day') return `${value}d ago`;
+  return new Intl.RelativeTimeFormat('en', { numeric: 'always', style: 'long' }).format(-value, unit);
 }
 
 function selectSession(session: Session) {
