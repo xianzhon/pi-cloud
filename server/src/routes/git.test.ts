@@ -323,7 +323,8 @@ describe('gitRoutes status and diff', () => {
       });
 
       let hookStarted = false;
-      for (let attempt = 0; attempt < 50; attempt += 1) {
+      // Coverage runs start many workers concurrently, so allow Git enough time to reach the hook.
+      for (let attempt = 0; attempt < 250; attempt += 1) {
         try {
           await access(hookStartedPath);
           hookStarted = true;
@@ -348,7 +349,7 @@ describe('gitRoutes status and diff', () => {
       await app.close();
       await rm(cwd, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it('stages and unstages all files through the index endpoint', async () => {
     const cwd = await createRepo();
