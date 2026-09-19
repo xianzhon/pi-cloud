@@ -15,15 +15,25 @@ describe('GitToolPanel', () => {
   it('lists changed files and emits commands only for actions handled by chat', async () => {
     vi.mocked(fetch).mockResolvedValue(response({
       files: [
-        { status: 'M', path: 'client/src/App.vue' },
-        { status: '??', path: 'client/src/components/GitToolPanel.vue' },
+        { status: ' M', path: 'client/src/App.vue', staged: false, unstaged: true },
+        { status: 'M ', path: 'client/src/staged.ts', staged: true, unstaged: false },
+        { status: '??', path: 'client/src/new.ts', staged: false, unstaged: true },
+        { status: ' D', path: 'client/src/deleted.ts', staged: false, unstaged: true },
       ],
     }));
     const wrapper = mount(GitToolPanel, { props: { cwd: '/workspace' } });
     await flushPromises();
 
-    expect(wrapper.findAll('.git-tool-files li')).toHaveLength(2);
+    expect(wrapper.findAll('.git-tool-files li')).toHaveLength(4);
     expect(wrapper.text()).toContain('client/src/App.vue');
+    expect(wrapper.findAll('.git-file-status').map(icon => icon.classes())).toEqual([
+      ['git-file-status', 'modified'],
+      ['git-file-status', 'staged'],
+      ['git-file-status', 'untracked'],
+      ['git-file-status', 'missing'],
+    ]);
+    expect(wrapper.findAll('.git-file-status-badge')).toHaveLength(2);
+    expect(wrapper.findAll('.git-file-open')[1].attributes('aria-label')).toBe('client/src/staged.ts: Staged for commit');
     const actions = wrapper.findAll('.git-tool-action');
     expect(actions.every(button => button.text() === '')).toBe(true);
     expect(actions.every(button => button.classes().includes('tooltip'))).toBe(true);

@@ -65,8 +65,20 @@
       <p v-else-if="files.length === 0" class="git-tool-state">{{ t('components.gitToolPanel.noChanges') }}</p>
       <ul v-else>
         <li v-for="file in files" :key="`${file.status}:${file.path}`">
-          <button class="git-file-open" type="button" :title="file.path" @click="openFile(file.path)">
-            <span class="git-file-status">{{ file.status }}</span>
+          <button
+            class="git-file-open"
+            type="button"
+            :title="file.path"
+            :aria-label="`${file.path}: ${fileStatusLabel(file)}`"
+            @click="openFile(file.path)"
+          >
+            <span class="git-file-status" :class="fileStatusKind(file)" :title="fileStatusLabel(file)" aria-hidden="true">
+              <PhFolder v-if="file.path.endsWith('/')" :size="19" weight="regular" />
+              <PhFileText v-else-if="fileStatusKind(file) === 'modified'" :size="19" weight="regular" />
+              <PhFile v-else :size="19" weight="regular" />
+              <span v-if="fileStatusKind(file) === 'missing'" class="git-file-status-badge"><PhQuestion :size="10" weight="bold" /></span>
+              <span v-else-if="fileStatusKind(file) === 'staged'" class="git-file-status-badge"><PhCheck :size="10" weight="bold" /></span>
+            </span>
             <span class="git-file-path">{{ file.path }}</span>
           </button>
         </li>
@@ -79,18 +91,27 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   PhArrowsClockwise,
+  PhCheck,
   PhClockCounterClockwise,
+  PhDownloadSimple,
+  PhFile,
+  PhFileText,
+  PhFolder,
   PhGitBranch,
   PhGitCommit,
   PhGitPullRequest,
-  PhDownloadSimple,
+  PhQuestion,
 } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
 
+type FileStatusKind = 'modified' | 'untracked' | 'missing' | 'staged';
+
 interface GitStatusFile {
   path: string;
   status: string;
+  staged: boolean;
+  unstaged: boolean;
 }
 
 const DEFAULT_PANEL_HEIGHT = 240;
@@ -142,6 +163,23 @@ async function refresh(): Promise<void> {
   } finally {
     if (currentRequestId === requestId) loading.value = false;
   }
+}
+
+function fileStatusKind(file: GitStatusFile): FileStatusKind {
+  if (file.staged) return 'staged';
+  if (file.status === '??') return 'untracked';
+  if (file.status.endsWith('D')) return 'missing';
+  return 'modified';
+}
+
+function fileStatusLabel(file: GitStatusFile): string {
+  const keys: Record<FileStatusKind, string> = {
+    modified: 'modifiedNotStaged',
+    untracked: 'untrackedNotStaged',
+    missing: 'missing',
+    staged: 'stagedForCommit',
+  };
+  return t(`components.gitChanges.${keys[fileStatusKind(file)]}`);
 }
 
 function openFile(path: string): void {
@@ -343,9 +381,41 @@ defineExpose({ refresh });
 }
 
 .git-file-status {
-  flex: 0 0 1.5rem;
+  position: relative;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
   color: var(--accent);
-  font-weight: 600;
+}
+
+.git-file-status.untracked {
+  color: var(--text-muted);
+}
+
+.git-file-status.missing {
+  color: var(--git-deleted);
+}
+
+.git-file-status.staged {
+  color: var(--git-added);
+}
+
+.git-file-status-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--bg-secondary);
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  color: currentColor;
 }
 
 .git-file-path {
