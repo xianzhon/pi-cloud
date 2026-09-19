@@ -259,7 +259,7 @@
         ></textarea>
         <div class="composer-meta-row">
           <span class="composer-hint">{{ t('components.chatPanel.enterSendsShiftEnterForNewlineCtrl') }}</span>
-          <div v-if="userPrompts.length" class="user-prompt-picker">
+          <div v-if="userPrompts.length" ref="userPromptPickerRef" class="user-prompt-picker">
             <button
               type="button"
               class="prompt-polish-btn tooltip tooltip-above"
@@ -989,6 +989,7 @@ const {
 } = useChatAttachments((key, params) => t(key, params || {}));
 const isPolishingPrompt = ref(false);
 const showUserPrompts = ref(false);
+const userPromptPickerRef = ref<HTMLElement>();
 const promptPolishError = ref('');
 const dictationAvailable = ref(false);
 const ttsAvailable = ref(false);
@@ -1621,7 +1622,14 @@ function runWhenIdle(callback: () => void): void {
   globalThis.setTimeout(callback, 0);
 }
 
+function handleUserPromptOutsidePointerDown(event: PointerEvent): void {
+  if (showUserPrompts.value && !userPromptPickerRef.value?.contains(event.target as Node)) {
+    showUserPrompts.value = false;
+  }
+}
+
 onMounted(async () => {
+  document.addEventListener('pointerdown', handleUserPromptOutsidePointerDown);
   window.addEventListener('summary-generated', handleSummaryGenerated as EventListener);
   window.addEventListener('assistant-response-completed', handleAssistantResponseCompleted as EventListener);
   await Promise.all([resizeInputAfterDomUpdate(), loadSpeechAvailability()]);
@@ -1630,6 +1638,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   isUnmounted = true;
+  document.removeEventListener('pointerdown', handleUserPromptOutsidePointerDown);
   window.removeEventListener('summary-generated', handleSummaryGenerated as EventListener);
   window.removeEventListener('assistant-response-completed', handleAssistantResponseCompleted as EventListener);
   stopInputResize();
@@ -4084,7 +4093,7 @@ function handleInputKeydown(event: KeyboardEvent) {
 .user-prompt-menu {
   position: absolute;
   z-index: 20;
-  right: 0;
+  left: 0;
   bottom: calc(100% + 0.5rem);
   width: min(22rem, 80vw);
   max-height: 16rem;

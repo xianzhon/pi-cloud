@@ -135,6 +135,20 @@ describe('ChatPanel', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
+  it('closes the saved prompt menu when clicking outside it', async () => {
+    const wrapper = mount(ChatPanel, {
+      props: { userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.', createdAt: '2026-09-10T10:00:00.000Z', updatedAt: '2026-09-11T10:00:00.000Z' }] },
+    });
+
+    await wrapper.find('.user-prompt-picker > button').trigger('click');
+    expect(wrapper.find('.user-prompt-menu').exists()).toBe(true);
+
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await nextTick();
+
+    expect(wrapper.find('.user-prompt-menu').exists()).toBe(false);
+  });
+
   it('shows the profile default provider and model before a session exists', () => {
     const wrapper = mount(ChatPanel, { props: { modelInfo: 'openai / gpt-5.4' } });
 
