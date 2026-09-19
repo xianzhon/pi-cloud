@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -272,6 +272,48 @@ describe('gitRoutes status and diff', () => {
       expect(unstage.statusCode).toBe(200);
       expect(await git(cwd, 'diff', '--cached')).toBe('');
       expect(await git(cwd, 'diff')).toContain('+changed');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('discards unstaged changes while preserving the index', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'README.md'), 'staged\n');
+      await git(cwd, 'add', 'README.md');
+      await writeFile(join(cwd, 'README.md'), 'unstaged\n');
+
+      const partial = await app.inject({
+        method: 'POST',
+        url: '/api/git/discard',
+        payload: { cwd, path: 'README.md' },
+      });
+      expect(partial.statusCode).toBe(200);
+      expect(await readFile(join(cwd, 'README.md'), 'utf8')).toBe('staged\n');
+      expect(await git(cwd, 'diff')).toBe('');
+      expect(await git(cwd, 'diff', '--cached')).toContain('+staged');
+
+      await git(cwd, 'reset', '--hard', 'HEAD');
+      await rm(join(cwd, 'README.md'));
+      const deletion = await app.inject({
+        method: 'POST',
+        url: '/api/git/discard',
+        payload: { cwd, path: 'README.md' },
+      });
+      expect(deletion.statusCode).toBe(200);
+      expect(await readFile(join(cwd, 'README.md'), 'utf8')).toBe('initial\n');
+
+      await writeFile(join(cwd, 'untracked.txt'), 'remove me\n');
+      const untracked = await app.inject({
+        method: 'POST',
+        url: '/api/git/discard',
+        payload: { cwd, path: 'untracked.txt' },
+      });
+      expect(untracked.statusCode).toBe(200);
+      await expect(access(join(cwd, 'untracked.txt'))).rejects.toThrow();
     } finally {
       await app.close();
       await rm(cwd, { recursive: true, force: true });

@@ -70,6 +70,24 @@ describe('GitChangesView', () => {
     wrapper.unmount();
   });
 
+  it('confirms and discards the selected file\'s unstaged changes', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    const wrapper = mount(GitChangesView, { props: { visible: true, cwd: '/workspace' } });
+    await flushPromises();
+
+    const discard = Array.from(document.querySelectorAll<HTMLButtonElement>('.git-changes-detail-actions button'))
+      .find(button => button.textContent?.includes('Discard'))!;
+    discard.click();
+    await flushPromises();
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('src/app.ts'));
+    expect(fetch).toHaveBeenCalledWith('/api/git/discard', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ cwd: '/workspace', path: 'src/app.ts' }),
+    }));
+    wrapper.unmount();
+  });
+
   it('provides resizable, independently scrollable lists and stages all files', async () => {
     const wrapper = mount(GitChangesView, { props: { visible: true, cwd: '/workspace' } });
     await flushPromises();

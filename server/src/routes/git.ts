@@ -398,6 +398,15 @@ async function unstageIndexPath(cwd: string, path: string, recursive = false): P
   await runGit(cwd, ['rm', '--cached', ...(recursive ? ['-r'] : []), '-q', '--', path]);
 }
 
+async function discardWorktreePath(cwd: string, path: string): Promise<void> {
+  const tracked = await runGit(cwd, ['ls-files', '--error-unmatch', '--', path]).then(() => true, () => false);
+  if (tracked) {
+    await runGit(cwd, ['restore', '--worktree', '--', path]);
+  } else {
+    await runGit(cwd, ['clean', '-fd', '--', path]);
+  }
+}
+
 async function updateIndex(cwd: string, body: {
   path?: string;
   scope?: string;
@@ -1130,6 +1139,20 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to run git amend';
       return reply.status(400).send({ error: errorMessage });
+    }
+  });
+
+  app.post('/discard', async (req, reply) => {
+    const body = (req.body || {}) as { cwd?: string; path?: string };
+    const resolvedCwd = await resolveGitCwd(body.cwd);
+
+    try {
+      const path = validateGitPath(body.path);
+      await serializeGitIndexOperation(resolvedCwd, () => discardWorktreePath(resolvedCwd, path));
+      return { cwd: resolvedCwd, path };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to discard file changes';
+      return reply.status(400).send({ error: message });
     }
   });
 

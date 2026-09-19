@@ -126,13 +126,18 @@
               <div v-if="!selected" class="git-changes-state">{{ t('components.gitChanges.selectFile') }}</div>
               <template v-else>
                 <header class="git-changes-detail-header">
-                  <div>
+                  <div class="git-changes-detail-title">
                     <strong :title="selected.path">{{ selected.path }}</strong>
                     <span class="git-change-detail-status" :class="selectedStatusKind">{{ selectedStatusLabel }}</span>
                   </div>
-                  <button type="button" :disabled="updating" @click="mutateFile(selected.path, selected.scope)">
-                    {{ t(selected.scope === 'staged' ? 'components.gitChanges.unstageFile' : 'components.gitChanges.stageFile') }}
-                  </button>
+                  <div class="git-changes-detail-actions">
+                    <button v-if="selected.scope === 'unstaged'" type="button" class="is-danger" :disabled="updating" @click="discardFile(selected.path)">
+                      {{ t('components.gitChanges.discardFile') }}
+                    </button>
+                    <button type="button" :disabled="updating" @click="mutateFile(selected.path, selected.scope)">
+                      {{ t(selected.scope === 'staged' ? 'components.gitChanges.unstageFile' : 'components.gitChanges.stageFile') }}
+                    </button>
+                  </div>
                 </header>
                 <div v-if="diffLoading" class="git-changes-state">{{ t('components.gitChanges.loadingDiff') }}</div>
                 <div v-else-if="diffError" class="git-changes-state is-error" role="alert">{{ diffError }}</div>
@@ -497,6 +502,22 @@ async function applyIndexUpdate(options: Parameters<ReturnType<typeof createGitO
 function mutateFile(path: string, scope: DiffScope): void {
   if (updating.value) return;
   void applyIndexUpdate({ cwd: props.cwd, path, scope, mode: 'file' });
+}
+
+async function discardFile(path: string): Promise<void> {
+  if (updating.value || !window.confirm(t('components.gitChanges.discardFileConfirm', { path }))) return;
+  updating.value = true;
+  diffError.value = '';
+  try {
+    await gitOperations.discardFile({ cwd: props.cwd, path });
+    window.dispatchEvent(new CustomEvent('refresh-file-tree'));
+    window.dispatchEvent(new CustomEvent('refresh-git-status'));
+    await refresh();
+  } catch (cause) {
+    diffError.value = cause instanceof Error ? cause.message : t('components.gitChanges.discardFailed');
+  } finally {
+    updating.value = false;
+  }
 }
 
 function mutateAll(scope: DiffScope): void {
@@ -1032,11 +1053,20 @@ onBeforeUnmount(() => {
   background: var(--bg-secondary);
 }
 
-.git-changes-detail-header > div {
+.git-changes-detail-title,
+.git-changes-detail-actions {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 10px;
+}
+
+.git-changes-detail-actions {
+  flex: 0 0 auto;
+}
+
+.git-changes-detail-header button.is-danger {
+  color: var(--git-deleted);
 }
 
 .git-changes-detail-header strong {

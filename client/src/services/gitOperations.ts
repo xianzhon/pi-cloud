@@ -43,6 +43,9 @@ export function createGitOperations() {
     }) {
       return postJson('/api/git/index', options);
     },
+    discardFile(options: { cwd: string; path: string }) {
+      return postJson('/api/git/discard', options);
+    },
     sync(command: 'push' | 'pull', cwd: string) {
       return postJson(`/api/git/${command}`, { cwd });
     },

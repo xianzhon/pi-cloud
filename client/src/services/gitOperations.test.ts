@@ -37,6 +37,16 @@ describe('gitOperations', () => {
     });
   });
 
+  it('sends discard requests as JSON', async () => {
+    await createGitOperations().discardFile({ cwd: '/workspace', path: 'src/app.ts' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/git/discard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd: '/workspace', path: 'src/app.ts' }),
+    });
+  });
+
   it('sends change explanation requests as JSON', async () => {
     const options = {
       cwd: '/workspace',
