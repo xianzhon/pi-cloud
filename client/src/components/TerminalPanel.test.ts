@@ -129,9 +129,13 @@ describe('TerminalPanel', () => {
     expect(wrapper.find('.terminal-panel').classes()).toContain('terminal-panel-maximized');
   });
 
-  it('has a docked resize handle when docked', () => {
-    const wrapper = mount(TerminalPanel, { props: defaultProps });
-    expect(wrapper.find('.resize-docked').exists()).toBe(true);
+  it('has a docked resize handle that resets the height', async () => {
+    const wrapper = mount(TerminalPanel, { props: { ...defaultProps, terminalHeight: 450 } });
+    const handle = wrapper.find('.resize-docked');
+    expect(handle.exists()).toBe(true);
+
+    await handle.trigger('dblclick');
+    expect(wrapper.emitted('updateHeight')).toEqual([[300]]);
   });
 
   it('clears the docked divider highlight when the window blurs', async () => {

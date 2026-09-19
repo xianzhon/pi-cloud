@@ -539,6 +539,9 @@ describe('EditorPanel', () => {
     window.dispatchEvent(new MouseEvent('mouseup'));
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.markdown-outline').attributes('style')).toContain('width: 270px');
+
+    await wrapper.find('.markdown-outline-resize-handle').trigger('dblclick');
+    expect(wrapper.find('.markdown-outline').attributes('style')).toContain('width: 220px');
   });
 
   it('renders Mermaid flowcharts and sequence diagrams in markdown preview', async () => {
@@ -737,13 +740,21 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.editor-panel').attributes('style')).toContain('--editor-panel-width: 600px');
     expect(layout).toHaveBeenCalled();
 
+    await editorHandle.trigger('dblclick');
+    expect(wrapper.find('.editor-panel').attributes('style')).toContain('--editor-panel-width: 50vw');
+
     const treeHandle = wrapper.find('.file-tree-resize-handle');
     await treeHandle.trigger('mousedown', { clientX: 260 });
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 310 }));
     expect(treeHandle.classes()).toContain('is-resizing');
 
     window.dispatchEvent(new Event('blur'));
     await wrapper.vm.$nextTick();
     expect(treeHandle.classes()).not.toContain('is-resizing');
+    expect(wrapper.find('.file-tree-pane').attributes('style')).toContain('270px');
+
+    await treeHandle.trigger('dblclick');
+    expect(wrapper.find('.file-tree-pane').attributes('style')).toContain('220px');
   });
 
   it('supports minimize and maximize window controls', async () => {

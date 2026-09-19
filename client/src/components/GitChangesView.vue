@@ -72,6 +72,7 @@
                   aria-orientation="horizontal"
                   :aria-label="t('components.gitChanges.resizeLists')"
                   @pointerdown="startResize($event, 'lists')"
+                  @dblclick.stop="resetResize('lists')"
                 ></div>
 
                 <section class="git-change-group is-staged">
@@ -118,6 +119,7 @@
               aria-orientation="vertical"
               :aria-label="t('components.gitChanges.resizePanes')"
               @pointerdown="startResize($event, 'panes')"
+              @dblclick.stop="resetResize('panes')"
             ></div>
 
             <main class="git-changes-detail">
@@ -275,8 +277,10 @@ const dialog = ref<HTMLElement>();
 const diffRoot = ref<HTMLElement>();
 const filesPane = ref<HTMLElement>();
 const contextMenu = ref<{ x: number; y: number; hunkIndex: number; selectedLines: number[] }>();
-const filesWidth = ref(360);
-const unstagedHeight = ref(320);
+const DEFAULT_FILES_WIDTH = 360;
+const DEFAULT_UNSTAGED_HEIGHT = 320;
+const filesWidth = ref(DEFAULT_FILES_WIDTH);
+const unstagedHeight = ref(DEFAULT_UNSTAGED_HEIGHT);
 const amend = ref(false);
 const initialCommitMessage = props.sessionTitle?.trim() || '';
 const commitMessage = ref(initialCommitMessage);
@@ -491,6 +495,12 @@ function mutateFile(path: string, scope: DiffScope): void {
 function mutateAll(scope: DiffScope): void {
   if (updating.value) return;
   void applyIndexUpdate({ cwd: props.cwd, scope, mode: 'all' });
+}
+
+function resetResize(mode: 'panes' | 'lists'): void {
+  stopResize();
+  if (mode === 'panes') filesWidth.value = DEFAULT_FILES_WIDTH;
+  else unstagedHeight.value = DEFAULT_UNSTAGED_HEIGHT;
 }
 
 function startResize(event: PointerEvent, mode: 'panes' | 'lists'): void {

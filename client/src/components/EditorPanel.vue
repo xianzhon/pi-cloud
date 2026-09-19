@@ -7,6 +7,7 @@
       :class="{ 'is-resizing': isEditorResizing }"
       :title="t('components.editorPanel.resizeEditor')"
       @mousedown="startEditorResize"
+      @dblclick.stop="resetEditorWidth"
     />
     <div class="editor-header" @dblclick.stop="toggleMaximize">
       <div class="editor-tabs">
@@ -216,6 +217,7 @@
           :class="{ 'is-resizing': isFileTreeResizing }"
           :title="t('components.editorPanel.resizeFileTree')"
           @mousedown.prevent.stop="startFileTreeResize"
+          @dblclick.stop="resetFileTreeWidth"
         />
       </div>
       <div v-if="showTree" class="file-tree-backdrop" @click="toggleFileTree" />
@@ -243,6 +245,7 @@
             :class="{ 'is-resizing': isMarkdownOutlineResizing }"
             :title="t('components.editorPanel.resizeMarkdownOutline')"
             @mousedown.prevent.stop="startMarkdownOutlineResize"
+            @dblclick.stop="resetMarkdownOutlineWidth"
           />
           <div class="markdown-outline-header">
             <div class="markdown-outline-title">{{ t('components.editorPanel.outline') }}</div>
@@ -634,16 +637,17 @@ const panelStyle = computed<CSSProperties>(() => {
 
   return { '--editor-panel-width': editorWidthCss.value };
 });
+const defaultPaneWidth = 220;
 const minEditorWidth = 360;
 const maxEditorWidthRatio = 0.85;
 const minFileTreeWidth = 140;
 const maxFileTreeWidth = 420;
-const fileTreeWidthPx = ref(220);
+const fileTreeWidthPx = ref(defaultPaneWidth);
 const fileTreePaneStyle = computed<CSSProperties>(() => ({
   '--file-tree-pane-width': `${fileTreeWidthPx.value}px`,
 }));
 const showMarkdownOutline = ref(true);
-const markdownOutlineWidthPx = ref(220);
+const markdownOutlineWidthPx = ref(defaultPaneWidth);
 const markdownOutlineStyle = computed<CSSProperties>(() => ({
   width: `${markdownOutlineWidthPx.value}px`,
 }));
@@ -1248,6 +1252,12 @@ function handleEditorResize(event: MouseEvent) {
   editor?.layout();
 }
 
+function resetEditorWidth() {
+  stopEditorResize();
+  editorWidthPx.value = undefined;
+  nextTick(() => editor?.layout());
+}
+
 function startEditorResize(event: MouseEvent) {
   event.preventDefault();
   isEditorResizing.value = true;
@@ -1267,6 +1277,12 @@ function clampFileTreeWidth(width: number): number {
 function handleFileTreeResize(event: MouseEvent) {
   const delta = event.clientX - fileTreeResizeStartX;
   fileTreeWidthPx.value = clampFileTreeWidth(fileTreeResizeStartWidth + delta);
+  nextTick(() => editor?.layout());
+}
+
+function resetFileTreeWidth() {
+  stopFileTreeResize();
+  fileTreeWidthPx.value = defaultPaneWidth;
   nextTick(() => editor?.layout());
 }
 
@@ -1290,6 +1306,11 @@ function clampMarkdownOutlineWidth(width: number): number {
 function handleMarkdownOutlineResize(event: MouseEvent) {
   const delta = markdownOutlineResizeStartX - event.clientX;
   markdownOutlineWidthPx.value = clampMarkdownOutlineWidth(markdownOutlineResizeStartWidth + delta);
+}
+
+function resetMarkdownOutlineWidth() {
+  stopMarkdownOutlineResize();
+  markdownOutlineWidthPx.value = defaultPaneWidth;
 }
 
 function startMarkdownOutlineResize(event: MouseEvent) {

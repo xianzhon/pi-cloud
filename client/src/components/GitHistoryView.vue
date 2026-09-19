@@ -55,6 +55,7 @@
             :aria-label="t('components.gitHistory.resizePanes')"
             :aria-valuenow="listPaneWidth"
             @pointerdown.prevent="startPaneResize"
+            @dblclick.stop="resetPaneWidth"
           />
 
           <main ref="detailEl" class="git-history-detail">
@@ -82,6 +83,7 @@
                 :aria-label="t('components.gitHistory.resizeDetails')"
                 :aria-valuenow="detailHeaderHeight"
                 @pointerdown.prevent="startDetailHeaderResize"
+                @dblclick.stop="resetDetailHeaderHeight"
               />
 
               <div v-if="diffLoading" class="git-history-diff-state">{{ t('components.gitHistory.loadingDiff') }}</div>
@@ -226,8 +228,10 @@ const reasonLoadingKey = ref<string>();
 const expandedReasonKey = ref<string>();
 const dialogEl = ref<HTMLElement>();
 const detailEl = ref<HTMLElement>();
-const listPaneWidth = ref(336);
-const detailHeaderHeight = ref(164);
+const DEFAULT_LIST_PANE_WIDTH = 336;
+const DEFAULT_DETAIL_HEADER_HEIGHT = 164;
+const listPaneWidth = ref(DEFAULT_LIST_PANE_WIDTH);
+const detailHeaderHeight = ref(DEFAULT_DETAIL_HEADER_HEIGHT);
 let historyRequestId = 0;
 let diffRequestId = 0;
 let reasonRequestId = 0;
@@ -431,8 +435,18 @@ function startResize(mode: 'panes' | 'details'): void {
   window.addEventListener('pointercancel', stopResize);
 }
 
+function resetPaneWidth(): void {
+  stopResize();
+  listPaneWidth.value = DEFAULT_LIST_PANE_WIDTH;
+}
+
 function startPaneResize(): void {
   startResize('panes');
+}
+
+function resetDetailHeaderHeight(): void {
+  stopResize();
+  detailHeaderHeight.value = DEFAULT_DETAIL_HEADER_HEIGHT;
 }
 
 function startDetailHeaderResize(event: PointerEvent): void {

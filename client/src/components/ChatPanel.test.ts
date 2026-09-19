@@ -473,6 +473,10 @@ describe('ChatPanel', () => {
     await nextTick();
 
     expect((wrapper.find('#chat-input').element as HTMLTextAreaElement).style.height).toBe('144px');
+
+    await wrapper.find('.input-resize-handle').trigger('dblclick');
+    expect(sessionStorage.getItem('pi-cloud-message-input-height')).toBeNull();
+    expect((wrapper.find('#chat-input').element as HTMLTextAreaElement).style.height).not.toBe('144px');
     wrapper.unmount();
   });
 

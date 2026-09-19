@@ -12,6 +12,7 @@
       :aria-label="t('components.gitToolPanel.resize')"
       :aria-valuenow="panelHeight"
       @pointerdown.prevent="startResize"
+      @dblclick.stop="resetHeight"
     />
     <div class="git-tool-toolbar" role="toolbar" :aria-label="t('components.gitToolPanel.actions')">
       <button
@@ -83,6 +84,7 @@ interface GitStatusFile {
   status: string;
 }
 
+const DEFAULT_PANEL_HEIGHT = 240;
 const MIN_PANEL_HEIGHT = 120;
 const MAX_PANEL_HEIGHT_RATIO = 0.75;
 
@@ -94,7 +96,7 @@ const files = ref<GitStatusFile[]>([]);
 const isRepository = ref(true);
 const loading = ref(false);
 const error = ref('');
-const panelHeight = ref(240);
+const panelHeight = ref(DEFAULT_PANEL_HEIGHT);
 const resizing = ref(false);
 let requestId = 0;
 let resizeStartY = 0;
@@ -161,6 +163,11 @@ function stopResize(): void {
   window.removeEventListener('pointermove', resize);
   window.removeEventListener('pointerup', stopResize);
   window.removeEventListener('pointercancel', stopResize);
+}
+
+function resetHeight(): void {
+  stopResize();
+  panelHeight.value = DEFAULT_PANEL_HEIGHT;
 }
 
 function startResize(event: PointerEvent): void {

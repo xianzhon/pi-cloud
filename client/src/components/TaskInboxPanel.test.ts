@@ -250,5 +250,8 @@ describe('TaskInboxPanel', () => {
     await wrapper.vm.$nextTick();
     expect(handle.classes()).not.toContain('is-resizing');
     expect(wrapper.attributes('style')).toContain('--task-inbox-panel-width: 580px');
+
+    await handle.trigger('dblclick');
+    expect(wrapper.attributes('style')).toContain('--task-inbox-panel-width: 480px');
   });
 });

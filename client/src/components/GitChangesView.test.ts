@@ -92,6 +92,31 @@ describe('GitChangesView', () => {
 
     window.dispatchEvent(new PointerEvent('pointercancel'));
     expect(backdrop.classList.contains('git-changes-resizing-rows')).toBe(false);
+
+    const dialog = document.querySelector<HTMLElement>('.git-changes-dialog')!;
+    Object.defineProperty(dialog, 'clientWidth', { configurable: true, value: 1_000 });
+    vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({ left: 100 } as DOMRect);
+    const paneSeparator = document.querySelector<HTMLElement>('.git-changes-resizer.is-vertical')!;
+    paneSeparator.dispatchEvent(new PointerEvent('pointerdown'));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 500 }));
+    window.dispatchEvent(new PointerEvent('pointerup'));
+    await wrapper.vm.$nextTick();
+    expect(document.querySelector<HTMLElement>('.git-changes-body')!.style.gridTemplateColumns).toContain('400px');
+    paneSeparator.dispatchEvent(new MouseEvent('dblclick'));
+    await wrapper.vm.$nextTick();
+    expect(document.querySelector<HTMLElement>('.git-changes-body')!.style.gridTemplateColumns).toContain('360px');
+
+    const filesPane = document.querySelector<HTMLElement>('.git-changes-files')!;
+    Object.defineProperty(filesPane, 'clientHeight', { configurable: true, value: 700 });
+    vi.spyOn(filesPane, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
+    listSeparator.dispatchEvent(new PointerEvent('pointerdown'));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientY: 500 }));
+    window.dispatchEvent(new PointerEvent('pointerup'));
+    await wrapper.vm.$nextTick();
+    expect(document.querySelector<HTMLElement>('.git-change-group')!.style.height).toBe('400px');
+    listSeparator.dispatchEvent(new MouseEvent('dblclick'));
+    await wrapper.vm.$nextTick();
+    expect(document.querySelector<HTMLElement>('.git-change-group')!.style.height).toBe('320px');
     wrapper.unmount();
   });
 

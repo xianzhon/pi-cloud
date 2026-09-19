@@ -141,6 +141,7 @@
         aria-orientation="horizontal"
         :title="t('components.chatPanel.dragToResizeMessageInput')"
         @pointerdown="handleInputResizeStart"
+        @dblclick.stop="resetInputHeight"
         @pointermove="handleInputResizeMove"
         @pointerup="handleInputResizeEnd"
         @pointercancel="handleInputResizeEnd"
@@ -188,6 +189,7 @@
         aria-orientation="horizontal"
         :title="t('components.chatPanel.dragToResizeMessageInput')"
         @pointerdown="handleInputResizeStart"
+        @dblclick.stop="resetInputHeight"
         @pointermove="handleInputResizeMove"
         @pointerup="handleInputResizeEnd"
         @pointercancel="handleInputResizeEnd"
@@ -1248,6 +1250,17 @@ function handleInputResizeEnd(event: PointerEvent) {
   stopInputResize();
   const handle = event.currentTarget as HTMLElement;
   if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+}
+
+function resetInputHeight() {
+  stopInputResize();
+  userInputHeight = null;
+  try {
+    sessionStorage.removeItem(inputHeightStorageKey);
+  } catch {
+    // Keep the default height for this component instance when storage is unavailable.
+  }
+  resizeInput();
 }
 
 interface FocusInputOptions {

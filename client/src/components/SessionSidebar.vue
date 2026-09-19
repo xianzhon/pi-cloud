@@ -447,6 +447,7 @@
       :class="{ 'is-resizing': isSidebarResizing }"
       :title="t('components.sessionSidebar.resizeSessionList')"
       @mousedown="startSidebarResize"
+      @dblclick.stop="resetSidebarWidth"
     />
   </aside>
 </template>
@@ -621,7 +622,8 @@ const recentProjectList = ref<HTMLElement | null>(null);
 const showFolderPicker = ref(false);
 const reviewSearchQuery = ref('');
 let reviewSearchTimeout: ReturnType<typeof setTimeout> | undefined;
-const sidebarWidth = ref(280);
+const defaultSidebarWidth = 280;
+const sidebarWidth = ref(defaultSidebarWidth);
 const minSidebarWidth = 220;
 const maxSidebarWidth = 420;
 const storageKey = 'pi-cloud-project-path';
@@ -1194,8 +1196,11 @@ function clampSidebarWidth(width: number): number {
   return Math.min(maxSidebarWidth, Math.max(minSidebarWidth, width));
 }
 
+let sidebarResizeStartX = 0;
+let sidebarResizeStartWidth = 0;
+
 function handleSidebarResize(event: MouseEvent) {
-  sidebarWidth.value = clampSidebarWidth(event.clientX);
+  sidebarWidth.value = clampSidebarWidth(sidebarResizeStartWidth + event.clientX - sidebarResizeStartX);
 }
 
 const isSidebarResizing = ref(false);
@@ -1209,9 +1214,16 @@ function stopSidebarResize() {
   window.removeEventListener('blur', stopSidebarResize);
 }
 
+function resetSidebarWidth() {
+  stopSidebarResize();
+  sidebarWidth.value = defaultSidebarWidth;
+}
+
 function startSidebarResize(event: MouseEvent) {
   event.preventDefault();
   isSidebarResizing.value = true;
+  sidebarResizeStartX = event.clientX;
+  sidebarResizeStartWidth = sidebarWidth.value;
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';
   window.addEventListener('mousemove', handleSidebarResize);

@@ -204,7 +204,7 @@ export default {
       chatViewOptions: '聊天视图选项',
       goToTop: '返回顶部',
       resizeMessageInput: '调整消息输入框大小',
-      dragToResizeMessageInput: '拖动以调整消息输入框大小',
+      dragToResizeMessageInput: '拖动以调整大小，双击恢复默认大小',
       attachedImages: '已添加的图片',
       doubleClickToEnlarge: '双击放大',
       typeAMessage: '输入消息...',

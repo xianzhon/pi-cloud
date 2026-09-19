@@ -22,6 +22,7 @@
       class="resize-handle resize-docked"
       :class="{ 'is-resizing': isDockedResizing }"
       @mousedown="onDockedResizeStart"
+      @dblclick.stop="resetDockedHeight"
     />
 
     <div
@@ -156,6 +157,7 @@ function onHeaderMouseDown(event: MouseEvent) {
 
 // ── Docked vertical resize ───────────────────────────────────────────────────
 
+const DEFAULT_DOCKED_HEIGHT = 300
 const MIN_DOCKED_HEIGHT = 140
 const MAX_HEIGHT_RATIO = 0.75
 
@@ -182,6 +184,11 @@ function onDockedResizeStart(event: MouseEvent) {
 
 function onDockedResizeMove(event: MouseEvent) {
   emit('updateHeight', clampHeight(resizeStartHeight - (event.clientY - resizeStartY)))
+}
+
+function resetDockedHeight() {
+  onDockedResizeEnd()
+  emit('updateHeight', DEFAULT_DOCKED_HEIGHT)
 }
 
 function onDockedResizeEnd() {

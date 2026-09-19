@@ -87,6 +87,8 @@ describe('GitHistoryView', () => {
     expect(wrapper.get('.git-history-body').attributes('style')).toContain('400px 5px');
     window.dispatchEvent(new PointerEvent('pointerup'));
     expect(document.body.classList.contains('is-resizing-columns')).toBe(false);
+    await wrapper.get('.git-history-pane-resize-handle').trigger('dblclick');
+    expect(wrapper.get('.git-history-body').attributes('style')).toContain('336px 5px');
 
     const detail = wrapper.get<HTMLElement>('.git-history-detail').element;
     Object.defineProperty(detail, 'clientHeight', { configurable: true, value: 600 });
@@ -96,6 +98,8 @@ describe('GitHistoryView', () => {
     expect(wrapper.get('.git-history-detail-header').attributes('style')).toContain('height: 250px');
     window.dispatchEvent(new PointerEvent('pointerup'));
     expect(document.body.classList.contains('is-resizing-rows')).toBe(false);
+    await wrapper.get('.git-history-detail-resize-handle').trigger('dblclick');
+    expect(wrapper.get('.git-history-detail-header').attributes('style')).toContain('height: 164px');
   });
 
   it('shows colored change counts and collapses individual or all file diffs', async () => {

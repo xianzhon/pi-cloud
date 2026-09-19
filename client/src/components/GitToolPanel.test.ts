@@ -101,5 +101,8 @@ describe('GitToolPanel', () => {
 
     expect(wrapper.find('.git-tool-panel').attributes('style')).toContain('height: 290px');
     window.dispatchEvent(new PointerEvent('pointerup'));
+
+    await wrapper.find('.git-tool-resize-handle').trigger('dblclick');
+    expect(wrapper.find('.git-tool-panel').attributes('style')).toContain('height: 240px');
   });
 });

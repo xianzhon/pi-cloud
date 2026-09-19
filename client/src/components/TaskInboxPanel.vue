@@ -5,6 +5,7 @@
       :class="{ 'is-resizing': isPanelResizing }"
       :title="t('components.taskInboxPanel.resizeTaskInbox')"
       @mousedown="startPanelResize"
+      @dblclick.stop="resetPanelWidth"
     />
     <header class="task-inbox-header">
       <div>
@@ -439,6 +440,11 @@ function stopPanelResize() {
   window.removeEventListener('mousemove', handlePanelResize);
   window.removeEventListener('mouseup', stopPanelResize);
   window.removeEventListener('blur', stopPanelResize);
+}
+
+function resetPanelWidth() {
+  stopPanelResize();
+  panelWidthPx.value = undefined;
 }
 
 function startPanelResize(event: MouseEvent) {

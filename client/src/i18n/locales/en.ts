@@ -204,7 +204,7 @@ export default {
       chatViewOptions: 'Chat view options',
       goToTop: 'Go to top',
       resizeMessageInput: 'Resize message input',
-      dragToResizeMessageInput: 'Drag to resize message input',
+      dragToResizeMessageInput: 'Drag to resize or double-click to reset',
       attachedImages: 'Attached images',
       doubleClickToEnlarge: 'Double-click to enlarge',
       typeAMessage: 'Type a message...',

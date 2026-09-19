@@ -833,8 +833,12 @@ describe('SessionSidebar', () => {
     expect(wrapper.find('.session-sidebar').attributes('style')).toContain('--session-sidebar-width: 280px');
 
     const handle = wrapper.find('.sidebar-resize-handle');
-    await handle.trigger('mousedown', { clientX: 280 });
-    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 340 }));
+    await handle.trigger('mousedown', { clientX: 500 });
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 500 }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.session-sidebar').attributes('style')).toContain('--session-sidebar-width: 280px');
+
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 560 }));
     await wrapper.vm.$nextTick();
     expect(handle.classes()).toContain('is-resizing');
 
@@ -842,6 +846,9 @@ describe('SessionSidebar', () => {
     await wrapper.vm.$nextTick();
     expect(handle.classes()).not.toContain('is-resizing');
     expect(wrapper.find('.session-sidebar').attributes('style')).toContain('--session-sidebar-width: 340px');
+
+    await handle.trigger('dblclick');
+    expect(wrapper.find('.session-sidebar').attributes('style')).toContain('--session-sidebar-width: 280px');
   });
 
   it('shows a live indicator for streaming sessions', async () => {
