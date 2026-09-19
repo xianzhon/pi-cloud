@@ -2,6 +2,28 @@
 
 All notable changes to Pi Cloud are documented here.
 
+## [2.0.3] - 2026-09-19
+
+### Added
+
+- Added a dedicated Git Commit view with staged and unstaged diff browsing, file, hunk, and selected-line staging, commit and amend controls, and push support.
+- Added on-demand AI explanations for pending and historical Git diff hunks, with a customizable explanation prompt.
+- Added image annotations with zooming, panning, color tones, flattened PNG export, and customizable annotation-tool shortcuts shared with PDF previews.
+- Added per-tab workspace restoration after refresh for the editor, active file, task inbox, and terminal visibility and display mode.
+
+### Changed
+
+- Stored TOTP secrets, Git hosting tokens, and gateway credentials are now encrypted in SQLite with an environment-managed or automatically generated key; existing plaintext credentials are migrated on startup.
+- Enabling or disabling two-factor authentication and clearing the audit log now require password reauthentication and, when enabled, the current TOTP code.
+- Annotation sidecars are now stored in a hidden `.annotations` directory, while legacy sidecars remain readable.
+- Empty `@` file searches now list all workspace files with recent files first instead of showing only recent files, and search results are no longer limited to ten suggestions.
+
+### Fixed
+
+- Reject Feishu webhook requests when no verification token is configured.
+- Prevent PDF wheel zoom without Ctrl or Command, and keep text annotations within page bounds.
+- Serialize Git index and commit operations to prevent concurrent staging or commit updates from racing.
+
 ## [2.0.2] - 2026-09-12
 
 ### Added
