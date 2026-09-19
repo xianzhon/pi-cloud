@@ -282,9 +282,9 @@ const DEFAULT_UNSTAGED_HEIGHT = 320;
 const filesWidth = ref(DEFAULT_FILES_WIDTH);
 const unstagedHeight = ref(DEFAULT_UNSTAGED_HEIGHT);
 const amend = ref(false);
-const initialCommitMessage = props.sessionTitle?.trim() || '';
-const commitMessage = ref(initialCommitMessage);
-const normalCommitMessage = ref(initialCommitMessage);
+const commitMessage = ref('');
+const normalCommitMessage = ref('');
+let commitMessageInitialized = false;
 const committing = ref(false);
 const syncing = ref(false);
 const generatingMessage = ref(false);
@@ -426,7 +426,7 @@ async function loadDiff(): Promise<void> {
     const result = await gitOperations.getDiff({
       cwd: props.cwd,
       path: current.path,
-      scope: current.scope,
+      scope: amend.value && current.scope === 'staged' ? 'amend' : current.scope,
       includeUntracked: current.scope === 'unstaged',
     });
     if (currentRequestId !== diffRequestId) return;
@@ -456,6 +456,13 @@ async function refresh(preferred = selected.value): Promise<void> {
     if (currentRequestId !== requestId) return;
     files.value = Array.isArray(status.files) ? status.files as GitStatusFile[] : [];
     branch.value = typeof branches.current === 'string' ? branches.current : 'HEAD';
+    if (!commitMessageInitialized) {
+      commitMessageInitialized = true;
+      if (files.value.length) {
+        commitMessage.value = props.sessionTitle?.trim() || '';
+        normalCommitMessage.value = commitMessage.value;
+      }
+    }
     const available = (candidate: SelectedFile | undefined) => candidate && files.value.some(file =>
       file.path === candidate.path && file[candidate.scope]);
     if (available(preferred)) selected.value = preferred;
@@ -532,12 +539,21 @@ async function toggleAmend(): Promise<void> {
   commitResult.value = '';
   if (!amend.value) {
     commitMessage.value = normalCommitMessage.value;
+    await refresh();
     return;
   }
   normalCommitMessage.value = commitMessage.value;
   try {
     const result = await gitOperations.getAmendStatus({ cwd: props.cwd });
-    if (amend.value) commitMessage.value = typeof result.message === 'string' ? result.message : '';
+    if (!amend.value) return;
+    commitMessage.value = typeof result.message === 'string' ? result.message : '';
+    files.value = Array.isArray(result.files) ? result.files as GitStatusFile[] : [];
+    if (!selected.value || !files.value.some(file => file.path === selected.value?.path && file[selected.value.scope])) {
+      const file = stagedFiles.value[0] || unstagedFiles.value[0];
+      selected.value = file ? { path: file.path, scope: file.staged ? 'staged' : 'unstaged' } : undefined;
+    }
+    diffContent.value = '';
+    if (selected.value) await loadDiff();
   } catch (cause) {
     amend.value = false;
     commitError.value = cause instanceof Error ? cause.message : t('components.gitChanges.amendFailed');
@@ -715,8 +731,8 @@ onBeforeUnmount(() => {
 
 .git-changes-dialog {
   display: flex;
-  width: min(1500px, 94vw);
-  height: 94vh;
+  width: min(1400px, 96vw);
+  height: min(900px, 94vh);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);

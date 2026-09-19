@@ -169,6 +169,40 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('previews the previous commit together with current staged changes for amend', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'staged.txt'), 'staged change\n');
+      await git(cwd, 'add', 'staged.txt');
+      await writeFile(join(cwd, 'unstaged.txt'), 'unstaged change\n');
+
+      const statusResponse = await app.inject({
+        method: 'GET',
+        url: `/api/git/amend-status?cwd=${encodeURIComponent(cwd)}`,
+      });
+      const diffResponse = await app.inject({
+        method: 'GET',
+        url: `/api/git/diff?cwd=${encodeURIComponent(cwd)}&scope=amend`,
+      });
+
+      expect(statusResponse.statusCode).toBe(200);
+      expect(statusResponse.json().files).toEqual(expect.arrayContaining([
+        { path: 'README.md', status: 'A', staged: true, unstaged: false },
+        { path: 'staged.txt', status: 'A', staged: true, unstaged: false },
+        { path: 'unstaged.txt', status: '??', staged: false, unstaged: true },
+      ]));
+      expect(diffResponse.statusCode).toBe(200);
+      expect(diffResponse.json()).toMatchObject({ scope: 'amend' });
+      expect(diffResponse.json().diff).toContain('+initial');
+      expect(diffResponse.json().diff).toContain('+staged change');
+      expect(diffResponse.json().diff).not.toContain('unstaged change');
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('amends with staged changes without including unstaged files when requested', async () => {
     const cwd = await createRepo();
     const app = await buildApp();

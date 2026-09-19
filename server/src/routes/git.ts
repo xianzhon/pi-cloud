@@ -33,7 +33,7 @@ interface GitStatusFile {
   unstaged: boolean;
 }
 
-type GitDiffScope = 'all' | 'staged' | 'unstaged';
+type GitDiffScope = 'all' | 'staged' | 'unstaged' | 'amend';
 type GitSyncCommand = 'push' | 'pull';
 
 function isMaxBufferError(error: unknown) {
@@ -165,6 +165,23 @@ function getStagedStatus(status: string): string {
     .join('\n');
 }
 
+function mergeAmendFiles(status: string, previousCommitStatus: string): GitStatusFile[] {
+  const files = new Map(parseStatusFiles(status).map(file => [file.path, file]));
+  for (const line of previousCommitStatus.split('\n').filter(Boolean)) {
+    const [statusCode, ...pathParts] = line.split('\t');
+    const path = pathParts.at(-1);
+    if (!path) continue;
+    const current = files.get(path);
+    files.set(path, {
+      path,
+      status: current?.status || statusCode,
+      staged: true,
+      unstaged: current?.unstaged || false,
+    });
+  }
+  return [...files.values()];
+}
+
 function describeArea(path: string) {
   const [first, second] = path.split('/');
   if (!second) return first;
@@ -259,8 +276,8 @@ async function getCombinedDiff(cwd: string, args: string[], maxBytes = MAX_GIT_O
 
 function parseDiffScope(scope: string | undefined): GitDiffScope {
   if (!scope || scope === 'all') return 'all';
-  if (scope === 'staged' || scope === 'unstaged') return scope;
-  throw new Error('Invalid diff scope. Use all, staged, or unstaged.');
+  if (scope === 'staged' || scope === 'unstaged' || scope === 'amend') return scope;
+  throw new Error('Invalid diff scope. Use all, staged, unstaged, or amend.');
 }
 
 function validateGitPath(path: string | undefined): string {
@@ -459,9 +476,15 @@ function parseGitHistory(output: string) {
   return commits;
 }
 
-function getDiff(cwd: string, args: string[], scope: GitDiffScope, maxBytes = MAX_GIT_OUTPUT_BYTES) {
+async function getDiff(cwd: string, args: string[], scope: GitDiffScope, maxBytes = MAX_GIT_OUTPUT_BYTES) {
   if (scope === 'staged') return runGit(cwd, ['diff', '--cached', ...args], maxBytes);
   if (scope === 'unstaged') return runGit(cwd, ['diff', ...args], maxBytes);
+  if (scope === 'amend') {
+    const previous = await runGit(cwd, ['show', '--format=', 'HEAD', ...args], maxBytes);
+    const remainingBytes = maxBytes - Buffer.byteLength(previous);
+    const staged = remainingBytes > 0 ? await runGit(cwd, ['diff', '--cached', ...args], remainingBytes) : '';
+    return joinGitOutput(previous, staged);
+  }
   return getCombinedDiff(cwd, args, maxBytes);
 }
 
@@ -917,7 +940,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
         ]);
       } else {
         scope = parseDiffScope(body.scope);
-        if (scope === 'all') throw new Error('scope must be staged or unstaged');
+        if (scope !== 'staged' && scope !== 'unstaged') throw new Error('scope must be staged or unstaged');
         const [currentFileDiff, currentStatus, trackedDiff] = await Promise.all([
           getIndexPatch(resolvedCwd, path, scope),
           runGit(resolvedCwd, ['status', '--porcelain']),
@@ -1061,13 +1084,14 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
 
     try {
       await ensureHasCommit(resolvedCwd);
-      const [status, previousMessage] = await Promise.all([
+      const [status, previousMessage, previousCommitStatus] = await Promise.all([
         runGit(resolvedCwd, ['status', '--porcelain']),
         runGit(resolvedCwd, ['log', '-1', '--pretty=%B']),
+        runGit(resolvedCwd, ['diff-tree', '--no-commit-id', '--name-status', '--no-renames', '-r', '--root', 'HEAD']),
       ]);
       return {
         cwd: resolvedCwd,
-        files: parseStatusFiles(status),
+        files: mergeAmendFiles(status, previousCommitStatus),
         message: message?.trim() || previousMessage.trim(),
       };
     } catch (error) {

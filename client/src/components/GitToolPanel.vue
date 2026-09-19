@@ -18,6 +18,15 @@
       <button
         type="button"
         class="git-tool-action tooltip"
+        :data-tooltip="t('components.gitToolPanel.refresh')"
+        :aria-label="t('components.gitToolPanel.refresh')"
+        @click="refresh"
+      >
+        <PhArrowsClockwise :size="17" weight="bold" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="git-tool-action tooltip"
         :data-tooltip="t('components.gitToolPanel.changesView')"
         :aria-label="t('components.gitToolPanel.changesView')"
         :disabled="!isRepository"
@@ -40,10 +49,10 @@
         :key="action.command"
         type="button"
         class="git-tool-action tooltip"
-        :disabled="!isRepository && action.command !== '/status'"
+        :disabled="!isRepository"
         :data-tooltip="action.label"
         :aria-label="action.label"
-        @click="runAction(action.command)"
+        @click="emit('command', action.command)"
       >
         <component :is="action.icon" :size="17" weight="bold" aria-hidden="true" />
       </button>
@@ -103,7 +112,6 @@ let resizeStartY = 0;
 let resizeStartHeight = 0;
 
 const actions = computed(() => [
-  { command: '/status', label: t('components.gitToolPanel.refresh'), icon: PhArrowsClockwise },
   { command: '/pr', label: t('components.gitToolPanel.pr'), icon: PhGitPullRequest },
   { command: '/pull', label: t('components.gitToolPanel.pull'), icon: PhDownloadSimple },
   { command: '/branch', label: t('components.gitToolPanel.branch'), icon: PhGitBranch },
@@ -134,14 +142,6 @@ async function refresh(): Promise<void> {
   } finally {
     if (currentRequestId === requestId) loading.value = false;
   }
-}
-
-function runAction(command: string): void {
-  if (command === '/status') {
-    void refresh();
-    return;
-  }
-  emit('command', command);
 }
 
 function openFile(path: string): void {

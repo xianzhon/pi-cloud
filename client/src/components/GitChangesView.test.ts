@@ -26,7 +26,15 @@ describe('GitChangesView', () => {
       if (url.includes('/api/git/branches')) return response({ current: 'main' });
       if (url.includes('/api/git/diff')) return response({ diff: patch });
       if (url.includes('/api/git/change-reason')) return response({ reason: 'This updates the displayed value.' });
-      if (url.includes('/api/git/amend-status')) return response({ message: 'Previous message' });
+      if (url.includes('/api/git/amend-status')) {
+        return response({
+          message: 'Previous message',
+          files: [
+            { path: 'src/app.ts', status: 'MM', staged: true, unstaged: true },
+            { path: 'src/previous.ts', status: 'M', staged: true, unstaged: false },
+          ],
+        });
+      }
       if (url.includes('/api/git/commit') || url.includes('/api/git/amend')) return response({ commit: '1234567890' });
       return response({});
     }));
@@ -120,6 +128,22 @@ describe('GitChangesView', () => {
     wrapper.unmount();
   });
 
+  it('leaves the commit message empty when there are no changes', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/api/git/status')) return response({ files: [] });
+      if (url.includes('/api/git/branches')) return response({ current: 'main' });
+      return response({});
+    });
+    const wrapper = mount(GitChangesView, {
+      props: { visible: true, cwd: '/workspace', sessionTitle: 'Unrelated session title' },
+    });
+    await flushPromises();
+
+    expect(document.querySelector<HTMLTextAreaElement>('#git-changes-commit-message')!.value).toBe('');
+    wrapper.unmount();
+  });
+
   it('uses the session title as the commit message and restores it after viewing amend', async () => {
     const wrapper = mount(GitChangesView, {
       props: { visible: true, cwd: '/workspace', sessionId: 'session-1', sessionTitle: 'Improve Git workflow' },
@@ -133,6 +157,12 @@ describe('GitChangesView', () => {
     amend.click();
     await flushPromises();
     expect(message.value).toBe('Previous message');
+    expect(Array.from(document.querySelectorAll('.git-change-file')).some(file => file.textContent?.includes('src/previous.ts'))).toBe(true);
+    const previousFile = Array.from(document.querySelectorAll<HTMLButtonElement>('.git-change-file'))
+      .find(file => file.textContent?.includes('src/previous.ts'))!;
+    previousFile.click();
+    await flushPromises();
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('scope=amend'));
 
     amend.click();
     await flushPromises();
