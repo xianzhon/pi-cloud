@@ -632,6 +632,7 @@ export default {
       recent: '最近',
       fileSearchResults: '文件搜索结果',
       searchResults: '搜索结果',
+      allFiles: '全部文件',
       recentFiles: '最近的文件',
     },
     folderPickerModal: {

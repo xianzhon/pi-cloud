@@ -632,6 +632,7 @@ export default {
       recent: 'Recent',
       fileSearchResults: 'File search results',
       searchResults: 'Search Results',
+      allFiles: 'All Files',
       recentFiles: 'Recent Files',
     },
     folderPickerModal: {

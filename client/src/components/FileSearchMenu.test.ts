@@ -151,7 +151,7 @@ describe('FileSearchMenu', () => {
     expect(wrapper.text()).toContain('No files found');
   });
 
-  it('shows recent files header when query is empty', () => {
+  it('shows all files header when query is empty', () => {
     const wrapper = mount(FileSearchMenu, {
       props: {
         files: mockFiles,
@@ -161,7 +161,7 @@ describe('FileSearchMenu', () => {
         isOpen: true
       }
     });
-    expect(wrapper.text()).toContain('Recent Files');
+    expect(wrapper.text()).toContain('All Files');
   });
 
   it('shows search results header when query is present', () => {

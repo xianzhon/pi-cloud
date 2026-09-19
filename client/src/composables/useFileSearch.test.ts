@@ -106,6 +106,25 @@ describe('useFileSearch', () => {
   });
 
   describe('updateQuery', () => {
+    it('shows all files when only @ is entered', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: ['README.md', 'src/components/ChatPanel.vue'],
+        }),
+      }));
+
+      const fileSearch = useFileSearch('.');
+      await fileSearch.updateQuery('@', 1);
+
+      expect(fileSearch.isOpen.value).toBe(true);
+      expect(fileSearch.state.value.query).toBe('');
+      expect(fileSearch.suggestions.value.map((file) => file.path)).toEqual([
+        'README.md',
+        'src/components/ChatPanel.vue',
+      ]);
+    });
+
     it('keeps the menu open while the initial file search is loading', async () => {
       const deferred = createDeferred<{ ok: boolean; json: () => Promise<{ files: string[] }> }>();
       vi.stubGlobal('fetch', vi.fn().mockReturnValue(deferred.promise));
@@ -181,14 +200,14 @@ describe('useFileSearch', () => {
       fileSearch.move(-1);
       expect(fileSearch.state.value.activeIndex).toBe(0);
 
-      fileSearch.move(10);
-      expect(fileSearch.state.value.activeIndex).toBe(9);
+      fileSearch.move(20);
+      expect(fileSearch.state.value.activeIndex).toBe(11);
 
       fileSearch.move(1);
-      expect(fileSearch.state.value.activeIndex).toBe(9);
+      expect(fileSearch.state.value.activeIndex).toBe(11);
 
       fileSearch.move(-1);
-      expect(fileSearch.state.value.activeIndex).toBe(8);
+      expect(fileSearch.state.value.activeIndex).toBe(10);
     });
 
     it('preserves the active selection when the query text has not changed', async () => {

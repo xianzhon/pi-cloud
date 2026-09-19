@@ -2,7 +2,7 @@
 <template>
   <div v-if="isOpen" ref="menuRef" class="file-search-menu" role="listbox" :aria-label="t('components.fileSearchMenu.fileSearchResults')">
     <div class="file-search-header">
-      <span class="header-label">{{ query ? t('components.fileSearchMenu.searchResults') : t('components.fileSearchMenu.recentFiles') }}</span>
+      <span class="header-label">{{ query ? t('components.fileSearchMenu.searchResults') : t('components.fileSearchMenu.allFiles') }}</span>
       <span v-if="query" class="header-query">{{ query }}</span>
     </div>
     

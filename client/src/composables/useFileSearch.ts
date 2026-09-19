@@ -4,8 +4,6 @@ import { parseFileQuery, filterAndRankFiles } from '../services/fileSearchServic
 import { getRecentFiles, addRecentFile } from '../services/recentFiles';
 
 // Directories to exclude from file search
-const MAX_SUGGESTIONS = 10;
-
 const EXCLUDED_DIRS = new Set([
   'node_modules',
   '.git',
@@ -86,7 +84,7 @@ export function useFileSearch(projectPath?: FileSearchPathSource) {
   let queryRequestId = 0;
 
   const isOpen = computed(() => state.value.isOpen);
-  const suggestions = computed(() => state.value.results.slice(0, MAX_SUGGESTIONS));
+  const suggestions = computed(() => state.value.results);
   const currentProjectPath = computed(() => resolveProjectPath(projectPath));
 
   function resetCache() {
@@ -231,7 +229,9 @@ export function useFileSearch(projectPath?: FileSearchPathSource) {
       .map(f => ({ ...f, isRecent: true, score: 1 }));
 
     if (!token.query) {
-      state.value.results = recentFileResults;
+      const recentPaths = new Set(recentFileResults.map(f => f.path));
+      const nonRecent = files.filter(f => !recentPaths.has(f.path));
+      state.value.results = [...recentFileResults, ...nonRecent];
     } else {
       const queryText = isDirectPathQuery(token.query)
         ? token.query.slice(token.query.lastIndexOf('/') + 1)
@@ -255,7 +255,7 @@ export function useFileSearch(projectPath?: FileSearchPathSource) {
   }
 
   function move(delta: number) {
-    const lastIndex = Math.min(state.value.results.length, MAX_SUGGESTIONS) - 1;
+    const lastIndex = state.value.results.length - 1;
     if (lastIndex < 0) return;
     state.value.activeIndex = Math.min(
       Math.max(state.value.activeIndex + delta, 0),
