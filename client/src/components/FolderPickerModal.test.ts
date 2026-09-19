@@ -35,6 +35,7 @@ describe('FolderPickerModal', () => {
       global: { stubs: { Teleport: true } },
     });
 
+    await wrapper.findAll('.project-dialog-tabs button')[1].trigger('click');
     await vi.waitFor(() => {
       expect(wrapper.text()).toContain('Rename project');
     });
@@ -186,7 +187,9 @@ describe('FolderPickerModal', () => {
       global: { stubs: { Teleport: true } },
     });
 
-    await wrapper.findAll('.project-dialog-tabs button')[1].trigger('click');
+    const tabs = wrapper.findAll('.project-dialog-tabs button');
+    expect(tabs.map((tab) => tab.text())).toEqual(['History', 'Browse', 'Clone repository']);
+    await tabs[2].trigger('click');
 
     expect(wrapper.find('[data-testid="embedded-clone"]').exists()).toBe(true);
     await wrapper.find('[data-testid="mock-cloned"]').trigger('click');
@@ -221,7 +224,7 @@ describe('FolderPickerModal', () => {
       global: { stubs: { Teleport: true } },
     });
 
-    await wrapper.findAll('.project-dialog-tabs button')[2].trigger('click');
+    expect(wrapper.findAll('.project-dialog-tabs button')[0].attributes('aria-selected')).toBe('true');
     await vi.waitFor(() => expect(wrapper.find('.project-history-session-count').text()).toBe('0 sessions'));
     expect(wrapper.find('.project-history-heading').text()).toContain('cloned');
     expect(wrapper.find('.project-history-meta').text()).toContain('/workspace/cloned');
@@ -256,6 +259,7 @@ describe('FolderPickerModal', () => {
       global: { stubs: { Teleport: true } },
     });
 
+    await wrapper.findAll('.project-dialog-tabs button')[1].trigger('click');
     await vi.waitFor(() => {
       expect(wrapper.text()).toContain('Move project here');
       expect(wrapper.text()).toContain('Move sessions here');

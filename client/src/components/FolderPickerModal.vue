@@ -10,6 +10,15 @@
         <div v-if="showClone && clientId" class="project-dialog-tabs" role="tablist" :aria-label="t('components.folderPickerModal.projectAction')">
           <button
             type="button"
+            :class="{ active: activeTab === 'history' }"
+            role="tab"
+            :aria-selected="activeTab === 'history'"
+            @click="openHistory"
+          >
+            {{ t('components.folderPickerModal.history') }}
+          </button>
+          <button
+            type="button"
             :class="{ active: activeTab === 'browse' }"
             role="tab"
             :aria-selected="activeTab === 'browse'"
@@ -25,15 +34,6 @@
             @click="activeTab = 'clone'"
           >
             {{ t('components.folderPickerModal.cloneRepository') }}
-          </button>
-          <button
-            type="button"
-            :class="{ active: activeTab === 'history' }"
-            role="tab"
-            :aria-selected="activeTab === 'history'"
-            @click="openHistory"
-          >
-            {{ t('components.folderPickerModal.history') }}
           </button>
         </div>
 
@@ -331,6 +331,7 @@ watch(
       historyPathToRemove.value = '';
       projectHistory.value = [];
       browse(props.initialPath || '~');
+      if (props.showClone && props.clientId) void openHistory();
     }
   },
   { immediate: true },
