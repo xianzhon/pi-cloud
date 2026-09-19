@@ -1,6 +1,7 @@
 // server/src/routes/git.ts
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { completeSimple, type AssistantMessage, type TextContent } from '@earendil-works/pi-ai/compat';
@@ -23,6 +24,14 @@ const gitIndexOperations = new Map<string, Promise<unknown>>();
 class OversizedGitOutputError extends Error {
   constructor() {
     super(`The Git output is too large to show safely (limit: ${MAX_GIT_OUTPUT_BYTES / 1024} KiB). Inspect it with Git in the terminal or another Git client.`);
+  }
+}
+
+class UnavailableProjectFolderError extends Error {
+  statusCode = 400;
+
+  constructor(cwd: string) {
+    super(`Project folder does not exist. Select an existing project folder: ${cwd}`);
   }
 }
 
@@ -61,7 +70,14 @@ async function retryGitIndexLock<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 async function resolveGitCwd(cwd: string | undefined): Promise<string> {
-  return resolveAllowedPath(cwd || '.');
+  const resolvedCwd = await resolveAllowedPath(cwd || '.');
+  try {
+    if (!(await stat(resolvedCwd)).isDirectory()) throw new UnavailableProjectFolderError(resolvedCwd);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new UnavailableProjectFolderError(resolvedCwd);
+    throw error;
+  }
+  return resolvedCwd;
 }
 
 async function serializeGitIndexOperation<T>(cwd: string, operation: () => Promise<T>): Promise<T> {

@@ -94,6 +94,25 @@ describe('gitRoutes status and diff', () => {
     }
   });
 
+  it('reports a missing project folder instead of a spawn error', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'pi-cloud-missing-git-route-'));
+    const cwd = join(parent, 'deleted-project');
+    const app = await buildApp();
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/git/status?cwd=${encodeURIComponent(cwd)}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().message).toBe(`Project folder does not exist. Select an existing project folder: ${cwd}`);
+    } finally {
+      await app.close();
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+
   it('reports a non-Git directory as an expected empty state', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'pi-cloud-non-git-route-'));
     const app = await buildApp();
