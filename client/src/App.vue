@@ -1,7 +1,7 @@
 <!-- client/src/App.vue -->
 <template>
   <LoginView v-if="!loading && !isAuthenticated" />
-  <div v-else-if="loading" class="app-loading">{{ t('app.loading') }}</div>
+  <div v-else-if="loading && !isAuthenticated" class="app-loading">{{ t('app.loading') }}</div>
   <div v-else class="app">
     <!-- Mobile sidebar backdrop -->
     <div

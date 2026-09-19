@@ -106,6 +106,22 @@ describe('App auth gate', () => {
     wrapper.unmount();
   });
 
+  it('keeps the authenticated application mounted during an auth refresh', async () => {
+    authenticated.value = true;
+    loading.value = false;
+    user.value = { username: 'me', totpEnabled: false };
+
+    const wrapper = mount(App, { global: { stubs: { Teleport: true } } });
+    const app = wrapper.find('.app').element;
+
+    loading.value = true;
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.app').element).toBe(app);
+    expect(wrapper.find('.app-loading').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('refreshes authentication before the returned session expiry', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-08T12:00:00.000Z'));
