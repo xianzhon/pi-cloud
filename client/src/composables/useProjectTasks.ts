@@ -15,8 +15,10 @@ export function useProjectTasks(clientId: string) {
   const error = ref('');
   const startingTaskId = ref<string | null>(null);
   let lastProjectPath = '';
+  let loadRequestId = 0;
 
   async function load(projectPath = lastProjectPath): Promise<void> {
+    const requestId = ++loadRequestId;
     lastProjectPath = projectPath;
     loading.value = true;
     error.value = '';
@@ -26,12 +28,13 @@ export function useProjectTasks(clientId: string) {
       const data = await apiRequest<{ tasks?: ProjectTask[] }>(`/api/tasks?${params.toString()}`, {
         fallbackMessage: 'Task request failed',
       });
-      tasks.value = data.tasks || [];
+      if (requestId === loadRequestId) tasks.value = data.tasks || [];
     } catch (exception) {
+      if (requestId !== loadRequestId) return;
       error.value = errorMessage(exception);
       tasks.value = [];
     } finally {
-      loading.value = false;
+      if (requestId === loadRequestId) loading.value = false;
     }
   }
 

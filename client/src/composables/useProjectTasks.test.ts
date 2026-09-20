@@ -30,6 +30,64 @@ describe('useProjectTasks', () => {
     expect(state.tasks.value).toEqual([task]);
   });
 
+  it.each([true, false])('keeps the latest project results when an older request finishes last (ok=%s)', async (ok) => {
+    let resolveOlder!: (value: Response) => void;
+    vi.mocked(fetch)
+      .mockReturnValueOnce(new Promise<Response>((resolve) => { resolveOlder = resolve; }))
+      .mockResolvedValueOnce(response({ tasks: [{ ...task, id: 'new-task', projectPath: '/repo/new' }] }) as Response);
+    const state = useProjectTasks('client-1');
+
+    const olderLoad = state.load('/repo/old');
+    await state.load('/repo/new');
+    resolveOlder(response(ok ? { tasks: [task] } : { error: 'Old request failed' }, ok) as Response);
+    await olderLoad;
+
+    expect(state.tasks.value.map((item) => item.id)).toEqual(['new-task']);
+    expect(state.error.value).toBe('');
+    expect(state.loading.value).toBe(false);
+  });
+
+  it('preserves the current error when an older successful request finishes last', async () => {
+    let resolveOlder!: (value: Response) => void;
+    vi.mocked(fetch)
+      .mockReturnValueOnce(new Promise<Response>((resolve) => { resolveOlder = resolve; }))
+      .mockResolvedValueOnce(response({ error: 'Current request failed' }, false) as Response);
+    const state = useProjectTasks('client-1');
+
+    const olderLoad = state.load('/repo/old');
+    await state.load('/repo/new');
+    resolveOlder(response({ tasks: [task] }) as Response);
+    await olderLoad;
+
+    expect(state.tasks.value).toEqual([]);
+    expect(state.error.value).toBe('Current request failed');
+    expect(state.loading.value).toBe(false);
+  });
+
+  it.each([true, false])('keeps loading the current filter when an older request settles (ok=%s)', async (ok) => {
+    let resolveOlder!: (value: Response) => void;
+    let resolveLatest!: (value: Response) => void;
+    vi.mocked(fetch)
+      .mockReturnValueOnce(new Promise<Response>((resolve) => { resolveOlder = resolve; }))
+      .mockReturnValueOnce(new Promise<Response>((resolve) => { resolveLatest = resolve; }));
+    const state = useProjectTasks('client-1');
+
+    const olderLoad = state.load('/repo/app');
+    state.status.value = 'completed';
+    const latestLoad = state.load('/repo/app');
+    resolveOlder(response(ok ? { tasks: [task] } : { error: 'Old request failed' }, ok) as Response);
+    await olderLoad;
+
+    expect(state.loading.value).toBe(true);
+    expect(state.error.value).toBe('');
+    expect(state.tasks.value).toEqual([]);
+
+    resolveLatest(response({ tasks: [{ ...task, status: 'completed' }] }) as Response);
+    await latestLoad;
+    expect(state.loading.value).toBe(false);
+    expect(state.tasks.value[0].status).toBe('completed');
+  });
+
   it('starts a task, refreshes the list, and notifies count consumers', async () => {
     const startResult = { task: { ...task, status: 'started', sessionId: 'session-1' }, sessionId: 'session-1', prompt: task.prompt };
     vi.mocked(fetch)
