@@ -68,6 +68,7 @@ import { ReviewSourceService } from './services/review-source-service.js';
 import { ModelWindowKickoffStore } from './services/model-window-kickoff-store.js';
 import { ModelWindowKickoffScheduler } from './services/model-window-kickoff-scheduler.js';
 import { NotificationChannelService } from './services/notification-channel.js';
+import { installGracefulShutdown } from './shutdown.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -441,7 +442,13 @@ export async function buildApp(): Promise<FastifyInstance> {
 
 export async function startServer(): Promise<FastifyInstance> {
   const app = await buildApp();
-  await app.listen({ port, host: process.env.HOST || '127.0.0.1' });
+  installGracefulShutdown(app);
+  try {
+    await app.listen({ port, host: process.env.HOST || '127.0.0.1' });
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
   return app;
 }
 
