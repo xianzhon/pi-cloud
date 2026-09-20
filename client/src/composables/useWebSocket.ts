@@ -87,6 +87,17 @@ function scheduleReconnect() {
   }, delay);
 }
 
+function retry() {
+  if (isConnected.value) return;
+
+  reconnectAttempts.value = 0;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  connect();
+}
+
 function send(data: any): boolean {
   if (socket.value?.readyState !== WebSocket.OPEN) {
     console.warn('WebSocket not connected; message not sent');
@@ -130,6 +141,7 @@ export function useWebSocket(options: { autoConnect?: boolean } = {}) {
     socket,
     isConnected,
     connect,
+    retry,
     send,
     on,
     close,

@@ -19,8 +19,9 @@ vi.mock('vue-router', () => ({
 }));
 
 const isConnected = ref(true);
+const retryConnection = vi.fn();
 vi.mock('./composables/useWebSocket', () => ({
-  useWebSocket: () => ({ isConnected, clientId: 'client-1' }),
+  useWebSocket: () => ({ isConnected, clientId: 'client-1', retry: retryConnection }),
 }));
 
 const memoryCounts = ref({ globalPending: 0 });
@@ -287,6 +288,7 @@ describe('App routing', () => {
     });
     submitExternalPrompt.mockClear();
     isConnected.value = true;
+    retryConnection.mockClear();
     refresh.mockClear();
     loadPreferences.mockClear();
     setShowHintInfo.mockClear();
@@ -666,6 +668,33 @@ describe('App routing', () => {
       'noopener',
     );
     openSpy.mockRestore();
+  });
+
+  it('retries a disconnected socket explicitly and when connectivity returns', async () => {
+    isConnected.value = false;
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    const banner = wrapper.get('.app-utility-rail .sidebar-logo');
+    expect(banner.attributes('data-tooltip')).toBe('Retry connection');
+    await banner.trigger('click');
+    expect(retryConnection).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new Event('online'));
+    expect(retryConnection).toHaveBeenCalledTimes(2);
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(retryConnection).toHaveBeenCalledTimes(3);
   });
 
   it('keeps global actions in a permanent desktop utility rail beside the session panel', async () => {

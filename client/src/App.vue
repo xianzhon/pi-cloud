@@ -20,9 +20,9 @@
         class="sidebar-logo tooltip"
         :class="{ connected: isConnected }"
         type="button"
-        :data-tooltip="t('app.openCurrentWorkspaceInNewTab')"
-        :aria-label="t('app.openCurrentWorkspaceInNewTab')"
-        @click="openCurrentWorkspaceInNewTab"
+        :data-tooltip="isConnected ? t('app.openCurrentWorkspaceInNewTab') : t('app.retryConnection')"
+        :aria-label="isConnected ? t('app.openCurrentWorkspaceInNewTab') : t('app.retryConnection')"
+        @click="handleLogoClick"
       >
         <img src="/icon.svg" alt="" />
         <span
@@ -655,7 +655,7 @@ function loadTerminalRuntime(): Promise<TerminalRuntime> {
 
 const router = useRouter();
 const route = useRoute();
-const { isConnected, clientId, connect, close } = useWebSocket({ autoConnect: false });
+const { isConnected, clientId, connect, retry, close } = useWebSocket({ autoConnect: false });
 const { isAuthenticated, loading, user, sessionExpiresAt = ref<string | null>(null), refresh, logout } = useAuth();
 const AUTH_REFRESH_MAX_INTERVAL_MS = 60 * 60 * 1000;
 const AUTH_REFRESH_MIN_INTERVAL_MS = 1000;
@@ -1149,9 +1149,22 @@ function handleSessionStreamingState(event: Event) {
   updateReadySessions((nextReadySessionIds) => nextReadySessionIds.add(detail.id!));
 }
 
+function retryDisconnectedSocket() {
+  if (!isConnected.value) retry?.();
+}
+
+function handleLogoClick() {
+  if (!isConnected.value) {
+    retryDisconnectedSocket();
+    return;
+  }
+  openCurrentWorkspaceInNewTab();
+}
+
 function handleVisibilityChange() {
   if (document.visibilityState === 'visible') {
     clearReadySession(activeSessionId.value);
+    retryDisconnectedSocket();
   }
 }
 
@@ -2329,6 +2342,7 @@ onMounted(() => {
   window.addEventListener('open-file-in-editor', handleOpenFileInEditor);
   window.addEventListener('open-virtual-diff-in-editor', handleOpenVirtualDiffInEditor);
   window.addEventListener('vite:preloadError', handlePreloadError);
+  window.addEventListener('online', retryDisconnectedSocket);
   document.addEventListener('visibilitychange', handleVisibilityChange);
   document.addEventListener('fullscreenchange', updateFullscreenState);
   updateFullscreenState();
@@ -2343,6 +2357,7 @@ onUnmounted(() => {
   window.removeEventListener('open-file-in-editor', handleOpenFileInEditor);
   window.removeEventListener('open-virtual-diff-in-editor', handleOpenVirtualDiffInEditor);
   window.removeEventListener('vite:preloadError', handlePreloadError);
+  window.removeEventListener('online', retryDisconnectedSocket);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   document.removeEventListener('fullscreenchange', updateFullscreenState);
   authRefreshMounted = false;

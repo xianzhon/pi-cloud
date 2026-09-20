@@ -132,6 +132,27 @@ describe('useWebSocket', () => {
     ]);
   });
 
+  it('can restart reconnect attempts after a prolonged outage', async () => {
+    const { useWebSocket } = await importComposable();
+    const ws = useWebSocket();
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      MockWebSocket.instances.at(-1)!.close();
+      vi.runOnlyPendingTimers();
+    }
+
+    MockWebSocket.instances.at(-1)!.close();
+    vi.runOnlyPendingTimers();
+    expect(MockWebSocket.instances).toHaveLength(11);
+
+    ws.retry();
+    expect(MockWebSocket.instances).toHaveLength(12);
+
+    MockWebSocket.instances.at(-1)!.close();
+    vi.runOnlyPendingTimers();
+    expect(MockWebSocket.instances).toHaveLength(13);
+  });
+
   it('does not reconnect after manual close', async () => {
     const { useWebSocket } = await importComposable();
     const ws = useWebSocket();
