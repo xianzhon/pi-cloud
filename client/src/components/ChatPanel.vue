@@ -781,15 +781,17 @@ import ConfirmModal from './ConfirmModal.vue';
 import DialogCloseButton from './DialogCloseButton.vue';
 import SessionTreeModal from './SessionTreeModal.vue';
 import SkillPicker from './SkillPicker.vue';
-import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
+import CustomSelect from './CustomSelect.vue';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import { exportSessionPdf, hasExportableMessages } from '../utils/sessionPdfExport';
-import { diffLineClass, shouldHideDiffHeaderLine, pairDiffLines, parseDiffFiles } from '../utils/gitDiff';
+import { diffLineClass, pairDiffLines } from '../utils/gitDiff';
 import { getReviewTranscript } from '../services/reviewSourceService';
 import type { ReviewSessionTranscript } from '../types/reviewSource';
 import { formatFileSize, useChatAttachments, type PendingAttachment } from '../composables/useChatAttachments';
 import { useSessionRuntime } from '../composables/useSessionRuntime';
 import { useChatPullRequests } from '../composables/useChatPullRequests';
+import { useChatBranches } from '../composables/useChatBranches';
+import { useChatCommits } from '../composables/useChatCommits';
 import { createGitOperations } from '../services/gitOperations';
 import { usePreferences } from '../composables/usePreferences';
 import { useToasts } from '../composables/useToasts';
@@ -876,19 +878,6 @@ const {
   t: (key, params) => t(key, params || {}),
 });
 
-interface CommitStatusFile {
-  path: string;
-  status: string;
-}
-
-interface CommitPreview {
-  cwd: string;
-  message: string;
-  files: CommitStatusFile[];
-  mode: 'commit' | 'amend';
-}
-
-type BranchDialogMode = 'switch' | 'changes' | 'base';
 type GitSyncCommand = 'push' | 'pull';
 
 type SkillMode = 'all' | 'enabled' | 'disabled';
@@ -1025,37 +1014,6 @@ const showViewOptions = ref(false);
 const isExportingPdf = ref(false);
 const exportPdfError = ref('');
 const isPreparingSession = ref(false);
-const commitPreview = ref<CommitPreview | null>(null);
-const commitStatusMessage = ref<ChatLocalMessage | null>(null);
-const commitGeneratingMessage = ref(false);
-const commitGenerationError = ref('');
-const commitStagedOnly = ref(false);
-const commitDiffLoading = ref(false);
-const commitDiffError = ref('');
-const commitDiffContent = ref('');
-const collapsedCommitDiffFiles = ref(new Set<string>());
-const commitDiffViewMode = ref<'unified' | 'split'>('unified');
-let commitDiffRequestId = 0;
-const commitCommandShowsUserMessage = ref(true);
-const branchDialogOpen = ref(false);
-const branchDialogMode = ref<BranchDialogMode>('switch');
-const branchDialogLoading = ref(false);
-const branchDialogSubmitting = ref(false);
-const branchCommandShowsUserMessage = ref(true);
-const branchGeneratingName = ref(false);
-const branchDialogError = ref('');
-const branchOptions = ref<string[]>([]);
-const branchHasChanges = ref(false);
-const branchSwitchName = ref('');
-const branchBaseName = ref('');
-const branchNewName = ref('');
-const branchPullAfterSwitch = ref(false);
-const branchDeleteOriginal = ref(true);
-const BRANCH_SELECTION_STORAGE_KEY = 'pi-cloud:last-branch-selection';
-
-function branchSelectionStorageKey(): string {
-  return `${BRANCH_SELECTION_STORAGE_KEY}:${props.projectPath || '~'}`;
-}
 const skillSelectorOpen = ref(false);
 const treeModalOpen = ref(false);
 const skillSelectorLoading = ref(false);
@@ -1074,6 +1032,79 @@ const streamingElapsedSeconds = ref(0);
 let streamingElapsedTimerId: number | undefined;
 let isUnmounted = false;
 const slashCommands = useSlashCommands();
+function clearGitComposer(): void {
+  inputText.value = '';
+  void resizeInputAfterDomUpdate();
+}
+const {
+  branchOptions,
+  branchDialogOpen,
+  branchDialogMode,
+  branchDialogLoading,
+  branchDialogSubmitting,
+  branchGeneratingName,
+  branchDialogError,
+  branchHasChanges,
+  branchSwitchName,
+  branchBaseName,
+  branchNewName,
+  branchPullAfterSwitch,
+  branchDeleteOriginal,
+  branchDialogActionLabel,
+  branchSelectOptions,
+  rememberBranchSelection,
+  closeBranchDialog,
+  openBranchDialog,
+  generateBranchDialogName,
+  submitBranchDialog,
+  handleBranchCommand,
+} = useChatBranches({
+  projectPath: () => props.projectPath,
+  sessionId: () => props.sessionId,
+  clientId: () => props.clientId,
+  closeCommands: slashCommands.close,
+  clearComposer: clearGitComposer,
+  addLocalMessage: (message, sessionId) => addLocalMessage(message, sessionId),
+  showToast,
+  refreshSessionStatus,
+  onBranchChanged: () => emit('branchChanged'),
+  t: (key, params) => t(key, params || {}),
+});
+const {
+  commitPreview,
+  commitGeneratingMessage,
+  commitGenerationError,
+  commitStagedOnly,
+  commitDiffLoading,
+  commitDiffError,
+  collapsedCommitDiffFiles,
+  commitDiffViewMode,
+  commitDialogTitle,
+  commitDialogConfirmText,
+  commitDiffFiles,
+  allCommitDiffFilesCollapsed,
+  commitDiffSummary,
+  handleCommitCommand,
+  handleAmendCommand,
+  commitDiffFileId,
+  toggleCommitDiffFile,
+  toggleAllCommitDiffFiles,
+  loadCommitDiff,
+  refreshCommitFiles,
+  generateCommitMessage,
+  cancelCommit,
+  confirmCommit,
+} = useChatCommits({
+  projectPath: () => props.projectPath,
+  sessionId: () => props.sessionId,
+  clientId: () => props.clientId,
+  sessionTitle: () => props.sessionTitle,
+  closeCommands: slashCommands.close,
+  clearComposer: clearGitComposer,
+  addLocalMessage: (message, sessionId) => addLocalMessage(message, sessionId),
+  showToast,
+  t: (key, params) => t(key, params || {}),
+});
 const {
   prPreview,
   prGeneratingContent,
@@ -1091,10 +1122,7 @@ const {
   clientId: () => props.clientId,
   branchOptions,
   closeCommands: slashCommands.close,
-  clearComposer: () => {
-    inputText.value = '';
-    void resizeInputAfterDomUpdate();
-  },
+  clearComposer: clearGitComposer,
   addLocalMessage: (message, sessionId) => addLocalMessage(message, sessionId),
   showToast,
   t: (key, params) => t(key, params || {}),
@@ -1582,30 +1610,6 @@ const activeSkillCount = computed(() => {
   if (skillMode.value === 'disabled') return Math.max(skillOptions.value.length - selectedSkills.value.length, 0);
   return skillOptions.value.length;
 });
-const commitDialogTitle = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amendPreviousCommit') : t('components.chatPanel.commitChanges'));
-const commitDialogConfirmText = computed(() => commitPreview.value?.mode === 'amend' ? t('components.chatPanel.amend') : t('components.chatPanel.commit'));
-const commitDiffFiles = computed(() => parseDiffFiles(
-  commitDiffContent.value,
-  t('components.gitHistory.changes'),
-  { mergeByName: true },
-).map(file => ({ ...file, lines: file.lines.filter(line => !shouldHideDiffHeaderLine(line)) })));
-const allCommitDiffFilesCollapsed = computed(() => commitDiffFiles.value.length > 0
-  && commitDiffFiles.value.every((file) => collapsedCommitDiffFiles.value.has(file.name)));
-const commitDiffSummary = computed(() => {
-  const totals = commitDiffFiles.value.reduce((sum, file) => ({
-    additions: sum.additions + file.additions,
-    deletions: sum.deletions + file.deletions,
-  }), { additions: 0, deletions: 0 });
-  const files = commitDiffFiles.value.length;
-  return [
-    t(files === 1 ? 'components.chatPanel.fileChanged' : 'components.chatPanel.filesChanged', { count: files }),
-    t(totals.additions === 1 ? 'components.chatPanel.insertion' : 'components.chatPanel.insertions', { count: totals.additions }),
-    t(totals.deletions === 1 ? 'components.chatPanel.deletion' : 'components.chatPanel.deletions', { count: totals.deletions }),
-  ].join(', ');
-});
-const branchDialogActionLabel = computed(() => branchDialogMode.value === 'switch' ? t('components.chatPanel.switchBranch') : t('components.chatPanel.createBranch'));
-const branchSelectOptions = computed<CustomSelectOption[]>(() => branchOptions.value.map((branch) => ({ value: branch, label: branch })));
-
 function formatTokens(count: number) {
   if (count < 1000) return String(count);
   if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
@@ -2264,23 +2268,6 @@ function isChangelogCommand(text: string) {
   return /^\/changelog(?:\s|$)/i.test(text.trim());
 }
 
-function parseBranchArgs(text: string) {
-  const [name, baseBranch] = text.trim().replace(/^\/branch(?:\s+|$)/i, '').trim().split(/\s+/).filter(Boolean);
-  return { name, baseBranch };
-}
-
-function parseCommitMessageOverride(text: string) {
-  return text.trim().replace(/^\/commit(?:\s+|$)/i, '').trim();
-}
-
-function parseAmendMessageOverride(text: string) {
-  return text.trim().replace(/^\/amend(?:\s+|$)/i, '').trim();
-}
-
-function getCommitMessage(text: string) {
-  return parseCommitMessageOverride(text) || props.sessionTitle?.trim() || t('components.chatPanel.updateChanges');
-}
-
 function getLastAssistantResponseText() {
   const lastCopyableIndex = [...messages.value]
     .map((message, index) => ({ message, index }))
@@ -2696,21 +2683,6 @@ async function handleStatusCommand(text: string, showUserMessage = true) {
   }
 }
 
-function formatBranchSuccess(data: { cwd?: string; name?: string; baseBranch?: string; output?: string }) {
-  const output = data.output?.trim() || t('components.chatPanel.switchedToNewBranch', { name: data.name || '' });
-  const base = data.baseBranch ? `\n\nBase: \`${data.baseBranch}\`` : '';
-  return `### Git branch created\n\n\`${data.cwd || props.projectPath}\`\n\nBranch: \`${data.name || ''}\`${base}\n\n\`\`\`text\n${output}\n\`\`\``;
-}
-
-function formatBranchSwitchSuccess(data: { cwd?: string; name?: string; pulled?: boolean; deletedBranch?: { name?: string; commit?: string }; output?: string }) {
-  const output = data.output?.trim() || t('components.chatPanel.switchedToBranch', { name: data.name || '' });
-  const pulled = data.pulled ? '\n\nPulled: `git pull --ff-only`' : '';
-  const deleted = data.deletedBranch
-    ? `\n\nDeleted original branch: \`${data.deletedBranch.name || ''}\` (last commit \`${data.deletedBranch.commit || ''}\`)`
-    : '';
-  return `### Git branch switched\n\n\`${data.cwd || props.projectPath}\`\n\nBranch: \`${data.name || ''}\`${pulled}${deleted}\n\n\`\`\`text\n${output}\n\`\`\``;
-}
-
 function formatGitSyncSuccess(command: GitSyncCommand, data: { cwd?: string; output?: string }) {
   const title = `Git ${command}`;
   const output = data.output?.trim() || `git ${command} completed.`;
@@ -2740,411 +2712,6 @@ async function handleGitSyncCommand(text: string, command: GitSyncCommand, showU
     responseMessage.title = `${title} failed`;
     responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToRunGitCommand', { command });
     if (!showUserMessage) showToast(responseMessage.content, 'error');
-  }
-}
-
-function defaultMainBranch() {
-  return branchOptions.value.find((branch) => branch === 'main') || branchOptions.value[0] || '';
-}
-
-function rememberBranchSelection(branch: string): void {
-  if (branch) localStorage.setItem(branchSelectionStorageKey(), branch);
-}
-
-async function loadBranchOptions() {
-  branchDialogLoading.value = true;
-  branchDialogError.value = '';
-  branchHasChanges.value = false;
-  try {
-    const [branchesData, statusData] = await Promise.all([
-      gitOperations.getBranches(props.projectPath || '~'),
-      gitOperations.getStatus({ cwd: props.projectPath || '~' }),
-    ]);
-    branchOptions.value = Array.isArray(branchesData.branches) ? branchesData.branches : [];
-    branchHasChanges.value = Array.isArray(statusData.files) && statusData.files.length > 0;
-    const savedBranch = localStorage.getItem(branchSelectionStorageKey()) || '';
-    const rememberedBranch = branchOptions.value.includes(savedBranch) ? savedBranch : '';
-    // Reuse one saved choice for both branch selectors while it remains valid.
-    branchSwitchName.value = rememberedBranch || defaultMainBranch();
-    branchBaseName.value = rememberedBranch || branchesData.current || defaultMainBranch();
-  } catch (error) {
-    branchDialogError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToLoadGitBranches');
-  } finally {
-    branchDialogLoading.value = false;
-  }
-}
-
-function closeBranchDialog() {
-  branchDialogOpen.value = false;
-  branchDialogError.value = '';
-}
-
-async function openBranchDialog() {
-  slashCommands.close();
-  inputText.value = '';
-  resizeInputAfterDomUpdate();
-  branchDialogMode.value = 'switch';
-  branchNewName.value = '';
-  branchPullAfterSwitch.value = true;
-  branchDeleteOriginal.value = true;
-  branchDialogOpen.value = true;
-  await loadBranchOptions();
-}
-
-async function generateBranchDialogName() {
-  if (!props.clientId) {
-    branchDialogError.value = 'clientId is required to generate a branch name with AI';
-    return;
-  }
-  branchGeneratingName.value = true;
-  branchDialogError.value = '';
-  try {
-    const data = await gitOperations.generateBranchName({ cwd: props.projectPath || '~', clientId: props.clientId });
-    branchNewName.value = data.name || '';
-  } catch (error) {
-    branchDialogError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToGenerateBranchName');
-  } finally {
-    branchGeneratingName.value = false;
-  }
-}
-
-async function submitBranchDialog() {
-  branchDialogSubmitting.value = true;
-  branchDialogError.value = '';
-  try {
-    if (branchDialogMode.value === 'switch') {
-      const name = branchSwitchName.value.trim();
-      if (!name) throw new Error(t('components.chatPanel.selectABranchToSwitchTo'));
-      await runBranchSwitch(name, branchPullAfterSwitch.value, branchDeleteOriginal.value, '/branch', branchCommandShowsUserMessage.value);
-    } else {
-      const name = branchNewName.value.trim();
-      const baseBranch = branchDialogMode.value === 'base' ? branchBaseName.value.trim() : undefined;
-      if (!name) throw new Error(t('components.chatPanel.branchNameIsRequired'));
-      if (branchDialogMode.value === 'base' && !baseBranch) throw new Error(t('components.chatPanel.selectABaseBranch'));
-      await runBranchCreate(name, baseBranch, '/branch', branchCommandShowsUserMessage.value);
-    }
-    closeBranchDialog();
-  } catch (error) {
-    branchDialogError.value = error instanceof Error ? error.message : t('components.chatPanel.gitBranchOperationFailed');
-  } finally {
-    branchDialogSubmitting.value = false;
-  }
-}
-
-async function runBranchCreate(name: string, baseBranch: string | undefined, userText: string, showUserMessage = true) {
-  if (showUserMessage) addLocalMessage({ role: 'user', content: userText, kind: 'text' }, props.sessionId);
-  const responseMessage = createResponseMessage({ role: 'assistant', content: t('components.chatPanel.creatingGitBranch'), kind: 'status', status: 'pending', title: t('components.chatPanel.gitBranch') }, showUserMessage, props.sessionId);
-
-  try {
-    const data = await gitOperations.createBranch({ cwd: props.projectPath || '~', name, baseBranch });
-    responseMessage.kind = 'text';
-    responseMessage.status = undefined;
-    responseMessage.title = undefined;
-    responseMessage.content = formatBranchSuccess(data);
-    if (!showUserMessage) showToast(t('components.chatPanel.switchedToNewBranch', { name: data.name || name }), 'success');
-    emit('branchChanged');
-    void refreshSessionStatus();
-  } catch (error) {
-    responseMessage.status = 'failure';
-    responseMessage.title = t('components.chatPanel.gitBranchFailed');
-    responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToCreateGitBranch');
-    if (!showUserMessage) showToast(responseMessage.content, 'error');
-    throw error;
-  }
-}
-
-async function runBranchSwitch(name: string, pull: boolean, deleteOriginal: boolean, userText: string, showUserMessage = true) {
-  if (showUserMessage) addLocalMessage({ role: 'user', content: userText, kind: 'text' }, props.sessionId);
-  const responseMessage = createResponseMessage({ role: 'assistant', content: t('components.chatPanel.switchingGitBranch'), kind: 'status', status: 'pending', title: t('components.chatPanel.gitBranch') }, showUserMessage, props.sessionId);
-
-  try {
-    const data = await gitOperations.switchBranch({
-      cwd: props.projectPath || '~', name, pull, deleteOriginal, sessionId: props.sessionId,
-    });
-    responseMessage.kind = 'text';
-    responseMessage.status = undefined;
-    responseMessage.title = undefined;
-    responseMessage.content = formatBranchSwitchSuccess(data);
-    if (!showUserMessage) showToast(t('components.chatPanel.switchedToBranch', { name: data.name || name }), 'success');
-    emit('branchChanged');
-    void refreshSessionStatus();
-  } catch (error) {
-    responseMessage.status = 'failure';
-    responseMessage.title = t('components.chatPanel.gitBranchFailed');
-    responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToSwitchGitBranch');
-    if (!showUserMessage) showToast(responseMessage.content, 'error');
-    throw error;
-  }
-}
-
-async function handleBranchCommand(text: string, showUserMessage = true) {
-  const branchArgs = parseBranchArgs(text);
-  if (!branchArgs.name) {
-    branchCommandShowsUserMessage.value = showUserMessage;
-    await openBranchDialog();
-    return;
-  }
-
-  slashCommands.close();
-  inputText.value = '';
-  resizeInputAfterDomUpdate();
-  await runBranchCreate(branchArgs.name, branchArgs.baseBranch, text, showUserMessage);
-}
-
-function formatCommitPreview(preview: CommitPreview) {
-  const files = preview.files.length
-    ? preview.files.map((file) => `- ${file.status.padEnd(2, ' ')} ${file.path}`).join('\n')
-    : t('components.chatPanel.noWorkingTreeChanges');
-  const action = preview.mode === 'amend' ? 'amend the previous commit' : 'create this commit';
-  const heading = preview.mode === 'amend' ? '### Proposed git amend' : '### Proposed git commit';
-  return `${heading}\n\nMessage:\n\n\`${preview.message}\`\n\nFiles:\n\n\`\`\`text\n${files}\n\`\`\`\n\nConfirm in the dialog to ${action}, or cancel to do nothing.`;
-}
-
-function formatCommitSuccess(data: { cwd?: string; message?: string; commit?: string; output?: string }, mode: 'commit' | 'amend') {
-  const output = data.output?.trim() || (mode === 'amend' ? t('components.chatPanel.commitAmended') : t('components.chatPanel.commitCreated'));
-  const heading = mode === 'amend' ? '### Git commit amended' : '### Git commit created';
-  const commit = data.commit ? `\n\nCommit: \`${data.commit.slice(0, 7)}\`` : '';
-  return `${heading}\n\n\`${data.cwd || props.projectPath}\`\n\nMessage: \`${data.message || commitPreview.value?.message || ''}\`${commit}\n\n\`\`\`text\n${output}\n\`\`\``;
-}
-
-async function handleCommitCommand(text: string, showUserMessage = true) {
-  slashCommands.close();
-  commitCommandShowsUserMessage.value = showUserMessage;
-  if (showUserMessage) addLocalMessage({ role: 'user', content: text, kind: 'text' }, props.sessionId);
-  const responseMessage = createResponseMessage({
-    role: 'assistant',
-    content: t('components.chatPanel.preparingGitCommitPreview'),
-    kind: 'status',
-    status: 'pending',
-    title: t('components.chatPanel.gitCommit'),
-  }, showUserMessage, props.sessionId);
-
-  inputText.value = '';
-  resizeInputAfterDomUpdate();
-
-  try {
-    const commitMessage = getCommitMessage(text);
-    const data = await gitOperations.getStatus({ cwd: props.projectPath || '~', message: commitMessage });
-    if (!Array.isArray(data.files) || data.files.length === 0) {
-      responseMessage.kind = 'text';
-      responseMessage.status = undefined;
-      responseMessage.title = undefined;
-      responseMessage.content = `### Git commit\n\nNo changes to commit in \`${data.cwd || props.projectPath}\`.`;
-      if (!showUserMessage) showToast(t('components.chatPanel.noWorkingTreeChanges'));
-      return;
-    }
-
-    const preview: CommitPreview = {
-      cwd: data.cwd || props.projectPath || '~',
-      message: data.message || commitMessage,
-      files: data.files,
-      mode: 'commit',
-    };
-    commitGenerationError.value = '';
-    commitStagedOnly.value = false;
-    resetCommitDiff();
-    commitPreview.value = preview;
-    commitStatusMessage.value = responseMessage;
-    responseMessage.kind = 'text';
-    responseMessage.status = undefined;
-    responseMessage.title = undefined;
-    responseMessage.content = formatCommitPreview(preview);
-  } catch (error) {
-    responseMessage.status = 'failure';
-    responseMessage.title = t('components.chatPanel.gitCommitFailed');
-    responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToPrepareGitCommit');
-    if (!showUserMessage) showToast(responseMessage.content, 'error');
-  }
-}
-
-async function handleAmendCommand(text: string) {
-  slashCommands.close();
-  addLocalMessage({ role: 'user', content: text, kind: 'text' }, props.sessionId);
-  const responseMessage = addLocalMessage({
-    role: 'assistant',
-    content: t('components.chatPanel.preparingGitAmendPreview'),
-    kind: 'status',
-    status: 'pending',
-    title: t('components.chatPanel.gitAmend'),
-  }, props.sessionId);
-
-  inputText.value = '';
-  resizeInputAfterDomUpdate();
-
-  try {
-    const amendMessage = parseAmendMessageOverride(text);
-    const data = await gitOperations.getAmendStatus({
-      cwd: props.projectPath || '~',
-      message: amendMessage || undefined,
-    });
-
-    const preview: CommitPreview = {
-      cwd: data.cwd || props.projectPath || '~',
-      message: data.message || amendMessage,
-      files: Array.isArray(data.files) ? data.files : [],
-      mode: 'amend',
-    };
-    commitGenerationError.value = '';
-    resetCommitDiff();
-    commitPreview.value = preview;
-    commitStatusMessage.value = responseMessage;
-    responseMessage.kind = 'text';
-    responseMessage.status = undefined;
-    responseMessage.title = undefined;
-    responseMessage.content = formatCommitPreview(preview);
-  } catch (error) {
-    responseMessage.status = 'failure';
-    responseMessage.title = t('components.chatPanel.gitAmendFailed');
-    responseMessage.content = error instanceof Error ? error.message : t('components.chatPanel.failedToPrepareGitAmend');
-  }
-}
-
-function commitDiffFileId(index: number): string {
-  return `commit-diff-file-${index}`;
-}
-
-function toggleCommitDiffFile(name: string): void {
-  const collapsed = new Set(collapsedCommitDiffFiles.value);
-  if (collapsed.has(name)) collapsed.delete(name);
-  else collapsed.add(name);
-  collapsedCommitDiffFiles.value = collapsed;
-}
-
-function toggleAllCommitDiffFiles(): void {
-  collapsedCommitDiffFiles.value = allCommitDiffFilesCollapsed.value
-    ? new Set()
-    : new Set(commitDiffFiles.value.map((file) => file.name));
-}
-
-function resetCommitDiff() {
-  ++commitDiffRequestId;
-  commitDiffLoading.value = false;
-  commitDiffError.value = '';
-  commitDiffContent.value = '';
-  collapsedCommitDiffFiles.value = new Set();
-  commitDiffViewMode.value = 'unified';
-}
-
-async function loadCommitDiff() {
-  const preview = commitPreview.value;
-  if (!preview) return;
-
-  const requestId = ++commitDiffRequestId;
-  commitDiffLoading.value = true;
-  commitDiffError.value = '';
-  commitDiffContent.value = '';
-  collapsedCommitDiffFiles.value = new Set();
-  try {
-    const scope = preview.mode === 'commit' && commitStagedOnly.value ? 'staged' : 'all';
-    const data = await gitOperations.getDiff({
-      cwd: preview.cwd,
-      scope,
-      includeUntracked: scope === 'all',
-    });
-    if (requestId !== commitDiffRequestId) return;
-    if (data.oversized) {
-      commitDiffError.value = String(data.message || t('components.gitHistory.diffFailed'));
-      return;
-    }
-    commitDiffContent.value = typeof data.diff === 'string' ? data.diff : '';
-  } catch (error) {
-    if (requestId === commitDiffRequestId) {
-      commitDiffError.value = error instanceof Error ? error.message : t('components.gitHistory.diffFailed');
-    }
-  } finally {
-    if (requestId === commitDiffRequestId) commitDiffLoading.value = false;
-  }
-}
-
-async function refreshCommitFiles() {
-  const preview = commitPreview.value;
-  if (!preview || preview.mode !== 'commit') return;
-
-  commitGenerationError.value = '';
-  try {
-    const data = await gitOperations.getStatus({ cwd: preview.cwd, stagedOnly: commitStagedOnly.value });
-    preview.files = Array.isArray(data.files) ? data.files : [];
-    await loadCommitDiff();
-  } catch (error) {
-    commitGenerationError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToPrepareGitCommit');
-  }
-}
-
-async function generateCommitMessage() {
-  const preview = commitPreview.value;
-  if (!preview) return;
-  if (!props.clientId) {
-    commitGenerationError.value = 'clientId is required to generate a commit message with AI';
-    return;
-  }
-  if (preview.mode === 'amend' && preview.files.length === 0) {
-    commitGenerationError.value = t('components.chatPanel.noWorkingTreeChangesToGenerateA');
-    return;
-  }
-
-  commitGeneratingMessage.value = true;
-  commitGenerationError.value = '';
-  try {
-    const data = await gitOperations.generateCommitMessage({
-      cwd: preview.cwd,
-      clientId: props.clientId,
-      stagedOnly: preview.mode === 'commit' && commitStagedOnly.value,
-    });
-    preview.message = data.message || preview.message;
-  } catch (error) {
-    commitGenerationError.value = error instanceof Error ? error.message : t('components.chatPanel.failedToGenerateCommitMessage');
-  } finally {
-    commitGeneratingMessage.value = false;
-  }
-}
-
-function cancelCommit() {
-  if (commitStatusMessage.value) {
-    commitStatusMessage.value.content += '\n\nCommit cancelled.';
-  }
-  resetCommitDiff();
-  commitPreview.value = null;
-  commitStatusMessage.value = null;
-  commitGenerationError.value = '';
-}
-
-async function confirmCommit() {
-  const preview = commitPreview.value;
-  const responseMessage = commitStatusMessage.value;
-  if (!preview || !responseMessage) return;
-
-  resetCommitDiff();
-  commitPreview.value = null;
-  commitGenerationError.value = '';
-  responseMessage.kind = 'status';
-  responseMessage.status = 'pending';
-  responseMessage.title = preview.mode === 'amend' ? t('components.chatPanel.gitAmend') : t('components.chatPanel.gitCommit');
-  responseMessage.content = preview.mode === 'amend' ? t('components.chatPanel.amendingGitCommit') : t('components.chatPanel.creatingGitCommit');
-
-  try {
-    const data = await gitOperations.saveCommit(preview.mode, {
-      cwd: preview.cwd,
-      message: preview.message,
-      sessionId: props.sessionId,
-      stagedOnly: preview.mode === 'commit' && commitStagedOnly.value,
-    });
-
-    responseMessage.kind = 'text';
-    responseMessage.status = undefined;
-    responseMessage.title = undefined;
-    responseMessage.content = formatCommitSuccess(data, preview.mode);
-    if (!commitCommandShowsUserMessage.value) {
-      showToast(preview.mode === 'amend' ? t('components.chatPanel.commitAmended') : t('components.chatPanel.commitCreated'), 'success');
-    }
-    window.dispatchEvent(new CustomEvent('refresh-file-tree'));
-    window.dispatchEvent(new CustomEvent('refresh-git-status'));
-  } catch (error) {
-    responseMessage.status = 'failure';
-    responseMessage.title = preview.mode === 'amend' ? t('components.chatPanel.gitAmendFailed') : t('components.chatPanel.gitCommitFailed');
-    responseMessage.content = error instanceof Error ? error.message : preview.mode === 'amend' ? t('components.chatPanel.failedToAmendGitCommit') : t('components.chatPanel.failedToCreateGitCommit');
-    if (!commitCommandShowsUserMessage.value) showToast(responseMessage.content, 'error');
-  } finally {
-    commitStatusMessage.value = null;
   }
 }
 
