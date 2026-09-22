@@ -54,6 +54,7 @@ const context = {
   fillText: vi.fn(),
   measureText: vi.fn((text: string) => ({ width: text.length * 10 }) as TextMetrics),
   drawImage: vi.fn(),
+  translate: vi.fn(),
   save: vi.fn(),
   restore: vi.fn(),
   lineCap: '',
@@ -121,6 +122,62 @@ describe('MediaAnnotationPreview', () => {
     await wrapper.find('[aria-label="Zoom in"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('110%');
+  });
+
+  it('renders and annotates MHTML directly without converting it to PDF', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/files/read')) return { ok: false, status: 404 } as Response;
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    }));
+
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: {
+        src: '',
+        filePath: '/project/snapshot.mhtml',
+        htmlDocument: '<!doctype html><html><body><h1>Archived page</h1></body></html>',
+        kind: 'html',
+      },
+    });
+    await flushPromises();
+
+    const frame = wrapper.get('iframe.mhtml-document-frame');
+    expect(frame.attributes('srcdoc')).toContain('Archived page');
+    expect(frame.attributes('sandbox')).toBe('allow-same-origin');
+    expect(pdfjsMock.getDocument).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.annotations%2Fsnapshot.mhtml.annotations.json');
+
+    await frame.trigger('load');
+    await flushPromises();
+    expect(wrapper.find('.pdf-navigation-toolbar').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="MHTML annotation controls"]').exists()).toBe(true);
+
+    await wrapper.get('[aria-label="Draw line"]').trigger('click');
+    const canvas = wrapper.get('.pdf-annotation-canvas');
+    expect(canvas.classes()).toContain('mhtml');
+    expect(wrapper.findAll('.pdf-page > canvas')).toHaveLength(1);
+    await canvas.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
+
+    let drawFrame: FrameRequestCallback | undefined;
+    const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      drawFrame = callback;
+      return 1;
+    });
+    vi.mocked(context.clearRect).mockClear();
+    await canvas.trigger('pointermove', { pointerId: 1, clientX: 30, clientY: 30 });
+    await canvas.trigger('pointermove', { pointerId: 1, clientX: 40, clientY: 40 });
+    expect(requestFrame).toHaveBeenCalledTimes(1);
+    expect(context.clearRect).not.toHaveBeenCalled();
+    drawFrame?.(0);
+    expect(context.clearRect).toHaveBeenCalledTimes(1);
+
+    await canvas.trigger('pointerup', { pointerId: 1, clientX: 40, clientY: 40 });
+    await flushPromises();
+
+    expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('/project/.annotations/snapshot.mhtml.annotations.json'),
+    }));
   });
 
   it('loads and annotates an image using the PDF toolset', async () => {

@@ -17,12 +17,16 @@ export function renderMhtmlDocument(source: string): string | undefined {
   if (!htmlPart) return undefined;
 
   const resources = new Map<string, MimePart>();
+  const registerResource = (location: string, part: MimePart): void => {
+    resources.set(location, part);
+    resources.set(location.toLowerCase(), part);
+  };
   for (const part of parts) {
-    if (part.contentId) resources.set(`cid:${stripAngles(part.contentId).toLowerCase()}`, part);
+    if (part.contentId) registerResource(`cid:${stripAngles(part.contentId).toLowerCase()}`, part);
     if (part.contentLocation) {
-      resources.set(part.contentLocation, part);
+      registerResource(part.contentLocation, part);
       const absoluteLocation = resolveUrl(part.contentLocation, htmlPart.contentLocation);
-      if (absoluteLocation) resources.set(absoluteLocation, part);
+      if (absoluteLocation) registerResource(absoluteLocation, part);
     }
   }
 
@@ -32,7 +36,12 @@ export function renderMhtmlDocument(source: string): string | undefined {
     const key = path.toLowerCase().startsWith('cid:')
       ? `cid:${stripAngles(path.slice(4)).toLowerCase()}`
       : path;
-    const resolved = resources.get(key) || resources.get(resolveUrl(key, base) || '');
+    const absoluteKey = resolveUrl(key, base);
+    const lookupKeys = [key, absoluteKey, key.split('?')[0], absoluteKey?.split('?')[0]]
+      .filter((value): value is string => Boolean(value));
+    const resolved = lookupKeys
+      .map(value => resources.get(value) || resources.get(value.toLowerCase()))
+      .find((part): part is MimePart => Boolean(part));
     if (!resolved || resolved === htmlPart || resolving.has(resolved)) return undefined;
 
     const cached = dataUrls.get(resolved);
@@ -218,10 +227,19 @@ function resolveUrl(reference: string, base?: string): string | undefined {
 }
 
 function splitUrlSuffix(value: string): { path: string; suffix: string } {
-  const index = value.indexOf('#');
-  return index === -1
-    ? { path: value, suffix: '' }
-    : { path: value.slice(0, index), suffix: value.slice(index) };
+  const fragmentIndex = value.indexOf('#');
+  const queryIndex = value.indexOf('?');
+  const suffixIndex = [queryIndex, fragmentIndex]
+    .filter(index => index >= 0)
+    .sort((left, right) => left - right)[0];
+  if (suffixIndex === undefined) return { path: value, suffix: '' };
+
+  // Query strings are useful for locating an MHTML part, but must not be
+  // appended to the generated data URL. Preserve only a fragment.
+  return {
+    path: fragmentIndex >= 0 ? value.slice(0, fragmentIndex) : value,
+    suffix: fragmentIndex >= 0 ? value.slice(fragmentIndex) : '',
+  };
 }
 
 function cleanHeaderValue(value?: string): string | undefined {

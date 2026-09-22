@@ -273,6 +273,13 @@
           </div>
         </nav>
       </div>
+      <MediaAnnotationPreview
+        v-else-if="activeIsMhtml && activePreviewMode === 'preview' && activeTab"
+        kind="html"
+        src=""
+        :html-document="activeHtmlDocument"
+        :file-path="activeTab"
+      />
       <iframe
         v-else-if="activeIsHtml && activePreviewMode === 'preview'"
         class="html-preview"
@@ -762,7 +769,8 @@ function setActivePreviewScale(scale: number): void {
   }
 }
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
-const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || isMhtmlFile(activeTab.value)));
+const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMhtmlFile(activeTab.value));
+const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
 const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value);
 const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
 const activeViewModeLabel = computed(() => t(activeIsHtml.value

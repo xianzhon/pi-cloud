@@ -19,9 +19,9 @@ vi.mock('../utils/markdownPdfExport', () => ({
 vi.mock('./MediaAnnotationPreview.vue', () => ({
   default: {
     name: 'MediaAnnotationPreviewStub',
-    props: ['src', 'filePath', 'initialScale', 'kind'],
+    props: ['src', 'filePath', 'htmlDocument', 'initialScale', 'kind'],
     emits: ['scale-change'],
-    template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-initial-scale="initialScale" :data-kind="kind" />',
+    template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-html-document="htmlDocument" :data-initial-scale="initialScale" :data-kind="kind" />',
   },
 }));
 
@@ -668,10 +668,10 @@ describe('EditorPanel', () => {
     await wrapper.vm.openFile('/project/snapshot.mhtml');
     await wrapper.vm.$nextTick();
 
-    const preview = wrapper.find('iframe.html-preview');
-    expect(preview.exists()).toBe(true);
-    expect(preview.attributes('sandbox')).toBe('allow-same-origin');
-    const srcdoc = preview.attributes('srcdoc') || '';
+    const preview = wrapper.find('.pdf-preview-test');
+    expect(preview.attributes('data-kind')).toBe('html');
+    expect(preview.attributes('data-file-path')).toBe('/project/snapshot.mhtml');
+    const srcdoc = preview.attributes('data-html-document') || '';
     expect(srcdoc).toContain('src="data:image/png;base64,AQID"');
     expect(srcdoc).toContain('href="data:text/css;base64,');
     expect(srcdoc).toContain("script-src 'none'");

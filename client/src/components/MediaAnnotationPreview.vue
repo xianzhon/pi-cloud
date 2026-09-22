@@ -6,7 +6,7 @@
       :class="{ vertical: toolbarVertical }"
       :style="toolbarStyle"
       role="toolbar"
-      :aria-label="t(isImage ? 'components.editorPanel.imageAnnotationControls' : 'components.editorPanel.pdfAnnotationControls')"
+      :aria-label="t(annotationControlsLabel)"
       @mouseover="showTooltip"
       @mouseout="clearTooltip"
       @focusin="showTooltip"
@@ -23,7 +23,7 @@
         @pointerdown="startToolbarDrag"
         @keydown="moveToolbarWithKeyboard"
       ><PhDotsSixVertical :size="19" weight="bold" /></div>
-      <div class="pdf-toolbar-group" role="group" :aria-label="t(isImage ? 'components.editorPanel.imageAnnotationControls' : 'components.editorPanel.pdfAnnotationControls')">
+      <div class="pdf-toolbar-group" role="group" :aria-label="t(annotationControlsLabel)">
         <button
           v-for="annotationTool in annotationToolOptions"
           :key="annotationTool.name"
@@ -146,7 +146,7 @@
       role="tooltip"
       :style="{ left: `${activeTooltip.left}px`, top: `${activeTooltip.top}px` }"
     >{{ activeTooltip.text }}</div>
-    <div class="pdf-navigation-toolbar" role="toolbar" :aria-label="t(isImage ? 'components.editorPanel.imageControls' : 'components.editorPanel.pdfControls')">
+    <div v-if="!isHtml" class="pdf-navigation-toolbar" role="toolbar" :aria-label="t(isImage ? 'components.editorPanel.imageControls' : 'components.editorPanel.pdfControls')">
       <button
         v-if="!isImage"
         type="button"
@@ -241,7 +241,7 @@
       @wheel="handleZoomWheel"
       @dblclick="resetImageZoom"
     >
-      <div v-if="loading" class="pdf-message" role="status">{{ t(isImage ? 'components.editorPanel.loadingImage' : 'components.editorPanel.loadingPdf') }}</div>
+      <div v-if="loading" class="pdf-message" role="status">{{ t(isHtml ? 'components.editorPanel.loadingMhtml' : isImage ? 'components.editorPanel.loadingImage' : 'components.editorPanel.loadingPdf') }}</div>
       <div v-else-if="error" class="pdf-message pdf-error" role="alert">{{ error }}</div>
       <div v-show="!loading && !error" class="pdf-pages continuous" :class="`tone-${pageTone}`">
         <div
@@ -252,17 +252,28 @@
           :data-page="page"
           :style="pageStyle(page)"
         >
-          <canvas :ref="element => setCanvasElement(page, element, false)" />
+          <canvas v-if="!isHtml" :ref="element => setCanvasElement(page, element, false)" />
+          <iframe
+            v-if="isHtml"
+            :ref="setHtmlFrameElement"
+            class="mhtml-document-frame"
+            sandbox="allow-same-origin"
+            :srcdoc="htmlDocument"
+            :title="t('components.editorPanel.mhtmlPreview')"
+            @load="handleHtmlLoad"
+          />
           <canvas
             :ref="element => setCanvasElement(page, element, true)"
             class="pdf-annotation-canvas"
             :class="{
               enabled: tool !== 'pan',
+              mhtml: isHtml,
               pen: tool === 'pen',
               highlighter: tool === 'highlighter',
               erasing: tool === 'eraser',
               moving: tool === 'move',
             }"
+            :style="isHtml ? { height: `${htmlCanvasHeight}px` } : undefined"
             @pointerdown="startAnnotation($event, page)"
             @pointermove="continueAnnotation"
             @pointerup="finishAnnotation"
@@ -353,6 +364,7 @@ import {
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 
 interface AnnotationPoint { x: number; y: number }
+interface DrawingSurface { width: number; height: number }
 type DrawingTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'whiteout';
 interface AnnotationStroke {
   type?: DrawingTool;
@@ -395,12 +407,23 @@ interface PdfOutlineItem {
 const props = withDefaults(defineProps<{
   src: string;
   filePath: string;
+  htmlDocument?: string;
   initialScale?: number;
-  kind?: 'pdf' | 'image';
-}>(), { kind: 'pdf' });
+  kind?: 'pdf' | 'image' | 'html';
+}>(), { htmlDocument: '', kind: 'pdf' });
 const emit = defineEmits<{ 'scale-change': [scale: number] }>();
 const t = i18n.global.t;
 const isImage = computed(() => props.kind === 'image');
+const isHtml = computed(() => props.kind === 'html');
+const annotationControlsLabel = computed(() => {
+  if (isHtml.value) {
+    return 'components.editorPanel.mhtmlAnnotationControls';
+  }
+  if (isImage.value) {
+    return 'components.editorPanel.imageAnnotationControls';
+  }
+  return 'components.editorPanel.pdfAnnotationControls';
+});
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.1;
@@ -430,16 +453,16 @@ const pageToneOptions = computed<CustomSelectOption[]>(() => [
   { value: 'dark', label: t('components.editorPanel.pdfPageToneDark') },
 ]);
 const annotationToolOptions = computed<Array<{ name: ShortcutTool; label: string; icon: object; weight?: 'fill' }>>(() => [
-  { name: 'pen', label: isImage.value ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen', icon: PhPencilSimple },
-  { name: 'highlighter', label: isImage.value ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter', icon: PhHighlighter },
+  { name: 'pen', label: isHtml.value ? 'components.editorPanel.mhtmlPen' : isImage.value ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen', icon: PhPencilSimple },
+  { name: 'highlighter', label: isHtml.value ? 'components.editorPanel.mhtmlHighlighter' : isImage.value ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter', icon: PhHighlighter },
   { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus },
   { name: 'arrow', label: 'components.editorPanel.pdfArrow', icon: PhArrowUpRight },
   { name: 'rectangle', label: 'components.editorPanel.pdfRectangle', icon: PhRectangle },
   { name: 'ellipse', label: 'components.editorPanel.pdfEllipse', icon: PhCircle },
   { name: 'text', label: 'components.editorPanel.pdfText', icon: PhTextT },
   { name: 'move', label: 'components.editorPanel.pdfMoveAnnotation', icon: PhArrowsOutCardinal },
-  { name: 'whiteout', label: isImage.value ? 'components.editorPanel.imageWhiteout' : 'components.editorPanel.pdfWhiteout', icon: PhRectangle, weight: 'fill' },
-  { name: 'eraser', label: isImage.value ? 'components.editorPanel.imageEraser' : 'components.editorPanel.pdfEraser', icon: PhEraser },
+  { name: 'whiteout', label: isHtml.value ? 'components.editorPanel.mhtmlWhiteout' : isImage.value ? 'components.editorPanel.imageWhiteout' : 'components.editorPanel.pdfWhiteout', icon: PhRectangle, weight: 'fill' },
+  { name: 'eraser', label: isHtml.value ? 'components.editorPanel.mhtmlEraser' : isImage.value ? 'components.editorPanel.imageEraser' : 'components.editorPanel.pdfEraser', icon: PhEraser },
 ]);
 const { annotationToolShortcuts: toolShortcutKeys, setAnnotationToolShortcuts } = usePreferences();
 const showShortcutEditor = ref(false);
@@ -451,9 +474,11 @@ const shortcutEditorStyle = computed(() => shortcutEditorPosition.value && ({
 
 const previewEl = ref<HTMLDivElement>();
 const toolbarEl = ref<HTMLDivElement>();
+const htmlFrameEl = ref<HTMLIFrameElement>();
 const shortcutButtonEl = ref<HTMLButtonElement>();
 const shortcutEditorEl = ref<HTMLDivElement>();
 const viewportEl = ref<HTMLDivElement>();
+const htmlCanvasHeight = ref(1);
 const pageElements = new Map<number, HTMLElement>();
 const canvasElements = new Map<number, HTMLCanvasElement>();
 const annotationCanvasElements = new Map<number, HTMLCanvasElement>();
@@ -518,6 +543,7 @@ let document: PDFDocumentProxy | undefined;
 let imageDocument: HTMLImageElement | undefined;
 let loadingTask: PDFDocumentLoadingTask | undefined;
 let pageObserver: IntersectionObserver | undefined;
+let htmlResizeObserver: ResizeObserver | undefined;
 const visiblePages = new Set<number>();
 const renderTasks = new Map<number, RenderTask>();
 const renderRequests = new Map<number, number>();
@@ -535,6 +561,7 @@ let loadedFilePath: string | undefined;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let viewSaveTimer: ReturnType<typeof setTimeout> | undefined;
 let zoomRenderTimer: ReturnType<typeof setTimeout> | undefined;
+let annotationDrawFrame: number | undefined;
 let renderGeneration = 0;
 let tooltipAnchor: HTMLElement | undefined;
 let toolbarDrag: { pointerId: number; offsetX: number; offsetY: number } | undefined;
@@ -747,6 +774,10 @@ function setCanvasElement(page: number, element: unknown, annotation: boolean): 
   else elements.delete(page);
 }
 
+function setHtmlFrameElement(element: unknown): void {
+  htmlFrameEl.value = element instanceof HTMLIFrameElement ? element : undefined;
+}
+
 function setTextEditorElement(element: unknown): void {
   textEditorEl.value = element instanceof HTMLTextAreaElement ? element : undefined;
 }
@@ -875,6 +906,7 @@ async function goToPage(page: number): Promise<void> {
 }
 
 function handleViewportScroll(): void {
+  if (isHtml.value) scheduleAnnotationDraw();
   if (isPanning.value) return;
   const viewportTop = viewportEl.value?.getBoundingClientRect().top || 0;
   let closestPage = pageNumber.value;
@@ -933,15 +965,52 @@ function drawAnnotations(pageNumberToDraw = pageNumber.value): void {
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.lineCap = 'round';
   context.lineJoin = 'round';
+
+  let surface: DrawingSurface = canvas;
+  let drawingScale: number | undefined;
+  let translated = false;
+  if (isHtml.value) {
+    const pageRect = pageElements.get(pageNumberToDraw)?.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    if (pageRect?.width && pageRect.height && canvasRect.width) {
+      const pixelRatio = canvas.width / canvasRect.width;
+      surface = { width: pageRect.width * pixelRatio, height: pageRect.height * pixelRatio };
+      drawingScale = canvas.width / Math.max(1, (pageSizes.value[pageNumberToDraw] || defaultPageSize.value).width);
+      context.save();
+      context.translate(0, -(canvasRect.top - pageRect.top) * pixelRatio);
+      translated = true;
+    }
+  }
+
   const strokes = annotations.value.pages[String(pageNumberToDraw)] || [];
   strokes.forEach((stroke, index) => {
     if (textEditor.value?.page === String(pageNumberToDraw) && textEditor.value.index === index) return;
-    drawAnnotation(context, canvas, stroke);
+    drawAnnotation(context, surface, stroke, drawingScale);
   });
   if (tool.value === 'move' && selectedAnnotation.value?.page === pageNumberToDraw) {
     const selected = strokes[selectedAnnotation.value.index];
-    if (selected) drawResizeHandles(context, canvas, selected);
+    if (selected) drawResizeHandles(context, surface, selected);
   }
+  if (translated) context.restore();
+}
+
+function scheduleAnnotationDraw(): void {
+  if (!isHtml.value) {
+    drawAnnotations();
+    return;
+  }
+  if (annotationDrawFrame !== undefined) return;
+  annotationDrawFrame = window.requestAnimationFrame(() => {
+    annotationDrawFrame = undefined;
+    drawAnnotations();
+  });
+}
+
+function flushAnnotationDraw(): void {
+  if (annotationDrawFrame === undefined) return;
+  window.cancelAnimationFrame(annotationDrawFrame);
+  annotationDrawFrame = undefined;
+  drawAnnotations();
 }
 
 function drawVisibleAnnotations(): void {
@@ -978,7 +1047,7 @@ function wrapTextLines(context: CanvasRenderingContext2D, text: string, maxWidth
 
 function drawAnnotation(
   context: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
+  surface: DrawingSurface,
   stroke: AnnotationStroke,
   drawingScale = scale.value * (window.devicePixelRatio || 1),
 ): void {
@@ -986,10 +1055,10 @@ function drawAnnotation(
   const type = stroke.type || 'pen';
   const start = stroke.points[0];
   const end = stroke.points.at(-1) || start;
-  const startX = start.x * canvas.width;
-  const startY = start.y * canvas.height;
-  const endX = end.x * canvas.width;
-  const endY = end.y * canvas.height;
+  const startX = start.x * surface.width;
+  const startY = start.y * surface.height;
+  const endX = end.x * surface.width;
+  const endY = end.y * surface.height;
 
   context.save();
   context.beginPath();
@@ -1003,7 +1072,7 @@ function drawAnnotation(
 
   if (type === 'pen' || type === 'highlighter') {
     context.moveTo(startX, startY);
-    for (const point of stroke.points.slice(1)) context.lineTo(point.x * canvas.width, point.y * canvas.height);
+    for (const point of stroke.points.slice(1)) context.lineTo(point.x * surface.width, point.y * surface.height);
   } else if (type === 'line' || type === 'arrow') {
     context.moveTo(startX, startY);
     context.lineTo(endX, endY);
@@ -1026,7 +1095,7 @@ function drawAnnotation(
     const fontSize = (stroke.fontSize ?? 16) * drawingScale;
     context.font = `${fontSize}px sans-serif`;
     context.textBaseline = 'top';
-    const lines = wrapTextLines(context, stroke.text || '', canvas.width * (1 - start.x - TEXT_BOUNDARY_INSET));
+    const lines = wrapTextLines(context, stroke.text || '', surface.width * (1 - start.x - TEXT_BOUNDARY_INSET));
     for (const [index, line] of lines.entries()) {
       context.fillText(line, startX, startY + index * fontSize * 1.25);
     }
@@ -1106,7 +1175,7 @@ async function exportAnnotatedDocument(): Promise<void> {
 
 function drawResizeHandles(
   context: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
+  surface: DrawingSurface,
   stroke: AnnotationStroke,
 ): void {
   if (!isResizableAnnotation(stroke)) return;
@@ -1118,8 +1187,8 @@ function drawResizeHandles(
   for (const point of [stroke.points[0], stroke.points.at(-1)!]) {
     context.beginPath();
     context.rect(
-      point.x * canvas.width - handleSize / 2,
-      point.y * canvas.height - handleSize / 2,
+      point.x * surface.width - handleSize / 2,
+      point.y * surface.height - handleSize / 2,
       handleSize,
       handleSize,
     );
@@ -1148,9 +1217,18 @@ async function renderPage(pageNumberToRender: number): Promise<void> {
   const image = imageDocument;
   const canvas = canvasElements.get(pageNumberToRender);
   const annotationCanvas = annotationCanvasElements.get(pageNumberToRender);
-  if ((!pdf && !image) || !canvas || !annotationCanvas) return;
+  if (!annotationCanvas || (!isHtml.value && !canvas)) return;
 
   const generation = renderGeneration;
+  if (isHtml.value) {
+    const size = pageSizes.value[pageNumberToRender] || defaultPageSize.value;
+    const pixelRatio = window.devicePixelRatio || 1;
+    annotationCanvas.width = Math.max(1, Math.floor(size.width * scale.value * pixelRatio));
+    annotationCanvas.height = Math.max(1, Math.floor(htmlCanvasHeight.value * pixelRatio));
+    drawAnnotations(pageNumberToRender);
+    return;
+  }
+  if (!canvas || (!pdf && !image)) return;
   if (image) {
     const viewport = {
       width: image.naturalWidth * scale.value,
@@ -1278,6 +1356,57 @@ async function loadAnnotations(version: number): Promise<void> {
   }
 }
 
+function updateHtmlPageSize(): void {
+  const frame = htmlFrameEl.value;
+  const htmlDocument = frame?.contentDocument;
+  const viewport = viewportEl.value;
+  if (!frame || !htmlDocument || !viewport) return;
+
+  // The document's scrollWidth is relative to the iframe's current width. Using
+  // it here creates a feedback loop for responsive pages: once the page gets
+  // narrow, it reports that same narrow width forever. Use the preview viewport
+  // as the stable page width and only measure the document's resulting height.
+  const viewportStyle = window.getComputedStyle(viewport);
+  const width = Math.max(
+    viewport.clientWidth - parseFloat(viewportStyle.paddingLeft) - parseFloat(viewportStyle.paddingRight),
+    1,
+  );
+  const height = Math.max(htmlDocument.documentElement.scrollHeight, htmlDocument.body?.scrollHeight || 0, 1);
+  const availableHeight = viewport.clientHeight
+    - parseFloat(viewportStyle.paddingTop)
+    - parseFloat(viewportStyle.paddingBottom);
+  htmlCanvasHeight.value = Math.max(1, Math.min(availableHeight, height * scale.value));
+  if (pageSizes.value[1]?.width === width && pageSizes.value[1]?.height === height) return;
+  defaultPageSize.value = { width, height };
+  pageSizes.value = { 1: { width, height } };
+  void nextTick(() => renderPage(1).catch(handleRenderError));
+}
+
+async function handleHtmlLoad(): Promise<void> {
+  const frame = htmlFrameEl.value;
+  const htmlDocument = frame?.contentDocument;
+  if (!frame || !htmlDocument || !isHtml.value) return;
+
+  htmlResizeObserver?.disconnect();
+  if (typeof ResizeObserver !== 'undefined') {
+    htmlResizeObserver = new ResizeObserver(updateHtmlPageSize);
+    htmlResizeObserver.observe(htmlDocument.documentElement);
+    if (htmlDocument.body) htmlResizeObserver.observe(htmlDocument.body);
+  }
+  htmlDocument.addEventListener('wheel', event => {
+    const viewport = viewportEl.value;
+    if (!viewport || event.ctrlKey || event.metaKey) return;
+    event.preventDefault();
+    viewport.scrollBy({ left: event.deltaX, top: event.deltaY });
+  }, { passive: false });
+
+  updateHtmlPageSize();
+  loading.value = false;
+  await nextTick();
+  updateHtmlPageSize();
+  await renderVisiblePages().catch(handleRenderError);
+}
+
 function loadImage(): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -1306,6 +1435,8 @@ async function loadPdf(): Promise<void> {
   isPanning.value = false;
   pageSizes.value = {};
   outline.value = [];
+  htmlResizeObserver?.disconnect();
+  htmlResizeObserver = undefined;
   const previousLoadingTask = loadingTask;
   loadingTask = undefined;
   await previousLoadingTask?.destroy();
@@ -1314,6 +1445,15 @@ async function loadPdf(): Promise<void> {
 
   try {
     const annotationPromise = loadAnnotations(version);
+    if (isHtml.value) {
+      pageCount.value = 1;
+      await annotationPromise;
+      if (version !== loadVersion) return;
+      restoreViewState(annotations.value.view);
+      loadedFilePath = props.filePath;
+      await nextTick();
+      return;
+    }
     if (isImage.value) {
       const loadedImage = await loadImage();
       await annotationPromise;
@@ -1367,9 +1507,13 @@ async function loadPdf(): Promise<void> {
     if (pageNumber.value > 1) pageElements.get(pageNumber.value)?.scrollIntoView({ block: 'start' });
   } catch (loadError) {
     if (version !== loadVersion) return;
-    console.error(`Failed to load ${isImage.value ? 'image' : 'PDF'}:`, loadError);
+    console.error(`Failed to load ${isHtml.value ? 'MHTML' : isImage.value ? 'image' : 'PDF'}:`, loadError);
     loading.value = false;
-    error.value = t(isImage.value ? 'components.editorPanel.imageLoadFailed' : 'components.editorPanel.pdfLoadFailed');
+    error.value = t(isHtml.value
+      ? 'components.editorPanel.mhtmlLoadFailed'
+      : isImage.value
+        ? 'components.editorPanel.imageLoadFailed'
+        : 'components.editorPanel.pdfLoadFailed');
   }
 }
 
@@ -1437,7 +1581,8 @@ function pointFromEvent(event: PointerEvent): AnnotationPoint | undefined {
     ? event.currentTarget
     : annotationCanvasElements.get(pageNumber.value);
   if (!canvas) return undefined;
-  const rect = canvas.getBoundingClientRect();
+  const pageRect = isHtml.value ? pageElements.get(pageNumber.value)?.getBoundingClientRect() : undefined;
+  const rect = pageRect?.width && pageRect.height ? pageRect : canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return undefined;
   return {
     x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
@@ -1462,11 +1607,21 @@ function eraseAt(point: AnnotationPoint): void {
   }
 }
 
+function annotationDrawingSurface(canvas: HTMLCanvasElement): DrawingSurface {
+  if (!isHtml.value) return canvas;
+  const pageRect = pageElements.get(pageNumber.value)?.getBoundingClientRect();
+  const canvasRect = canvas.getBoundingClientRect();
+  if (!pageRect || !canvasRect.width) return canvas;
+  const pixelRatio = canvas.width / canvasRect.width;
+  return { width: pageRect.width * pixelRatio, height: pageRect.height * pixelRatio };
+}
+
 function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoint, canvas: HTMLCanvasElement): boolean {
   if (!stroke.points.length) return false;
   const threshold = 12 * (window.devicePixelRatio || 1);
-  const target = { x: point.x * canvas.width, y: point.y * canvas.height };
-  const points = stroke.points.map(item => ({ x: item.x * canvas.width, y: item.y * canvas.height }));
+  const surface = annotationDrawingSurface(canvas);
+  const target = { x: point.x * surface.width, y: point.y * surface.height };
+  const points = stroke.points.map(item => ({ x: item.x * surface.width, y: item.y * surface.height }));
   const type = stroke.type || 'pen';
 
   if (type === 'rectangle' || type === 'ellipse' || type === 'text' || type === 'whiteout') {
@@ -1477,7 +1632,7 @@ function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoin
     const context = type === 'text' ? canvas.getContext('2d') : null;
     if (context) context.font = `${fontSize}px sans-serif`;
     const textLines = context
-      ? wrapTextLines(context, stroke.text || '', canvas.width * (1 - stroke.points[0].x - TEXT_BOUNDARY_INSET))
+      ? wrapTextLines(context, stroke.text || '', surface.width * (1 - stroke.points[0].x - TEXT_BOUNDARY_INSET))
       : (stroke.text || '').split('\n');
     const textWidth = context ? Math.max(...textLines.map(line => context.measureText(line).width), 0) : 0;
     const textHeight = type === 'text' ? textLines.length * fontSize * 1.25 : 0;
@@ -1501,11 +1656,12 @@ function resizePointIndex(
   canvas: HTMLCanvasElement,
 ): number | undefined {
   if (!isResizableAnnotation(stroke)) return undefined;
-  const target = { x: point.x * canvas.width, y: point.y * canvas.height };
+  const surface = annotationDrawingSurface(canvas);
+  const target = { x: point.x * surface.width, y: point.y * surface.height };
   const indexes = [0, stroke.points.length - 1];
   const distances = indexes.map(index => {
     const candidate = stroke.points[index];
-    return Math.hypot(target.x - candidate.x * canvas.width, target.y - candidate.y * canvas.height);
+    return Math.hypot(target.x - candidate.x * surface.width, target.y - candidate.y * surface.height);
   });
   const closest = distances[0] <= distances[1] ? 0 : 1;
   return distances[closest] <= 12 * (window.devicePixelRatio || 1) ? indexes[closest] : undefined;
@@ -1695,7 +1851,7 @@ function continueAnnotation(event: PointerEvent): void {
     if (points) points[1] = point;
     annotationChanged = true;
   }
-  drawAnnotations();
+  scheduleAnnotationDraw();
 }
 
 function finishAnnotation(event: PointerEvent, cancelled = false): void {
@@ -1707,6 +1863,7 @@ function finishAnnotation(event: PointerEvent, cancelled = false): void {
     return;
   }
   if (event.pointerId !== activePointer) return;
+  flushAnnotationDraw();
   activePointer = undefined;
   moveStart = undefined;
   if (!annotationChanged) {
@@ -1774,7 +1931,7 @@ function clearPage(): void {
   void saveAnnotations();
 }
 
-watch([() => props.src, () => props.filePath], () => void loadPdf(), { immediate: true });
+watch([() => props.src, () => props.filePath, () => props.htmlDocument], () => void loadPdf(), { immediate: true });
 function rerenderVisiblePages(): void {
   renderGeneration++;
   renderTasks.forEach(task => task.cancel());
@@ -1812,8 +1969,10 @@ onUnmounted(() => {
   clearTimeout(statusTimer);
   clearTimeout(viewSaveTimer);
   clearTimeout(zoomRenderTimer);
+  if (annotationDrawFrame !== undefined) window.cancelAnimationFrame(annotationDrawFrame);
   imagePointers.clear();
   pageObserver?.disconnect();
+  htmlResizeObserver?.disconnect();
   renderTasks.forEach(task => task.cancel());
   void loadingTask?.destroy();
 });
@@ -2289,6 +2448,23 @@ onUnmounted(() => {
   transition: filter 120ms ease;
 }
 
+.mhtml-document-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+}
+
+.pdf-annotation-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .pdf-pages.tone-warm .pdf-page canvas { filter: sepia(0.18) saturate(0.9) brightness(0.94); }
 .pdf-pages.tone-gray .pdf-page canvas { filter: grayscale(1) brightness(0.78) contrast(0.95); }
 .pdf-pages.tone-dark .pdf-page canvas { filter: invert(0.88) hue-rotate(180deg) brightness(0.82) contrast(0.92); }
@@ -2296,10 +2472,11 @@ onUnmounted(() => {
 .pdf-pages.tone-gray .pdf-page { background: #a9aaad; }
 .pdf-pages.tone-dark .pdf-page { background: #202329; }
 
-.pdf-annotation-canvas {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.pdf-annotation-canvas.mhtml {
+  position: sticky;
+  inset: auto;
+  top: 0;
+  width: 100%;
 }
 
 .pdf-annotation-canvas.enabled {
