@@ -103,6 +103,14 @@
         >
           <PhList :size="16" weight="bold" />
         </button>
+        <CustomSelect
+          v-if="activeIsMhtml && activePreviewMode === 'preview'"
+          class="mhtml-font-select"
+          :model-value="mhtmlFont"
+          :options="mhtmlFontOptions"
+          :aria-label="t('components.editorPanel.mhtmlFont')"
+          @update:model-value="setMhtmlFont"
+        />
         <div v-if="activeIsPreviewable" class="view-mode-toggle" role="group" :aria-label="activeViewModeLabel">
           <button
             :class="{ active: activePreviewMode === 'preview' }"
@@ -433,6 +441,7 @@ import { useTheme } from '../composables/useTheme';
 import { normalizePathSeparators } from '../utils/paths';
 import { createMarkdownPdfCopy, exportMarkdownPdf } from '../utils/markdownPdfExport';
 import { renderMhtmlDocument } from '../utils/mhtmlPreview';
+import terminalFontUrl from '../assets/fonts/MesloLGMNerdFontMono-Regular.ttf?url';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
 import CssWorker from 'monaco-editor/language/css/css.worker?worker';
@@ -773,6 +782,20 @@ const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.k
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
 const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value);
 const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
+type MhtmlFont = 'original' | 'sans' | 'serif' | 'terminal';
+const storedMhtmlFont = localStorage.getItem('pi-cloud-mhtml-font');
+const mhtmlFont = ref<MhtmlFont>(['original', 'sans', 'serif', 'terminal'].includes(storedMhtmlFont || '')
+  ? storedMhtmlFont as MhtmlFont : 'original');
+const mhtmlFontOptions = computed<CustomSelectOption[]>(() => [
+  { value: 'original', label: t('components.editorPanel.mhtmlFontOriginal') },
+  { value: 'sans', label: t('components.editorPanel.mhtmlFontSans') },
+  { value: 'serif', label: t('components.editorPanel.mhtmlFontSerif') },
+  { value: 'terminal', label: t('components.editorPanel.mhtmlFontTerminal') },
+]);
+function setMhtmlFont(value: string): void {
+  mhtmlFont.value = value as MhtmlFont;
+  localStorage.setItem('pi-cloud-mhtml-font', value);
+}
 const activeViewModeLabel = computed(() => t(activeIsHtml.value
   ? 'components.editorPanel.htmlViewMode'
   : 'components.editorPanel.markdownViewMode'));
@@ -815,7 +838,8 @@ const activeHtmlDocument = computed(() => {
   if (!filePath || !model) return '';
   const source = model.getValue();
   const html = isMhtmlFile(filePath) ? renderMhtmlDocument(source) : source;
-  return renderHtmlPreview(html || '<p>This MHTML archive does not contain an HTML document.</p>', filePath);
+  return renderHtmlPreview(html || '<p>This MHTML archive does not contain an HTML document.</p>', filePath,
+    isMhtmlFile(filePath) ? mhtmlFont.value : 'original');
 });
 const isLocalSystemOpen = isLocalHostname(window.location.hostname);
 const systemOpenExplicitlyEnabled = ref(false);
@@ -1020,7 +1044,7 @@ function encodeBase64Url(value: string): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function renderHtmlPreview(html: string, filePath: string): string {
+function renderHtmlPreview(html: string, filePath: string, font: MhtmlFont = 'original'): string {
   const root = encodeBase64Url(dirname(filePath));
   const document = new DOMParser().parseFromString(html, 'text/html');
 
@@ -1045,6 +1069,16 @@ function renderHtmlPreview(html: string, filePath: string): string {
   const previewOrigin = window.location.origin;
   policy.content = `default-src 'none'; style-src ${previewOrigin} 'unsafe-inline' data: blob:; img-src ${previewOrigin} data: blob:; font-src ${previewOrigin} data:; media-src ${previewOrigin} data: blob:; script-src 'none'; object-src 'none'; frame-src 'none'; connect-src 'none'; base-uri 'none'`;
   document.head.prepend(policy);
+
+  if (font !== 'original') {
+    const fontFamily = font === 'terminal' ? '"Pi Terminal Nerd Font", monospace'
+      : font === 'sans' ? 'Arial, sans-serif' : 'Georgia, serif';
+    const style = document.createElement('style');
+    style.textContent = `${font === 'terminal' ? `@font-face { font-family: "Pi Terminal Nerd Font"; src: url("${terminalFontUrl}") format("truetype"); }` : ''}
+      body, #sbo-rt-content, body :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, td, th),
+      #sbo-rt-content :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, td, th) { font-family: ${fontFamily} !important; }`;
+    document.head.append(style);
+  }
 
   const doctype = /^\s*<!doctype\s+html[^>]*>/i.test(html) ? '<!DOCTYPE html>' : '';
   return `${doctype}${document.documentElement.outerHTML}`;
@@ -3301,6 +3335,16 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 .diff-file-select :deep(.custom-select-list) {
   min-width: min(360px, calc(100vw - 2rem));
+}
+
+.mhtml-font-select :deep(.custom-select-trigger) {
+  height: 1.75rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.mhtml-font-select :deep(.custom-select-list) {
+  min-width: 10rem;
 }
 
 .editor-actions {

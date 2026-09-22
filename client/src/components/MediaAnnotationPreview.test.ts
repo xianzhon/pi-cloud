@@ -190,6 +190,51 @@ describe('MediaAnnotationPreview', () => {
     }));
   });
 
+  it('keeps existing MHTML annotations in place when a font change changes document height', async () => {
+    const sidecar = {
+      version: 1,
+      view: { htmlPageWidth: 600 },
+      pages: { '1': [{ type: 'line', color: '#ef4444', width: 1, points: [{ x: 0.25, y: 0.5 }, { x: 0.5, y: 0.75 }] }] },
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: JSON.stringify(sidecar) }) } as Response;
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    }));
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/font.mhtml', kind: 'html', htmlDocument: '<p>Original</p>' },
+    });
+    await flushPromises();
+    const frame = wrapper.get<HTMLIFrameElement>('iframe');
+    const htmlDocument = window.document.implementation.createHTMLDocument();
+    let height = 1200;
+    Object.defineProperty(htmlDocument.documentElement, 'scrollHeight', { get: () => height });
+    Object.defineProperty(frame.element, 'contentDocument', { value: htmlDocument });
+    const page = wrapper.get<HTMLElement>('.pdf-page');
+    vi.spyOn(page.element, 'getBoundingClientRect').mockImplementation(() => ({
+      left: 0, top: 0, width: 600, height, right: 600, bottom: height, x: 0, y: 0, toJSON: () => ({}),
+    }));
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    viewport.element.style.paddingLeft = '0px';
+    viewport.element.style.paddingRight = '0px';
+    viewport.element.style.paddingTop = '0px';
+    viewport.element.style.paddingBottom = '0px';
+    Object.defineProperty(viewport.element, 'clientWidth', { value: 600 });
+
+    await frame.trigger('load');
+    await flushPromises();
+    vi.mocked(context.moveTo).mockClear();
+    await wrapper.setProps({ htmlDocument: '<p>Different font</p>' });
+    height = 1800;
+    await frame.trigger('load');
+    await flushPromises();
+
+    expect(context.moveTo).toHaveBeenLastCalledWith(150, 600);
+    expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
+      body: expect.stringContaining('htmlWidthCoordinates'),
+    }));
+  });
+
   it('uses the outer viewport to scroll MHTML instead of the embedded document', async () => {
     const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '', filePath: '/project/scroll.mhtml', kind: 'html', htmlDocument: '<p>Content</p>' },

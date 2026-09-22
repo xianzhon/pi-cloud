@@ -675,6 +675,24 @@ describe('EditorPanel', () => {
     expect(srcdoc).toContain('src="data:image/png;base64,AQID"');
     expect(srcdoc).toContain('href="data:text/css;base64,');
     expect(srcdoc).toContain("script-src 'none'");
+    expect(srcdoc).not.toContain('Pi Terminal Nerd Font');
+
+    await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
+    await wrapper.findAll('.mhtml-font-select [role="option"]')[3].trigger('click');
+    const monoPreview = wrapper.find('.pdf-preview-test').attributes('data-html-document') || '';
+    expect(monoPreview).toContain('font-family: "Pi Terminal Nerd Font", monospace !important');
+    expect(monoPreview).toContain('@font-face');
+    expect(monoPreview).toContain('MesloLGMNerdFontMono-Regular.ttf');
+    expect(localStorage.getItem('pi-cloud-mhtml-font')).toBe('terminal');
+
+    await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
+    await wrapper.findAll('.mhtml-font-select [role="option"]')[1].trigger('click');
+    expect(wrapper.find('.pdf-preview-test').attributes('data-html-document')).toContain('font-family: Arial, sans-serif !important');
+
+    await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
+    await wrapper.findAll('.mhtml-font-select [role="option"]')[0].trigger('click');
+    expect(wrapper.find('.pdf-preview-test').attributes('data-html-document')).not.toContain('Pi Terminal Nerd Font');
+    localStorage.removeItem('pi-cloud-mhtml-font');
 
     const stylesheet = new DOMParser().parseFromString(srcdoc, 'text/html').querySelector('link')!.getAttribute('href')!;
     expect(atob(stylesheet.slice(stylesheet.indexOf(',') + 1))).toContain('url(data:image/png;base64,iVBORw==)');

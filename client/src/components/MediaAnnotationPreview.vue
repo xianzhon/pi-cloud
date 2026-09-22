@@ -421,6 +421,7 @@ type PdfPageTone = 'original' | 'warm' | 'gray' | 'dark';
 interface PdfViewState {
   scale?: number;
   htmlPageWidth?: number;
+  htmlWidthCoordinates?: boolean;
   page?: number;
   tool?: AnnotationTool;
   penColor?: string;
@@ -580,7 +581,7 @@ const textEditorStyle = computed(() => {
   const longestLine = Math.max(...lines.map(line => line.length));
   return {
     left: `${editor.point.x * 100}%`,
-    top: `${editor.point.y * 100}%`,
+    top: isHtml.value ? `${editor.point.y * (htmlPageWidth.value || 1) * scale.value}px` : `${editor.point.y * 100}%`,
     width: `${Math.max(24, longestLine + 2)}ch`,
     maxWidth: `${Math.max(0, 1 - editor.point.x - TEXT_BOUNDARY_INSET) * 100}%`,
     color: editor.color,
@@ -938,6 +939,7 @@ function currentViewState(): PdfViewState {
   return {
     scale: scale.value,
     htmlPageWidth: isHtml.value ? htmlPageWidth.value : undefined,
+    htmlWidthCoordinates: isHtml.value ? true : undefined,
     page: pageNumber.value,
     tool: tool.value,
     penColor: penColor.value,
@@ -1070,7 +1072,7 @@ function drawAnnotations(pageNumberToDraw = pageNumber.value): void {
     const canvasRect = canvas.getBoundingClientRect();
     if (pageRect?.width && pageRect.height && canvasRect.width) {
       const pixelRatio = canvas.width / canvasRect.width;
-      surface = { width: pageRect.width * pixelRatio, height: pageRect.height * pixelRatio };
+      surface = { width: pageRect.width * pixelRatio, height: pageRect.width * pixelRatio };
       drawingScale = canvas.width / Math.max(1, (pageSizes.value[pageNumberToDraw] || defaultPageSize.value).width);
       context.save();
       context.translate(0, -(canvasRect.top - pageRect.top) * pixelRatio);
@@ -1467,6 +1469,16 @@ function updateHtmlPageSize(): void {
   );
   htmlPageWidth.value = width;
   const height = Math.max(htmlDocument.documentElement.scrollHeight, htmlDocument.body?.scrollHeight || 0, 1);
+  // Legacy MHTML strokes use page-height fractions. Convert once to width-based
+  // coordinates so font reflow cannot stretch annotations vertically.
+  if (!annotations.value.view?.htmlWidthCoordinates) {
+    const strokes = annotations.value.pages['1'] || [];
+    for (const stroke of strokes) {
+      for (const point of stroke.points) point.y *= height / width;
+    }
+    annotations.value.view = { ...annotations.value.view, htmlWidthCoordinates: true };
+    if (strokes.length) void saveAnnotations();
+  }
   const availableHeight = viewport.clientHeight
     - parseFloat(viewportStyle.paddingTop)
     - parseFloat(viewportStyle.paddingBottom);
@@ -1688,9 +1700,10 @@ function pointFromEvent(event: PointerEvent): AnnotationPoint | undefined {
   const pageRect = isHtml.value ? pageElements.get(pageNumber.value)?.getBoundingClientRect() : undefined;
   const rect = pageRect?.width && pageRect.height ? pageRect : canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return undefined;
+  const heightUnit = isHtml.value ? rect.width : rect.height;
   return {
     x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
-    y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+    y: Math.min(rect.height / heightUnit, Math.max(0, (event.clientY - rect.top) / heightUnit)),
   };
 }
 
@@ -1717,7 +1730,7 @@ function annotationDrawingSurface(canvas: HTMLCanvasElement): DrawingSurface {
   const canvasRect = canvas.getBoundingClientRect();
   if (!pageRect || !canvasRect.width) return canvas;
   const pixelRatio = canvas.width / canvasRect.width;
-  return { width: pageRect.width * pixelRatio, height: pageRect.height * pixelRatio };
+  return { width: pageRect.width * pixelRatio, height: pageRect.width * pixelRatio };
 }
 
 function annotationContainsPoint(stroke: AnnotationStroke, point: AnnotationPoint, canvas: HTMLCanvasElement): boolean {
@@ -1940,7 +1953,9 @@ function continueAnnotation(event: PointerEvent): void {
       const minY = Math.min(...moveStart.points.map(item => item.y));
       const maxY = Math.max(...moveStart.points.map(item => item.y));
       const deltaX = Math.max(-minX, Math.min(1 - maxX, point.x - moveStart.point.x));
-      const deltaY = Math.max(-minY, Math.min(1 - maxY, point.y - moveStart.point.y));
+      const page = pageElements.get(pageNumber.value)?.getBoundingClientRect();
+      const maxPageY = isHtml.value && page?.width ? page.height / page.width : 1;
+      const deltaY = Math.max(-minY, Math.min(Math.max(0, maxPageY - maxY), point.y - moveStart.point.y));
       stroke.points = moveStart.points.map(item => ({ x: item.x + deltaX, y: item.y + deltaY }));
       annotationChanged = deltaX !== 0 || deltaY !== 0;
     }
@@ -2035,7 +2050,8 @@ function clearPage(): void {
   void saveAnnotations();
 }
 
-watch([() => props.src, () => props.filePath, () => props.htmlDocument], () => void loadPdf(), { immediate: true });
+watch([() => props.src, () => props.filePath], () => void loadPdf(), { immediate: true });
+watch(() => props.htmlDocument, () => { if (!isHtml.value) void loadPdf(); });
 function rerenderVisiblePages(): void {
   renderGeneration++;
   renderTasks.forEach(task => task.cancel());
