@@ -425,6 +425,7 @@ import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
 import { normalizePathSeparators } from '../utils/paths';
 import { createMarkdownPdfCopy, exportMarkdownPdf } from '../utils/markdownPdfExport';
+import { renderMhtmlDocument } from '../utils/mhtmlPreview';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
 import CssWorker from 'monaco-editor/language/css/css.worker?worker';
@@ -761,7 +762,7 @@ function setActivePreviewScale(scale: number): void {
   }
 }
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
-const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isHtmlFile(activeTab.value));
+const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || isMhtmlFile(activeTab.value)));
 const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value);
 const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
 const activeViewModeLabel = computed(() => t(activeIsHtml.value
@@ -803,7 +804,10 @@ const activeHtmlDocument = computed(() => {
   void previewVersion.value;
   const filePath = activeTab.value;
   const model = filePath ? models.get(filePath) : undefined;
-  return filePath && model ? renderHtmlPreview(model.getValue(), filePath) : '';
+  if (!filePath || !model) return '';
+  const source = model.getValue();
+  const html = isMhtmlFile(filePath) ? renderMhtmlDocument(source) : source;
+  return renderHtmlPreview(html || '<p>This MHTML archive does not contain an HTML document.</p>', filePath);
 });
 const isLocalSystemOpen = isLocalHostname(window.location.hostname);
 const systemOpenExplicitlyEnabled = ref(false);
@@ -993,8 +997,12 @@ function isHtmlFile(filePath: string): boolean {
   return /\.html?$/i.test(filePath);
 }
 
+function isMhtmlFile(filePath: string): boolean {
+  return /\.m(?:html|ht)$/i.test(filePath);
+}
+
 function isPreviewableFile(filePath: string): boolean {
-  return isMarkdownFile(filePath) || isHtmlFile(filePath);
+  return isMarkdownFile(filePath) || isHtmlFile(filePath) || isMhtmlFile(filePath);
 }
 
 function encodeBase64Url(value: string): string {

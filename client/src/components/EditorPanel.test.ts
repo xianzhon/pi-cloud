@@ -621,6 +621,64 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.editor-container').classes()).not.toContain('hidden');
   });
 
+  it('previews MHTML with embedded resources in a sandboxed iframe', async () => {
+    const mhtml = [
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/related; boundary="snapshot"',
+      '',
+      '--snapshot',
+      'Content-Type: text/html; charset=utf-8',
+      'Content-Location: https://example.test/pages/index.html',
+      '',
+      '<!doctype html><html><head><link rel="stylesheet" href="../styles/site.css"></head><body><img src="cid:hero"></body></html>',
+      '--snapshot',
+      'Content-Type: text/css',
+      'Content-Location: https://example.test/styles/site.css',
+      'Content-Transfer-Encoding: quoted-printable',
+      '',
+      'body { background-image: url(../images/background.png); }',
+      '--snapshot',
+      'Content-Type: image/png',
+      'Content-Location: https://example.test/images/background.png',
+      'Content-Transfer-Encoding: base64',
+      '',
+      'iVBORw==',
+      '--snapshot',
+      'Content-Type: image/png',
+      'Content-ID: <hero>',
+      'Content-Transfer-Encoding: base64',
+      '',
+      'AQID',
+      '--snapshot--',
+    ].join('\r\n');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: mhtml, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => mhtml),
+      dispose: vi.fn(),
+    } as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/snapshot.mhtml');
+    await wrapper.vm.$nextTick();
+
+    const preview = wrapper.find('iframe.html-preview');
+    expect(preview.exists()).toBe(true);
+    expect(preview.attributes('sandbox')).toBe('allow-same-origin');
+    const srcdoc = preview.attributes('srcdoc') || '';
+    expect(srcdoc).toContain('src="data:image/png;base64,AQID"');
+    expect(srcdoc).toContain('href="data:text/css;base64,');
+    expect(srcdoc).toContain("script-src 'none'");
+
+    const stylesheet = new DOMParser().parseFromString(srcdoc, 'text/html').querySelector('link')!.getAttribute('href')!;
+    expect(atob(stylesheet.slice(stylesheet.indexOf(',') + 1))).toContain('url(data:image/png;base64,iVBORw==)');
+  });
+
   it('keeps invalid Mermaid source visible in markdown preview', async () => {
     const markdown = '```mermaid\nnot a valid diagram\n```';
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
