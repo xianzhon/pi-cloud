@@ -1412,6 +1412,11 @@ async function handleHtmlLoad(): Promise<void> {
   const htmlDocument = frame?.contentDocument;
   if (!frame || !htmlDocument || !isHtml.value) return;
 
+  // The outer viewport scrolls the page and its annotation overlay together.
+  // Override archived root scrollbars while keeping body overflow measurable.
+  htmlDocument.documentElement.style.setProperty('overflow', 'hidden', 'important');
+  htmlDocument.body?.style.setProperty('overflow', 'visible', 'important');
+
   htmlResizeObserver?.disconnect();
   if (typeof ResizeObserver !== 'undefined') {
     htmlResizeObserver = new ResizeObserver(updateHtmlPageSize);

@@ -190,6 +190,41 @@ describe('MediaAnnotationPreview', () => {
     }));
   });
 
+  it('uses the outer viewport to scroll MHTML instead of the embedded document', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/scroll.mhtml', kind: 'html', htmlDocument: '<p>Content</p>' },
+    });
+    await flushPromises();
+
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    viewport.element.style.padding = '0px';
+    Object.defineProperty(viewport.element, 'clientWidth', { value: 640 });
+    const scrollBy = vi.fn();
+    viewport.element.scrollBy = scrollBy;
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    const htmlDocument = window.document.implementation.createHTMLDocument();
+    htmlDocument.documentElement.style.setProperty('overflow-y', 'scroll', 'important');
+    htmlDocument.body.style.setProperty('overflow', 'auto', 'important');
+    Object.defineProperty(htmlDocument.documentElement, 'scrollHeight', { value: 800 });
+    Object.defineProperty(htmlDocument.body, 'scrollHeight', { value: 2400 });
+    Object.defineProperty(frame.element, 'contentDocument', { value: htmlDocument });
+
+    await frame.trigger('load');
+    await flushPromises();
+
+    expect(htmlDocument.documentElement.style.overflow).toBe('hidden');
+    expect(htmlDocument.documentElement.style.getPropertyPriority('overflow')).toBe('important');
+    expect(htmlDocument.body.style.overflow).toBe('visible');
+    expect(htmlDocument.body.style.getPropertyPriority('overflow')).toBe('important');
+    expect(frame.element.style.height).toBe('2400px');
+    expect(wrapper.get<HTMLElement>('.pdf-page').element.style.height).toBe('2400px');
+
+    const wheel = new WheelEvent('wheel', { deltaX: 12, deltaY: 120, cancelable: true });
+    htmlDocument.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(scrollBy).toHaveBeenCalledWith({ left: 12, top: 120 });
+  });
+
   it('keeps the MHTML layout fixed when zooming and resizing the viewport', async () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640);
     let resize: (() => void) | undefined;
