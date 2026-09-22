@@ -139,10 +139,13 @@ function splitMultipart(body: string, boundary: string): string[] {
 
   for (const line of lines) {
     const marker = line.trimEnd();
-    if (marker === delimiter || marker === `${delimiter}--`) {
+    if (marker === `${delimiter}--`) {
       if (current) parts.push(current.join('\n'));
-      current = marker.endsWith('--') ? undefined : [];
-      if (marker.endsWith('--')) break;
+      break;
+    }
+    if (marker === delimiter) {
+      if (current) parts.push(current.join('\n'));
+      current = [];
     } else if (current) {
       current.push(line);
     }

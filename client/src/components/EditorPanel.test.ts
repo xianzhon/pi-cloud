@@ -622,34 +622,35 @@ describe('EditorPanel', () => {
   });
 
   it('previews MHTML with embedded resources in a sandboxed iframe', async () => {
+    const boundary = '----snapshot----';
     const mhtml = [
       'MIME-Version: 1.0',
-      'Content-Type: multipart/related; boundary="snapshot"',
+      `Content-Type: multipart/related; boundary="${boundary}"`,
       '',
-      '--snapshot',
+      `--${boundary}`,
       'Content-Type: text/html; charset=utf-8',
       'Content-Location: https://example.test/pages/index.html',
       '',
       '<!doctype html><html><head><link rel="stylesheet" href="../styles/site.css"></head><body><img src="cid:hero"></body></html>',
-      '--snapshot',
+      `--${boundary}`,
       'Content-Type: text/css',
       'Content-Location: https://example.test/styles/site.css',
       'Content-Transfer-Encoding: quoted-printable',
       '',
       'body { background-image: url(../images/background.png); }',
-      '--snapshot',
+      `--${boundary}`,
       'Content-Type: image/png',
       'Content-Location: https://example.test/images/background.png',
       'Content-Transfer-Encoding: base64',
       '',
       'iVBORw==',
-      '--snapshot',
+      `--${boundary}`,
       'Content-Type: image/png',
       'Content-ID: <hero>',
       'Content-Transfer-Encoding: base64',
       '',
       'AQID',
-      '--snapshot--',
+      `--${boundary}--`,
     ].join('\r\n');
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
