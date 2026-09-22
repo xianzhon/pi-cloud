@@ -42,11 +42,16 @@
     "prepack": "pnpm build",
     "start": "pnpm -r run start",
     "start:prod": "pnpm --filter @pi-cloud/server start",
-    "test": "pnpm -r --if-present run test:run",
-    "test:coverage": "pnpm -r --if-present run test:coverage",
+    "test": "pnpm architecture:test && pnpm -r --if-present run test:run",
+    "test:coverage": "pnpm architecture:test && pnpm -r --if-present run test:coverage",
     "test:watch": "pnpm -r --if-present run test",
-    "lint": "oxlint --deny-warnings client/src server/src bin client/*.config.ts server/*.config.ts server/build.mjs",
-    "format:check": "prettier --check package.json client/package.json server/package.json pnpm-workspace.yaml .oxlintrc.json .prettierrc.json .github client/*.config.ts server/*.config.ts server/build.mjs client/src/test/setup.ts"
+    "lint": "oxlint --deny-warnings client/src server/src bin client/*.config.ts server/*.config.ts server/build.mjs scripts/architecture",
+    "format:check": "prettier --check package.json client/package.json server/package.json architecture-policy.json pnpm-workspace.yaml .oxlintrc.json .prettierrc.json .github client/*.config.ts server/*.config.ts server/build.mjs client/src/test/setup.ts scripts/architecture",
+    "architecture:check": "node scripts/architecture/architecture-check.mjs check",
+    "architecture:report": "node scripts/architecture/architecture-check.mjs report",
+    "architecture:baseline:update": "node scripts/architecture/architecture-check.mjs baseline:update",
+    "architecture:context": "node scripts/architecture/architecture-check.mjs context",
+    "architecture:test": "node --test scripts/architecture/*.test.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.84.2",

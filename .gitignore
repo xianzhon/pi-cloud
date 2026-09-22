@@ -14,6 +14,10 @@ coverage
 *.zip
 .codegraph/
 .pi-subagents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/architecture-governance/
+!.agents/skills/architecture-governance/**
 *.tgz
-.agents
 tmp/

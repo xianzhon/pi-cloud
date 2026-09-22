@@ -35,6 +35,10 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
+      # Report-only during the initial architecture policy rollout.
+      - name: Report architecture policy violations
+        run: pnpm architecture:report
+
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level high
 

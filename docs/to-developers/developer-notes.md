@@ -9,6 +9,8 @@
 
 Each browser tab gets its own `clientId` and independent session state — no synchronization between tabs.
 
+See [Architecture Governance](architecture-governance.md) for module ownership, dependency policy, and the workflow for architecture-significant changes.
+
 ## API
 
 The server exposes REST APIs under `/api/*` and WebSocket endpoints at `/ws/chat` and `/ws/terminal`. Route definitions live in `server/src/routes/` and `server/src/ws/`.

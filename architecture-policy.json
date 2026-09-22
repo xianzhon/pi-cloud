@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "id": "server-core",
+      "roots": ["server/src"],
+      "requires": [
+        "server-auth",
+        "server-config",
+        "server-db",
+        "server-memory",
+        "server-routes",
+        "server-services",
+        "server-ws"
+      ],
+      "owner": "server composition"
+    },
+    {
+      "id": "server-auth",
+      "roots": ["server/src/auth"],
+      "requires": ["server-config", "server-db"],
+      "owner": "authentication and authorization"
+    },
+    {
+      "id": "server-config",
+      "roots": ["server/src/config"],
+      "requires": [],
+      "owner": "runtime configuration"
+    },
+    {
+      "id": "server-db",
+      "roots": ["server/src/db"],
+      "requires": [],
+      "owner": "SQLite schema and connection"
+    },
+    {
+      "id": "server-extensions",
+      "roots": ["server/src/extensions"],
+      "requires": [],
+      "owner": "Pi agent extensions"
+    },
+    {
+      "id": "server-memory",
+      "roots": ["server/src/memory"],
+      "requires": [
+        "server-core",
+        "server-db",
+        "server-services",
+        "server-utils"
+      ],
+      "owner": "durable memory"
+    },
+    {
+      "id": "server-routes",
+      "roots": ["server/src/routes"],
+      "requires": [
+        "server-auth",
+        "server-config",
+        "server-core",
+        "server-db",
+        "server-memory",
+        "server-services",
+        "server-utils"
+      ],
+      "owner": "REST transport"
+    },
+    {
+      "id": "server-services",
+      "roots": ["server/src/services"],
+      "requires": [
+        "server-core",
+        "server-db",
+        "server-extensions",
+        "server-memory",
+        "server-utils"
+      ],
+      "owner": "application services and session state"
+    },
+    {
+      "id": "server-utils",
+      "roots": ["server/src/utils"],
+      "requires": [],
+      "owner": "shared server utilities"
+    },
+    {
+      "id": "server-ws",
+      "roots": ["server/src/ws"],
+      "requires": [
+        "server-auth",
+        "server-core",
+        "server-services",
+        "server-utils"
+      ],
+      "owner": "WebSocket transport"
+    },
+    {
+      "id": "client-core",
+      "roots": ["client/src"],
+      "requires": [
+        "client-components",
+        "client-composables",
+        "client-i18n",
+        "client-services",
+        "client-types",
+        "client-utils"
+      ],
+      "owner": "client composition and routing"
+    },
+    {
+      "id": "client-components",
+      "roots": ["client/src/components"],
+      "requires": [
+        "client-composables",
+        "client-i18n",
+        "client-services",
+        "client-types",
+        "client-utils"
+      ],
+      "owner": "Vue user interface"
+    },
+    {
+      "id": "client-composables",
+      "roots": ["client/src/composables"],
+      "requires": ["client-services", "client-types", "client-utils"],
+      "owner": "client state orchestration"
+    },
+    {
+      "id": "client-i18n",
+      "roots": ["client/src/i18n"],
+      "requires": [],
+      "owner": "localization"
+    },
+    {
+      "id": "client-services",
+      "roots": ["client/src/services"],
+      "requires": ["client-composables", "client-types"],
+      "owner": "browser-side integrations"
+    },
+    {
+      "id": "client-types",
+      "roots": ["client/src/types"],
+      "requires": [],
+      "owner": "shared client types"
+    },
+    {
+      "id": "client-utils",
+      "roots": ["client/src/utils"],
+      "requires": ["client-types"],
+      "owner": "shared client utilities"
+    }
+  ],
+  "global": {
+    "aliases": {
+      "@/": "client/src/"
+    },
+    "forbidCycles": false,
+    "forbidDeepImports": false
+  }
+}
