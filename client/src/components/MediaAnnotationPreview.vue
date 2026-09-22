@@ -43,6 +43,15 @@
         <label class="pdf-control-label" :data-tooltip="t(annotationColorLabel)">
           <input v-model="annotationColor" type="color" :aria-label="t(annotationColorLabel)">
         </label>
+        <button
+          ref="colorPresetsButtonEl"
+          type="button"
+          class="pdf-color-presets-trigger"
+          :aria-label="t('components.editorPanel.annotationColorPresets')"
+          :aria-expanded="showColorPresets"
+          :data-tooltip="t('components.editorPanel.annotationColorPresets')"
+          @click="toggleColorPresets"
+        ><PhCaretDown :size="13" /></button>
         <label
           class="pdf-width-control"
           :data-tooltip="`${t('components.editorPanel.pdfPenWidth')}: ${penWidth}`"
@@ -107,6 +116,26 @@
           <span v-else-if="saveState === 'error'" aria-hidden="true">!</span>
         </span>
       </div>
+    </div>
+    <div
+      v-if="showColorPresets"
+      ref="colorPresetsEl"
+      class="pdf-color-presets"
+      role="group"
+      :aria-label="t('components.editorPanel.annotationColorPresets')"
+      :style="colorPresetsStyle"
+      @keydown.esc="showColorPresets = false"
+    >
+      <button
+        v-for="color in ANNOTATION_COLOR_PRESETS"
+        :key="color"
+        type="button"
+        :style="{ backgroundColor: color }"
+        :class="{ selected: annotationColor === color }"
+        :aria-label="`${t('components.editorPanel.annotationColorPreset')} ${color}`"
+        :aria-pressed="annotationColor === color"
+        @click="annotationColor = color; showColorPresets = false"
+      />
     </div>
     <div
       v-if="showShortcutEditor"
@@ -340,6 +369,7 @@ import {
   PhArrowsOutCardinal,
   PhArrowsOutLineHorizontal,
   PhArrowsOutLineVertical,
+  PhCaretDown,
   PhCaretLeft,
   PhCaretRight,
   PhCircle,
@@ -439,6 +469,10 @@ const minScale = computed(() => isImage.value ? 0.05 : MIN_SCALE);
 const maxScale = computed(() => isImage.value ? 8 : MAX_SCALE);
 const scaleStep = computed(() => isImage.value ? 0.05 : SCALE_STEP);
 const TOOLBAR_INSET = 12;
+const ANNOTATION_COLOR_PRESETS = [
+  '#3f3f46', '#9ca3af', '#c94f59', '#ef4444', '#fb923c', '#facc15', '#10b981', '#06b6d4', '#3b82f6', '#c084d4',
+  '#ffffff', '#e5e7eb', '#f4b183', '#fecdd3', '#fde68a', '#fef3c7', '#a3e635', '#a5f3fc', '#7dd3fc', '#dbeafe',
+];
 const TEXT_BOUNDARY_INSET = 0.01;
 const VIEW_SAVE_DELAY = 300;
 const ZOOM_RENDER_DELAY = 120;
@@ -474,6 +508,14 @@ const annotationToolOptions = computed<Array<{ name: ShortcutTool; label: string
 ]);
 const { annotationToolShortcuts: toolShortcutKeys, setAnnotationToolShortcuts } = usePreferences();
 const showShortcutEditor = ref(false);
+const showColorPresets = ref(false);
+const colorPresetsButtonEl = ref<HTMLButtonElement>();
+const colorPresetsEl = ref<HTMLDivElement>();
+const colorPresetsPosition = ref<ToolbarPosition>();
+const colorPresetsStyle = computed(() => colorPresetsPosition.value && ({
+  left: `${colorPresetsPosition.value.left}px`,
+  top: `${colorPresetsPosition.value.top}px`,
+}));
 const shortcutEditorPosition = ref<ToolbarPosition>();
 const shortcutEditorStyle = computed(() => shortcutEditorPosition.value && ({
   left: `${shortcutEditorPosition.value.left}px`,
@@ -611,6 +653,7 @@ function startToolbarDrag(event: PointerEvent): void {
     left: toolbarRect.left - previewRect.left,
     top: toolbarRect.top - previewRect.top,
   };
+  showColorPresets.value = false;
   window.addEventListener('pointermove', continueToolbarDrag);
   window.addEventListener('pointerup', finishToolbarDrag);
   window.addEventListener('pointercancel', finishToolbarDrag);
@@ -637,6 +680,7 @@ function moveToolbarWithKeyboard(event: KeyboardEvent): void {
     top: toolbarRect.top - previewRect.top,
   };
   toolbarPosition.value = clampToolbarPosition(current.left + delta.left, current.top + delta.top);
+  showColorPresets.value = false;
   void nextTick(updateShortcutEditorPosition);
 }
 
@@ -649,6 +693,7 @@ function finishToolbarDrag(event?: PointerEvent): void {
 }
 
 function keepToolbarInBounds(): void {
+  showColorPresets.value = false;
   if (toolbarPosition.value) {
     toolbarPosition.value = clampToolbarPosition(toolbarPosition.value.left, toolbarPosition.value.top);
   }
@@ -684,6 +729,30 @@ function updateShortcutEditorPosition(): void {
   };
 }
 
+async function toggleColorPresets(): Promise<void> {
+  showColorPresets.value = !showColorPresets.value;
+  clearTooltip();
+  if (!showColorPresets.value) return;
+  await nextTick();
+  const previewRect = previewEl.value?.getBoundingClientRect();
+  const buttonRect = colorPresetsButtonEl.value?.getBoundingClientRect();
+  const paletteRect = colorPresetsEl.value?.getBoundingClientRect();
+  if (!previewRect || !buttonRect || !paletteRect) return;
+  colorPresetsPosition.value = {
+    left: Math.max(0, Math.min(previewRect.width - paletteRect.width, buttonRect.left - previewRect.left)),
+    top: buttonRect.bottom + paletteRect.height > previewRect.bottom
+      ? buttonRect.top - previewRect.top - paletteRect.height
+      : buttonRect.bottom - previewRect.top,
+  };
+}
+
+function closeColorPresetsOutside(event: PointerEvent): void {
+  if (!colorPresetsEl.value?.contains(event.target as Node)
+    && !colorPresetsButtonEl.value?.contains(event.target as Node)) {
+    showColorPresets.value = false;
+  }
+}
+
 async function toggleShortcutEditor(): Promise<void> {
   showShortcutEditor.value = !showShortcutEditor.value;
   clearTooltip();
@@ -694,6 +763,7 @@ async function toggleShortcutEditor(): Promise<void> {
 }
 
 function toggleToolbarOrientation(): void {
+  showColorPresets.value = false;
   toolbarVertical.value = !toolbarVertical.value;
   clearTooltip();
 
@@ -1991,6 +2061,7 @@ onMounted(() => {
     pageElements.forEach(element => pageObserver?.observe(element));
   }
   window.addEventListener('resize', keepToolbarInBounds);
+  window.addEventListener('pointerdown', closeColorPresetsOutside);
   window.addEventListener('keydown', handleToolShortcut);
 });
 
@@ -1998,6 +2069,7 @@ onUnmounted(() => {
   loadVersion++;
   finishToolbarDrag();
   window.removeEventListener('resize', keepToolbarInBounds);
+  window.removeEventListener('pointerdown', closeColorPresetsOutside);
   window.removeEventListener('keydown', handleToolShortcut);
   clearTooltip();
   clearTimeout(statusTimer);
@@ -2046,6 +2118,34 @@ onUnmounted(() => {
   max-height: calc(100% - 1.5rem);
   flex-direction: column;
 }
+
+.pdf-color-presets {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  box-sizing: border-box;
+  width: min(260px, 100%);
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
+}
+
+.pdf-color-presets button {
+  width: 100%;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pdf-color-presets button:hover,
+.pdf-color-presets button:focus-visible,
+.pdf-color-presets button.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .pdf-shortcut-editor {
   position: absolute;
@@ -2251,6 +2351,12 @@ onUnmounted(() => {
   display: inline-flex;
   height: 34px;
   align-items: center;
+}
+
+.pdf-toolbar .pdf-color-presets-trigger {
+  min-width: 18px;
+  padding: 0;
+  color: var(--text-secondary);
 }
 
 .pdf-control-label input[type='color'] {

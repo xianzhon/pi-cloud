@@ -538,6 +538,8 @@ export default {
       resetAnnotationShortcuts: '重置为数字快捷键',
       pdfPenColor: '标注颜色',
       coverColor: '覆盖颜色',
+      annotationColorPresets: '常用颜色',
+      annotationColorPreset: '颜色',
       pdfPenWidth: '标注粗细',
       undoPdfAnnotation: '撤销标注',
       redoPdfAnnotation: '重做标注',

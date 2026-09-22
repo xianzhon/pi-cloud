@@ -1041,6 +1041,40 @@ describe('MediaAnnotationPreview', () => {
     expect(context.fillText).toHaveBeenCalledWith('on two lines', 240, 360);
   });
 
+  it('offers quick color presets for annotations and cover without losing custom colors', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    const presets = wrapper.get('[aria-label="Color presets"]');
+    await presets.trigger('click');
+    expect(presets.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.findAll('.pdf-color-presets button')).toHaveLength(20);
+    await wrapper.get('[aria-label="Color #3b82f6"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#3b82f6');
+    expect(wrapper.find('.pdf-color-presets').exists()).toBe(false);
+
+    await wrapper.get('[aria-label="Cover PDF content with rectangle"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Cover color"]').element.value).toBe('#ffffff');
+    await presets.trigger('click');
+    await wrapper.get('[aria-label="Color #facc15"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Cover color"]').element.value).toBe('#facc15');
+
+    await presets.trigger('click');
+    await wrapper.get('.pdf-color-presets').trigger('keydown', { key: 'Escape' });
+    expect(wrapper.find('.pdf-color-presets').exists()).toBe(false);
+    await presets.trigger('click');
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.pdf-color-presets').exists()).toBe(false);
+
+    await wrapper.get('[aria-label="Draw on PDF"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#3b82f6');
+    await wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').setValue('#123456');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#123456');
+  });
+
   it('covers PDF content with a selectable color that defaults to white', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (url, init) => {

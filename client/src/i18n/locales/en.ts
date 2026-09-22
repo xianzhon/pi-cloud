@@ -538,6 +538,8 @@ export default {
       resetAnnotationShortcuts: 'Reset to number shortcuts',
       pdfPenColor: 'Annotation color',
       coverColor: 'Cover color',
+      annotationColorPresets: 'Color presets',
+      annotationColorPreset: 'Color',
       pdfPenWidth: 'Annotation width',
       undoPdfAnnotation: 'Undo annotation',
       redoPdfAnnotation: 'Redo annotation',
