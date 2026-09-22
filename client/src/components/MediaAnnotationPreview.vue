@@ -259,6 +259,12 @@
             class="mhtml-document-frame"
             sandbox="allow-same-origin"
             :srcdoc="htmlDocument"
+            :style="{
+              width: `${htmlPageWidth || 1}px`,
+              height: `${(pageSizes[1] || defaultPageSize).height}px`,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }"
             :title="t('components.editorPanel.mhtmlPreview')"
             @load="handleHtmlLoad"
           />
@@ -384,6 +390,7 @@ type PdfFitMode = 'width' | 'height';
 type PdfPageTone = 'original' | 'warm' | 'gray' | 'dark';
 interface PdfViewState {
   scale?: number;
+  htmlPageWidth?: number;
   page?: number;
   tool?: AnnotationTool;
   penColor?: string;
@@ -480,6 +487,7 @@ const shortcutButtonEl = ref<HTMLButtonElement>();
 const shortcutEditorEl = ref<HTMLDivElement>();
 const viewportEl = ref<HTMLDivElement>();
 const htmlCanvasHeight = ref(1);
+const htmlPageWidth = ref<number>();
 const pageElements = new Map<number, HTMLElement>();
 const canvasElements = new Map<number, HTMLCanvasElement>();
 const annotationCanvasElements = new Map<number, HTMLCanvasElement>();
@@ -859,6 +867,7 @@ function fitPdfToViewport(): void {
 function currentViewState(): PdfViewState {
   return {
     scale: scale.value,
+    htmlPageWidth: isHtml.value ? htmlPageWidth.value : undefined,
     page: pageNumber.value,
     tool: tool.value,
     penColor: penColor.value,
@@ -875,6 +884,9 @@ function restoreViewState(view?: PdfViewState): void {
   const savedScale = typeof view?.scale === 'number' && Number.isFinite(view.scale) ? view.scale : 1;
   pageNumber.value = Math.min(pageCount.value, Math.max(1, savedPage));
   scale.value = clampScale(props.initialScale ?? savedScale);
+  htmlPageWidth.value = typeof view?.htmlPageWidth === 'number' && Number.isFinite(view.htmlPageWidth) && view.htmlPageWidth > 0
+    ? view.htmlPageWidth
+    : undefined;
   tool.value = view?.tool && ANNOTATION_TOOLS.has(view.tool) ? view.tool : 'pan';
   penColor.value = typeof view?.penColor === 'string' ? view.penColor : '#ef4444';
   coverColor.value = typeof view?.coverColor === 'string' ? view.coverColor : '#ffffff';
@@ -920,7 +932,7 @@ async function goToPage(page: number): Promise<void> {
 }
 
 function handleViewportScroll(): void {
-  if (isHtml.value) scheduleAnnotationDraw();
+  if (isHtml.value) drawAnnotations();
   if (isPanning.value) return;
   const viewportTop = viewportEl.value?.getBoundingClientRect().top || 0;
   let closestPage = pageNumber.value;
@@ -1376,15 +1388,14 @@ function updateHtmlPageSize(): void {
   const viewport = viewportEl.value;
   if (!frame || !htmlDocument || !viewport) return;
 
-  // The document's scrollWidth is relative to the iframe's current width. Using
-  // it here creates a feedback loop for responsive pages: once the page gets
-  // narrow, it reports that same narrow width forever. Use the preview viewport
-  // as the stable page width and only measure the document's resulting height.
+  // Freeze the layout width so zoom and viewport resizing cannot reflow content
+  // independently of the annotation coordinates.
   const viewportStyle = window.getComputedStyle(viewport);
-  const width = Math.max(
+  const width = htmlPageWidth.value ?? Math.max(
     viewport.clientWidth - parseFloat(viewportStyle.paddingLeft) - parseFloat(viewportStyle.paddingRight),
     1,
   );
+  htmlPageWidth.value = width;
   const height = Math.max(htmlDocument.documentElement.scrollHeight, htmlDocument.body?.scrollHeight || 0, 1);
   const availableHeight = viewport.clientHeight
     - parseFloat(viewportStyle.paddingTop)
@@ -1409,7 +1420,11 @@ async function handleHtmlLoad(): Promise<void> {
   }
   htmlDocument.addEventListener('wheel', event => {
     const viewport = viewportEl.value;
-    if (!viewport || event.ctrlKey || event.metaKey) return;
+    if (event.ctrlKey || event.metaKey) {
+      handleZoomWheel(event);
+      return;
+    }
+    if (!viewport) return;
     event.preventDefault();
     viewport.scrollBy({ left: event.deltaX, top: event.deltaY });
   }, { passive: false });

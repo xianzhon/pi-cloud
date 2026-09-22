@@ -152,8 +152,8 @@ describe('MediaAnnotationPreview', () => {
     expect(wrapper.find('.pdf-navigation-toolbar').exists()).toBe(false);
     expect(wrapper.find('[aria-label="MHTML annotation controls"]').exists()).toBe(true);
 
-    await wrapper.get('[aria-label="Draw line"]').trigger('click');
-    const canvas = wrapper.get('.pdf-annotation-canvas');
+    await wrapper.get('[aria-label="Cover MHTML content with rectangle"]').trigger('click');
+    const canvas = wrapper.get<HTMLCanvasElement>('.pdf-annotation-canvas');
     expect(canvas.classes()).toContain('mhtml');
     expect(wrapper.findAll('.pdf-page > canvas')).toHaveLength(1);
     await canvas.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
@@ -174,10 +174,61 @@ describe('MediaAnnotationPreview', () => {
     await canvas.trigger('pointerup', { pointerId: 1, clientX: 40, clientY: 40 });
     await flushPromises();
 
+    vi.spyOn(wrapper.get<HTMLElement>('.pdf-page').element, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: -120, width: 600, height: 800, right: 600, bottom: 680, x: 0, y: -120, toJSON: () => ({}),
+    });
+    canvas.element.width = 600;
+    requestFrame.mockClear();
+    vi.mocked(context.translate).mockClear();
+    await wrapper.get('.pdf-viewport').trigger('scroll');
+    expect(requestFrame).not.toHaveBeenCalled();
+    expect(vi.mocked(context.translate).mock.calls.at(-1)?.[1]).toBe(-120);
+
     expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
       method: 'POST',
       body: expect.stringContaining('/project/.annotations/snapshot.mhtml.annotations.json'),
     }));
+  });
+
+  it('keeps the MHTML layout fixed when zooming and resizing the viewport', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640);
+    let resize: (() => void) | undefined;
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resize = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    const wrapper = mount(MediaAnnotationPreview, {
+      attachTo: document.body,
+      props: { src: '', filePath: '/project/zoom.mhtml', kind: 'html', htmlDocument: '<p>Content</p>' },
+    });
+    await flushPromises();
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    Object.defineProperty(viewport.element, 'clientWidth', { configurable: true, value: 640 });
+    viewport.element.style.padding = '0px';
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    const htmlDocument = window.document.implementation.createHTMLDocument();
+    Object.defineProperty(htmlDocument.documentElement, 'scrollHeight', { value: 800 });
+    Object.defineProperty(frame.element, 'contentDocument', { value: htmlDocument });
+    await frame.trigger('load');
+    await flushPromises();
+    const layoutWidth = frame.element.style.width;
+    const pageWidth = wrapper.get<HTMLElement>('.pdf-page').element.style.width;
+    expect(parseFloat(layoutWidth)).toBeGreaterThan(1);
+
+    await viewport.trigger('wheel', { ctrlKey: true, deltaY: -100 });
+    await flushPromises();
+    expect(frame.element.style.width).toBe(layoutWidth);
+    expect(frame.element.style.transform).toBe('scale(1.1)');
+    expect(parseFloat(wrapper.get<HTMLElement>('.pdf-page').element.style.width))
+      .toBe(Math.floor(parseFloat(pageWidth) * 1.1));
+
+    Object.defineProperty(viewport.element, 'clientWidth', { configurable: true, value: 400 });
+    resize?.();
+    await flushPromises();
+    expect(frame.element.style.width).toBe(layoutWidth);
+    expect(parseFloat(wrapper.get<HTMLElement>('.pdf-page').element.style.width))
+      .toBe(Math.floor(parseFloat(pageWidth) * 1.1));
   });
 
   it('loads and annotates an image using the PDF toolset', async () => {
