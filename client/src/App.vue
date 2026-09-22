@@ -827,7 +827,14 @@ const canSwitchToSessionProject = computed(() => (
 const pageTitle = computed(() => [sessionTitle.value || 'Pi Cloud', selectedAgentName.value].filter(Boolean).join(' - '));
 const readySessionIds = ref<Set<string>>(new Set());
 const readySessionIdList = computed(() => Array.from(readySessionIds.value));
-const tabTitle = computed(() => readySessionIds.value.size > 0 ? `🔔 ${pageTitle.value}` : pageTitle.value);
+const streamingSessionIds = ref<Set<string>>(new Set());
+const streamingTitleFrames = ['◐', '◓', '◑', '◒'];
+const streamingTitleFrame = ref(0);
+let streamingTitleTimer: ReturnType<typeof setInterval> | undefined;
+const tabTitle = computed(() => {
+  if (streamingSessionIds.value.size > 0) return `${streamingTitleFrames[streamingTitleFrame.value]} ${pageTitle.value}`;
+  return readySessionIds.value.size > 0 ? `🔔 ${pageTitle.value}` : pageTitle.value;
+});
 const newSessionShortcutLabel = computed(() => {
   if (newSessionShortcut.value === 'disabled') return '';
   return newSessionShortcut.value === 'ctrlMetaN' ? 'Ctrl+⌘+N' : 'Ctrl+Alt+N';
@@ -1113,6 +1120,19 @@ watch(tabTitle, (title) => {
   document.title = title;
 }, { immediate: true });
 
+watch(() => streamingSessionIds.value.size > 0, (streaming) => {
+  if (streamingTitleTimer) {
+    clearInterval(streamingTitleTimer);
+    streamingTitleTimer = undefined;
+  }
+  streamingTitleFrame.value = 0;
+  if (streaming) {
+    streamingTitleTimer = setInterval(() => {
+      streamingTitleFrame.value = (streamingTitleFrame.value + 1) % streamingTitleFrames.length;
+    }, 250);
+  }
+});
+
 watch(sidebarCollapsed, (collapsed) => {
   try {
     localStorage.setItem(sidebarCollapsedStorageKey, collapsed ? 'true' : 'false');
@@ -1134,7 +1154,12 @@ function clearReadySession(sessionId?: string | null) {
 
 function handleSessionStreamingState(event: Event) {
   const detail = (event as CustomEvent<{ id?: string; isStreaming?: boolean; completed?: boolean }>).detail;
-  if (!detail?.id) return;
+  if (!detail?.id || typeof detail.isStreaming !== 'boolean') return;
+
+  const nextStreamingSessionIds = new Set(streamingSessionIds.value);
+  if (detail.isStreaming) nextStreamingSessionIds.add(detail.id);
+  else nextStreamingSessionIds.delete(detail.id);
+  streamingSessionIds.value = nextStreamingSessionIds;
 
   if (detail.isStreaming) {
     clearReadySession(detail.id);
@@ -2362,6 +2387,8 @@ onUnmounted(() => {
   document.removeEventListener('fullscreenchange', updateFullscreenState);
   authRefreshMounted = false;
   clearAuthRefreshTimer();
+  if (streamingTitleTimer) clearInterval(streamingTitleTimer);
+  streamingTitleTimer = undefined;
   disposeAllTerminals();
   terminalInstanceMap.forEach(instance => terminalRuntime?.disposeTerminal(instance));
   terminalInstanceMap.clear();

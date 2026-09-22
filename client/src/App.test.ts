@@ -965,6 +965,40 @@ describe('App routing', () => {
     expect(document.title).toBe('Debug bug - default');
   });
 
+  it('animates the browser title while a session is streaming and resets it when streaming ends', async () => {
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+    await flushPromises();
+    const normalTitle = document.title;
+    vi.useFakeTimers();
+
+    window.dispatchEvent(new CustomEvent('session-streaming-state', {
+      detail: { id: 'session-1', isStreaming: true },
+    }));
+    await wrapper.vm.$nextTick();
+    expect(document.title).toBe(`◐ ${normalTitle}`);
+
+    vi.advanceTimersByTime(250);
+    await wrapper.vm.$nextTick();
+    expect(document.title).toBe(`◓ ${normalTitle}`);
+
+    window.dispatchEvent(new CustomEvent('session-streaming-state', {
+      detail: { id: 'session-1', isStreaming: false },
+    }));
+    await wrapper.vm.$nextTick();
+    expect(document.title).toBe(normalTitle);
+    vi.useRealTimers();
+  });
+
   it('shows the current git branch for the active session cwd in the header', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url === '/api/sessions/project-path') {
