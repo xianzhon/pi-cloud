@@ -568,7 +568,7 @@ describe('MediaAnnotationPreview', () => {
       'Export annotated PDF',
     ]);
     expect(annotationToolbar.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
-    for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text', 'Move annotation', 'Erase PDF content with white rectangle']) {
+    for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text', 'Move annotation', 'Cover PDF content with rectangle']) {
       expect(wrapper.get(`[aria-label="${label}"]`).attributes('data-tooltip')).toBe(label);
     }
     expect(wrapper.get('[aria-label="Undo annotation"]').attributes('data-tooltip')).toBe('Undo annotation');
@@ -611,7 +611,7 @@ describe('MediaAnnotationPreview', () => {
       ['6', 'Draw ellipse'],
       ['7', 'Add text'],
       ['8', 'Move annotation'],
-      ['9', 'Erase PDF content with white rectangle'],
+      ['9', 'Cover PDF content with rectangle'],
       ['0', 'Erase PDF annotations'],
     ];
     for (const [key, label] of shortcuts) {
@@ -851,6 +851,7 @@ describe('MediaAnnotationPreview', () => {
                 page: 2,
                 tool: 'eraser',
                 penColor: '#123456',
+                coverColor: '#3f3f4d',
                 penWidth: 7,
                 toolbarVertical: true,
                 toolbarPosition: { left: 0, top: 0 },
@@ -887,6 +888,7 @@ describe('MediaAnnotationPreview', () => {
       page: 2,
       tool: 'eraser',
       penColor: '#123456',
+      coverColor: '#3f3f4d',
       penWidth: 7,
       pageTone: 'original',
       toolbarVertical: true,
@@ -953,7 +955,7 @@ describe('MediaAnnotationPreview', () => {
     expect(context.fillText).toHaveBeenCalledWith('on two lines', 240, 360);
   });
 
-  it('covers PDF content with a saved white rectangle', async () => {
+  it('covers PDF content with a selectable color that defaults to white', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (url, init) => {
       if (String(url).startsWith('/api/files/read')) return { ok: false, status: 404 } as Response;
@@ -964,7 +966,10 @@ describe('MediaAnnotationPreview', () => {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
-    await wrapper.get('[aria-label="Erase PDF content with white rectangle"]').trigger('click');
+    await wrapper.get('[aria-label="Cover PDF content with rectangle"]').trigger('click');
+    const colorInput = wrapper.get<HTMLInputElement>('[aria-label="Cover color"]');
+    expect(colorInput.element.value).toBe('#ffffff');
+    await colorInput.setValue('#3f3f4d');
 
     const canvas = wrapper.get('.pdf-annotation-canvas');
     await canvas.trigger('pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
@@ -976,7 +981,7 @@ describe('MediaAnnotationPreview', () => {
     const body = JSON.parse(String(writeCall?.[1]?.body));
     expect(JSON.parse(body.content).pages['1'][0]).toMatchObject({
       type: 'whiteout',
-      color: '#ffffff',
+      color: '#3f3f4d',
       points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 }],
     });
     expect(context.fillRect).toHaveBeenCalledWith(60, 80, 120, 160);

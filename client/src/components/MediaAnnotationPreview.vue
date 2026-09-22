@@ -40,8 +40,8 @@
           :weight="annotationTool.weight"
           :class="{ 'pdf-line-icon': annotationTool.name === 'line' }"
         /><span class="pdf-tool-shortcut">{{ toolShortcutKeys[annotationTool.name] }}</span></button>
-        <label class="pdf-control-label" :data-tooltip="t('components.editorPanel.pdfPenColor')">
-          <input v-model="penColor" type="color" :aria-label="t('components.editorPanel.pdfPenColor')">
+        <label class="pdf-control-label" :data-tooltip="t(annotationColorLabel)">
+          <input v-model="annotationColor" type="color" :aria-label="t(annotationColorLabel)">
         </label>
         <label
           class="pdf-width-control"
@@ -387,6 +387,7 @@ interface PdfViewState {
   page?: number;
   tool?: AnnotationTool;
   penColor?: string;
+  coverColor?: string;
   penWidth?: number;
   pageTone?: PdfPageTone;
   toolbarVertical?: boolean;
@@ -493,6 +494,17 @@ const outline = ref<PdfOutlineItem[]>([]);
 const showOutline = ref(true);
 const tool = ref<AnnotationTool>('pan');
 const penColor = ref('#ef4444');
+const coverColor = ref('#ffffff');
+const annotationColor = computed({
+  get: () => tool.value === 'whiteout' ? coverColor.value : penColor.value,
+  set: value => {
+    if (tool.value === 'whiteout') coverColor.value = value;
+    else penColor.value = value;
+  },
+});
+const annotationColorLabel = computed(() => tool.value === 'whiteout'
+  ? 'components.editorPanel.coverColor'
+  : 'components.editorPanel.pdfPenColor');
 const penWidth = ref(1);
 const pageTone = ref<PdfPageTone>('original');
 const annotations = ref<AnnotationDocument>({ version: 1, pages: {} });
@@ -850,6 +862,7 @@ function currentViewState(): PdfViewState {
     page: pageNumber.value,
     tool: tool.value,
     penColor: penColor.value,
+    coverColor: coverColor.value,
     penWidth: penWidth.value,
     pageTone: pageTone.value,
     toolbarVertical: toolbarVertical.value,
@@ -864,6 +877,7 @@ function restoreViewState(view?: PdfViewState): void {
   scale.value = clampScale(props.initialScale ?? savedScale);
   tool.value = view?.tool && ANNOTATION_TOOLS.has(view.tool) ? view.tool : 'pan';
   penColor.value = typeof view?.penColor === 'string' ? view.penColor : '#ef4444';
+  coverColor.value = typeof view?.coverColor === 'string' ? view.coverColor : '#ffffff';
   penWidth.value = typeof view?.penWidth === 'number' && Number.isFinite(view.penWidth)
     ? Math.min(12, Math.max(1, Math.round(view.penWidth)))
     : 1;
@@ -1726,7 +1740,7 @@ function startAnnotation(event: PointerEvent, page: number): void {
 
   addAnnotation({
     type: tool.value,
-    color: tool.value === 'whiteout' ? '#ffffff' : penColor.value,
+    color: tool.value === 'whiteout' ? coverColor.value : penColor.value,
     width: penWidth.value,
     points: [point],
   });
@@ -1946,7 +1960,7 @@ watch(tool, () => {
   selectedAnnotation.value = undefined;
   drawVisibleAnnotations();
 });
-watch([scale, pageNumber, tool, penColor, penWidth, toolbarVertical, toolbarPosition], scheduleViewSave);
+watch([scale, pageNumber, tool, penColor, coverColor, penWidth, toolbarVertical, toolbarPosition], scheduleViewSave);
 
 onMounted(() => {
   if (typeof IntersectionObserver !== 'undefined' && viewportEl.value) {
