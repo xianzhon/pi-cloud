@@ -689,6 +689,24 @@ describe('EditorPanel', () => {
     await wrapper.findAll('.mhtml-font-select [role="option"]')[1].trigger('click');
     expect(wrapper.find('.pdf-preview-test').attributes('data-html-document')).toContain('font-family: Arial, sans-serif !important');
 
+    for (const [index, family] of [
+      [2, 'Georgia, serif'],
+      [4, 'Palatino, "Palatino Linotype", "Book Antiqua", serif'],
+      [5, 'Garamond, "EB Garamond", Georgia, serif'],
+      [6, 'Baskerville, "Libre Baskerville", Georgia, serif'],
+      [7, 'Literata, Georgia, serif'],
+      [8, '"Songti SC", "Noto Serif CJK SC", serif'],
+      [9, '"Noto Serif CJK SC", "Songti SC", serif'],
+      [10, '"PingFang SC", "Noto Sans CJK SC", sans-serif'],
+    ] as const) {
+      await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
+      await wrapper.findAll('.mhtml-font-select [role="option"]')[index].trigger('click');
+      const document = wrapper.find('.pdf-preview-test').attributes('data-html-document') || '';
+      expect(document).toContain(`font-family: ${family} !important`);
+      expect(document).not.toContain('@font-face');
+    }
+    expect(localStorage.getItem('pi-cloud-mhtml-font')).toBe('pingfang');
+
     await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
     await wrapper.findAll('.mhtml-font-select [role="option"]')[0].trigger('click');
     expect(wrapper.find('.pdf-preview-test').attributes('data-html-document')).not.toContain('Pi Terminal Nerd Font');

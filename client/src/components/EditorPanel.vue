@@ -782,15 +782,22 @@ const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.k
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
 const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value);
 const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
-type MhtmlFont = 'original' | 'sans' | 'serif' | 'terminal';
+type MhtmlFont = 'original' | 'sans' | 'serif' | 'terminal' | 'palatino' | 'garamond' | 'baskerville' | 'literata' | 'songti' | 'noto-serif-cjk' | 'pingfang';
 const storedMhtmlFont = localStorage.getItem('pi-cloud-mhtml-font');
-const mhtmlFont = ref<MhtmlFont>(['original', 'sans', 'serif', 'terminal'].includes(storedMhtmlFont || '')
+const mhtmlFont = ref<MhtmlFont>(['original', 'sans', 'serif', 'terminal', 'palatino', 'garamond', 'baskerville', 'literata', 'songti', 'noto-serif-cjk', 'pingfang'].includes(storedMhtmlFont || '')
   ? storedMhtmlFont as MhtmlFont : 'original');
 const mhtmlFontOptions = computed<CustomSelectOption[]>(() => [
   { value: 'original', label: t('components.editorPanel.mhtmlFontOriginal') },
   { value: 'sans', label: t('components.editorPanel.mhtmlFontSans') },
   { value: 'serif', label: t('components.editorPanel.mhtmlFontSerif') },
   { value: 'terminal', label: t('components.editorPanel.mhtmlFontTerminal') },
+  { value: 'palatino', label: t('components.editorPanel.mhtmlFontPalatino') },
+  { value: 'garamond', label: t('components.editorPanel.mhtmlFontGaramond') },
+  { value: 'baskerville', label: t('components.editorPanel.mhtmlFontBaskerville') },
+  { value: 'literata', label: t('components.editorPanel.mhtmlFontLiterata') },
+  { value: 'songti', label: t('components.editorPanel.mhtmlFontSongti') },
+  { value: 'noto-serif-cjk', label: t('components.editorPanel.mhtmlFontNotoSerifCjk') },
+  { value: 'pingfang', label: t('components.editorPanel.mhtmlFontPingfang') },
 ]);
 function setMhtmlFont(value: string): void {
   mhtmlFont.value = value as MhtmlFont;
@@ -1071,8 +1078,19 @@ function renderHtmlPreview(html: string, filePath: string, font: MhtmlFont = 'or
   document.head.prepend(policy);
 
   if (font !== 'original') {
-    const fontFamily = font === 'terminal' ? '"Pi Terminal Nerd Font", monospace'
-      : font === 'sans' ? 'Arial, sans-serif' : 'Georgia, serif';
+    const fontFamilies: Record<Exclude<MhtmlFont, 'original'>, string> = {
+      sans: 'Arial, sans-serif',
+      serif: 'Georgia, serif',
+      terminal: '"Pi Terminal Nerd Font", monospace',
+      palatino: 'Palatino, "Palatino Linotype", "Book Antiqua", serif',
+      garamond: 'Garamond, "EB Garamond", Georgia, serif',
+      baskerville: 'Baskerville, "Libre Baskerville", Georgia, serif',
+      literata: 'Literata, Georgia, serif',
+      songti: '"Songti SC", "Noto Serif CJK SC", serif',
+      'noto-serif-cjk': '"Noto Serif CJK SC", "Songti SC", serif',
+      pingfang: '"PingFang SC", "Noto Sans CJK SC", sans-serif',
+    };
+    const fontFamily = fontFamilies[font];
     const style = document.createElement('style');
     style.textContent = `${font === 'terminal' ? `@font-face { font-family: "Pi Terminal Nerd Font"; src: url("${terminalFontUrl}") format("truetype"); }` : ''}
       body, #sbo-rt-content, body :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, td, th),
