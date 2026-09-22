@@ -50,7 +50,7 @@ export function renderMhtmlDocument(source: string): string | undefined {
     let bytes = resolved.bytes;
     if (resolved.contentType === 'text/css') {
       const nextResolving = new Set(resolving).add(resolved);
-      const css = decodeText(bytes, resolved.charset).replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/gi, (match, quote: string, url: string) => {
+      const css = decodeText(bytes, resolved.charset).replace(/url\(\s*(['"]?)([^')]+)\1\s*\)/gi, (match, quote: string, url: string) => {
         const replacement = resourceUrl(url, resolved.contentLocation || base, nextResolving);
         return replacement ? `url(${quote}${replacement}${quote})` : match;
       });
@@ -202,7 +202,7 @@ function decodeText(bytes: Uint8Array, charset?: string): string {
 }
 
 function rewriteCssUrls(css: string, resolve: (url: string) => string | undefined): string {
-  return css.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/gi, (match, quote: string, url: string) => {
+  return css.replace(/url\(\s*(['"]?)([^')]+)\1\s*\)/gi, (match, quote: string, url: string) => {
     const replacement = resolve(url);
     return replacement ? `url(${quote}${replacement}${quote})` : match;
   });
