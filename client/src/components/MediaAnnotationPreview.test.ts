@@ -198,6 +198,8 @@ describe('MediaAnnotationPreview', () => {
 
     const select = wrapper.get('[aria-label="Select MHTML text to copy"]');
     const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    expect(select.attributes('aria-keyshortcuts')).toBe('S');
+    expect(select.get('.pdf-tool-shortcut').text()).toBe('S');
     expect(select.attributes('aria-pressed')).toBe('false');
     expect(frame.element.style.pointerEvents).toBe('none');
     await select.trigger('click');
@@ -212,6 +214,27 @@ describe('MediaAnnotationPreview', () => {
     expect(canvas.classes()).toContain('enabled');
     expect(select.attributes('aria-pressed')).toBe('false');
     expect(frame.element.style.pointerEvents).toBe('auto');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }));
+    await wrapper.vm.$nextTick();
+    expect(select.attributes('aria-pressed')).toBe('true');
+    const frameWindow = new EventTarget();
+    Object.defineProperty(frame.element, 'contentDocument', { value: new DOMParser().parseFromString('<p>Copy this text</p>', 'text/html') });
+    Object.defineProperty(frame.element, 'contentWindow', { value: frameWindow });
+    await frame.trigger('load');
+    frameWindow.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }));
+    await wrapper.vm.$nextTick();
+    expect(select.attributes('aria-pressed')).toBe('false');
+
+    await wrapper.get('[aria-label="Customize annotation shortcuts"]').trigger('click');
+    expect(wrapper.get('[aria-label="Shortcut for Select MHTML text to copy"]').attributes('value')).toBe('S');
+    await wrapper.get('[aria-label="Shortcut for Select MHTML text to copy"]').trigger('keydown', { key: 'q' });
+    expect(select.attributes('aria-keyshortcuts')).toBe('Q');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'q' }));
+    await wrapper.vm.$nextTick();
+    expect(select.attributes('aria-pressed')).toBe('true');
+    await wrapper.get('.pdf-shortcut-reset').trigger('click');
+    expect(select.attributes('aria-keyshortcuts')).toBe('S');
   });
 
   it('shows MHTML headings in an outline and scrolls the outer viewport to them', async () => {
@@ -860,6 +883,11 @@ describe('MediaAnnotationPreview', () => {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
+
+    expect(wrapper.find('[aria-label="Select MHTML text to copy"]').exists()).toBe(false);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('.pdf-annotation-canvas').classes()).not.toContain('enabled');
 
     const shortcuts = [
       ['1', 'Draw on PDF'],

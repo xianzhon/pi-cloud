@@ -34,15 +34,6 @@
           @click="showOutline = !showOutline"
         ><PhList :size="19" /></button>
         <button
-          v-if="isHtml"
-          type="button"
-          :class="{ active: tool === 'select' }"
-          :aria-pressed="tool === 'select'"
-          :aria-label="t('components.editorPanel.mhtmlSelectText')"
-          :data-tooltip="t('components.editorPanel.mhtmlSelectText')"
-          @click="toggleTool('select')"
-        ><PhCursorText :size="19" /></button>
-        <button
           v-for="annotationTool in annotationToolOptions"
           :key="annotationTool.name"
           type="button"
@@ -521,6 +512,7 @@ const pageToneOptions = computed<CustomSelectOption[]>(() => [
   { value: 'dark', label: t('components.editorPanel.pdfPageToneDark') },
 ]);
 const annotationToolOptions = computed<Array<{ name: ShortcutTool; label: string; icon: object; weight?: 'fill' }>>(() => [
+  ...(isHtml.value ? [{ name: 'select' as const, label: 'components.editorPanel.mhtmlSelectText', icon: PhCursorText }] : []),
   { name: 'pen', label: isHtml.value ? 'components.editorPanel.mhtmlPen' : isImage.value ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen', icon: PhPencilSimple },
   { name: 'highlighter', label: isHtml.value ? 'components.editorPanel.mhtmlHighlighter' : isImage.value ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter', icon: PhHighlighter },
   { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus },
@@ -1072,13 +1064,13 @@ function resetToolShortcuts(): void {
 }
 
 function handleToolShortcut(event: KeyboardEvent): void {
-  const target = event.target;
-  const isEditable = target instanceof HTMLElement
-    && (target.isContentEditable || Boolean(target.closest('input, textarea, select, [contenteditable="true"]')));
+  const target = event.target as HTMLElement | null;
+  // iframe elements come from a different window, so instanceof HTMLElement would miss its inputs.
+  const isEditable = Boolean(target?.isContentEditable || target?.closest?.('input, textarea, select, [contenteditable="true"]'));
   const key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
   const nextTool = (Object.keys(toolShortcutKeys.value) as ShortcutTool[])
     .find(annotationTool => toolShortcutKeys.value[annotationTool] === key);
-  if (!nextTool || isEditable || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing) return;
+  if (!nextTool || (nextTool === 'select' && !isHtml.value) || isEditable || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing) return;
   event.preventDefault();
   toggleTool(nextTool);
 }
@@ -1516,10 +1508,15 @@ function updateHtmlPageSize(): void {
   void nextTick(() => renderPage(1).catch(handleRenderError));
 }
 
+let htmlShortcutWindow: Window | undefined;
+
 async function handleHtmlLoad(): Promise<void> {
   const frame = htmlFrameEl.value;
   const htmlDocument = frame?.contentDocument;
   if (!frame || !htmlDocument || !isHtml.value) return;
+  htmlShortcutWindow?.removeEventListener('keydown', handleToolShortcut);
+  htmlShortcutWindow = frame.contentWindow || undefined;
+  htmlShortcutWindow?.addEventListener('keydown', handleToolShortcut);
 
   // The outer viewport scrolls the page and its annotation overlay together.
   // Override archived root scrollbars while keeping body overflow measurable.
@@ -2140,6 +2137,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', keepToolbarInBounds);
   window.removeEventListener('pointerdown', closeColorPresetsOutside);
   window.removeEventListener('keydown', handleToolShortcut);
+  htmlShortcutWindow?.removeEventListener('keydown', handleToolShortcut);
   clearTooltip();
   clearTimeout(statusTimer);
   clearTimeout(viewSaveTimer);

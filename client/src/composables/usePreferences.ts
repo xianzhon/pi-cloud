@@ -17,11 +17,11 @@ const AUTO_SPEAK_ASSISTANT_KEY = 'pi-cloud.autoSpeakAssistant';
 const GIT_CLONE_PARENT_PATH_KEY = 'pi-cloud.gitCloneParentPath';
 const ANNOTATION_TOOL_SHORTCUTS_KEY = 'pi-cloud.annotationToolShortcuts';
 
-export type AnnotationShortcutTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'move' | 'whiteout' | 'eraser';
+export type AnnotationShortcutTool = 'select' | 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'move' | 'whiteout' | 'eraser';
 export type AnnotationToolShortcuts = Record<AnnotationShortcutTool, string>;
 export const DEFAULT_ANNOTATION_TOOL_SHORTCUTS: AnnotationToolShortcuts = {
   pen: '1', highlighter: '2', line: '3', arrow: '4', rectangle: '5',
-  ellipse: '6', text: '7', move: '8', whiteout: '9', eraser: '0',
+  ellipse: '6', text: '7', move: '8', whiteout: '9', eraser: '0', select: 'S',
 };
 export type StreamingMessageBehavior = 'steer' | 'followUp';
 export type NewSessionShortcut = 'ctrlAltN' | 'ctrlMetaN' | 'disabled';
@@ -166,8 +166,13 @@ function parseAnnotationToolShortcuts(value: unknown): AnnotationToolShortcuts |
   const shortcuts = { ...DEFAULT_ANNOTATION_TOOL_SHORTCUTS };
   for (const tool of Object.keys(shortcuts) as AnnotationShortcutTool[]) {
     const key = (value as Record<string, unknown>)[tool];
+    if (tool === 'select' && key === undefined) continue; // Older saved preferences predate the selection tool.
     if (typeof key !== 'string' || key.length !== 1 || /\s/.test(key)) return;
     shortcuts[tool] = key.toUpperCase();
+  }
+  if ((value as Record<string, unknown>).select === undefined) {
+    shortcuts.select = [...'SABCDEFGHIJKLMNOPQRSTUVWXYZ'].find(key => !Object.entries(shortcuts)
+      .some(([tool, shortcut]) => tool !== 'select' && shortcut === key))!;
   }
   if (new Set(Object.values(shortcuts)).size !== Object.keys(shortcuts).length) return;
   return shortcuts;
