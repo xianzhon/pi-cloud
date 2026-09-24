@@ -284,6 +284,7 @@
           <canvas v-if="!isHtml" :ref="element => setCanvasElement(page, element, false)" />
           <iframe
             v-if="isHtml"
+            :key="filePath"
             :ref="setHtmlFrameElement"
             class="mhtml-document-frame"
             sandbox="allow-same-origin"

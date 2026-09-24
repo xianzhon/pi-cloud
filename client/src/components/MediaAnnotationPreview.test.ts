@@ -190,6 +190,27 @@ describe('MediaAnnotationPreview', () => {
     }));
   });
 
+  it('loads an MHTML iframe again when its file is renamed without changing the HTML', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/old.mhtml', kind: 'html', htmlDocument: '<p>Same page</p>' },
+    });
+    await flushPromises();
+    const oldFrame = wrapper.get<HTMLIFrameElement>('iframe.mhtml-document-frame').element;
+    Object.defineProperty(oldFrame, 'contentDocument', { value: window.document.implementation.createHTMLDocument() });
+    await wrapper.get('iframe.mhtml-document-frame').trigger('load');
+    await flushPromises();
+    expect(wrapper.find('.pdf-message').exists()).toBe(false);
+
+    await wrapper.setProps({ filePath: '/project/new.mhtml' });
+    await flushPromises();
+    const newFrame = wrapper.get('iframe.mhtml-document-frame');
+    expect(newFrame.element).not.toBe(oldFrame);
+    Object.defineProperty(newFrame.element, 'contentDocument', { value: window.document.implementation.createHTMLDocument() });
+    await newFrame.trigger('load');
+    await flushPromises();
+    expect(wrapper.find('.pdf-message').exists()).toBe(false);
+  });
+
   it('keeps existing MHTML annotations in place when a font change changes document height', async () => {
     const sidecar = {
       version: 1,
