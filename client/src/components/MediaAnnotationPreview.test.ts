@@ -190,6 +190,30 @@ describe('MediaAnnotationPreview', () => {
     }));
   });
 
+  it('lets MHTML text receive pointer events for native selection and copying', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/snapshot.mhtml', htmlDocument: '<p>Copy this text</p>', kind: 'html' },
+    });
+    await flushPromises();
+
+    const select = wrapper.get('[aria-label="Select MHTML text to copy"]');
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    expect(select.attributes('aria-pressed')).toBe('false');
+    expect(frame.element.style.pointerEvents).toBe('none');
+    await select.trigger('click');
+    expect(select.attributes('aria-pressed')).toBe('true');
+    expect(frame.element.style.pointerEvents).toBe('auto');
+    const canvas = wrapper.get('.pdf-annotation-canvas');
+    expect(canvas.classes()).not.toContain('enabled');
+    await wrapper.get('.pdf-viewport').trigger('pointerdown', { button: 0, pointerId: 1 });
+    expect(wrapper.get('.pdf-viewport').classes()).not.toContain('panning');
+
+    await wrapper.get('[aria-label="Draw on MHTML"]').trigger('click');
+    expect(canvas.classes()).toContain('enabled');
+    expect(select.attributes('aria-pressed')).toBe('false');
+    expect(frame.element.style.pointerEvents).toBe('auto');
+  });
+
   it('shows MHTML headings in an outline and scrolls the outer viewport to them', async () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
       return this.classList.contains('pdf-viewport') ? (this.classList.contains('has-outline') ? 380 : 600) : 0;

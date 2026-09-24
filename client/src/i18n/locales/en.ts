@@ -524,6 +524,7 @@ export default {
       pdfAnnotationControls: 'PDF annotation controls',
       imageAnnotationControls: 'Image annotation controls',
       mhtmlAnnotationControls: 'MHTML annotation controls',
+      mhtmlSelectText: 'Select MHTML text to copy',
       movePdfToolbar: 'Move annotation toolbar',
       showPdfToolbarVertically: 'Show annotation toolbar vertically',
       showPdfToolbarHorizontally: 'Show annotation toolbar horizontally',

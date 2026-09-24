@@ -34,6 +34,15 @@
           @click="showOutline = !showOutline"
         ><PhList :size="19" /></button>
         <button
+          v-if="isHtml"
+          type="button"
+          :class="{ active: tool === 'select' }"
+          :aria-pressed="tool === 'select'"
+          :aria-label="t('components.editorPanel.mhtmlSelectText')"
+          :data-tooltip="t('components.editorPanel.mhtmlSelectText')"
+          @click="toggleTool('select')"
+        ><PhCursorText :size="19" /></button>
+        <button
           v-for="annotationTool in annotationToolOptions"
           :key="annotationTool.name"
           type="button"
@@ -303,6 +312,7 @@
               height: `${(pageSizes[1] || defaultPageSize).height}px`,
               transform: `scale(${scale})`,
               transformOrigin: 'top left',
+              pointerEvents: tool === 'pan' ? 'none' : 'auto',
             }"
             :title="t('components.editorPanel.mhtmlPreview')"
             @load="handleHtmlLoad"
@@ -311,7 +321,7 @@
             :ref="element => setCanvasElement(page, element, true)"
             class="pdf-annotation-canvas"
             :class="{
-              enabled: tool !== 'pan',
+              enabled: tool !== 'pan' && tool !== 'select',
               mhtml: isHtml,
               pen: tool === 'pen',
               highlighter: tool === 'highlighter',
@@ -384,6 +394,7 @@ import {
   PhCaretRight,
   PhCircle,
   PhColumns,
+  PhCursorText,
   PhDotsSixVertical,
   PhDownloadSimple,
   PhEraser,
@@ -424,7 +435,7 @@ interface TextEditorState { page: string; point: AnnotationPoint; index?: number
 interface TooltipState { text: string; left: number; top: number }
 interface ToolbarPosition { left: number; top: number }
 interface ImagePinch { initialDistance: number; initialScale: number }
-type AnnotationTool = 'pan' | DrawingTool | 'move' | 'eraser';
+type AnnotationTool = 'pan' | 'select' | DrawingTool | 'move' | 'eraser';
 type ShortcutTool = AnnotationShortcutTool;
 type PdfFitMode = 'width' | 'height';
 type PdfPageTone = 'original' | 'warm' | 'gray' | 'dark';
@@ -500,7 +511,7 @@ const TOOLBAR_KEYBOARD_MOVEMENT: Record<string, ToolbarPosition> = {
   ArrowDown: { left: 0, top: 10 },
 };
 const ANNOTATION_TOOLS = new Set<AnnotationTool>([
-  'pan', 'pen', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'whiteout', 'move', 'eraser',
+  'pan', 'select', 'pen', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'whiteout', 'move', 'eraser',
 ]);
 const PDF_PAGE_TONES = new Set<PdfPageTone>(['original', 'warm', 'gray', 'dark']);
 const pageToneOptions = computed<CustomSelectOption[]>(() => [
@@ -974,7 +985,8 @@ function restoreViewState(view?: PdfViewState): void {
   htmlPageWidth.value = typeof view?.htmlPageWidth === 'number' && Number.isFinite(view.htmlPageWidth) && view.htmlPageWidth > 0
     ? view.htmlPageWidth
     : undefined;
-  tool.value = view?.tool && ANNOTATION_TOOLS.has(view.tool) ? view.tool : 'pan';
+  tool.value = view?.tool && ANNOTATION_TOOLS.has(view.tool) && (isHtml.value || view.tool !== 'select')
+    ? view.tool : 'pan';
   penColor.value = typeof view?.penColor === 'string' ? view.penColor : '#ef4444';
   coverColor.value = typeof view?.coverColor === 'string' ? view.coverColor : '#ffffff';
   penWidth.value = typeof view?.penWidth === 'number' && Number.isFinite(view.penWidth)
@@ -1835,7 +1847,7 @@ function distanceToSegment(point: AnnotationPoint, start: AnnotationPoint, end: 
 }
 
 function startAnnotation(event: PointerEvent, page: number): void {
-  if (tool.value === 'pan' || activePointer !== undefined || event.button !== 0) return;
+  if (tool.value === 'pan' || tool.value === 'select' || activePointer !== undefined || event.button !== 0) return;
   pageNumber.value = page;
   const point = pointFromEvent(event);
   if (!point) return;
