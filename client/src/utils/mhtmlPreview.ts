@@ -50,10 +50,7 @@ export function renderMhtmlDocument(source: string): string | undefined {
     let bytes = resolved.bytes;
     if (resolved.contentType === 'text/css') {
       const nextResolving = new Set(resolving).add(resolved);
-      const css = decodeText(bytes, resolved.charset).replace(/url\(\s*(['"]?)([^')]+)\1\s*\)/gi, (match, quote: string, url: string) => {
-        const replacement = resourceUrl(url, resolved.contentLocation || base, nextResolving);
-        return replacement ? `url(${quote}${replacement}${quote})` : match;
-      });
+      const css = rewriteCssUrls(decodeText(bytes, resolved.charset), url => resourceUrl(url, resolved.contentLocation || base));
       bytes = new TextEncoder().encode(css);
     }
 
@@ -69,6 +66,7 @@ export function renderMhtmlDocument(source: string): string | undefined {
     if (!value) return;
     const replacement = resourceUrl(value, htmlPart.contentLocation);
     if (replacement) element.setAttribute(attribute, replacement);
+    else if (isRemoteUrl(value)) element.removeAttribute(attribute);
   };
 
   document.querySelectorAll('[src]').forEach(element => rewriteAttribute(element, 'src'));
@@ -76,12 +74,21 @@ export function renderMhtmlDocument(source: string): string | undefined {
   document.querySelectorAll('[srcset]').forEach(element => {
     const srcset = element.getAttribute('srcset');
     if (!srcset) return;
-    element.setAttribute('srcset', srcset.split(',').map(candidate => {
+    const candidates = srcset.split(',').map(candidate => {
       const [url, ...descriptor] = candidate.trim().split(/\s+/);
-      return [resourceUrl(url, htmlPart.contentLocation) || url, ...descriptor].join(' ');
-    }).join(', '));
+      const replacement = resourceUrl(url, htmlPart.contentLocation);
+      return replacement || !isRemoteUrl(url) ? [replacement || url, ...descriptor].join(' ') : '';
+    }).filter(Boolean);
+    if (candidates.length) element.setAttribute('srcset', candidates.join(', '));
+    else element.removeAttribute('srcset');
   });
-  document.querySelectorAll('link[href]').forEach(element => rewriteAttribute(element, 'href'));
+  document.querySelectorAll('link[href]').forEach(element => {
+    rewriteAttribute(element, 'href');
+    if (!element.getAttribute('href')) element.remove();
+  });
+  document.querySelectorAll('meta[http-equiv]').forEach(element => {
+    if (element.getAttribute('http-equiv')?.toLowerCase() === 'refresh') element.remove();
+  });
   document.querySelectorAll('[background]').forEach(element => rewriteAttribute(element, 'background'));
   document.querySelectorAll('[style]').forEach(element => {
     const style = element.getAttribute('style');
@@ -201,11 +208,21 @@ function decodeText(bytes: Uint8Array, charset?: string): string {
   }
 }
 
+function isRemoteUrl(url: string): boolean {
+  return /^(?:https?:)?\/\//i.test(url.trim());
+}
+
 function rewriteCssUrls(css: string, resolve: (url: string) => string | undefined): string {
-  return css.replace(/url\(\s*(['"]?)([^')]+)\1\s*\)/gi, (match, quote: string, url: string) => {
-    const replacement = resolve(url);
-    return replacement ? `url(${quote}${replacement}${quote})` : match;
-  });
+  return css
+    .replace(/@import\s+(?:url\(\s*)?(['"]?)([^'"\s);]+)\1\s*\)?[^;]*;/gi, (match, _quote: string, url: string) => {
+      const replacement = resolve(url);
+      if (replacement) return match.replace(url, replacement);
+      return isRemoteUrl(url) ? '' : match;
+    })
+    .replace(/url\(\s*(['"]?)([^')]+)\1\s*\)/gi, (match, quote: string, url: string) => {
+      const replacement = resolve(url);
+      return replacement ? `url(${quote}${replacement}${quote})` : isRemoteUrl(url) ? 'url("data:,")' : match;
+    });
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
