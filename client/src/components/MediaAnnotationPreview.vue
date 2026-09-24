@@ -25,6 +25,15 @@
       ><PhDotsSixVertical :size="19" weight="bold" /></div>
       <div class="pdf-toolbar-group" role="group" :aria-label="t(annotationControlsLabel)">
         <button
+          v-if="isHtml && htmlOutline.length"
+          type="button"
+          :class="{ active: showOutline }"
+          :aria-pressed="showOutline"
+          :aria-label="t(showOutline ? 'components.editorPanel.hideMhtmlOutline' : 'components.editorPanel.showMhtmlOutline')"
+          :data-tooltip="t(showOutline ? 'components.editorPanel.hideMhtmlOutline' : 'components.editorPanel.showMhtmlOutline')"
+          @click="showOutline = !showOutline"
+        ><PhList :size="19" /></button>
+        <button
           v-for="annotationTool in annotationToolOptions"
           :key="annotationTool.name"
           type="button"
@@ -260,7 +269,7 @@
     <div
       ref="viewportEl"
       class="pdf-viewport"
-      :class="{ pannable: tool === 'pan', panning: isPanning, 'has-outline': showOutline && outline.length }"
+      :class="{ pannable: tool === 'pan', panning: isPanning, 'has-outline': showOutline && (isHtml ? htmlOutline.length : outline.length) }"
       :title="isImage ? t('components.editorPanel.imagePanHint') : undefined"
       @pointerdown="startPan"
       @pointermove="continuePan"
@@ -332,29 +341,29 @@
       </div>
     </div>
     <nav
-      v-if="showOutline && outline.length"
+      v-if="showOutline && (isHtml ? htmlOutline.length : outline.length)"
       class="pdf-outline"
-      :aria-label="t('components.editorPanel.pdfOutline')"
+      :aria-label="t(isHtml ? 'components.editorPanel.mhtmlOutline' : 'components.editorPanel.pdfOutline')"
     >
       <div class="pdf-outline-header">
         <div class="pdf-outline-title">{{ t('components.editorPanel.outline') }}</div>
         <button
           type="button"
           class="pdf-outline-close"
-          :title="t('components.editorPanel.hidePdfOutline')"
-          :aria-label="t('components.editorPanel.hidePdfOutline')"
+          :title="t(isHtml ? 'components.editorPanel.hideMhtmlOutline' : 'components.editorPanel.hidePdfOutline')"
+          :aria-label="t(isHtml ? 'components.editorPanel.hideMhtmlOutline' : 'components.editorPanel.hidePdfOutline')"
           @click="showOutline = false"
         ><PhX :size="14" /></button>
       </div>
       <div class="pdf-outline-items">
         <button
-          v-for="(item, index) in outline"
+          v-for="(item, index) in isHtml ? htmlOutline : outline"
           :key="`${index}-${item.title}`"
           type="button"
-          :disabled="!item.dest"
+          :disabled="'dest' in item && !item.dest"
           :style="{ paddingLeft: `${0.75 + item.level * 0.75}rem` }"
           :title="item.title"
-          @click="openOutlineItem(item)"
+          @click="isHtml ? openHtmlOutlineItem(index) : openOutlineItem(item as PdfOutlineItem)"
         >{{ item.title }}</button>
       </div>
     </nav>
@@ -441,6 +450,10 @@ interface PdfOutlineSource {
 interface PdfOutlineItem {
   title: string;
   dest: string | unknown[] | null;
+  level: number;
+}
+interface HtmlOutlineItem {
+  title: string;
   level: number;
 }
 
@@ -543,6 +556,7 @@ const nextFitMode = ref<PdfFitMode>('width');
 const loading = ref(true);
 const error = ref('');
 const outline = ref<PdfOutlineItem[]>([]);
+const htmlOutline = ref<HtmlOutlineItem[]>([]);
 const showOutline = ref(true);
 const tool = ref<AnnotationTool>('pan');
 const penColor = ref('#ef4444');
@@ -1506,6 +1520,9 @@ async function handleHtmlLoad(): Promise<void> {
     htmlResizeObserver.observe(htmlDocument.documentElement);
     if (htmlDocument.body) htmlResizeObserver.observe(htmlDocument.body);
   }
+  htmlOutline.value = getHtmlOutlineHeadings(htmlDocument)
+    .map(heading => ({ title: heading.textContent!.trim(), level: Number(heading.tagName.slice(1)) - 1 }));
+
   htmlDocument.addEventListener('wheel', event => {
     const viewport = viewportEl.value;
     if (event.ctrlKey || event.metaKey) {
@@ -1517,11 +1534,33 @@ async function handleHtmlLoad(): Promise<void> {
     viewport.scrollBy({ left: event.deltaX, top: event.deltaY });
   }, { passive: false });
 
-  updateHtmlPageSize();
   loading.value = false;
   await nextTick();
   updateHtmlPageSize();
+  await nextTick();
+  updateHtmlPageSize();
   await renderVisiblePages().catch(handleRenderError);
+}
+
+function getHtmlOutlineHeadings(htmlDocument: Document): Element[] {
+  // Reader archives may include a separate site table of contents and other UI headings.
+  const content = htmlDocument.querySelector('#sbo-rt-content')
+    || htmlDocument.querySelector('main, [role="main"]') || htmlDocument.body;
+  return Array.from(content.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+    .filter(heading => heading.textContent?.trim()
+      && !heading.closest('nav, aside, header, footer, [role="navigation"], [aria-hidden="true"], [hidden], [inert]'));
+}
+
+function openHtmlOutlineItem(index: number): void {
+  const viewport = viewportEl.value;
+  const frame = htmlFrameEl.value;
+  const heading = frame?.contentDocument && getHtmlOutlineHeadings(frame.contentDocument)[index];
+  if (!viewport || !frame || !heading) return;
+  viewport.scrollTo({
+    top: viewport.scrollTop + frame.getBoundingClientRect().top - viewport.getBoundingClientRect().top
+      + heading.getBoundingClientRect().top * scale.value,
+    behavior: 'smooth',
+  });
 }
 
 function loadImage(): Promise<HTMLImageElement> {
@@ -1552,6 +1591,7 @@ async function loadPdf(): Promise<void> {
   isPanning.value = false;
   pageSizes.value = {};
   outline.value = [];
+  htmlOutline.value = [];
   htmlResizeObserver?.disconnect();
   htmlResizeObserver = undefined;
   const previousLoadingTask = loadingTask;

@@ -190,6 +190,89 @@ describe('MediaAnnotationPreview', () => {
     }));
   });
 
+  it('shows MHTML headings in an outline and scrolls the outer viewport to them', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('pdf-viewport') ? (this.classList.contains('has-outline') ? 380 : 600) : 0;
+    });
+    const getComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(element => {
+      const style = getComputedStyle(element);
+      if (element.classList.contains('pdf-viewport')) {
+        return { ...style, paddingLeft: '0px', paddingRight: '0px', paddingTop: '0px', paddingBottom: '0px' };
+      }
+      return style;
+    });
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/headings.mhtml', kind: 'html', htmlDocument: '<h1>Start</h1><h2>Details</h2>' },
+    });
+    await flushPromises();
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    const document = new DOMParser().parseFromString('<h1>Start</h1><h2>Details</h2>', 'text/html');
+    Object.defineProperty(frame.element, 'contentDocument', { configurable: true, value: document });
+    vi.spyOn(frame.element, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
+    vi.spyOn(document.querySelector('h2')!, 'getBoundingClientRect').mockReturnValue({ top: 300 } as DOMRect);
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    vi.spyOn(viewport.element, 'getBoundingClientRect').mockReturnValue({ top: 20 } as DOMRect);
+    viewport.element.scrollTop = 40;
+    const scrollTo = vi.fn();
+    viewport.element.scrollTo = scrollTo;
+
+    await frame.trigger('load');
+    await flushPromises();
+    expect(wrapper.findAll('.pdf-outline-items button').map(button => button.text())).toEqual(['Start', 'Details']);
+    expect(wrapper.find('.pdf-viewport').classes()).toContain('has-outline');
+    expect(frame.element.style.width).toBe('380px');
+    await wrapper.findAll('.pdf-outline-items button')[1].trigger('click');
+    expect(scrollTo).toHaveBeenCalledWith({ top: 420, behavior: 'smooth' });
+
+    await wrapper.get('[aria-label="Hide MHTML outline"]').trigger('click');
+    expect(wrapper.find('.pdf-outline').exists()).toBe(false);
+    expect(frame.element.style.width).toBe('380px');
+    await wrapper.get('[aria-label="Show MHTML outline"]').trigger('click');
+    expect(wrapper.find('.pdf-outline').exists()).toBe(true);
+
+    const newDocument = new DOMParser().parseFromString('<h3>Replacement</h3>', 'text/html');
+    Object.defineProperty(frame.element, 'contentDocument', { value: newDocument });
+    await frame.trigger('load');
+    expect(wrapper.findAll('.pdf-outline-items button').map(button => button.text())).toEqual(['Replacement']);
+
+    const emptyDocument = new DOMParser().parseFromString('<p>No headings</p>', 'text/html');
+    Object.defineProperty(frame.element, 'contentDocument', { value: emptyDocument });
+    await frame.trigger('load');
+    expect(wrapper.find('.pdf-outline').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Show MHTML outline"]').exists()).toBe(false);
+  });
+
+  it('excludes the archived reader table of contents from the MHTML outline', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/chapter.mhtml', kind: 'html', htmlDocument: '<p>Reader snapshot</p>' },
+    });
+    await flushPromises();
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    const document = new DOMParser().parseFromString(`
+      <main>
+        <div id="sbo-rt-content"><h1>第1章 数据系统架构</h1><h2>Cloud时代的运维实践</h2></div>
+        <div class="_tableOfContents_lswvm_11"><h5>前言</h5><h5>1. 数据系统架构</h5><h6>Cloud Versus Self-Hosting</h6></div>
+      </main>
+      <div id="onetrust-pc-sdk"><h2>Privacy Preference Center</h2></div>
+    `, 'text/html');
+    Object.defineProperty(frame.element, 'contentDocument', { value: document });
+    const chapterHeading = document.querySelector('#sbo-rt-content h2')!;
+    vi.spyOn(chapterHeading, 'getBoundingClientRect').mockReturnValue({ top: 180 } as DOMRect);
+    vi.spyOn(frame.element, 'getBoundingClientRect').mockReturnValue({ top: 0 } as DOMRect);
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    vi.spyOn(viewport.element, 'getBoundingClientRect').mockReturnValue({ top: 0 } as DOMRect);
+    const scrollTo = vi.fn();
+    viewport.element.scrollTo = scrollTo;
+
+    await frame.trigger('load');
+    await flushPromises();
+    expect(wrapper.findAll('.pdf-outline-items button').map(button => button.text()))
+      .toEqual(['第1章 数据系统架构', 'Cloud时代的运维实践']);
+    await wrapper.findAll('.pdf-outline-items button')[1].trigger('click');
+    expect(scrollTo).toHaveBeenCalledWith({ top: 180, behavior: 'smooth' });
+  });
+
   it('loads an MHTML iframe again when its file is renamed without changing the HTML', async () => {
     const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '', filePath: '/project/old.mhtml', kind: 'html', htmlDocument: '<p>Same page</p>' },
