@@ -863,6 +863,15 @@ function openCurrentWorkspaceInNewTab(): void {
   window.open(url.toString(), '_blank', 'noopener');
 }
 
+function projectRouteLocation(cwd: string) {
+  const query: Record<string, string> = {};
+  if (selectedAgentProfileId.value && selectedAgentProfileId.value !== 'default') {
+    query.profile = selectedAgentProfileId.value;
+  }
+  if (cwd && cwd !== '~') query.project = cwd;
+  return { path: '/', query };
+}
+
 function sessionRouteLocation(sessionId: string, cwd?: string) {
   const query: Record<string, string> = {};
   if (selectedAgentProfileId.value && selectedAgentProfileId.value !== 'default') {
@@ -1489,9 +1498,9 @@ async function finishWorktreeSession() {
 
 function handleProjectPathChanged(cwd: string, options?: { initial?: boolean; keepSession?: boolean }): void {
   selectedProjectPath.value = cwd;
-  if (activeSessionId.value && !options?.initial && !options?.keepSession) {
-    router.push('/sessions');
-  }
+  if (options?.initial || options?.keepSession) return;
+
+  void router.push(projectRouteLocation(cwd));
 }
 
 function handleSidebarInitialized(): void {
@@ -1667,7 +1676,7 @@ async function handleAgentProfileChanged(profileId: string) {
   }
 
   const sessionFound = await refreshActiveSessionMetadata(existingSessionId);
-  if (!sessionFound) router.push('/sessions');
+  if (!sessionFound) void router.push(projectRouteLocation(selectedProjectPath.value));
 }
 
 async function startProjectTask(taskId: string): Promise<ProjectTaskStartResult> {

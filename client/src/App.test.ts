@@ -916,6 +916,53 @@ describe('App routing', () => {
     wrapper.unmount();
   });
 
+  it('routes a selected project with its agent profile so it survives refresh', async () => {
+    route.params.id = undefined;
+    route.path = '/';
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+    await flushPromises();
+    push.mockClear();
+
+    const sidebar = wrapper.findComponent({ name: 'SessionSidebar' });
+    sidebar.vm.$emit('agentProfileChanged', 'codex');
+    sidebar.vm.$emit('projectPathChanged', '/Users/ross/git/github/pi-cloud');
+
+    expect(push).toHaveBeenCalledWith({
+      path: '/',
+      query: { profile: 'codex', project: '/Users/ross/git/github/pi-cloud' },
+    });
+  });
+
+  it('leaves the session route when a different project is selected', async () => {
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          ChatPanel: true,
+          TerminalPanel: true,
+          EditorPanel: true,
+          FolderPickerModal: true,
+          Teleport: true,
+        },
+      },
+    });
+    await flushPromises();
+    push.mockClear();
+
+    wrapper.findComponent({ name: 'SessionSidebar' }).vm.$emit('projectPathChanged', '/workspace/other');
+
+    expect(push).toHaveBeenCalledWith({ path: '/', query: { project: '/workspace/other' } });
+  });
+
   it('keeps the active session route when the sidebar loads the initial project path', async () => {
     mount(App, {
       global: {
@@ -1561,6 +1608,9 @@ describe('App routing', () => {
 
   it('clears route state when the agent profile changes away from the active session store', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/sessions/agent-profile?')) {
+        return { json: async () => ({ profile: { id: 'work', label: 'Work' } }) };
+      }
       if (url === '/api/sessions/project-path') {
         return { json: async () => ({ projectPath: '/workspace' }) };
       }
@@ -1589,7 +1639,7 @@ describe('App routing', () => {
     await wrapper.findComponent({ name: 'SessionSidebar' }).vm.$emit('agentProfileChanged', 'work');
     await flushPromises();
 
-    expect(push).toHaveBeenCalledWith('/sessions');
+    expect(push).toHaveBeenCalledWith({ path: '/', query: { profile: 'work', project: '/workspace' } });
   });
 
   it('renames the active session by double-clicking its navbar title', async () => {
