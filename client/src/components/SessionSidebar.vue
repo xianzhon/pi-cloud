@@ -613,6 +613,7 @@ const isAgentProfileListOpen = ref(false);
 const showProfileManager = ref(false);
 const projectPath = ref<string>('');
 const projectPathOptions = ref<string[]>([]);
+const favoriteProjectPaths = ref<string[]>([]);
 const projectPathError = ref('');
 const isRecentProjectListOpen = ref(false);
 const projectPathQuery = ref('');
@@ -631,9 +632,10 @@ const agentProfileStorageKey = 'pi-cloud-agent-profile';
 const version = import.meta.env.VITE_APP_VERSION || 'dev';
 const projectPathDisplay = computed(() => formatProjectPath(projectPath.value));
 const filteredProjectPathOptions = computed(() => {
+  const paths = Array.from(new Set([...favoriteProjectPaths.value, ...projectPathOptions.value]));
   const query = projectPathQuery.value.trim().toLowerCase();
-  if (!query) return projectPathOptions.value;
-  return projectPathOptions.value.filter((path) => (
+  if (!query) return paths;
+  return paths.filter((path) => (
     path.toLowerCase().includes(query) || formatHomePath(path).toLowerCase().includes(query)
   ));
 });
@@ -749,6 +751,7 @@ async function rememberProjectPath(path: string): Promise<void> {
 
 async function removeProjectPathHistory(path: string): Promise<void> {
   projectPathOptions.value = projectPathOptions.value.filter((entry) => entry !== path);
+  favoriteProjectPaths.value = favoriteProjectPaths.value.filter((entry) => entry !== path);
   if (projectPath.value === path) {
     if (props.activeSessionId) emit('sessionDeleted', props.activeSessionId);
     await loadSessions();
@@ -770,7 +773,22 @@ async function refreshProjectPath(options: { preferSaved: boolean; initial?: boo
   emit('projectPathChanged', projectPath.value, options.initial ? { initial: true } : undefined);
 }
 
+async function loadFavoriteProjectPaths() {
+  try {
+    const response = await fetch(`/api/sessions/project-history?clientId=${encodeURIComponent(props.clientId)}`);
+    if (!response.ok) return;
+    const data = await response.json() as { projects?: Array<{ path: string; isFavorite?: boolean }> };
+    if (isReviewMode.value) return;
+    favoriteProjectPaths.value = (data.projects || [])
+      .filter((entry) => entry.isFavorite && typeof entry.path === 'string')
+      .map((entry) => entry.path);
+  } catch {
+    // Keep the session project list available if history cannot be loaded.
+  }
+}
+
 async function loadProjectPathOptions(sourceId?: string) {
+  favoriteProjectPaths.value = [];
   try {
     let paths: string[];
     if (sourceId) {
@@ -783,6 +801,7 @@ async function loadProjectPathOptions(sourceId?: string) {
     projectPathOptions.value = Array.from(new Set(
       paths.filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
     ));
+    if (!sourceId) await loadFavoriteProjectPaths();
   } catch (error) {
     console.error(t('components.sessionSidebar.failedToLoadProjectPathOptions'), error);
     projectPathOptions.value = [];
@@ -1080,6 +1099,7 @@ async function switchToProjectPath(path: string): Promise<void> {
 
 function openRecentProjectList() {
   if (isRecentProjectListOpen.value) return;
+  if (!isReviewMode.value) void loadFavoriteProjectPaths();
   projectPathQuery.value = '';
   activeRecentProjectIndex.value = 0;
   isRecentProjectListOpen.value = true;

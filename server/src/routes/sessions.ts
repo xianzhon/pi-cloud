@@ -168,7 +168,7 @@ function sanitizeSessionTree(tree: any[]): any[] {
 
 interface SessionRouteOptions {
   projectTaskStore?: Pick<ProjectTaskStore, 'listProjectPaths' | 'replaceProjectPath'>;
-  projectHistoryStore?: Pick<ProjectHistoryStore, 'list' | 'touch' | 'remove'>;
+  projectHistoryStore?: Pick<ProjectHistoryStore, 'list' | 'touch' | 'setFavorite' | 'remove'>;
   pinStore?: Pick<SessionPinStore, 'listGroups' | 'createGroup' | 'pinSession' | 'unpinSession' | 'listSessionIdsByGroup' | 'pinFile' | 'unpinFile' | 'listFilePathsByGroup'>;
   activityStore?: Pick<SessionActivityStore, 'listForSession'> & Partial<Pick<SessionActivityStore, 'listLatestPrForSessions' | 'updatePrStatus'>>;
   refreshPrStatus?: (activity: SessionActivityRecord) => Promise<PullRequestStatus>;
@@ -724,6 +724,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     const projects = await Promise.all(entries.map(async (entry) => ({
       path: entry.path,
       lastAccessed: Date.parse(entry.lastAccessed),
+      isFavorite: entry.isFavorite,
       sessionCount: (await listSessionsForRoute(sessionService, worktreeMetadata, clientId, 'project', expandHomePath(entry.path))).length,
     })));
     return { projects };
@@ -738,6 +739,20 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
 
     const { id: profileId } = await sessionService.getClientAgentProfile(clientId);
     options.projectHistoryStore.touch(profileId, projectPath.trim());
+    return { success: true };
+  });
+
+  app.patch('/project-history/favorite', async (req, reply) => {
+    const { clientId, projectPath, isFavorite } = req.body as { clientId?: string; projectPath?: string; isFavorite?: boolean };
+    if (!clientId || !projectPath?.trim() || typeof isFavorite !== 'boolean') {
+      return reply.status(400).send({ error: 'clientId, projectPath and isFavorite are required' });
+    }
+    if (!options.projectHistoryStore) return reply.status(503).send({ error: 'Project history is not configured' });
+
+    const { id: profileId } = await sessionService.getClientAgentProfile(clientId);
+    if (!options.projectHistoryStore.setFavorite(profileId, projectPath.trim(), isFavorite)) {
+      return reply.status(404).send({ error: 'Project history entry not found' });
+    }
     return { success: true };
   });
 

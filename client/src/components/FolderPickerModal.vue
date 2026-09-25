@@ -175,7 +175,7 @@
           <div v-else-if="projectHistory.length === 0" class="empty-state">
             {{ t('components.folderPickerModal.noProjectHistory') }}
           </div>
-          <div v-for="entry in projectHistory" v-else :key="entry.path" class="project-history-row">
+          <div v-for="entry in sortedProjectHistory" v-else :key="entry.path" class="project-history-row">
             <button class="project-history-project" type="button" @click="selectHistoryProject(entry.path)">
               <PhFolder :size="18" weight="fill" />
               <span class="project-history-details">
@@ -190,6 +190,17 @@
                   <span :title="formatAbsoluteDate(entry.lastAccessed)">{{ formatLastAccessed(entry.lastAccessed) }}</span>
                 </span>
               </span>
+            </button>
+            <button
+              class="history-favorite-btn"
+              type="button"
+              :disabled="updatingFavoritePath === entry.path"
+              :aria-pressed="Boolean(entry.isFavorite)"
+              :title="t(entry.isFavorite ? 'components.folderPickerModal.unfavoriteProject' : 'components.folderPickerModal.favoriteProject')"
+              :aria-label="t(entry.isFavorite ? 'components.folderPickerModal.unfavoriteProjectFor' : 'components.folderPickerModal.favoriteProjectFor', { path: entry.path })"
+              @click="toggleFavorite(entry)"
+            >
+              <PhStar :size="16" :weight="entry.isFavorite ? 'fill' : 'regular'" />
             </button>
             <button
               class="history-remove-btn"
@@ -235,7 +246,7 @@
 <script setup lang="ts">
 import { i18n } from '../i18n';
 import { computed, ref, watch } from 'vue';
-import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhFolderPlus, PhMagnifyingGlass, PhTextAa, PhTrash } from '@phosphor-icons/vue';
+import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhFolderPlus, PhMagnifyingGlass, PhStar, PhTextAa, PhTrash } from '@phosphor-icons/vue';
 import CloneRepositoryModal from './CloneRepositoryModal.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import DialogCloseButton from './DialogCloseButton.vue';
@@ -253,6 +264,7 @@ interface ProjectHistoryEntry {
   path: string;
   lastAccessed: number;
   sessionCount: number;
+  isFavorite?: boolean;
 }
 
 const props = withDefaults(defineProps<{
@@ -293,8 +305,13 @@ const projectHistory = ref<ProjectHistoryEntry[]>([]);
 const historyLoading = ref(false);
 const historyError = ref('');
 const removingHistoryPath = ref('');
+const updatingFavoritePath = ref('');
 const historyPathToRemove = ref('');
 
+const sortedProjectHistory = computed(() => [
+  ...projectHistory.value.filter((entry) => entry.isFavorite),
+  ...projectHistory.value.filter((entry) => !entry.isFavorite),
+]);
 const currentProjectName = computed(() => basenamePath(props.currentProjectPath || ''));
 const isCurrentProjectPath = computed(() => Boolean(props.currentProjectPath) && currentPath.value === props.currentProjectPath);
 const showRenameOption = computed(() => isCurrentProjectPath.value);
@@ -417,6 +434,24 @@ async function openHistory() {
 
 function selectHistoryProject(path: string) {
   emit('select', { path });
+}
+
+async function toggleFavorite(entry: ProjectHistoryEntry) {
+  updatingFavoritePath.value = entry.path;
+  historyError.value = '';
+  try {
+    const response = await fetch('/api/sessions/project-history/favorite', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: props.clientId, projectPath: entry.path, isFavorite: !entry.isFavorite }),
+    });
+    if (!response.ok) throw new Error(t('components.folderPickerModal.failedToUpdateFavorite'));
+    entry.isFavorite = !entry.isFavorite;
+  } catch (err) {
+    historyError.value = err instanceof Error ? err.message : t('components.folderPickerModal.failedToUpdateFavorite');
+  } finally {
+    updatingFavoritePath.value = '';
+  }
 }
 
 async function removeHistory() {
@@ -766,11 +801,21 @@ function dirnamePath(path: string): string {
   white-space: nowrap;
 }
 
+.history-favorite-btn,
 .history-remove-btn {
-  margin-right: 0.4rem;
   padding: 0.45rem;
   color: var(--text-secondary);
   border-radius: var(--radius-sm);
+}
+
+.history-favorite-btn[aria-pressed="true"],
+.history-favorite-btn:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.history-remove-btn {
+  margin-right: 0.4rem;
 }
 
 .history-remove-btn:hover:not(:disabled) {
@@ -778,6 +823,7 @@ function dirnamePath(path: string): string {
   background: var(--error-muted);
 }
 
+.history-favorite-btn:disabled,
 .history-remove-btn:disabled {
   opacity: 0.45;
 }

@@ -493,6 +493,36 @@ describe('SessionSidebar', () => {
     expect(wrapper.find('.recent-project-list').classes()).toContain('bounded');
   });
 
+  it('pins favorite history projects above other project paths and refreshes favorites when opened', async () => {
+    mockFetchWithNoSessions(['/workspace/recent', '/workspace/favorite']);
+    const originalFetch = vi.mocked(fetch);
+    let favorite = true;
+    vi.stubGlobal('fetch', vi.fn(async (...args: Parameters<typeof fetch>) => {
+      if (String(args[0]).startsWith('/api/sessions/project-history?')) {
+        return { ok: true, json: async () => ({ projects: [
+          { path: '/workspace/favorite', isFavorite: favorite },
+          { path: '/workspace/no-sessions', isFavorite: favorite },
+        ] }) } as Response;
+      }
+      return originalFetch(...args);
+    }));
+
+    const wrapper = mountSidebar();
+    await vi.waitFor(() => expect((wrapper.find('.project-path-input').element as HTMLInputElement).value).toBe('/workspace/recent'));
+
+    await wrapper.find('.project-path-input').trigger('focus');
+    await vi.waitFor(() => expect(wrapper.findAll('.recent-project-option').map((option) => option.text())).toEqual([
+      '/workspace/favorite', '/workspace/no-sessions', '/workspace/recent',
+    ]));
+
+    favorite = false;
+    await wrapper.find('.project-path-input').trigger('keydown.escape');
+    await wrapper.find('.project-path-input').trigger('focus');
+    await vi.waitFor(() => expect(wrapper.findAll('.recent-project-option').map((option) => option.text())).toEqual([
+      '/workspace/recent', '/workspace/favorite',
+    ]));
+  });
+
   it('filters recent projects and abbreviates long paths while preserving their full title', async () => {
     const longPath = '/Users/alice/projects/clients/acme/platform/services/api/src/backend';
     mockFetchWithNoSessions([longPath, '/Users/alice/projects/internal/dashboard']);

@@ -334,10 +334,11 @@ describe('openPiCloudDatabase', () => {
       { version: 7, name: 'user-prompts-schema' },
       { version: 8, name: 'application-settings-table' },
       { version: 9, name: 'pinned-files-schema' },
+      { version: 10, name: 'project-history-favorites' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 9 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 10 });
     db.close();
   });
 

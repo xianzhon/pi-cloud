@@ -244,6 +244,61 @@ describe('FolderPickerModal', () => {
     await vi.waitFor(() => expect(wrapper.emitted('historyRemoved')?.[0]).toEqual(['/workspace/cloned']));
   });
 
+  it('moves favorites above recent projects and persists pin and unpin without selecting them', async () => {
+    const projects = [
+      { path: '/workspace/new', lastAccessed: Date.now(), sessionCount: 1, isFavorite: false },
+      { path: '/workspace/old', lastAccessed: Date.now() - 60_000, sessionCount: 0, isFavorite: false },
+    ];
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      if (input === '/api/sessions/project-history?clientId=client-1') {
+        return { ok: true, json: async () => ({ projects: projects.map((entry) => ({ ...entry })) }) };
+      }
+      if (input === '/api/sessions/project-history/favorite') {
+        const body = JSON.parse(init?.body as string);
+        expect(init?.method).toBe('PATCH');
+        expect(body).toMatchObject({ clientId: 'client-1', projectPath: '/workspace/old' });
+        projects[1].isFavorite = body.isFavorite;
+        return { ok: true };
+      }
+      return { ok: true, json: async () => ({ path: '/workspace', tree: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(FolderPickerModal, {
+      props: { visible: true, initialPath: '/workspace', clientId: 'client-1' },
+      global: { stubs: { Teleport: true } },
+    });
+    const paths = () => wrapper.findAll('.project-history-path').map((node) => node.text());
+    await vi.waitFor(() => expect(paths()).toEqual(['/workspace/new', '/workspace/old']));
+    await wrapper.find('[aria-label="Favorite /workspace/old"]').trigger('click');
+    await vi.waitFor(() => expect(paths()).toEqual(['/workspace/old', '/workspace/new']));
+    expect(wrapper.find('[aria-label="Remove favorite for /workspace/old"]').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.emitted('select')).toBeUndefined();
+
+    await wrapper.findAll('.project-dialog-tabs button')[1].trigger('click');
+    await wrapper.findAll('.project-dialog-tabs button')[0].trigger('click');
+    await vi.waitFor(() => expect(paths()).toEqual(['/workspace/old', '/workspace/new']));
+    await wrapper.find('[aria-label="Remove favorite for /workspace/old"]').trigger('click');
+    await vi.waitFor(() => expect(paths()).toEqual(['/workspace/new', '/workspace/old']));
+  });
+
+  it('leaves the order unchanged when favoriting fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (input === '/api/sessions/project-history/favorite') return { ok: false };
+      if (input === '/api/sessions/project-history?clientId=client-1') {
+        return { ok: true, json: async () => ({ projects: [{ path: '/workspace/a', lastAccessed: Date.now(), sessionCount: 0 }] }) };
+      }
+      return { ok: true, json: async () => ({ path: '/workspace', tree: [] }) };
+    }));
+    const wrapper = mount(FolderPickerModal, {
+      props: { visible: true, initialPath: '/workspace', clientId: 'client-1' },
+      global: { stubs: { Teleport: true } },
+    });
+    await vi.waitFor(() => expect(wrapper.find('.project-history-row').exists()).toBe(true));
+    await wrapper.find('[aria-label="Favorite /workspace/a"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Failed to update project favorite'));
+    expect(wrapper.find('[aria-label="Favorite /workspace/a"]').attributes('aria-pressed')).toBe('false');
+  });
+
   it('shows weeks and months before switching to an absolute access date', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-20T12:00:00.000Z'));

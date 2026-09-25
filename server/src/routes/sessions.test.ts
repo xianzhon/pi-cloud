@@ -23,6 +23,7 @@ const cloneCancel = vi.fn();
 const projectHistoryStore = {
   list: vi.fn(),
   touch: vi.fn(),
+  setFavorite: vi.fn(),
   remove: vi.fn(),
 };
 
@@ -186,6 +187,7 @@ describe('session routes', () => {
     projectHistoryStore.list.mockReset();
     projectHistoryStore.list.mockReturnValue([]);
     projectHistoryStore.touch.mockReset();
+    projectHistoryStore.setFavorite.mockReset();
     projectHistoryStore.remove.mockReset();
     vi.mocked(sessionService.getClientAgentProfile).mockResolvedValue({
       id: 'default', label: 'default', path: '/Users/test/.pi/agent', isDefault: true,
@@ -607,8 +609,8 @@ describe('session routes', () => {
 
   it('loads database-backed project history for the active agent profile', async () => {
     projectHistoryStore.list.mockReturnValue([
-      { path: '/repo/with-sessions', lastAccessed: '2026-08-30T02:00:00.000Z' },
-      { path: '/repo/cloned', lastAccessed: '2026-08-30T01:00:00.000Z' },
+      { path: '/repo/with-sessions', lastAccessed: '2026-08-30T02:00:00.000Z', isFavorite: true },
+      { path: '/repo/cloned', lastAccessed: '2026-08-30T01:00:00.000Z', isFavorite: false },
     ]);
     vi.mocked(sessionService.listSessions).mockImplementation(async (_clientId: string, path?: string) => (
       path === '/repo/with-sessions' ? [{ id: 'session-1' }] as any : []
@@ -623,8 +625,8 @@ describe('session routes', () => {
 
     expect(projectHistoryStore.list).toHaveBeenCalledWith('default');
     expect(result).toEqual({ projects: [
-      { path: '/repo/with-sessions', lastAccessed: Date.parse('2026-08-30T02:00:00.000Z'), sessionCount: 1 },
-      { path: '/repo/cloned', lastAccessed: Date.parse('2026-08-30T01:00:00.000Z'), sessionCount: 0 },
+      { path: '/repo/with-sessions', lastAccessed: Date.parse('2026-08-30T02:00:00.000Z'), isFavorite: true, sessionCount: 1 },
+      { path: '/repo/cloned', lastAccessed: Date.parse('2026-08-30T01:00:00.000Z'), isFavorite: false, sessionCount: 0 },
     ] });
   });
 
@@ -639,6 +641,27 @@ describe('session routes', () => {
 
     expect(projectHistoryStore.touch).toHaveBeenCalledWith('default', '/repo/project');
     expect(result).toEqual({ success: true });
+  });
+
+  it('updates a favorite only for an existing project in the active profile', async () => {
+    projectHistoryStore.setFavorite.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any, { projectHistoryStore });
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    expect(await handlers['PATCH /project-history/favorite']({
+      body: { clientId: 'client-1', projectPath: '/repo/project', isFavorite: true },
+    }, reply)).toEqual({ success: true });
+    expect(projectHistoryStore.setFavorite).toHaveBeenCalledWith('default', '/repo/project', true);
+
+    await handlers['PATCH /project-history/favorite']({
+      body: { clientId: 'client-1', projectPath: '/missing', isFavorite: false },
+    }, reply);
+    expect(reply.status).toHaveBeenCalledWith(404);
+    expect(reply.send).toHaveBeenCalledWith({ error: 'Project history entry not found' });
+    await handlers['PATCH /project-history/favorite']({ body: { clientId: 'client-1' } }, reply);
+    expect(reply.status).toHaveBeenCalledWith(400);
   });
 
   it('removes all session history files and the database history entry without deleting the project', async () => {
