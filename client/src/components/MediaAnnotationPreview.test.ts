@@ -1,5 +1,6 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetPreferencesForTests } from '../composables/usePreferences';
 import MediaAnnotationPreview from './MediaAnnotationPreview.vue';
 
 const pdfjsMock = vi.hoisted(() => {
@@ -70,6 +71,9 @@ const context = {
 describe('MediaAnnotationPreview', () => {
   beforeEach(() => {
     localStorage.removeItem('pi-cloud.annotationToolShortcuts');
+    localStorage.removeItem('pi-cloud.annotationPenColor');
+    localStorage.removeItem('pi-cloud.annotationPenWidth');
+    resetPreferencesForTests();
     pdfjsMock.document.numPages = 2;
     pdfjsMock.getOutline.mockResolvedValue([]);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
@@ -1159,8 +1163,11 @@ describe('MediaAnnotationPreview', () => {
     expect(wrapper.get('.pdf-zoom-level').text()).toBe('150%');
     expect(wrapper.get('.pdf-page-status').text()).toBe('2/2');
     expect(wrapper.get('[aria-label="Erase PDF annotations"]').classes()).toContain('active');
-    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#123456');
-    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]').element.value).toBe('7');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#ef4444');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]').element.value).toBe('1');
+    await wrapper.get('[aria-label="Cover PDF content with rectangle"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Cover color"]').element.value).toBe('#3f3f4d');
+    await wrapper.get('[aria-label="Erase PDF annotations"]').trigger('click');
     expect(wrapper.get('.pdf-toolbar').classes()).toContain('vertical');
     expect(wrapper.get('.pdf-toolbar').attributes('style')).toContain('left: 0px');
 
@@ -1174,13 +1181,56 @@ describe('MediaAnnotationPreview', () => {
       scale: 1.6,
       page: 2,
       tool: 'eraser',
-      penColor: '#123456',
       coverColor: '#3f3f4d',
-      penWidth: 7,
       pageTone: 'original',
       toolbarVertical: true,
       toolbarPosition: { left: 0, top: 0 },
     });
+  });
+
+  it('shares pen color and width across PDF, image, and MHTML without adopting per-file styles', async () => {
+    class MockImage {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload?: () => void;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    }
+    vi.stubGlobal('Image', MockImage);
+    vi.mocked(fetch).mockImplementation(async url => {
+      if (String(url).startsWith('/api/files/read')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ content: JSON.stringify({
+            version: 1, pages: {},
+            view: { penColor: '#123456', penWidth: 9, coverColor: '#aabbcc' },
+          }) }),
+        } as Response;
+      }
+      return { ok: true, status: 200 } as Response;
+    });
+
+    const pdf = mount(MediaAnnotationPreview, {
+      props: { src: '/pdf', filePath: '/project/a.pdf' },
+    });
+    await flushPromises();
+    await pdf.get<HTMLInputElement>('[aria-label="Annotation color"]').setValue('#3b82f6');
+    await pdf.get<HTMLInputElement>('[aria-label="Annotation width"]').setValue(5);
+    expect(localStorage.getItem('pi-cloud.annotationPenColor')).toBe('#3b82f6');
+    expect(localStorage.getItem('pi-cloud.annotationPenWidth')).toBe('5');
+    resetPreferencesForTests(); // Simulate restoring preferences on a new visit.
+
+    for (const kind of ['image', 'html'] as const) {
+      const wrapper = mount(MediaAnnotationPreview, {
+        props: { src: '', filePath: `/project/b.${kind}`, kind, htmlDocument: '<p>Archived</p>' },
+      });
+      await flushPromises();
+      expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#3b82f6');
+      expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]').element.value).toBe('5');
+      const coverLabel = kind === 'image' ? 'Cover image content with rectangle' : 'Cover MHTML content with rectangle';
+      await wrapper.get(`[aria-label="${coverLabel}"]`).trigger('click');
+      expect(wrapper.get<HTMLInputElement>('[aria-label="Cover color"]').element.value).toBe('#aabbcc');
+      wrapper.unmount();
+    }
   });
 
   it('draws and saves shape annotations', async () => {

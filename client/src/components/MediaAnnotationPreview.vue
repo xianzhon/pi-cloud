@@ -436,9 +436,7 @@ interface PdfViewState {
   htmlWidthCoordinates?: boolean;
   page?: number;
   tool?: AnnotationTool;
-  penColor?: string;
   coverColor?: string;
-  penWidth?: number;
   pageTone?: PdfPageTone;
   toolbarVertical?: boolean;
   toolbarPosition?: ToolbarPosition;
@@ -524,7 +522,11 @@ const annotationToolOptions = computed<Array<{ name: ShortcutTool; label: string
   { name: 'whiteout', label: isHtml.value ? 'components.editorPanel.mhtmlWhiteout' : isImage.value ? 'components.editorPanel.imageWhiteout' : 'components.editorPanel.pdfWhiteout', icon: PhRectangle, weight: 'fill' },
   { name: 'eraser', label: isHtml.value ? 'components.editorPanel.mhtmlEraser' : isImage.value ? 'components.editorPanel.imageEraser' : 'components.editorPanel.pdfEraser', icon: PhEraser },
 ]);
-const { annotationToolShortcuts: toolShortcutKeys, setAnnotationToolShortcuts } = usePreferences();
+const {
+  annotationToolShortcuts: toolShortcutKeys, setAnnotationToolShortcuts,
+  annotationPenColor: penColor, annotationPenWidth,
+  setAnnotationPenColor, setAnnotationPenWidth,
+} = usePreferences();
 const showShortcutEditor = ref(false);
 const showColorPresets = ref(false);
 const colorPresetsButtonEl = ref<HTMLButtonElement>();
@@ -562,19 +564,21 @@ const outline = ref<PdfOutlineItem[]>([]);
 const htmlOutline = ref<HtmlOutlineItem[]>([]);
 const showOutline = ref(true);
 const tool = ref<AnnotationTool>('pan');
-const penColor = ref('#ef4444');
 const coverColor = ref('#ffffff');
 const annotationColor = computed({
   get: () => tool.value === 'whiteout' ? coverColor.value : penColor.value,
   set: value => {
     if (tool.value === 'whiteout') coverColor.value = value;
-    else penColor.value = value;
+    else setAnnotationPenColor(value);
   },
 });
 const annotationColorLabel = computed(() => tool.value === 'whiteout'
   ? 'components.editorPanel.coverColor'
   : 'components.editorPanel.pdfPenColor');
-const penWidth = ref(1);
+const penWidth = computed({
+  get: () => annotationPenWidth.value,
+  set: setAnnotationPenWidth,
+});
 const pageTone = ref<PdfPageTone>('original');
 const annotations = ref<AnnotationDocument>({ version: 1, pages: {} });
 const undoStack = ref<AnnotationDocument[]>([]);
@@ -960,9 +964,7 @@ function currentViewState(): PdfViewState {
     htmlWidthCoordinates: isHtml.value ? true : undefined,
     page: pageNumber.value,
     tool: tool.value,
-    penColor: penColor.value,
     coverColor: coverColor.value,
-    penWidth: penWidth.value,
     pageTone: pageTone.value,
     toolbarVertical: toolbarVertical.value,
     toolbarPosition: toolbarPosition.value ? { ...toolbarPosition.value } : undefined,
@@ -979,11 +981,7 @@ function restoreViewState(view?: PdfViewState): void {
     : undefined;
   tool.value = view?.tool && ANNOTATION_TOOLS.has(view.tool) && (isHtml.value || view.tool !== 'select')
     ? view.tool : 'pan';
-  penColor.value = typeof view?.penColor === 'string' ? view.penColor : '#ef4444';
   coverColor.value = typeof view?.coverColor === 'string' ? view.coverColor : '#ffffff';
-  penWidth.value = typeof view?.penWidth === 'number' && Number.isFinite(view.penWidth)
-    ? Math.min(12, Math.max(1, Math.round(view.penWidth)))
-    : 1;
   pageTone.value = view?.pageTone && PDF_PAGE_TONES.has(view.pageTone) ? view.pageTone : 'original';
   toolbarVertical.value = view?.toolbarVertical === true;
   const position = view?.toolbarPosition;
@@ -2116,7 +2114,7 @@ watch(tool, () => {
   selectedAnnotation.value = undefined;
   drawVisibleAnnotations();
 });
-watch([scale, pageNumber, tool, penColor, coverColor, penWidth, toolbarVertical, toolbarPosition], scheduleViewSave);
+watch([scale, pageNumber, tool, coverColor, toolbarVertical, toolbarPosition], scheduleViewSave);
 
 onMounted(() => {
   if (typeof IntersectionObserver !== 'undefined' && viewportEl.value) {
