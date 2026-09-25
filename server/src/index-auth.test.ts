@@ -50,6 +50,7 @@ describe('buildApp auth protection', () => {
     expect(health.statusCode).toBe(200);
     expect(health.headers['content-security-policy']).toContain("default-src 'self'");
     expect(health.headers['content-security-policy']).toContain("media-src 'self' blob:");
+    expect(health.headers['content-security-policy']).toContain("style-src 'self' 'unsafe-inline' data:");
     expect(health.headers['x-content-type-options']).toBe('nosniff');
     expect(health.headers['x-frame-options']).toBe('DENY');
     expect(health.headers['referrer-policy']).toBe('no-referrer');

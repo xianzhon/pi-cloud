@@ -1,5 +1,6 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetPreferencesForTests } from '../composables/usePreferences';
 import MediaAnnotationPreview from './MediaAnnotationPreview.vue';
 
 const pdfjsMock = vi.hoisted(() => {
@@ -54,6 +55,7 @@ const context = {
   fillText: vi.fn(),
   measureText: vi.fn((text: string) => ({ width: text.length * 10 }) as TextMetrics),
   drawImage: vi.fn(),
+  translate: vi.fn(),
   save: vi.fn(),
   restore: vi.fn(),
   lineCap: '',
@@ -69,6 +71,9 @@ const context = {
 describe('MediaAnnotationPreview', () => {
   beforeEach(() => {
     localStorage.removeItem('pi-cloud.annotationToolShortcuts');
+    localStorage.removeItem('pi-cloud.annotationPenColor');
+    localStorage.removeItem('pi-cloud.annotationPenWidth');
+    resetPreferencesForTests();
     pdfjsMock.document.numPages = 2;
     pdfjsMock.getOutline.mockResolvedValue([]);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
@@ -121,6 +126,344 @@ describe('MediaAnnotationPreview', () => {
     await wrapper.find('[aria-label="Zoom in"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('.pdf-zoom-level').text()).toBe('110%');
+  });
+
+  it('renders and annotates MHTML directly without converting it to PDF', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/files/read')) return { ok: false, status: 404 } as Response;
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    }));
+
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: {
+        src: '',
+        filePath: '/project/snapshot.mhtml',
+        htmlDocument: '<!doctype html><html><body><h1>Archived page</h1></body></html>',
+        kind: 'html',
+      },
+    });
+    await flushPromises();
+
+    const frame = wrapper.get('iframe.mhtml-document-frame');
+    expect(frame.attributes('srcdoc')).toContain('Archived page');
+    expect(frame.attributes('sandbox')).toBe('allow-same-origin');
+    expect(pdfjsMock.getDocument).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.annotations%2Fsnapshot.mhtml.annotations.json');
+
+    await frame.trigger('load');
+    await flushPromises();
+    expect(wrapper.find('.pdf-navigation-toolbar').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="MHTML annotation controls"]').exists()).toBe(true);
+
+    await wrapper.get('[aria-label="Cover MHTML content with rectangle"]').trigger('click');
+    const canvas = wrapper.get<HTMLCanvasElement>('.pdf-annotation-canvas');
+    expect(canvas.classes()).toContain('mhtml');
+    expect(wrapper.findAll('.pdf-page > canvas')).toHaveLength(1);
+    await canvas.trigger('pointerdown', { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
+
+    let drawFrame: FrameRequestCallback | undefined;
+    const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      drawFrame = callback;
+      return 1;
+    });
+    vi.mocked(context.clearRect).mockClear();
+    await canvas.trigger('pointermove', { pointerId: 1, clientX: 30, clientY: 30 });
+    await canvas.trigger('pointermove', { pointerId: 1, clientX: 40, clientY: 40 });
+    expect(requestFrame).toHaveBeenCalledTimes(1);
+    expect(context.clearRect).not.toHaveBeenCalled();
+    drawFrame?.(0);
+    expect(context.clearRect).toHaveBeenCalledTimes(1);
+
+    await canvas.trigger('pointerup', { pointerId: 1, clientX: 40, clientY: 40 });
+    await flushPromises();
+
+    vi.spyOn(wrapper.get<HTMLElement>('.pdf-page').element, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: -120, width: 600, height: 800, right: 600, bottom: 680, x: 0, y: -120, toJSON: () => ({}),
+    });
+    canvas.element.width = 600;
+    requestFrame.mockClear();
+    vi.mocked(context.translate).mockClear();
+    await wrapper.get('.pdf-viewport').trigger('scroll');
+    expect(requestFrame).not.toHaveBeenCalled();
+    expect(vi.mocked(context.translate).mock.calls.at(-1)?.[1]).toBe(-120);
+
+    expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('/project/.annotations/snapshot.mhtml.annotations.json'),
+    }));
+  });
+
+  it('lets MHTML text receive pointer events for native selection and copying', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/snapshot.mhtml', htmlDocument: '<p>Copy this text</p>', kind: 'html' },
+    });
+    await flushPromises();
+
+    const select = wrapper.get('[aria-label="Select MHTML text to copy"]');
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    expect(select.attributes('aria-keyshortcuts')).toBe('S');
+    expect(select.get('.pdf-tool-shortcut').text()).toBe('S');
+    expect(select.attributes('aria-pressed')).toBe('false');
+    expect(frame.element.style.pointerEvents).toBe('none');
+    await select.trigger('click');
+    expect(select.attributes('aria-pressed')).toBe('true');
+    expect(frame.element.style.pointerEvents).toBe('auto');
+    const canvas = wrapper.get('.pdf-annotation-canvas');
+    expect(canvas.classes()).not.toContain('enabled');
+    await wrapper.get('.pdf-viewport').trigger('pointerdown', { button: 0, pointerId: 1 });
+    expect(wrapper.get('.pdf-viewport').classes()).not.toContain('panning');
+
+    await wrapper.get('[aria-label="Draw on MHTML"]').trigger('click');
+    expect(canvas.classes()).toContain('enabled');
+    expect(select.attributes('aria-pressed')).toBe('false');
+    expect(frame.element.style.pointerEvents).toBe('auto');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }));
+    await wrapper.vm.$nextTick();
+    expect(select.attributes('aria-pressed')).toBe('true');
+    const frameWindow = new EventTarget();
+    Object.defineProperty(frame.element, 'contentDocument', { value: new DOMParser().parseFromString('<p>Copy this text</p>', 'text/html') });
+    Object.defineProperty(frame.element, 'contentWindow', { value: frameWindow });
+    await frame.trigger('load');
+    frameWindow.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }));
+    await wrapper.vm.$nextTick();
+    expect(select.attributes('aria-pressed')).toBe('false');
+
+    await wrapper.get('[aria-label="Customize annotation shortcuts"]').trigger('click');
+    expect(wrapper.get('[aria-label="Shortcut for Select MHTML text to copy"]').attributes('value')).toBe('S');
+    await wrapper.get('[aria-label="Shortcut for Select MHTML text to copy"]').trigger('keydown', { key: 'q' });
+    expect(select.attributes('aria-keyshortcuts')).toBe('Q');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'q' }));
+    await wrapper.vm.$nextTick();
+    expect(select.attributes('aria-pressed')).toBe('true');
+    await wrapper.get('.pdf-shortcut-reset').trigger('click');
+    expect(select.attributes('aria-keyshortcuts')).toBe('S');
+  });
+
+  it('shows MHTML headings in an outline and scrolls the outer viewport to them', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('pdf-viewport') ? (this.classList.contains('has-outline') ? 380 : 600) : 0;
+    });
+    const getComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(element => {
+      const style = getComputedStyle(element);
+      if (element.classList.contains('pdf-viewport')) {
+        return { ...style, paddingLeft: '0px', paddingRight: '0px', paddingTop: '0px', paddingBottom: '0px' };
+      }
+      return style;
+    });
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/headings.mhtml', kind: 'html', htmlDocument: '<h1>Start</h1><h2>Details</h2>' },
+    });
+    await flushPromises();
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    const document = new DOMParser().parseFromString('<h1>Start</h1><h2>Details</h2>', 'text/html');
+    Object.defineProperty(frame.element, 'contentDocument', { configurable: true, value: document });
+    vi.spyOn(frame.element, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
+    vi.spyOn(document.querySelector('h2')!, 'getBoundingClientRect').mockReturnValue({ top: 300 } as DOMRect);
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    vi.spyOn(viewport.element, 'getBoundingClientRect').mockReturnValue({ top: 20 } as DOMRect);
+    viewport.element.scrollTop = 40;
+    const scrollTo = vi.fn();
+    viewport.element.scrollTo = scrollTo;
+
+    await frame.trigger('load');
+    await flushPromises();
+    expect(wrapper.findAll('.pdf-outline-items button').map(button => button.text())).toEqual(['Start', 'Details']);
+    expect(wrapper.find('.pdf-viewport').classes()).toContain('has-outline');
+    expect(frame.element.style.width).toBe('380px');
+    await wrapper.findAll('.pdf-outline-items button')[1].trigger('click');
+    expect(scrollTo).toHaveBeenCalledWith({ top: 420, behavior: 'smooth' });
+
+    await wrapper.get('[aria-label="Hide MHTML outline"]').trigger('click');
+    expect(wrapper.find('.pdf-outline').exists()).toBe(false);
+    expect(frame.element.style.width).toBe('380px');
+    await wrapper.get('[aria-label="Show MHTML outline"]').trigger('click');
+    expect(wrapper.find('.pdf-outline').exists()).toBe(true);
+
+    const newDocument = new DOMParser().parseFromString('<h3>Replacement</h3>', 'text/html');
+    Object.defineProperty(frame.element, 'contentDocument', { value: newDocument });
+    await frame.trigger('load');
+    expect(wrapper.findAll('.pdf-outline-items button').map(button => button.text())).toEqual(['Replacement']);
+
+    const emptyDocument = new DOMParser().parseFromString('<p>No headings</p>', 'text/html');
+    Object.defineProperty(frame.element, 'contentDocument', { value: emptyDocument });
+    await frame.trigger('load');
+    expect(wrapper.find('.pdf-outline').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Show MHTML outline"]').exists()).toBe(false);
+  });
+
+  it('excludes the archived reader table of contents from the MHTML outline', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/chapter.mhtml', kind: 'html', htmlDocument: '<p>Reader snapshot</p>' },
+    });
+    await flushPromises();
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    const document = new DOMParser().parseFromString(`
+      <main>
+        <div id="sbo-rt-content"><h1>第1章 数据系统架构</h1><h2>Cloud时代的运维实践</h2></div>
+        <div class="_tableOfContents_lswvm_11"><h5>前言</h5><h5>1. 数据系统架构</h5><h6>Cloud Versus Self-Hosting</h6></div>
+      </main>
+      <div id="onetrust-pc-sdk"><h2>Privacy Preference Center</h2></div>
+    `, 'text/html');
+    Object.defineProperty(frame.element, 'contentDocument', { value: document });
+    const chapterHeading = document.querySelector('#sbo-rt-content h2')!;
+    vi.spyOn(chapterHeading, 'getBoundingClientRect').mockReturnValue({ top: 180 } as DOMRect);
+    vi.spyOn(frame.element, 'getBoundingClientRect').mockReturnValue({ top: 0 } as DOMRect);
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    vi.spyOn(viewport.element, 'getBoundingClientRect').mockReturnValue({ top: 0 } as DOMRect);
+    const scrollTo = vi.fn();
+    viewport.element.scrollTo = scrollTo;
+
+    await frame.trigger('load');
+    await flushPromises();
+    expect(wrapper.findAll('.pdf-outline-items button').map(button => button.text()))
+      .toEqual(['第1章 数据系统架构', 'Cloud时代的运维实践']);
+    await wrapper.findAll('.pdf-outline-items button')[1].trigger('click');
+    expect(scrollTo).toHaveBeenCalledWith({ top: 180, behavior: 'smooth' });
+  });
+
+  it('loads an MHTML iframe again when its file is renamed without changing the HTML', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/old.mhtml', kind: 'html', htmlDocument: '<p>Same page</p>' },
+    });
+    await flushPromises();
+    const oldFrame = wrapper.get<HTMLIFrameElement>('iframe.mhtml-document-frame').element;
+    Object.defineProperty(oldFrame, 'contentDocument', { value: window.document.implementation.createHTMLDocument() });
+    await wrapper.get('iframe.mhtml-document-frame').trigger('load');
+    await flushPromises();
+    expect(wrapper.find('.pdf-message').exists()).toBe(false);
+
+    await wrapper.setProps({ filePath: '/project/new.mhtml' });
+    await flushPromises();
+    const newFrame = wrapper.get('iframe.mhtml-document-frame');
+    expect(newFrame.element).not.toBe(oldFrame);
+    Object.defineProperty(newFrame.element, 'contentDocument', { value: window.document.implementation.createHTMLDocument() });
+    await newFrame.trigger('load');
+    await flushPromises();
+    expect(wrapper.find('.pdf-message').exists()).toBe(false);
+  });
+
+  it('keeps existing MHTML annotations in place when a font change changes document height', async () => {
+    const sidecar = {
+      version: 1,
+      view: { htmlPageWidth: 600 },
+      pages: { '1': [{ type: 'line', color: '#ef4444', width: 1, points: [{ x: 0.25, y: 0.5 }, { x: 0.5, y: 0.75 }] }] },
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: JSON.stringify(sidecar) }) } as Response;
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    }));
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/font.mhtml', kind: 'html', htmlDocument: '<p>Original</p>' },
+    });
+    await flushPromises();
+    const frame = wrapper.get<HTMLIFrameElement>('iframe');
+    const htmlDocument = window.document.implementation.createHTMLDocument();
+    let height = 1200;
+    Object.defineProperty(htmlDocument.documentElement, 'scrollHeight', { get: () => height });
+    Object.defineProperty(frame.element, 'contentDocument', { value: htmlDocument });
+    const page = wrapper.get<HTMLElement>('.pdf-page');
+    vi.spyOn(page.element, 'getBoundingClientRect').mockImplementation(() => ({
+      left: 0, top: 0, width: 600, height, right: 600, bottom: height, x: 0, y: 0, toJSON: () => ({}),
+    }));
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    viewport.element.style.paddingLeft = '0px';
+    viewport.element.style.paddingRight = '0px';
+    viewport.element.style.paddingTop = '0px';
+    viewport.element.style.paddingBottom = '0px';
+    Object.defineProperty(viewport.element, 'clientWidth', { value: 600 });
+
+    await frame.trigger('load');
+    await flushPromises();
+    vi.mocked(context.moveTo).mockClear();
+    await wrapper.setProps({ htmlDocument: '<p>Different font</p>' });
+    height = 1800;
+    await frame.trigger('load');
+    await flushPromises();
+
+    expect(context.moveTo).toHaveBeenLastCalledWith(150, 600);
+    expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
+      body: expect.stringContaining('htmlWidthCoordinates'),
+    }));
+  });
+
+  it('uses the outer viewport to scroll MHTML instead of the embedded document', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/scroll.mhtml', kind: 'html', htmlDocument: '<p>Content</p>' },
+    });
+    await flushPromises();
+
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    viewport.element.style.padding = '0px';
+    Object.defineProperty(viewport.element, 'clientWidth', { value: 640 });
+    const scrollBy = vi.fn();
+    viewport.element.scrollBy = scrollBy;
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    const htmlDocument = window.document.implementation.createHTMLDocument();
+    htmlDocument.documentElement.style.setProperty('overflow-y', 'scroll', 'important');
+    htmlDocument.body.style.setProperty('overflow', 'auto', 'important');
+    Object.defineProperty(htmlDocument.documentElement, 'scrollHeight', { value: 800 });
+    Object.defineProperty(htmlDocument.body, 'scrollHeight', { value: 2400 });
+    Object.defineProperty(frame.element, 'contentDocument', { value: htmlDocument });
+
+    await frame.trigger('load');
+    await flushPromises();
+
+    expect(htmlDocument.documentElement.style.overflow).toBe('hidden');
+    expect(htmlDocument.documentElement.style.getPropertyPriority('overflow')).toBe('important');
+    expect(htmlDocument.body.style.overflow).toBe('visible');
+    expect(htmlDocument.body.style.getPropertyPriority('overflow')).toBe('important');
+    expect(frame.element.style.height).toBe('2400px');
+    expect(wrapper.get<HTMLElement>('.pdf-page').element.style.height).toBe('2400px');
+
+    const wheel = new WheelEvent('wheel', { deltaX: 12, deltaY: 120, cancelable: true });
+    htmlDocument.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(scrollBy).toHaveBeenCalledWith({ left: 12, top: 120 });
+  });
+
+  it('keeps the MHTML layout fixed when zooming and resizing the viewport', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640);
+    let resize: (() => void) | undefined;
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resize = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    const wrapper = mount(MediaAnnotationPreview, {
+      attachTo: document.body,
+      props: { src: '', filePath: '/project/zoom.mhtml', kind: 'html', htmlDocument: '<p>Content</p>' },
+    });
+    await flushPromises();
+    const viewport = wrapper.get<HTMLElement>('.pdf-viewport');
+    Object.defineProperty(viewport.element, 'clientWidth', { configurable: true, value: 640 });
+    viewport.element.style.padding = '0px';
+    const frame = wrapper.get<HTMLIFrameElement>('.mhtml-document-frame');
+    const htmlDocument = window.document.implementation.createHTMLDocument();
+    Object.defineProperty(htmlDocument.documentElement, 'scrollHeight', { value: 800 });
+    Object.defineProperty(frame.element, 'contentDocument', { value: htmlDocument });
+    await frame.trigger('load');
+    await flushPromises();
+    const layoutWidth = frame.element.style.width;
+    const pageWidth = wrapper.get<HTMLElement>('.pdf-page').element.style.width;
+    expect(parseFloat(layoutWidth)).toBeGreaterThan(1);
+
+    await viewport.trigger('wheel', { ctrlKey: true, deltaY: -100 });
+    await flushPromises();
+    expect(frame.element.style.width).toBe(layoutWidth);
+    expect(frame.element.style.transform).toBe('scale(1.1)');
+    expect(parseFloat(wrapper.get<HTMLElement>('.pdf-page').element.style.width))
+      .toBe(Math.floor(parseFloat(pageWidth) * 1.1));
+
+    Object.defineProperty(viewport.element, 'clientWidth', { configurable: true, value: 400 });
+    resize?.();
+    await flushPromises();
+    expect(frame.element.style.width).toBe(layoutWidth);
+    expect(parseFloat(wrapper.get<HTMLElement>('.pdf-page').element.style.width))
+      .toBe(Math.floor(parseFloat(pageWidth) * 1.1));
   });
 
   it('loads and annotates an image using the PDF toolset', async () => {
@@ -511,7 +854,7 @@ describe('MediaAnnotationPreview', () => {
       'Export annotated PDF',
     ]);
     expect(annotationToolbar.get('[aria-label="Draw on PDF"]').attributes('data-tooltip')).toBe('Draw on PDF');
-    for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text', 'Move annotation', 'Erase PDF content with white rectangle']) {
+    for (const label of ['Highlight PDF', 'Draw line', 'Draw arrow', 'Draw rectangle', 'Draw ellipse', 'Add text', 'Move annotation', 'Cover PDF content with rectangle']) {
       expect(wrapper.get(`[aria-label="${label}"]`).attributes('data-tooltip')).toBe(label);
     }
     expect(wrapper.get('[aria-label="Undo annotation"]').attributes('data-tooltip')).toBe('Undo annotation');
@@ -545,6 +888,11 @@ describe('MediaAnnotationPreview', () => {
     });
     await flushPromises();
 
+    expect(wrapper.find('[aria-label="Select MHTML text to copy"]').exists()).toBe(false);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('.pdf-annotation-canvas').classes()).not.toContain('enabled');
+
     const shortcuts = [
       ['1', 'Draw on PDF'],
       ['2', 'Highlight PDF'],
@@ -554,7 +902,7 @@ describe('MediaAnnotationPreview', () => {
       ['6', 'Draw ellipse'],
       ['7', 'Add text'],
       ['8', 'Move annotation'],
-      ['9', 'Erase PDF content with white rectangle'],
+      ['9', 'Cover PDF content with rectangle'],
       ['0', 'Erase PDF annotations'],
     ];
     for (const [key, label] of shortcuts) {
@@ -794,6 +1142,7 @@ describe('MediaAnnotationPreview', () => {
                 page: 2,
                 tool: 'eraser',
                 penColor: '#123456',
+                coverColor: '#3f3f4d',
                 penWidth: 7,
                 toolbarVertical: true,
                 toolbarPosition: { left: 0, top: 0 },
@@ -814,8 +1163,11 @@ describe('MediaAnnotationPreview', () => {
     expect(wrapper.get('.pdf-zoom-level').text()).toBe('150%');
     expect(wrapper.get('.pdf-page-status').text()).toBe('2/2');
     expect(wrapper.get('[aria-label="Erase PDF annotations"]').classes()).toContain('active');
-    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#123456');
-    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]').element.value).toBe('7');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#ef4444');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]').element.value).toBe('1');
+    await wrapper.get('[aria-label="Cover PDF content with rectangle"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Cover color"]').element.value).toBe('#3f3f4d');
+    await wrapper.get('[aria-label="Erase PDF annotations"]').trigger('click');
     expect(wrapper.get('.pdf-toolbar').classes()).toContain('vertical');
     expect(wrapper.get('.pdf-toolbar').attributes('style')).toContain('left: 0px');
 
@@ -829,12 +1181,56 @@ describe('MediaAnnotationPreview', () => {
       scale: 1.6,
       page: 2,
       tool: 'eraser',
-      penColor: '#123456',
-      penWidth: 7,
+      coverColor: '#3f3f4d',
       pageTone: 'original',
       toolbarVertical: true,
       toolbarPosition: { left: 0, top: 0 },
     });
+  });
+
+  it('shares pen color and width across PDF, image, and MHTML without adopting per-file styles', async () => {
+    class MockImage {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload?: () => void;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    }
+    vi.stubGlobal('Image', MockImage);
+    vi.mocked(fetch).mockImplementation(async url => {
+      if (String(url).startsWith('/api/files/read')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ content: JSON.stringify({
+            version: 1, pages: {},
+            view: { penColor: '#123456', penWidth: 9, coverColor: '#aabbcc' },
+          }) }),
+        } as Response;
+      }
+      return { ok: true, status: 200 } as Response;
+    });
+
+    const pdf = mount(MediaAnnotationPreview, {
+      props: { src: '/pdf', filePath: '/project/a.pdf' },
+    });
+    await flushPromises();
+    await pdf.get<HTMLInputElement>('[aria-label="Annotation color"]').setValue('#3b82f6');
+    await pdf.get<HTMLInputElement>('[aria-label="Annotation width"]').setValue(5);
+    expect(localStorage.getItem('pi-cloud.annotationPenColor')).toBe('#3b82f6');
+    expect(localStorage.getItem('pi-cloud.annotationPenWidth')).toBe('5');
+    resetPreferencesForTests(); // Simulate restoring preferences on a new visit.
+
+    for (const kind of ['image', 'html'] as const) {
+      const wrapper = mount(MediaAnnotationPreview, {
+        props: { src: '', filePath: `/project/b.${kind}`, kind, htmlDocument: '<p>Archived</p>' },
+      });
+      await flushPromises();
+      expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#3b82f6');
+      expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation width"]').element.value).toBe('5');
+      const coverLabel = kind === 'image' ? 'Cover image content with rectangle' : 'Cover MHTML content with rectangle';
+      await wrapper.get(`[aria-label="${coverLabel}"]`).trigger('click');
+      expect(wrapper.get<HTMLInputElement>('[aria-label="Cover color"]').element.value).toBe('#aabbcc');
+      wrapper.unmount();
+    }
   });
 
   it('draws and saves shape annotations', async () => {
@@ -896,7 +1292,41 @@ describe('MediaAnnotationPreview', () => {
     expect(context.fillText).toHaveBeenCalledWith('on two lines', 240, 360);
   });
 
-  it('covers PDF content with a saved white rectangle', async () => {
+  it('offers quick color presets for annotations and cover without losing custom colors', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+
+    const presets = wrapper.get('[aria-label="Color presets"]');
+    await presets.trigger('click');
+    expect(presets.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.findAll('.pdf-color-presets button')).toHaveLength(20);
+    await wrapper.get('[aria-label="Color #3b82f6"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#3b82f6');
+    expect(wrapper.find('.pdf-color-presets').exists()).toBe(false);
+
+    await wrapper.get('[aria-label="Cover PDF content with rectangle"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Cover color"]').element.value).toBe('#ffffff');
+    await presets.trigger('click');
+    await wrapper.get('[aria-label="Color #facc15"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Cover color"]').element.value).toBe('#facc15');
+
+    await presets.trigger('click');
+    await wrapper.get('.pdf-color-presets').trigger('keydown', { key: 'Escape' });
+    expect(wrapper.find('.pdf-color-presets').exists()).toBe(false);
+    await presets.trigger('click');
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.pdf-color-presets').exists()).toBe(false);
+
+    await wrapper.get('[aria-label="Draw on PDF"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#3b82f6');
+    await wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').setValue('#123456');
+    expect(wrapper.get<HTMLInputElement>('[aria-label="Annotation color"]').element.value).toBe('#123456');
+  });
+
+  it('covers PDF content with a selectable color that defaults to white', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (url, init) => {
       if (String(url).startsWith('/api/files/read')) return { ok: false, status: 404 } as Response;
@@ -907,7 +1337,10 @@ describe('MediaAnnotationPreview', () => {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },
     });
     await flushPromises();
-    await wrapper.get('[aria-label="Erase PDF content with white rectangle"]').trigger('click');
+    await wrapper.get('[aria-label="Cover PDF content with rectangle"]').trigger('click');
+    const colorInput = wrapper.get<HTMLInputElement>('[aria-label="Cover color"]');
+    expect(colorInput.element.value).toBe('#ffffff');
+    await colorInput.setValue('#3f3f4d');
 
     const canvas = wrapper.get('.pdf-annotation-canvas');
     await canvas.trigger('pointerdown', { pointerId: 1, clientX: 60, clientY: 80 });
@@ -919,7 +1352,7 @@ describe('MediaAnnotationPreview', () => {
     const body = JSON.parse(String(writeCall?.[1]?.body));
     expect(JSON.parse(body.content).pages['1'][0]).toMatchObject({
       type: 'whiteout',
-      color: '#ffffff',
+      color: '#3f3f4d',
       points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 }],
     });
     expect(context.fillRect).toHaveBeenCalledWith(60, 80, 120, 160);

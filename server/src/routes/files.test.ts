@@ -567,6 +567,90 @@ describe('fileRoutes', () => {
     expect(conflictResponse.statusCode).toBe(409);
   });
 
+  it.each(['pdf', 'png', 'mhtml', 'mht'])('moves %s annotation sidecars when renaming across directories', async (extension) => {
+    const from = path.join(tempDir, `old.${extension}`);
+    const to = path.join(tempDir, 'src', `new.${extension}`);
+    const sourceSidecar = path.join(tempDir, '.annotations', `old.${extension}.annotations.json`);
+    const targetSidecar = path.join(tempDir, 'src', '.annotations', `new.${extension}.annotations.json`);
+    await fs.writeFile(from, 'media');
+    await fs.mkdir(path.dirname(sourceSidecar));
+    await fs.writeFile(sourceSidecar, 'annotations');
+
+    const response = await app.inject({ method: 'POST', url: '/api/files/rename', payload: { from, to } });
+
+    expect(response.statusCode).toBe(200);
+    await expect(fs.readFile(to, 'utf8')).resolves.toBe('media');
+    await expect(fs.readFile(targetSidecar, 'utf8')).resolves.toBe('annotations');
+    await expect(fs.access(from)).rejects.toThrow();
+    await expect(fs.access(sourceSidecar)).rejects.toThrow();
+  });
+
+  it('moves legacy annotation sidecars when renaming a media file', async () => {
+    const from = path.join(tempDir, 'old.pdf');
+    const to = path.join(tempDir, 'new.pdf');
+    const legacyPaths = [path.join(tempDir, '.old.pdf.annotations.json'), `${from}.annotations.json`];
+    await fs.writeFile(from, 'pdf');
+    for (const sidecar of legacyPaths) await fs.writeFile(sidecar, sidecar);
+
+    const response = await app.inject({ method: 'POST', url: '/api/files/rename', payload: { from, to } });
+
+    expect(response.statusCode).toBe(200);
+    await expect(fs.readFile(path.join(tempDir, '.new.pdf.annotations.json'), 'utf8')).resolves.toBe(legacyPaths[0]);
+    await expect(fs.readFile(`${to}.annotations.json`, 'utf8')).resolves.toBe(legacyPaths[1]);
+    for (const sidecar of legacyPaths) await expect(fs.access(sidecar)).rejects.toThrow();
+  });
+
+  it('refuses to rename media when the destination annotation sidecar already exists', async () => {
+    const from = path.join(tempDir, 'old.pdf');
+    const to = path.join(tempDir, 'new.pdf');
+    const sourceSidecar = path.join(tempDir, '.annotations', 'old.pdf.annotations.json');
+    const targetSidecar = path.join(tempDir, '.annotations', 'new.pdf.annotations.json');
+    await fs.writeFile(from, 'pdf');
+    await fs.mkdir(path.dirname(sourceSidecar));
+    await fs.writeFile(sourceSidecar, 'original');
+    await fs.writeFile(targetSidecar, 'existing');
+
+    const response = await app.inject({ method: 'POST', url: '/api/files/rename', payload: { from, to } });
+
+    expect(response.statusCode).toBe(409);
+    await expect(fs.readFile(from, 'utf8')).resolves.toBe('pdf');
+    await expect(fs.readFile(sourceSidecar, 'utf8')).resolves.toBe('original');
+    await expect(fs.readFile(targetSidecar, 'utf8')).resolves.toBe('existing');
+    await expect(fs.access(to)).rejects.toThrow();
+  });
+
+  it('rolls back a media rename if moving its sidecar fails', async () => {
+    const from = path.join(tempDir, 'old.pdf');
+    const to = path.join(tempDir, 'src', 'new.pdf');
+    const sourceSidecar = path.join(tempDir, '.annotations', 'old.pdf.annotations.json');
+    await fs.writeFile(from, 'pdf');
+    await fs.mkdir(path.dirname(sourceSidecar));
+    await fs.writeFile(sourceSidecar, 'annotations');
+    await fs.writeFile(path.join(tempDir, 'src', '.annotations'), 'not a directory');
+
+    const response = await app.inject({ method: 'POST', url: '/api/files/rename', payload: { from, to } });
+
+    expect(response.statusCode).toBe(500);
+    await expect(fs.readFile(from, 'utf8')).resolves.toBe('pdf');
+    await expect(fs.readFile(sourceSidecar, 'utf8')).resolves.toBe('annotations');
+    await expect(fs.access(to)).rejects.toThrow();
+  });
+
+  it('renames directories with media extensions without moving sibling sidecars', async () => {
+    const from = path.join(tempDir, 'folder.pdf');
+    const to = path.join(tempDir, 'renamed.pdf');
+    const sidecar = path.join(tempDir, '.annotations', 'folder.pdf.annotations.json');
+    await fs.mkdir(from);
+    await fs.mkdir(path.dirname(sidecar));
+    await fs.writeFile(sidecar, 'sibling');
+
+    const response = await app.inject({ method: 'POST', url: '/api/files/rename', payload: { from, to } });
+
+    expect(response.statusCode).toBe(200);
+    await expect(fs.stat(to)).resolves.toMatchObject({});
+    await expect(fs.readFile(sidecar, 'utf8')).resolves.toBe('sibling');
+  });
+
   it('deletes files and directories recursively', async () => {
     const filePath = path.join(tempDir, 'README.md');
     const fileResponse = await app.inject({

@@ -19,9 +19,9 @@ vi.mock('../utils/markdownPdfExport', () => ({
 vi.mock('./MediaAnnotationPreview.vue', () => ({
   default: {
     name: 'MediaAnnotationPreviewStub',
-    props: ['src', 'filePath', 'initialScale', 'kind'],
+    props: ['src', 'filePath', 'htmlDocument', 'initialScale', 'kind'],
     emits: ['scale-change'],
-    template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-initial-scale="initialScale" :data-kind="kind" />',
+    template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-html-document="htmlDocument" :data-initial-scale="initialScale" :data-kind="kind" />',
   },
 }));
 
@@ -619,6 +619,101 @@ describe('EditorPanel', () => {
     await wrapper.find('.view-mode-toggle button:last-child').trigger('click');
     expect(wrapper.find('iframe.html-preview').exists()).toBe(false);
     expect(wrapper.find('.editor-container').classes()).not.toContain('hidden');
+  });
+
+  it('previews MHTML with embedded resources in a sandboxed iframe', async () => {
+    const boundary = '----snapshot----';
+    const mhtml = [
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/related; boundary="${boundary}"`,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/html; charset=utf-8',
+      'Content-Location: https://example.test/pages/index.html',
+      '',
+      '<!doctype html><html><head><link rel="stylesheet" href="../styles/site.css"></head><body><img src="cid:hero"></body></html>',
+      `--${boundary}`,
+      'Content-Type: text/css',
+      'Content-Location: https://example.test/styles/site.css',
+      'Content-Transfer-Encoding: quoted-printable',
+      '',
+      'body { background-image: url(../images/background.png); }',
+      `--${boundary}`,
+      'Content-Type: image/png',
+      'Content-Location: https://example.test/images/background.png',
+      'Content-Transfer-Encoding: base64',
+      '',
+      'iVBORw==',
+      `--${boundary}`,
+      'Content-Type: image/png',
+      'Content-ID: <hero>',
+      'Content-Transfer-Encoding: base64',
+      '',
+      'AQID',
+      `--${boundary}--`,
+    ].join('\r\n');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: mhtml, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => mhtml),
+      dispose: vi.fn(),
+    } as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/snapshot.mhtml');
+    await wrapper.vm.$nextTick();
+
+    const preview = wrapper.find('.pdf-preview-test');
+    expect(preview.attributes('data-kind')).toBe('html');
+    expect(preview.attributes('data-file-path')).toBe('/project/snapshot.mhtml');
+    const srcdoc = preview.attributes('data-html-document') || '';
+    expect(srcdoc).toContain('src="data:image/png;base64,AQID"');
+    expect(srcdoc).toContain('href="data:text/css;base64,');
+    expect(srcdoc).toContain("script-src 'none'");
+    expect(srcdoc).not.toContain('Pi Terminal Nerd Font');
+
+    await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
+    await wrapper.findAll('.mhtml-font-select [role="option"]')[3].trigger('click');
+    const monoPreview = wrapper.find('.pdf-preview-test').attributes('data-html-document') || '';
+    expect(monoPreview).toContain('font-family: "Pi Terminal Nerd Font", monospace !important');
+    expect(monoPreview).toContain('@font-face');
+    expect(monoPreview).toContain('MesloLGMNerdFontMono-Regular.ttf');
+    expect(localStorage.getItem('pi-cloud-mhtml-font')).toBe('terminal');
+
+    await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
+    await wrapper.findAll('.mhtml-font-select [role="option"]')[1].trigger('click');
+    expect(wrapper.find('.pdf-preview-test').attributes('data-html-document')).toContain('font-family: Arial, sans-serif !important');
+
+    for (const [index, family] of [
+      [2, 'Georgia, serif'],
+      [4, 'Palatino, "Palatino Linotype", "Book Antiqua", serif'],
+      [5, 'Garamond, "EB Garamond", Georgia, serif'],
+      [6, 'Baskerville, "Libre Baskerville", Georgia, serif'],
+      [7, 'Literata, Georgia, serif'],
+      [8, '"Songti SC", "Noto Serif CJK SC", serif'],
+      [9, '"Noto Serif CJK SC", "Songti SC", serif'],
+      [10, '"PingFang SC", "Noto Sans CJK SC", sans-serif'],
+    ] as const) {
+      await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
+      await wrapper.findAll('.mhtml-font-select [role="option"]')[index].trigger('click');
+      const document = wrapper.find('.pdf-preview-test').attributes('data-html-document') || '';
+      expect(document).toContain(`font-family: ${family} !important`);
+      expect(document).not.toContain('@font-face');
+    }
+    expect(localStorage.getItem('pi-cloud-mhtml-font')).toBe('pingfang');
+
+    await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
+    await wrapper.findAll('.mhtml-font-select [role="option"]')[0].trigger('click');
+    expect(wrapper.find('.pdf-preview-test').attributes('data-html-document')).not.toContain('Pi Terminal Nerd Font');
+    localStorage.removeItem('pi-cloud-mhtml-font');
+
+    const stylesheet = new DOMParser().parseFromString(srcdoc, 'text/html').querySelector('link')!.getAttribute('href')!;
+    expect(atob(stylesheet.slice(stylesheet.indexOf(',') + 1))).toContain('url(data:image/png;base64,iVBORw==)');
   });
 
   it('keeps invalid Mermaid source visible in markdown preview', async () => {

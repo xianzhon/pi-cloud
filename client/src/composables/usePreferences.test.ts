@@ -110,11 +110,11 @@ describe('usePreferences', () => {
 
     await preferences.loadPreferences();
 
-    expect(preferences.annotationToolShortcuts.value).toEqual(cached);
+    expect(preferences.annotationToolShortcuts.value).toEqual({ ...cached, select: 'B' });
     expect(fetch).toHaveBeenLastCalledWith('/api/auth/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ annotationToolShortcuts: cached }),
+      body: JSON.stringify({ annotationToolShortcuts: { ...cached, select: 'B' } }),
     });
   });
 
@@ -245,7 +245,7 @@ describe('usePreferences', () => {
   it('loads and persists annotation tool shortcuts through the backend preferences', async () => {
     const annotationToolShortcuts = {
       pen: 'A', highlighter: 'S', line: 'D', arrow: 'F', rectangle: 'G',
-      ellipse: 'H', text: 'J', move: 'K', whiteout: 'L', eraser: '0',
+      ellipse: 'H', text: 'J', move: 'K', whiteout: 'L', eraser: '0', select: 'B',
     };
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,

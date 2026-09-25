@@ -626,8 +626,50 @@ export async function fileRoutes(app: FastifyInstance) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
 
+    const sidecars: Array<{ from: string; to: string }> = [];
+    if ((await fs.stat(fromPath)).isFile() && (path.extname(fromPath).toLowerCase() === '.pdf'
+      || getImageMimeType(fromPath)
+      || /\.m(?:html|ht)$/i.test(fromPath))) {
+      const sidecarPaths = (filePath: string) => [
+        path.join(path.dirname(filePath), '.annotations', `${path.basename(filePath)}.annotations.json`),
+        path.join(path.dirname(filePath), `.${path.basename(filePath)}.annotations.json`),
+        `${filePath}.annotations.json`,
+      ];
+      const sourcePaths = sidecarPaths(fromPath);
+      const targetPaths = sidecarPaths(toPath);
+      for (let index = 0; index < sourcePaths.length; index++) {
+        try {
+          await fs.lstat(sourcePaths[index]);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+          throw error;
+        }
+        const sidecarFrom = await resolveAllowedPath(sourcePaths[index]);
+        const sidecarTo = await resolveAllowedPath(targetPaths[index]);
+        try {
+          await fs.lstat(sidecarTo);
+          return reply.code(409).send({ error: 'Target annotation sidecar already exists' });
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+        sidecars.push({ from: sidecarFrom, to: sidecarTo });
+      }
+    }
+
     await fs.mkdir(path.dirname(toPath), { recursive: true });
     await fs.rename(fromPath, toPath);
+    const movedSidecars: typeof sidecars = [];
+    try {
+      for (const sidecar of sidecars) {
+        await fs.mkdir(path.dirname(sidecar.to), { recursive: true });
+        await fs.rename(sidecar.from, sidecar.to);
+        movedSidecars.push(sidecar);
+      }
+    } catch (error) {
+      for (const sidecar of movedSidecars.reverse()) await fs.rename(sidecar.to, sidecar.from);
+      await fs.rename(toPath, fromPath);
+      throw error;
+    }
     app.authServices?.audit.record({
       type: 'file_rename',
       status: 'success',

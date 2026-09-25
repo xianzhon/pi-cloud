@@ -103,6 +103,14 @@
         >
           <PhList :size="16" weight="bold" />
         </button>
+        <CustomSelect
+          v-if="activeIsMhtml && activePreviewMode === 'preview'"
+          class="mhtml-font-select"
+          :model-value="mhtmlFont"
+          :options="mhtmlFontOptions"
+          :aria-label="t('components.editorPanel.mhtmlFont')"
+          @update:model-value="setMhtmlFont"
+        />
         <div v-if="activeIsPreviewable" class="view-mode-toggle" role="group" :aria-label="activeViewModeLabel">
           <button
             :class="{ active: activePreviewMode === 'preview' }"
@@ -273,6 +281,13 @@
           </div>
         </nav>
       </div>
+      <MediaAnnotationPreview
+        v-else-if="activeIsMhtml && activePreviewMode === 'preview' && activeTab"
+        kind="html"
+        src=""
+        :html-document="activeHtmlDocument"
+        :file-path="activeTab"
+      />
       <iframe
         v-else-if="activeIsHtml && activePreviewMode === 'preview'"
         class="html-preview"
@@ -425,6 +440,8 @@ import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
 import { normalizePathSeparators } from '../utils/paths';
 import { createMarkdownPdfCopy, exportMarkdownPdf } from '../utils/markdownPdfExport';
+import { renderMhtmlDocument } from '../utils/mhtmlPreview';
+import terminalFontUrl from '../assets/fonts/MesloLGMNerdFontMono-Regular.ttf?url';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
 import CssWorker from 'monaco-editor/language/css/css.worker?worker';
@@ -761,9 +778,31 @@ function setActivePreviewScale(scale: number): void {
   }
 }
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
-const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isHtmlFile(activeTab.value));
+const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMhtmlFile(activeTab.value));
+const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
 const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value);
 const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
+type MhtmlFont = 'original' | 'sans' | 'serif' | 'terminal' | 'palatino' | 'garamond' | 'baskerville' | 'literata' | 'songti' | 'noto-serif-cjk' | 'pingfang';
+const storedMhtmlFont = localStorage.getItem('pi-cloud-mhtml-font');
+const mhtmlFont = ref<MhtmlFont>(['original', 'sans', 'serif', 'terminal', 'palatino', 'garamond', 'baskerville', 'literata', 'songti', 'noto-serif-cjk', 'pingfang'].includes(storedMhtmlFont || '')
+  ? storedMhtmlFont as MhtmlFont : 'original');
+const mhtmlFontOptions = computed<CustomSelectOption[]>(() => [
+  { value: 'original', label: t('components.editorPanel.mhtmlFontOriginal') },
+  { value: 'sans', label: t('components.editorPanel.mhtmlFontSans') },
+  { value: 'serif', label: t('components.editorPanel.mhtmlFontSerif') },
+  { value: 'terminal', label: t('components.editorPanel.mhtmlFontTerminal') },
+  { value: 'palatino', label: t('components.editorPanel.mhtmlFontPalatino') },
+  { value: 'garamond', label: t('components.editorPanel.mhtmlFontGaramond') },
+  { value: 'baskerville', label: t('components.editorPanel.mhtmlFontBaskerville') },
+  { value: 'literata', label: t('components.editorPanel.mhtmlFontLiterata') },
+  { value: 'songti', label: t('components.editorPanel.mhtmlFontSongti') },
+  { value: 'noto-serif-cjk', label: t('components.editorPanel.mhtmlFontNotoSerifCjk') },
+  { value: 'pingfang', label: t('components.editorPanel.mhtmlFontPingfang') },
+]);
+function setMhtmlFont(value: string): void {
+  mhtmlFont.value = value as MhtmlFont;
+  localStorage.setItem('pi-cloud-mhtml-font', value);
+}
 const activeViewModeLabel = computed(() => t(activeIsHtml.value
   ? 'components.editorPanel.htmlViewMode'
   : 'components.editorPanel.markdownViewMode'));
@@ -803,7 +842,11 @@ const activeHtmlDocument = computed(() => {
   void previewVersion.value;
   const filePath = activeTab.value;
   const model = filePath ? models.get(filePath) : undefined;
-  return filePath && model ? renderHtmlPreview(model.getValue(), filePath) : '';
+  if (!filePath || !model) return '';
+  const source = model.getValue();
+  const html = isMhtmlFile(filePath) ? renderMhtmlDocument(source) : source;
+  return renderHtmlPreview(html || '<p>This MHTML archive does not contain an HTML document.</p>', filePath,
+    isMhtmlFile(filePath) ? mhtmlFont.value : 'original');
 });
 const isLocalSystemOpen = isLocalHostname(window.location.hostname);
 const systemOpenExplicitlyEnabled = ref(false);
@@ -993,8 +1036,12 @@ function isHtmlFile(filePath: string): boolean {
   return /\.html?$/i.test(filePath);
 }
 
+function isMhtmlFile(filePath: string): boolean {
+  return /\.m(?:html|ht)$/i.test(filePath);
+}
+
 function isPreviewableFile(filePath: string): boolean {
-  return isMarkdownFile(filePath) || isHtmlFile(filePath);
+  return isMarkdownFile(filePath) || isHtmlFile(filePath) || isMhtmlFile(filePath);
 }
 
 function encodeBase64Url(value: string): string {
@@ -1004,7 +1051,7 @@ function encodeBase64Url(value: string): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function renderHtmlPreview(html: string, filePath: string): string {
+function renderHtmlPreview(html: string, filePath: string, font: MhtmlFont = 'original'): string {
   const root = encodeBase64Url(dirname(filePath));
   const document = new DOMParser().parseFromString(html, 'text/html');
 
@@ -1029,6 +1076,27 @@ function renderHtmlPreview(html: string, filePath: string): string {
   const previewOrigin = window.location.origin;
   policy.content = `default-src 'none'; style-src ${previewOrigin} 'unsafe-inline' data: blob:; img-src ${previewOrigin} data: blob:; font-src ${previewOrigin} data:; media-src ${previewOrigin} data: blob:; script-src 'none'; object-src 'none'; frame-src 'none'; connect-src 'none'; base-uri 'none'`;
   document.head.prepend(policy);
+
+  if (font !== 'original') {
+    const fontFamilies: Record<Exclude<MhtmlFont, 'original'>, string> = {
+      sans: 'Arial, sans-serif',
+      serif: 'Georgia, serif',
+      terminal: '"Pi Terminal Nerd Font", monospace',
+      palatino: 'Palatino, "Palatino Linotype", "Book Antiqua", serif',
+      garamond: 'Garamond, "EB Garamond", Georgia, serif',
+      baskerville: 'Baskerville, "Libre Baskerville", Georgia, serif',
+      literata: 'Literata, Georgia, serif',
+      songti: '"Songti SC", "Noto Serif CJK SC", serif',
+      'noto-serif-cjk': '"Noto Serif CJK SC", "Songti SC", serif',
+      pingfang: '"PingFang SC", "Noto Sans CJK SC", sans-serif',
+    };
+    const fontFamily = fontFamilies[font];
+    const style = document.createElement('style');
+    style.textContent = `${font === 'terminal' ? `@font-face { font-family: "Pi Terminal Nerd Font"; src: url("${terminalFontUrl}") format("truetype"); }` : ''}
+      body, #sbo-rt-content, body :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, td, th),
+      #sbo-rt-content :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, td, th) { font-family: ${fontFamily} !important; }`;
+    document.head.append(style);
+  }
 
   const doctype = /^\s*<!doctype\s+html[^>]*>/i.test(html) ? '<!DOCTYPE html>' : '';
   return `${doctype}${document.documentElement.outerHTML}`;
@@ -3285,6 +3353,16 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 .diff-file-select :deep(.custom-select-list) {
   min-width: min(360px, calc(100vw - 2rem));
+}
+
+.mhtml-font-select :deep(.custom-select-trigger) {
+  height: 1.75rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.mhtml-font-select :deep(.custom-select-list) {
+  min-width: 10rem;
 }
 
 .editor-actions {

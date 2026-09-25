@@ -42,7 +42,7 @@ type PreferencePatchBody = {
 
 const DEFAULT_ANNOTATION_TOOL_SHORTCUTS = {
   pen: '1', highlighter: '2', line: '3', arrow: '4', rectangle: '5',
-  ellipse: '6', text: '7', move: '8', whiteout: '9', eraser: '0',
+  ellipse: '6', text: '7', move: '8', whiteout: '9', eraser: '0', select: 'S',
 };
 type AnnotationToolShortcuts = typeof DEFAULT_ANNOTATION_TOOL_SHORTCUTS;
 
@@ -51,8 +51,13 @@ function parseAnnotationToolShortcuts(value: unknown): AnnotationToolShortcuts |
   const shortcuts = { ...DEFAULT_ANNOTATION_TOOL_SHORTCUTS };
   for (const tool of Object.keys(shortcuts) as Array<keyof AnnotationToolShortcuts>) {
     const key = (value as Record<string, unknown>)[tool];
+    if (tool === 'select' && key === undefined) continue; // Older saved preferences predate the selection tool.
     if (typeof key !== 'string' || key.length !== 1 || /\s/.test(key)) return;
     shortcuts[tool] = key.toUpperCase();
+  }
+  if ((value as Record<string, unknown>).select === undefined) {
+    shortcuts.select = [...'SABCDEFGHIJKLMNOPQRSTUVWXYZ'].find(key => !Object.entries(shortcuts)
+      .some(([tool, shortcut]) => tool !== 'select' && shortcut === key))!;
   }
   if (new Set(Object.values(shortcuts)).size !== Object.keys(shortcuts).length) return;
   return shortcuts;

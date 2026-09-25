@@ -454,7 +454,7 @@ describe('authRoutes', () => {
     const cookieHeader = String(login.headers['set-cookie']).split(';')[0];
     const annotationToolShortcuts = {
       pen: 'A', highlighter: 'S', line: 'D', arrow: 'F', rectangle: 'G',
-      ellipse: 'H', text: 'J', move: 'K', whiteout: 'L', eraser: '0',
+      ellipse: 'H', text: 'J', move: 'K', whiteout: 'L', eraser: '0', select: 'Q',
     };
 
     const update = await app.inject({
@@ -470,6 +470,15 @@ describe('authRoutes', () => {
     expect(update.json().annotationToolShortcuts).toEqual(annotationToolShortcuts);
     expect(preferences.json().annotationToolShortcuts).toEqual(annotationToolShortcuts);
     expect(JSON.parse(row.value)).toEqual(annotationToolShortcuts);
+
+    const legacy = { ...annotationToolShortcuts } as Partial<typeof annotationToolShortcuts>;
+    delete legacy.select;
+    const migrated = await app.inject({
+      method: 'PATCH', url: '/api/auth/preferences', headers: { cookie: cookieHeader },
+      payload: { annotationToolShortcuts: legacy },
+    });
+    expect(migrated.statusCode).toBe(200);
+    expect(migrated.json().annotationToolShortcuts).toEqual({ ...legacy, select: 'B' });
   });
 
   it('persists floating chat button preferences for authenticated users', async () => {

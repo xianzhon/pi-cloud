@@ -136,7 +136,7 @@ const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' data:",
   "script-src 'self'",
   "connect-src 'self' ws: wss:",
   "worker-src 'self' blob:",
