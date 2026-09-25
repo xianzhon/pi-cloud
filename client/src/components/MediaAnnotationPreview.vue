@@ -2633,7 +2633,7 @@ onUnmounted(() => {
 .pdf-pages.continuous {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: safe center;
   gap: 1rem;
 }
 
