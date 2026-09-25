@@ -50,7 +50,7 @@ export function renderMhtmlDocument(source: string): string | undefined {
     let bytes = resolved.bytes;
     if (resolved.contentType === 'text/css') {
       const nextResolving = new Set(resolving).add(resolved);
-      const css = rewriteCssUrls(decodeText(bytes, resolved.charset), url => resourceUrl(url, resolved.contentLocation || base));
+      const css = rewriteCssUrls(decodeText(bytes, resolved.charset), url => resourceUrl(url, resolved.contentLocation || base, nextResolving));
       bytes = new TextEncoder().encode(css);
     }
 
