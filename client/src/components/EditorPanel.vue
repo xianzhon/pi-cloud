@@ -126,9 +126,9 @@
           >
             {{ t('components.editorPanel.raw') }}
           </button>
-          <button v-if="activeIsDiagram" :class="{ active: activePreviewMode === 'visual' }" :disabled="!!activeMindMapError" :title="activeMindMapError || t('components.editorPanel.mindMap.visual')" @click="setActivePreviewMode('visual')">{{ t('components.editorPanel.mindMap.visual') }}</button>
+          <button v-if="activeIsMindMap" :class="{ active: activePreviewMode === 'visual' }" :disabled="!!activeMindMapError" :title="activeMindMapError || t('components.editorPanel.mindMap.visual')" @click="setActivePreviewMode('visual')">{{ t('components.editorPanel.mindMap.visual') }}</button>
         </div>
-        <span v-if="activeIsDiagram && activeMindMapError" class="mindmap-unavailable" role="status">{{ activeMindMapError }}</span>
+        <span v-if="activeIsMindMap && activeMindMapError" class="mindmap-unavailable" role="status">{{ activeMindMapError }}</span>
         <button class="window-btn tooltip" @click="$emit('close')" :data-tooltip="t('components.editorPanel.minimize')" :aria-label="t('components.editorPanel.minimizeEditor')">—</button>
         <button class="window-btn maximize-btn tooltip" @click="toggleMaximize" :data-tooltip="isMaximized ? t('components.editorPanel.restore') : t('components.editorPanel.maximize')" :aria-label="isMaximized ? t('components.editorPanel.restoreEditor') : t('components.editorPanel.maximizeEditor')">
           {{ isMaximized ? '❐' : '▢' }}
@@ -154,9 +154,9 @@
           </button>
           <button
             class="file-tree-toolbar-btn tooltip"
-            @click="createMindMap"
-            :data-tooltip="t('components.editorPanel.newMindMap')"
-            :aria-label="t('components.editorPanel.newMindMap')"
+            @click="createDiagram"
+            :data-tooltip="t('components.editorPanel.newDiagram')"
+            :aria-label="t('components.editorPanel.newDiagram')"
           >
             <PhGraph :size="15" />
           </button>
@@ -433,6 +433,30 @@
       @cancel="handleInputPromptCancel"
     />
 
+    <InputPromptModal
+      :key="diagramType"
+      :visible="diagramPromptVisible"
+      :title="t('components.editorPanel.newDiagram')"
+      :label="t('components.editorPanel.filePath')"
+      :description="t('components.editorPanel.enterAFilePathRelativeToThe')"
+      :model-value="`${diagramType}.mmd`"
+      :confirm-text="t('components.editorPanel.createFile')"
+      @confirm="confirmDiagram"
+      @cancel="diagramPromptVisible = false"
+    >
+      <template #fields>
+        <label class="diagram-type-label" for="diagram-type">{{ t('components.editorPanel.diagramType') }}</label>
+        <CustomSelect
+          id="diagram-type"
+          class="diagram-type-select"
+          :model-value="diagramType"
+          :options="diagramTypeOptions"
+          :aria-label="t('components.editorPanel.diagramType')"
+          @update:model-value="diagramType = $event as DiagramType"
+        />
+      </template>
+    </InputPromptModal>
+
     <ConfirmModal
       :visible="confirmPrompt.visible"
       :variant="confirmPrompt.variant"
@@ -470,6 +494,7 @@ import TreeNode, { type TreeNodeData } from './FileTreeNode.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import MindMapVisualEditor from './MindMapVisualEditor.vue';
 import { parseMindMap } from '../utils/mindMap';
+import { diagramTypes, diagramTemplates, type DiagramType } from '../utils/diagramTemplates';
 import InputPromptModal from './InputPromptModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 import MediaAnnotationPreview from './MediaAnnotationPreview.vue';
@@ -723,6 +748,13 @@ interface FilePinGroup {
   filePaths: string[];
 }
 const filePinGroups = ref<FilePinGroup[]>([]);
+const diagramPromptVisible = ref(false);
+const diagramType = ref<DiagramType>('mindmap');
+const diagramTypeOptions = computed<CustomSelectOption[]>(() => diagramTypes.map(type => ({
+  value: type,
+  label: t(`components.editorPanel.diagramTypes.${type}`),
+})));
+const diagramDirectory = ref('');
 const inputPrompt = ref({
   visible: false,
   title: '',
@@ -812,6 +844,8 @@ function mindMapSource(path: string): string {
   void previewVersion.value;
   return models.get(path)?.getValue() || '';
 }
+const activeIsMindMap = computed(() => activeIsDiagram.value && !!activeTab.value && /^mindmap(?:\s|$)/.test(mindMapSource(activeTab.value)));
+
 function mindMapError(path: string): string {
   const source = mindMapSource(path);
   try { parseMindMap(source); return ''; }
@@ -821,9 +855,9 @@ function mindMapError(path: string): string {
     return t(line ? 'components.editorPanel.mindMap.unsupportedLine' : 'components.editorPanel.mindMap.unsupported', line ? { line } : {});
   }
 }
-const activeMindMapError = computed(() => activeIsDiagram.value && activeTab.value ? mindMapError(activeTab.value) : '');
-watch(activeMindMapError, error => {
-  if (error && activePreviewMode.value === 'visual') setActivePreviewMode('edit');
+const activeMindMapError = computed(() => activeIsMindMap.value && activeTab.value ? mindMapError(activeTab.value) : '');
+watch([activeIsMindMap, activeMindMapError], ([isMindMap, error]) => {
+  if ((!isMindMap || error) && activePreviewMode.value === 'visual') setActivePreviewMode('edit');
 });
 function applyMindMapSource(path: string, source: string): void {
   const model = models.get(path);
@@ -2358,16 +2392,22 @@ async function toggleHiddenFiles() {
   await refreshFileTree();
 }
 
-function createMindMap() {
-  void createNewFile(selectedDirectoryPath.value || rootDirectory(), true);
+function createDiagram() {
+  diagramDirectory.value = selectedDirectoryPath.value || rootDirectory();
+  diagramType.value = 'mindmap';
+  diagramPromptVisible.value = true;
 }
 
-async function createNewFile(targetDirectory = selectedDirectoryPath.value || rootDirectory(), mindMap = false) {
-  const input = await requestInput({
-    title: t(mindMap ? 'components.editorPanel.newMindMap' : 'components.editorPanel.createNewFile'),
+function confirmDiagram(name: string) {
+  diagramPromptVisible.value = false;
+  void createNewFile(diagramDirectory.value, { name, type: diagramType.value });
+}
+
+async function createNewFile(targetDirectory = selectedDirectoryPath.value || rootDirectory(), diagram?: { name: string; type: DiagramType }) {
+  const input = diagram?.name ?? await requestInput({
+    title: t('components.editorPanel.createNewFile'),
     label: t('components.editorPanel.filePath'),
     description: t('components.editorPanel.enterAFilePathRelativeToThe'),
-    value: mindMap ? 'mindmap.mmd' : '',
     confirmText: t('components.editorPanel.createFile'),
   });
   if (input === null) return;
@@ -2380,9 +2420,9 @@ async function createNewFile(targetDirectory = selectedDirectoryPath.value || ro
     return;
   }
 
-  if (mindMap && !isDiagramFile(trimmed)) {
+  if (diagram && !isDiagramFile(trimmed)) {
     statusType.value = 'error';
-    statusMessage.value = t('components.editorPanel.mindMapExtension');
+    statusMessage.value = t('components.editorPanel.diagramExtension');
     scheduleStatusClear();
     return;
   }
@@ -2396,7 +2436,7 @@ async function createNewFile(targetDirectory = selectedDirectoryPath.value || ro
     const response = await fetch('/api/files/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: filePath, content: mindMap ? 'mindmap\n  Root\n    Idea\n' : '' }),
+      body: JSON.stringify({ path: filePath, content: diagram ? diagramTemplates[diagram.type] : '' }),
     });
 
     if (response.status === 409) {

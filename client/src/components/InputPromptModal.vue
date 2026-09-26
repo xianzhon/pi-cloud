@@ -15,6 +15,7 @@
           </header>
 
           <form class="prompt-form" @submit.prevent="onSubmit">
+            <slot name="fields" />
             <label class="prompt-label" :for="inputId">{{ label || t('components.inputPromptModal.value') }}</label>
             <input
               :id="inputId"
@@ -165,12 +166,31 @@ function onCancel(): void {
   overflow-y: auto;
 }
 
+.prompt-form :deep(.diagram-type-select .custom-select-list) {
+  position: static;
+  max-height: 11rem !important;
+  margin-top: 0.5rem;
+}
+
 .prompt-label {
   display: block;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+:slotted(.diagram-type-label) {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+:slotted(.diagram-type-select) {
+  width: 100%;
+  margin-bottom: 1rem;
 }
 
 .prompt-input {

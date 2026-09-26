@@ -608,7 +608,7 @@ describe('EditorPanel', () => {
     mermaidMock.render.mockResolvedValue({ svg: '<svg><text>Root</text></svg>' });
 
     const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
-    await wrapper.get('[aria-label="New mind map"]').trigger('click');
+    await wrapper.get('[aria-label="New diagram"]').trigger('click');
     await flushPromises();
     expect((document.querySelector('.prompt-input') as HTMLInputElement).value).toBe('mindmap.mmd');
     (document.querySelector('.prompt-form') as HTMLFormElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -621,6 +621,63 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.mermaid-diagram svg').text()).toBe('Root');
     await wrapper.get('[title="Edit Mermaid source"]').trigger('click');
     expect(wrapper.find('.mermaid-diagram').exists()).toBe(false);
+  });
+
+  it('creates a selected flowchart starter and uses its suggested filename', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (url === '/api/files/create') return { ok: true, json: async () => ({ path: '/project/flowchart.mmd' }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: 'flowchart TD\n  Start --> End\n' }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => 'flowchart TD\n  Start --> End\n'),
+      dispose: vi.fn(),
+    } as any);
+    mermaidMock.render.mockResolvedValue({ svg: '<svg />' });
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.get('[aria-label="New diagram"]').trigger('click');
+    await flushPromises();
+    const select = document.querySelector('.diagram-type-select') as HTMLElement;
+    (select.querySelector('.custom-select-trigger') as HTMLButtonElement).click();
+    await flushPromises();
+    expect(Array.from(select.querySelectorAll('.custom-select-option')).slice(0, 3).map(option => option.textContent?.trim())).toEqual(['Mind map', 'Flowchart', 'ER diagram']);
+    (select.querySelectorAll('.custom-select-option')[1] as HTMLButtonElement).click();
+    await flushPromises();
+    expect((document.querySelector('.prompt-input') as HTMLInputElement).value).toBe('flowchart.mmd');
+    (document.querySelector('.prompt-form') as HTMLFormElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+    expect(fetchMock).toHaveBeenCalledWith('/api/files/create', expect.objectContaining({
+      body: JSON.stringify({ path: '/project/flowchart.mmd', content: 'flowchart TD\n  Start --> End\n' }),
+    }));
+    expect(wrapper.find('.view-mode-toggle').text()).not.toContain('Visual');
+    expect(wrapper.find('.mindmap-unavailable').exists()).toBe(false);
+  });
+
+  it('hides Visual and mind-map errors for an existing ER diagram', async () => {
+    const content = 'erDiagram\n  USER ||--o{ POST : writes\n';
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => content),
+      dispose: vi.fn(),
+    } as any);
+    mermaidMock.render.mockResolvedValue({ svg: '<svg />' });
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/model.mmd');
+    await flushPromises();
+    expect(wrapper.find('.view-mode-toggle').text()).toContain('Preview');
+    expect(wrapper.find('.view-mode-toggle').text()).toContain('Raw');
+    expect(wrapper.find('.view-mode-toggle').text()).not.toContain('Visual');
+    expect(wrapper.find('.mindmap-unavailable').exists()).toBe(false);
   });
 
   it('previews HTML in a sandboxed iframe with local asset support', async () => {
