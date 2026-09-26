@@ -71,6 +71,7 @@ describe('mind map operations', () => {
     const { alpha, beta } = ids(root);
     const added = editMindMap(root, { type: 'add', target: alpha, placement: 'sibling', label: 'New' });
     expect(serializeMindMap(added)).toBe('mindmap\n  Root\n    Alpha\n      Grand child\n    New\n    Beta\n');
+    expect(serializeMindMap(editMindMap(root, { type: 'add', target: beta, placement: 'before', label: 'Above' }))).toBe('mindmap\n  Root\n    Alpha\n      Grand child\n    Above\n    Beta\n');
     expect(serializeMindMap(editMindMap(added, { type: 'rename', target: beta, label: 'Renamed' }))).toContain('    Renamed\n');
     expect(serializeMindMap(editMindMap(root, { type: 'delete', target: alpha }))).toBe('mindmap\n  Root\n    Beta\n');
     expect(serializeMindMap(root)).toBe(source);

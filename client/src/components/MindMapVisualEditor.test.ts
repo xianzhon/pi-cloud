@@ -159,6 +159,11 @@ describe('mind map visual editing', () => {
     await wrapper.find('#mindmap-label').setValue('Next');
     await wrapper.find('.mindmap-inline-edit').trigger('submit');
     expect(wrapper.emitted('change')?.[0]).toEqual(['mindmap\n  Root\n    One\n    Next\n    Two\n']);
+    await wrapper.find('.mindmap-node.selected').trigger('keydown', { key: 'Enter', shiftKey: true });
+    expect(wrapper.findAll('.mindmap-node')[2].find('input').exists()).toBe(true);
+    await wrapper.find('#mindmap-label').setValue('Above');
+    await wrapper.find('.mindmap-inline-edit').trigger('submit');
+    expect(wrapper.emitted('change')?.[1]).toEqual(['mindmap\n  Root\n    One\n    Above\n    Next\n    Two\n']);
   });
 
   it('folds and zooms without emitting source, and moves with desktop drop and mobile controls', async () => {
@@ -256,6 +261,14 @@ describe('MindMapVisualEditor', () => {
     await wrapper.get('button[aria-label="Theme"]').trigger('click');
     await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Lavender')!.trigger('click');
     expect(wrapper.attributes('style')).toContain('#a58ad8');
+    await wrapper.get('button[aria-label="Theme"]').trigger('click');
+    await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Rainbow')!.trigger('click');
+    const branchStyles = wrapper.findAll('.mindmap-item').slice(1).map(item => item.attributes('style'));
+    const connectorStyles = wrapper.findAll('.mindmap-connections path').map(path => path.attributes('style'));
+    expect(branchStyles[0]).toContain('#e45b65');
+    expect(branchStyles[1]).toContain('#e58b3f');
+    expect(connectorStyles[0]).toContain('#e45b65');
+    expect(connectorStyles[1]).toContain('#e58b3f');
     await wrapper.get('button[aria-label="Structure"]').trigger('click');
     await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Branches')!.trigger('click');
     expect(wrapper.classes()).toContain('branches');

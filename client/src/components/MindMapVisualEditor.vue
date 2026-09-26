@@ -38,9 +38,9 @@
     <div ref="viewport" class="mindmap-viewport" tabindex="0" @pointerdown="startPan" @pointermove="pan" @pointerup="endPan" @pointercancel="endPan" @wheel.prevent="onWheel">
       <div class="mindmap-canvas" :style="{ width: `${canvasWidth}px`, height: `${canvasHeight}px`, transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})` }">
         <svg class="mindmap-connections" :width="canvasWidth" :height="canvasHeight" aria-hidden="true">
-          <path v-for="(path, index) in diagram.connectors" :key="index" :d="path" :transform="`translate(${originX} ${originY})`" />
+          <path v-for="(path, index) in diagram.connectors" :key="index" :d="path" :style="branchStyle(diagram.nodes[index + 1]?.id)" :transform="`translate(${originX} ${originY})`" />
         </svg>
-        <div v-for="entry in positionedNodes" :key="entry.node.id" class="mindmap-item" :style="{ left: `${entry.position.x + originX}px`, top: `${entry.position.y + originY}px` }">
+        <div v-for="entry in positionedNodes" :key="entry.node.id" class="mindmap-item" :style="{ left: `${entry.position.x + originX}px`, top: `${entry.position.y + originY}px`, ...branchStyle(entry.node.id) }">
           <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1, 'drop-child': dropTarget?.id === entry.node.id && dropTarget.placement === 'child', 'drop-before': dropTarget?.id === entry.node.id && dropTarget.placement === 'before', 'drop-after': dropTarget?.id === entry.node.id && dropTarget.placement === 'after' }" :draggable="!editing && entry.node.id !== root.id" @click="selectNode(entry.node.id)" @dblclick="startEdit('rename', entry.node.id)" @contextmenu.prevent="openMenu($event, entry.node.id)" @dragstart="draggedId = entry.node.id" @dragend="clearDrag" @dragover.prevent="showDrop(entry.node.id, 'child')" @drop.prevent="drop(entry.node.id, 'child')">
             <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'before')" @drop.stop.prevent="drop(entry.node.id, 'before')" />
             <form v-if="editing && editNodeId === entry.node.id" class="mindmap-inline-edit" @submit.stop.prevent="submitEdit" @click.stop @dblclick.stop>
@@ -96,7 +96,7 @@ const selectedId = ref<number | null>(root.value.id);
 const folded = ref(new Set<number>());
 const draggedId = ref<number | null>(null);
 const dropTarget = ref<{ id: number; placement: 'child' | 'before' | 'after' } | null>(null);
-const editing = ref<'child' | 'sibling' | 'rename' | null>(null);
+const editing = ref<'child' | 'sibling' | 'before' | 'rename' | null>(null);
 const draft = ref('');
 const labelError = ref(false);
 const confirmDelete = ref(false);
@@ -120,6 +120,7 @@ const themeOptions = computed(() => [
   { value: 'rose', label: t('rose') },
   { value: 'gold', label: t('gold') },
   { value: 'slate', label: t('slate') },
+  { value: 'rainbow', label: t('rainbow') },
 ]);
 const structureOptions = computed(() => [
   { value: 'cards', label: t('cards') },
@@ -162,7 +163,17 @@ const palettes = {
   rose: { accent: '#d783a6', strong: '#ad507d' },
   gold: { accent: '#cba34a', strong: '#9c7520' },
   slate: { accent: '#8295ad', strong: '#536e8c' },
+  rainbow: { accent: '#8b78d1', strong: '#6650b5' },
 };
+const rainbowColors = [
+  { accent: '#e45b65', strong: '#bd3645' },
+  { accent: '#e58b3f', strong: '#bd6424' },
+  { accent: '#d0aa35', strong: '#9b7a13' },
+  { accent: '#55a868', strong: '#347b45' },
+  { accent: '#4596d2', strong: '#2871aa' },
+  { accent: '#7774d8', strong: '#514db5' },
+  { accent: '#bd68bd', strong: '#914391' },
+];
 const palette = computed(() => ({ '--mindmap-accent': palettes[theme.value].accent, '--mindmap-strong': palettes[theme.value].strong }));
 const viewport = ref<HTMLElement>();
 const sizes = ref(new Map<number, NodeSize>());
@@ -175,9 +186,23 @@ const previewId = computed(() => {
   visit(root.value);
   return max + 1;
 });
-const previewRoot = computed(() => editing.value === 'child' || editing.value === 'sibling'
+const previewRoot = computed(() => editing.value === 'child' || editing.value === 'sibling' || editing.value === 'before'
   ? editMindMap(root.value, { type: 'add', target: selectedId.value!, placement: editing.value, label: selected.value!.label })
   : root.value);
+// Rainbow branches keep one color through their descendants, as in conventional mind-map themes.
+const branchColors = computed(() => {
+  const colors = new Map<number, (typeof rainbowColors)[number]>();
+  previewRoot.value.children.forEach((branch, index) => {
+    const color = rainbowColors[index % rainbowColors.length];
+    const visit = (node: MindMapNode) => { colors.set(node.id, color); node.children.forEach(visit); };
+    visit(branch);
+  });
+  return colors;
+});
+function branchStyle(id?: number) {
+  const color = theme.value === 'rainbow' && id !== undefined ? branchColors.value.get(id) : undefined;
+  return color ? { '--mindmap-accent': color.accent, '--mindmap-strong': color.strong } : {};
+}
 const previewFolded = computed(() => editing.value === 'child' && selectedId.value !== null
   ? new Set([...folded.value].filter(id => id !== selectedId.value)) : folded.value);
 const editNodeId = computed(() => editing.value === 'rename' ? selectedId.value : previewId.value);
@@ -263,8 +288,8 @@ function redo() {
   emittedSource = serializeMindMap(root.value);
   emit('change', emittedSource);
 }
-function startEdit(type: 'child' | 'sibling' | 'rename', id = selectedId.value) {
-  if (id === null || (type === 'sibling' && id === root.value.id)) return;
+function startEdit(type: 'child' | 'sibling' | 'before' | 'rename', id = selectedId.value) {
+  if (id === null || ((type === 'sibling' || type === 'before') && id === root.value.id)) return;
   selectedId.value = id;
   editing.value = type;
   draft.value = type === 'rename' ? selected.value?.label || '' : '';
@@ -283,7 +308,7 @@ function submitEdit() {
     return;
   }
   if (editing.value === 'rename' && draft.value !== selected.value.label) operate({ type: 'rename', target: selected.value.id, label: draft.value });
-  else if (editing.value === 'child' || editing.value === 'sibling') {
+  else if (editing.value === 'child' || editing.value === 'sibling' || editing.value === 'before') {
     const target = selected.value.id;
     const ids: number[] = [];
     const collect = (node: MindMapNode) => { ids.push(node.id); node.children.forEach(collect); };
@@ -383,7 +408,7 @@ function onKeydown(event: KeyboardEvent) {
     }
   } else if (event.key === 'Tab') {
     if (event.shiftKey) move('promote'); else startEdit('child');
-  } else if (event.key === 'Enter') startEdit(id === root.value.id ? 'child' : 'sibling');
+  } else if (event.key === 'Enter') startEdit(event.shiftKey ? 'before' : id === root.value.id ? 'child' : 'sibling');
   else if (event.key === 'F2') startEdit('rename');
   else if (event.key === 'Delete' || event.key === 'Backspace') { if (id !== root.value.id) confirmDelete.value = true; }
   else if (event.key === ' ' && selected.value.children.length) toggleFold(id);

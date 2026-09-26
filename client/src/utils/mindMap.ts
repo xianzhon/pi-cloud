@@ -7,7 +7,7 @@ export interface MindMapNode {
 }
 
 type Operation =
-  | { type: 'add'; target: number; placement: 'child' | 'sibling'; label: string }
+  | { type: 'add'; target: number; placement: 'child' | 'sibling' | 'before'; label: string }
   | { type: 'rename'; target: number; label: string }
   | { type: 'icon'; target: number; icon?: string }
   | { type: 'delete'; target: number }
@@ -95,13 +95,13 @@ export function editMindMap(root: MindMapNode, operation: Operation): MindMapNod
       if (node.label === operation.label) throw new Error('unchanged');
       node.label = operation.label;
     } else {
-      if (operation.placement === 'sibling' && !parent) throw new Error('root');
+      if (operation.placement !== 'child' && !parent) throw new Error('root');
       const ids: number[] = [];
       const collect = (n: MindMapNode) => { ids.push(n.id); n.children.forEach(collect); };
       collect(copy);
       const next: MindMapNode = { id: Math.max(...ids) + 1, label: operation.label, children: [] };
       if (operation.placement === 'child') node.children.push(next);
-      else parent!.children.splice(parent!.children.indexOf(node) + 1, 0, next);
+      else parent!.children.splice(parent!.children.indexOf(node) + (operation.placement === 'before' ? 0 : 1), 0, next);
     }
   } else if (operation.type === 'delete') {
     if (!parent) throw new Error('root');
