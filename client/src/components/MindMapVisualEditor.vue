@@ -1,32 +1,17 @@
 <template>
   <div class="mindmap-editor" :class="{ dragging: draggedId !== null }" :style="palette" @keydown="onKeydown">
     <div class="mindmap-toolbar">
-      <button type="button" :disabled="!selected" @click="startEdit('child')">{{ t('child') }}</button>
-      <button type="button" :disabled="!selected || selected.id === root.id" @click="startEdit('sibling')">{{ t('sibling') }}</button>
-      <button type="button" :disabled="!selected" @click="startEdit('rename')">{{ t('rename') }}</button>
-      <button type="button" :disabled="!selected || selected.id === root.id" @click="confirmDelete = true">{{ t('delete') }}</button>
       <button type="button" :disabled="!past.length" @click="undo">{{ t('undo') }}</button>
       <button type="button" :disabled="!future.length" @click="redo">{{ t('redo') }}</button>
-      <label class="mindmap-levels">{{ t('levels') }}
-        <select :aria-label="t('levels')" @change="changeLevel">
-          <option value="" selected disabled>{{ t('chooseLevel') }}</option>
-          <option v-for="level in 3" :key="level" :value="level">{{ t('level', { level }) }}</option>
-          <option value="0">{{ t('expandAll') }}</option>
-        </select>
-      </label>
-      <label class="mindmap-levels">{{ t('layout') }}
-        <select v-model="direction" :aria-label="t('layout')">
-          <option value="both">{{ t('bothSides') }}</option>
-          <option value="right">{{ t('rightSide') }}</option>
-        </select>
-      </label>
-      <label class="mindmap-levels">{{ t('theme') }}
-        <select v-model="theme" :aria-label="t('theme')">
-          <option value="ocean">{{ t('ocean') }}</option>
-          <option value="forest">{{ t('forest') }}</option>
-          <option value="sunset">{{ t('sunset') }}</option>
-        </select>
-      </label>
+      <div class="mindmap-levels"><span>{{ t('levels') }}</span>
+        <CustomSelect model-value="" :options="levelOptions" :aria-label="t('levels')" :placeholder="t('chooseLevel')" @update:model-value="setLevel(Number($event))" />
+      </div>
+      <div class="mindmap-levels"><span>{{ t('layout') }}</span>
+        <CustomSelect :model-value="direction" :options="layoutOptions" :aria-label="t('layout')" @update:model-value="setDirection" />
+      </div>
+      <div class="mindmap-levels"><span>{{ t('theme') }}</span>
+        <CustomSelect :model-value="theme" :options="themeOptions" :aria-label="t('theme')" @update:model-value="setTheme" />
+      </div>
       <span class="mindmap-toolbar-spacer" />
       <div class="mindmap-view-controls">
         <button type="button" @click="zoom(-0.1)" :aria-label="t('zoomOut')">−</button>
@@ -83,6 +68,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from 'vue';
 import { i18n } from '../i18n';
 import ConfirmModal from './ConfirmModal.vue';
+import CustomSelect from './CustomSelect.vue';
 import { editMindMap, parseMindMap, serializeMindMap, validMindMapLabel, type MindMapNode } from '../utils/mindMap';
 import { layoutMindMap, type NodeSize } from '../utils/mindMapLayout';
 
@@ -103,6 +89,21 @@ const confirmDelete = ref(false);
 const menu = ref<{ id: number; x: number; y: number } | null>(null);
 const direction = ref<'both' | 'right'>('both');
 const theme = ref<'ocean' | 'forest' | 'sunset'>('ocean');
+const levelOptions = computed(() => [
+  ...[1, 2, 3].map(level => ({ value: String(level), label: t('level', { level }) })),
+  { value: '0', label: t('expandAll') },
+]);
+const layoutOptions = computed(() => [
+  { value: 'both', label: t('bothSides') },
+  { value: 'right', label: t('rightSide') },
+]);
+const themeOptions = computed(() => [
+  { value: 'ocean', label: t('ocean') },
+  { value: 'forest', label: t('forest') },
+  { value: 'sunset', label: t('sunset') },
+]);
+function setDirection(value: string) { direction.value = value as typeof direction.value; }
+function setTheme(value: string) { theme.value = value as typeof theme.value; }
 const palettes = {
   ocean: { accent: '#58a6a0', strong: '#358e88' },
   forest: { accent: '#72a873', strong: '#438650' },
@@ -286,11 +287,6 @@ function toggleFold(id: number) {
   if (next.has(id)) next.delete(id); else next.add(id);
   folded.value = next;
 }
-function changeLevel(event: Event) {
-  const select = event.target as HTMLSelectElement;
-  setLevel(Number(select.value));
-  select.value = '';
-}
 function setLevel(level: number) {
   sides.value = new Map([...sides.value, ...diagram.value.sides]);
   const next = new Set<number>();
@@ -324,7 +320,8 @@ function onKeydown(event: KeyboardEvent) {
   } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
     const direction = event.key === 'ArrowLeft' ? -1 : 1;
     if (position.side === direction || position.side === 0) {
-      next = selected.value.children.find(child => positions.value.get(child.id)?.side === direction)?.id;
+      if (position.side === direction && folded.value.has(id) && selected.value.children.length) toggleFold(id);
+      else next = selected.value.children.find(child => positions.value.get(child.id)?.side === direction)?.id;
     } else {
       next = parentOptions.value.find(node => node.children.some(child => child.id === id))?.id;
     }
@@ -410,7 +407,8 @@ function endPan() { pointer = null; }
 .mindmap-toolbar button:disabled { opacity: .4; cursor: default; }
 .mindmap-toolbar-spacer { flex: 1; }
 .mindmap-view-controls { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--border-color); }
-.mindmap-inline-edit input, .mindmap-mobile-controls select, .mindmap-levels select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
+.mindmap-inline-edit input, .mindmap-mobile-controls select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
+.mindmap-levels :deep(.custom-select) { max-width: 180px; }
 .mindmap-inline-edit { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .mindmap-inline-edit input { width: 100%; min-width: 0; box-sizing: border-box; }
 .mindmap-context-menu { position: fixed; z-index: 100; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); box-shadow: 0 6px 20px #0004; }

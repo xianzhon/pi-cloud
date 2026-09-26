@@ -10,25 +10,25 @@ const mountEditor = () => mount(MindMapVisualEditor, { props: { source }, global
 describe('mind map visual editing', () => {
   it('edits source, preserves history on own update and invalidates it on raw changes', async () => {
     const wrapper = mountEditor();
-    await wrapper.findAll('.mindmap-node')[1].trigger('click');
-    await wrapper.findAll('.mindmap-toolbar button')[2].trigger('click');
+    expect(wrapper.findAll('.mindmap-toolbar > button').map(button => button.text())).toEqual(['Undo', 'Redo']);
+    await wrapper.findAll('.mindmap-node')[1].trigger('dblclick');
     expect(wrapper.findAll('.mindmap-node')[1].find('input').exists()).toBe(true);
     await wrapper.find('#mindmap-label').setValue('Renamed');
     await wrapper.find('.mindmap-inline-edit').trigger('submit');
     expect(wrapper.emitted('change')?.[0]).toEqual(['mindmap\n  Root\n    Renamed\n    Two\n']);
     await wrapper.setProps({ source: 'mindmap\n  Root\n    Renamed\n    Two\n' });
-    await wrapper.findAll('.mindmap-toolbar button')[4].trigger('click');
+    await wrapper.findAll('.mindmap-toolbar > button')[0].trigger('click');
     expect(wrapper.emitted('change')?.[1]).toEqual([source]);
     await wrapper.setProps({ source: 'mindmap\n  Other\n' });
     expect(wrapper.findAll('.mindmap-node').map(node => node.text())).toEqual(['Other']);
-    expect(wrapper.findAll('.mindmap-toolbar button')[4].attributes('disabled')).toBeDefined();
+    expect(wrapper.findAll('.mindmap-toolbar > button')[0].attributes('disabled')).toBeDefined();
   });
 
   it('fits the diagram at its center and preserves manual view after edits', async () => {
     const wrapper = mountEditor();
     const viewport = wrapper.find('.mindmap-viewport').element;
     Object.defineProperties(viewport, { clientWidth: { value: 900 }, clientHeight: { value: 500 } });
-    await wrapper.findAll('.mindmap-toolbar button')[8].trigger('click');
+    await wrapper.find('.mindmap-view-controls button:last-child').trigger('click');
     const canvas = wrapper.find('.mindmap-canvas');
     const width = parseFloat((canvas.element as HTMLElement).style.width);
     const height = parseFloat((canvas.element as HTMLElement).style.height);
@@ -39,8 +39,7 @@ describe('mind map visual editing', () => {
     expect(Number(match![2]) + height * Number(match![3]) / 2).toBeCloseTo(250);
     await wrapper.find('.mindmap-viewport').trigger('wheel', { deltaX: 20, deltaY: 10 });
     const panned = canvas.attributes('style');
-    await wrapper.findAll('.mindmap-node')[1].trigger('click');
-    await wrapper.findAll('.mindmap-toolbar button')[2].trigger('click');
+    await wrapper.findAll('.mindmap-node')[1].trigger('dblclick');
     await wrapper.find('#mindmap-label').setValue('New label');
     await wrapper.find('.mindmap-inline-edit').trigger('submit');
     expect(canvas.attributes('style')).toBe(panned);
@@ -52,11 +51,17 @@ describe('mind map visual editing', () => {
       global: { plugins: [i18n] },
     });
     const nodes = () => wrapper.findAll('.mindmap-node');
-    await wrapper.find('.mindmap-levels select').setValue('1');
+    const chooseLevel = async (label: string) => {
+      await wrapper.get('button[aria-label="Show levels"]').trigger('click');
+      const options = wrapper.findAll('.mindmap-levels [role="option"]');
+      expect(options.map(option => option.text())).toContain(label);
+      await options.find(option => option.text() === label)!.trigger('click');
+    };
+    await chooseLevel('Up to level 1');
     expect(nodes().map(node => node.attributes('aria-label'))).toEqual(['Root', 'One', 'Two']);
-    await wrapper.find('.mindmap-levels select').setValue('2');
+    await chooseLevel('Up to level 2');
     expect(nodes().map(node => node.attributes('aria-label'))).toEqual(['Root', 'One', 'Child', 'Two']);
-    await wrapper.find('.mindmap-levels select').setValue('3');
+    await chooseLevel('Up to level 3');
     expect(nodes()).toHaveLength(5);
     await nodes()[0].trigger('keydown', { key: 'ArrowLeft' });
     expect(nodes()[1].attributes('aria-pressed')).toBe('true');
@@ -113,6 +118,26 @@ describe('mind map visual editing', () => {
     await press('Left A', 'ArrowLeft', 'Left A');
   });
 
+  it('expands a folded branch with the arrow pointing outward on either side', async () => {
+    const wrapper = mount(MindMapVisualEditor, {
+      props: { source: 'mindmap\n  Root\n    Left\n      Left Child\n    Right\n      Right Child\n' },
+      global: { plugins: [i18n] },
+    });
+    const node = (label: string) => wrapper.findAll('.mindmap-node').find(item => item.attributes('aria-label') === label)!;
+    for (const [label, key, child] of [['Left', 'ArrowLeft', 'Left Child'], ['Right', 'ArrowRight', 'Right Child']]) {
+      await node(label).trigger('click');
+      await node(label).element.parentElement!.querySelector<HTMLButtonElement>('.mindmap-fold')!.click();
+      await wrapper.vm.$nextTick();
+      expect(node(child)).toBeUndefined();
+      await node(label).trigger('keydown', { key });
+      expect(node(child).exists()).toBe(true);
+      expect(node(label).attributes('aria-pressed')).toBe('true');
+      await node(label).trigger('keydown', { key });
+      expect(node(child).attributes('aria-pressed')).toBe('true');
+    }
+    expect(wrapper.emitted('change')).toBeUndefined();
+  });
+
   it('places the add input at the child or following sibling position without changing source until submission', async () => {
     const wrapper = mountEditor();
     const nodes = () => wrapper.findAll('.mindmap-node');
@@ -140,7 +165,7 @@ describe('mind map visual editing', () => {
     await wrapper.find('.mindmap-fold').trigger('click');
     expect(wrapper.findAll('.mindmap-node')).toHaveLength(1);
     await wrapper.find('.mindmap-fold').trigger('click');
-    await wrapper.findAll('.mindmap-toolbar button')[7].trigger('click');
+    await wrapper.get('button[aria-label="Zoom in"]').trigger('click');
     expect(wrapper.text()).toContain('110%');
     await wrapper.find('.mindmap-viewport').trigger('wheel', { deltaX: 12, deltaY: 8 });
     expect(wrapper.find('.mindmap-canvas').attributes('style')).toContain('translate(-12px, -8px)');
@@ -200,8 +225,10 @@ describe('MindMapVisualEditor', () => {
 
   it('changes layout and palette without changing source', async () => {
     const wrapper = mountEditor();
-    await wrapper.get('select[aria-label="Layout"]').setValue('right');
-    await wrapper.get('select[aria-label="Theme"]').setValue('forest');
+    await wrapper.get('button[aria-label="Layout"]').trigger('click');
+    await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Right side')!.trigger('click');
+    await wrapper.get('button[aria-label="Theme"]').trigger('click');
+    await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Forest')!.trigger('click');
     expect(wrapper.attributes('style')).toContain('#72a873');
     expect(wrapper.emitted('change')).toBeUndefined();
     wrapper.unmount();
