@@ -73,6 +73,7 @@ describe('MediaAnnotationPreview', () => {
     localStorage.removeItem('pi-cloud.annotationToolShortcuts');
     localStorage.removeItem('pi-cloud.annotationPenColor');
     localStorage.removeItem('pi-cloud.annotationPenWidth');
+    localStorage.removeItem('pi-cloud.mhtmlPageTone');
     resetPreferencesForTests();
     pdfjsMock.document.numPages = 2;
     pdfjsMock.getOutline.mockResolvedValue([]);
@@ -151,10 +152,25 @@ describe('MediaAnnotationPreview', () => {
     expect(pdfjsMock.getDocument).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledWith('/api/files/read?path=%2Fproject%2F.annotations%2Fsnapshot.mhtml.annotations.json');
 
+    Object.defineProperty(frame.element, 'contentDocument', {
+      value: new DOMParser().parseFromString('<h1>Archived page</h1>', 'text/html'),
+    });
     await frame.trigger('load');
     await flushPromises();
-    expect(wrapper.find('.pdf-navigation-toolbar').exists()).toBe(false);
+    expect(wrapper.get('[aria-label="MHTML display controls"]').attributes('role')).toBe('toolbar');
     expect(wrapper.find('[aria-label="MHTML annotation controls"]').exists()).toBe(true);
+
+    const toneControl = wrapper.get('[aria-label="MHTML background color"]');
+    await toneControl.trigger('click');
+    const darkOption = wrapper.findAll('[role="option"]').find(option => option.text() === 'Dark');
+    expect(darkOption).toBeDefined();
+    await darkOption!.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.pdf-pages').classes()).toContain('tone-dark');
+    expect(localStorage.getItem('pi-cloud.mhtmlPageTone')).toBe('dark');
+    expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
+      body: expect.stringContaining('\\"pageTone\\": \\"dark\\"'),
+    }));
 
     await wrapper.get('[aria-label="Cover MHTML content with rectangle"]').trigger('click');
     const canvas = wrapper.get<HTMLCanvasElement>('.pdf-annotation-canvas');
@@ -192,6 +208,39 @@ describe('MediaAnnotationPreview', () => {
       method: 'POST',
       body: expect.stringContaining('/project/.annotations/snapshot.mhtml.annotations.json'),
     }));
+  });
+
+  it('uses the global MHTML color unless the annotation file specifies one', async () => {
+    localStorage.setItem('pi-cloud.mhtmlPageTone', 'dark');
+    vi.mocked(fetch).mockImplementation(async url => {
+      if (String(url).includes('override.mhtml.annotations.json')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ content: JSON.stringify({ version: 1, pages: {}, view: { pageTone: 'warm' } }) }),
+        } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    });
+
+    const props = { src: '', htmlDocument: '<p>Archived</p>', kind: 'html' as const };
+    const defaultPreview = mount(MediaAnnotationPreview, {
+      props: { ...props, filePath: '/project/default.mhtml' },
+    });
+    await flushPromises();
+    expect(defaultPreview.get('.pdf-pages').classes()).toContain('tone-dark');
+
+    const overridePreview = mount(MediaAnnotationPreview, {
+      props: { ...props, filePath: '/project/override.mhtml' },
+    });
+    await flushPromises();
+    expect(overridePreview.get('.pdf-pages').classes()).toContain('tone-warm');
+    expect(localStorage.getItem('pi-cloud.mhtmlPageTone')).toBe('dark');
+
+    const pdf = mount(MediaAnnotationPreview, {
+      props: { src: '/pdf', filePath: '/project/default.pdf' },
+    });
+    await flushPromises();
+    expect(pdf.get('.pdf-pages').classes()).toContain('tone-original');
   });
 
   it('lets MHTML text receive pointer events for native selection and copying', async () => {

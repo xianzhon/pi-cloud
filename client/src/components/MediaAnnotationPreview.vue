@@ -184,26 +184,26 @@
       role="tooltip"
       :style="{ left: `${activeTooltip.left}px`, top: `${activeTooltip.top}px` }"
     >{{ activeTooltip.text }}</div>
-    <div v-if="!isHtml" class="pdf-navigation-toolbar" role="toolbar" :aria-label="t(isImage ? 'components.editorPanel.imageControls' : 'components.editorPanel.pdfControls')">
+    <div class="pdf-navigation-toolbar" role="toolbar" :aria-label="t(displayControlsLabel)">
       <button
-        v-if="!isImage"
+        v-if="!isHtml && !isImage"
         type="button"
         :disabled="loading || pageNumber <= 1"
         :aria-label="t('components.editorPanel.previousPage')"
         @click="goToPage(pageNumber - 1)"
       ><PhCaretLeft :size="18" weight="bold" /></button>
-      <span v-if="!isImage" class="pdf-page-status">
+      <span v-if="!isHtml && !isImage" class="pdf-page-status">
         {{ t('components.editorPanel.pdfPageStatus', { page: pageNumber, pages: pageCount || 1 }) }}
       </span>
       <button
-        v-if="!isImage"
+        v-if="!isHtml && !isImage"
         type="button"
         :disabled="loading || pageNumber >= pageCount"
         :aria-label="t('components.editorPanel.nextPage')"
         @click="goToPage(pageNumber + 1)"
       ><PhCaretRight :size="18" weight="bold" /></button>
       <button
-        v-if="!isImage && outline.length"
+        v-if="!isHtml && !isImage && outline.length"
         type="button"
         :class="{ active: showOutline }"
         :aria-pressed="showOutline"
@@ -213,12 +213,14 @@
         @click="showOutline = !showOutline"
       ><PhList :size="18" /></button>
       <button
+        v-if="!isHtml"
         type="button"
         :disabled="loading || scale <= minScale"
         :aria-label="t('components.editorPanel.zoomOut')"
         @click="setScale(scale - scaleStep)"
       ><PhMinus :size="18" /></button>
       <button
+        v-if="!isHtml"
         type="button"
         class="pdf-zoom-level"
         :disabled="loading"
@@ -228,6 +230,7 @@
         {{ Math.round(scale * 100) }}%
       </button>
       <button
+        v-if="!isHtml"
         type="button"
         :disabled="loading || scale >= maxScale"
         :aria-label="t('components.editorPanel.zoomIn')"
@@ -239,11 +242,12 @@
           :model-value="pageTone"
           :options="pageToneOptions"
           :disabled="loading"
-          :aria-label="t(isImage ? 'components.editorPanel.imageTone' : 'components.editorPanel.pdfPageTone')"
+          :aria-label="t(pageToneLabel)"
           @update:model-value="setPageTone"
         />
       </div>
       <button
+        v-if="!isHtml"
         type="button"
         :disabled="loading"
         :aria-label="t(isImage
@@ -257,6 +261,7 @@
         :size="18"
       /></button>
       <button
+        v-if="!isHtml"
         type="button"
         :disabled="loading || exporting"
         :aria-label="t(exporting
@@ -264,7 +269,7 @@
           : isImage ? 'components.editorPanel.exportAnnotatedImage' : 'components.editorPanel.exportAnnotatedPdf')"
         @click="exportAnnotatedDocument"
       ><PhDownloadSimple :size="18" /></button>
-      <span v-if="exportError" class="pdf-export-error" role="alert">{{ exportError }}</span>
+      <span v-if="!isHtml && exportError" class="pdf-export-error" role="alert">{{ exportError }}</span>
     </div>
     <div
       ref="viewportEl"
@@ -477,6 +482,16 @@ const annotationControlsLabel = computed(() => {
   }
   return 'components.editorPanel.pdfAnnotationControls';
 });
+const displayControlsLabel = computed(() => {
+  if (isHtml.value) return 'components.editorPanel.mhtmlDisplayControls';
+  if (isImage.value) return 'components.editorPanel.imageControls';
+  return 'components.editorPanel.pdfControls';
+});
+const pageToneLabel = computed(() => {
+  if (isHtml.value) return 'components.editorPanel.mhtmlTone';
+  if (isImage.value) return 'components.editorPanel.imageTone';
+  return 'components.editorPanel.pdfPageTone';
+});
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.1;
@@ -503,6 +518,7 @@ const ANNOTATION_TOOLS = new Set<AnnotationTool>([
   'pan', 'select', 'pen', 'highlighter', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'whiteout', 'move', 'eraser',
 ]);
 const PDF_PAGE_TONES = new Set<PdfPageTone>(['original', 'warm', 'gray', 'dark']);
+const MHTML_PAGE_TONE_KEY = 'pi-cloud.mhtmlPageTone';
 const pageToneOptions = computed<CustomSelectOption[]>(() => [
   { value: 'original', label: t('components.editorPanel.pdfPageToneOriginal') },
   { value: 'warm', label: t('components.editorPanel.pdfPageToneWarm') },
@@ -982,7 +998,10 @@ function restoreViewState(view?: PdfViewState): void {
   tool.value = view?.tool && ANNOTATION_TOOLS.has(view.tool) && (isHtml.value || view.tool !== 'select')
     ? view.tool : 'pan';
   coverColor.value = typeof view?.coverColor === 'string' ? view.coverColor : '#ffffff';
-  pageTone.value = view?.pageTone && PDF_PAGE_TONES.has(view.pageTone) ? view.pageTone : 'original';
+  const globalTone = isHtml.value ? localStorage.getItem(MHTML_PAGE_TONE_KEY) : null;
+  pageTone.value = 'original';
+  if (globalTone && PDF_PAGE_TONES.has(globalTone as PdfPageTone)) pageTone.value = globalTone as PdfPageTone;
+  if (view?.pageTone && PDF_PAGE_TONES.has(view.pageTone)) pageTone.value = view.pageTone;
   toolbarVertical.value = view?.toolbarVertical === true;
   const position = view?.toolbarPosition;
   toolbarPosition.value = position && Number.isFinite(position.left) && Number.isFinite(position.top)
@@ -999,6 +1018,7 @@ function scheduleViewSave(): void {
 function setPageTone(value: string): void {
   if (!PDF_PAGE_TONES.has(value as PdfPageTone)) return;
   pageTone.value = value as PdfPageTone;
+  if (isHtml.value) localStorage.setItem(MHTML_PAGE_TONE_KEY, value);
   void saveAnnotations();
 }
 
@@ -2670,9 +2690,9 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-.pdf-pages.tone-warm .pdf-page canvas { filter: sepia(0.18) saturate(0.9) brightness(0.94); }
-.pdf-pages.tone-gray .pdf-page canvas { filter: grayscale(1) brightness(0.78) contrast(0.95); }
-.pdf-pages.tone-dark .pdf-page canvas { filter: invert(0.88) hue-rotate(180deg) brightness(0.82) contrast(0.92); }
+.pdf-pages.tone-warm .pdf-page :is(canvas, iframe) { filter: sepia(0.18) saturate(0.9) brightness(0.94); }
+.pdf-pages.tone-gray .pdf-page :is(canvas, iframe) { filter: grayscale(1) brightness(0.78) contrast(0.95); }
+.pdf-pages.tone-dark .pdf-page :is(canvas, iframe) { filter: invert(0.88) hue-rotate(180deg) brightness(0.82) contrast(0.92); }
 .pdf-pages.tone-warm .pdf-page { background: #eadfbe; }
 .pdf-pages.tone-gray .pdf-page { background: #a9aaad; }
 .pdf-pages.tone-dark .pdf-page { background: #202329; }
