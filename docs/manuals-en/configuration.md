@@ -41,6 +41,12 @@ pi-cloud --port 8080
 pi-cloud --hostname 0.0.0.0 --no-open
 ```
 
+## Shared skills
+
+In **Settings → Shared skills**, add a skill by entering a lowercase hyphenated name and a `SKILL.md` containing matching `name` and nonempty `description` frontmatter. You can edit its `SKILL.md` later without changing other files. Alternatively, clone an HTTPS GitHub repository containing a root `SKILL.md`, or a skill subdirectory using `https://github.com/owner/repo/tree/branch/path/to/skill` (single-segment branch names). The destination name must match the skill's frontmatter name. Clone never overwrites an existing skill and reports failures without retaining a partial copy.
+
+Managed skills are stored in `~/.agents/skills/` on the server, shared across agent profiles. Pi discovers them along with project and profile skills in the existing skill picker and presets; existing presets are not modified. Review third-party instructions and scripts before selecting them. A running session may need to be restarted to load a new or updated skill.
+
 ## Sessions and Security
 
 | Variable | Default | Description |

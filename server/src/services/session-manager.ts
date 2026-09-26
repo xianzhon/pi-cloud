@@ -56,6 +56,15 @@ const execFileAsync = promisify(execFile);
 const PROXY_CHECK_URL = 'https://www.google.com/generate_204';
 const PROXY_CHECK_ARGS = ['-fsSL', '--connect-timeout', '5', '--max-time', '10', PROXY_CHECK_URL];
 const PROXY_COUNTRY_ARGS = ['-fsSL', '--connect-timeout', '5', '--max-time', '10', 'https://ipinfo.io/country'];
+
+function toAvailableSkillInfo(skill: Skill): AvailableSkillInfo {
+  const directory = dirname(skill.filePath);
+  const home = os.homedir();
+  let path = directory;
+  if (directory === home) path = '~';
+  else if (directory.startsWith(`${home}/`)) path = `~${directory.slice(home.length)}`;
+  return { name: skill.name, description: skill.description, path };
+}
 const PROXY_ENV_KEYS = ['ALL_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'all_proxy', 'http_proxy', 'https_proxy', 'no_proxy'];
 const SESSION_LIST_CACHE_TTL_MS = 2000;
 const USER_MESSAGE_COUNT_CONCURRENCY = 10;
@@ -1359,22 +1368,14 @@ export class PiSessionService {
   async listAvailableSkills(clientId: string, projectPath?: string): Promise<AvailableSkillInfo[]> {
     const { agentDir } = await this.getClientProfileProxyEnv(clientId);
     const skills = await this.loadSkills(projectPath ? expandHomePath(projectPath) : process.cwd(), agentDir);
-    return skills.map((skill) => ({
-      name: skill.name,
-      description: skill.description,
-      path: skill.filePath,
-    }));
+    return skills.map(toAvailableSkillInfo);
   }
 
   async listAgentProfileSkills(profileId: string, cwd: string): Promise<AvailableSkillInfo[]> {
     const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
     if (!profile) throw new Error(`Unknown agent profile: ${profileId}`);
     const skills = await this.loadSkills(expandHomePath(cwd), profile.path);
-    return skills.map((skill) => ({
-      name: skill.name,
-      description: skill.description,
-      path: skill.filePath,
-    }));
+    return skills.map(toAvailableSkillInfo);
   }
 
   async getSessionSkillConfiguration(clientId: string, sessionId: string): Promise<{

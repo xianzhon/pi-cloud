@@ -88,6 +88,10 @@
       </div>
     </div>
   </Teleport>
+  <ConfirmModal :visible="showCloseConfirm" variant="danger" @confirm="confirmClose" @cancel="showCloseConfirm = false">
+    <template #title>{{ t('components.confirmModal.confirmAction') }}</template>
+    <template #message>{{ t('components.cloneRepositoryModal.cancelCloneAndDeleteThePartialFolder') }}</template>
+  </ConfirmModal>
 </template>
 
 <script setup lang="ts">
@@ -95,6 +99,7 @@ import { i18n } from '../i18n';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { PhArrowLeft, PhFolder } from '@phosphor-icons/vue';
 import { usePreferences } from '../composables/usePreferences';
+import ConfirmModal from './ConfirmModal.vue';
 
 const t = i18n.global.t;
 
@@ -113,6 +118,7 @@ const existingPath = ref('');
 const error = ref('');
 const jobId = ref('');
 const canceling = ref(false);
+const showCloseConfirm = ref(false);
 const isStarting = ref(false);
 const destinationWasAutoSuggested = ref(false);
 const progress = ref<CloneProgressEvent>({ type: 'progress', status: t('components.cloneRepositoryModal.cloning') });
@@ -284,12 +290,21 @@ function useExistingFolder() {
 }
 
 function requestClose() {
-  if (isRunning.value && !window.confirm(t('components.cloneRepositoryModal.cancelCloneAndDeleteThePartialFolder'))) return;
+  if (isRunning.value) {
+    showCloseConfirm.value = true;
+    return;
+  }
+  emit('close');
+}
+
+function confirmClose() {
+  showCloseConfirm.value = false;
   if (isRunning.value) void cancelClone();
   emit('close');
 }
 
 function reset() {
+  showCloseConfirm.value = false;
   remoteUrl.value = '';
   destinationPath.value = '';
   shallow.value = false;

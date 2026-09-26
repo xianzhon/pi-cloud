@@ -21,7 +21,7 @@
         <h5 class="skill-picker-group-title">{{ group.title }}</h5>
         <label
           v-for="skill in group.skills"
-          :key="skill.name"
+          :key="skill.path || skill.name"
           class="skill-option"
         >
           <input
@@ -31,7 +31,10 @@
             @change="toggleSkill(skill.name, ($event.target as HTMLInputElement).checked)"
           />
           <span class="skill-option-copy">
-            <span class="skill-option-name">{{ skill.name }}</span>
+            <span class="skill-option-header">
+              <span class="skill-option-name">{{ skill.name }}</span>
+              <span v-if="skill.path" class="skill-option-path" :title="skill.path"><span dir="ltr">{{ skill.path }}</span></span>
+            </span>
             <span v-if="skill.description" class="skill-option-description">{{ skill.description }}</span>
           </span>
         </label>
@@ -66,7 +69,7 @@ const selectedCount = computed(() => props.modelValue.length);
 const filteredSkills = computed(() => {
   const normalized = query.value.trim().toLowerCase();
   if (!normalized) return props.skills;
-  return props.skills.filter((skill) => `${skill.name} ${skill.description}`.toLowerCase().includes(normalized));
+  return props.skills.filter((skill) => `${skill.name} ${skill.description} ${skill.path ?? ''}`.toLowerCase().includes(normalized));
 });
 const visibleSkillGroups = computed(() => [
   { title: t('components.skillPicker.selected'), skills: filteredSkills.value.filter((skill) => selectedNames.value.has(skill.name)) },
@@ -193,13 +196,33 @@ function invertFiltered(): void {
   gap: 0.125rem;
 }
 
+.skill-option-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
 .skill-option-name {
   min-width: 0;
+  flex-shrink: 1;
   color: var(--text-primary);
   line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.skill-option-path {
+  flex: 1;
+  min-width: 3rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
 }
 
 .skill-option-description,

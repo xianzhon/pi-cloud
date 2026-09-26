@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import * as os from 'os';
 import { dirname, isAbsolute } from 'path';
 import { projectMover } from '../services/project-mover.js';
+import { ManagedSkills, SkillInputError } from '../services/managed-skills.js';
 import { sessionFileRelocator } from '../services/session-file-relocator.js';
 import type { PiSessionService } from '../services/session-manager.js';
 import type { WorktreeMetadataStore } from '../services/worktree-metadata-store.js';
@@ -173,6 +174,7 @@ interface SessionRouteOptions {
   activityStore?: Pick<SessionActivityStore, 'listForSession'> & Partial<Pick<SessionActivityStore, 'listLatestPrForSessions' | 'updatePrStatus'>>;
   refreshPrStatus?: (activity: SessionActivityRecord) => Promise<PullRequestStatus>;
   repositoryCloner?: Pick<RepositoryCloner, 'preview' | 'start' | 'getJob' | 'subscribe' | 'cancel'>;
+  managedSkillProxyEnv?: () => Record<string, string>;
 }
 
 const PR_STATUS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -565,6 +567,45 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     }
 
     return { results, total: results.length };
+  });
+
+  const managedSkills = new ManagedSkills(undefined, options.managedSkillProxyEnv);
+  const skillError = (reply: FastifyReply, error: unknown) => reply.status(error instanceof SkillInputError ? 400 : 500)
+    .send({ error: error instanceof Error ? error.message : 'Skill operation failed' });
+
+  app.get('/managed-skills', async () => ({ skills: await managedSkills.list() }));
+
+  app.post('/managed-skills', async (req, reply) => {
+    try {
+      const { name, content } = (req.body || {}) as { name: string; content: string };
+      await managedSkills.save(name, content);
+      return { name };
+    } catch (error) { return skillError(reply, error); }
+  });
+
+  app.put('/managed-skills/:name', async (req, reply) => {
+    try {
+      const { name } = req.params as { name: string };
+      const { content } = (req.body || {}) as { content: string };
+      await managedSkills.save(name, content, true);
+      return { name };
+    } catch (error) { return skillError(reply, error); }
+  });
+
+  app.delete('/managed-skills/:name', async (req, reply) => {
+    try {
+      const { name } = req.params as { name: string };
+      await managedSkills.delete(name);
+      return { name };
+    } catch (error) { return skillError(reply, error); }
+  });
+
+  app.post('/managed-skills/clone', async (req, reply) => {
+    try {
+      const { url } = (req.body || {}) as { url: string };
+      if (typeof url !== 'string') throw new SkillInputError('Enter a GitHub repository URL');
+      return { name: await managedSkills.clone(url) };
+    } catch (error) { return skillError(reply, error); }
   });
 
   app.get('/skills', async (req, reply) => {

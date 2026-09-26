@@ -13,6 +13,11 @@ const SkillPresetsPanelStub = {
   template: '<section class="skill-presets-panel-stub">Skill presets</section>',
 };
 
+const ManagedSkillsPanelStub = {
+  emits: ['changed'],
+  template: '<section class="managed-skills-stub"><button @click="$emit(\'changed\')">Skill changed</button></section>',
+};
+
 const SecurityPanelStub = {
   props: {
     totpEnabled: Boolean,
@@ -59,7 +64,7 @@ function mountSettingsDialog(props = {}) {
       editorAutoRefresh: false,
       ...props,
     },
-    global: { stubs: { SecurityPanel: SecurityPanelStub, SkillPresetsPanel: SkillPresetsPanelStub, FolderPickerModal: FolderPickerModalStub, Teleport: true } },
+    global: { stubs: { SecurityPanel: SecurityPanelStub, SkillPresetsPanel: SkillPresetsPanelStub, ManagedSkillsPanel: ManagedSkillsPanelStub, FolderPickerModal: FolderPickerModalStub, Teleport: true } },
   });
 }
 
@@ -148,17 +153,26 @@ describe('SettingsDialog', () => {
     expect(wrapper.find('.display-settings').exists()).toBe(false);
   });
 
-  it('shows a Skills section in settings and renders the preset panel', async () => {
+  it('keeps skill presets and shared skill management in separate settings sections', async () => {
     const wrapper = mountSettingsDialog({
       availableSkills: [{ name: 'systematic-debugging', description: '...' }],
       skillPresets: [{ id: 'preset-1', name: 'debug', mode: 'enabled', skills: ['systematic-debugging'] }],
     });
 
-    const skillsButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Skills'))!;
-    await skillsButton.trigger('click');
+    const presetButton = wrapper.findAll('.settings-menu-item').find((button) => button.text() === 'Skill presets')!;
+    const sharedButton = wrapper.findAll('.settings-menu-item').find((button) => button.text() === 'Shared skills')!;
+    await presetButton.trigger('click');
 
     expect(wrapper.find('.skill-presets-panel-stub').exists()).toBe(true);
+    expect(wrapper.find('.managed-skills-stub').exists()).toBe(false);
     expect(wrapper.find('.settings-body-header').text()).toContain('Skill presets');
+
+    await sharedButton.trigger('click');
+    expect(wrapper.find('.skill-presets-panel-stub').exists()).toBe(false);
+    expect(wrapper.find('.managed-skills-stub').exists()).toBe(true);
+    expect(wrapper.find('.settings-body-header').text()).toContain('Shared skills');
+    await wrapper.find('.managed-skills-stub button').trigger('click');
+    expect(wrapper.emitted('managedSkillsChanged')).toHaveLength(1);
   });
 
   it('loads and saves project commit message prompt overrides', async () => {
@@ -327,15 +341,18 @@ describe('SettingsDialog', () => {
   });
 
   it('prompts before closing with unsaved Git changes', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const wrapper = mountSettingsDialog({ giteaServerUrl: 'https://git.example.com' });
 
     await wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!.trigger('click');
     await wrapper.find('.git-settings input').setValue('https://dirty.example.com');
     await wrapper.find('.settings-close').trigger('click');
 
-    expect(confirm).toHaveBeenCalled();
+    expect(wrapper.find('.confirm-modal').text()).toContain('unsaved Git');
+    await wrapper.find('.confirm-modal .btn-cancel').trigger('click');
     expect(wrapper.emitted('close')).toBeUndefined();
+    await wrapper.find('.settings-close').trigger('click');
+    await wrapper.find('.confirm-modal .btn-confirm').trigger('click');
+    expect(wrapper.emitted('close')).toHaveLength(1);
   });
 
   it('shows persisted WeChat pairing status in gateway settings', async () => {

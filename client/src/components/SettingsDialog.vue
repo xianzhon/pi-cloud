@@ -62,6 +62,15 @@
               </button>
               <button
                 class="settings-menu-item"
+                :class="{ active: activeSection === 'sharedSkills' }"
+                type="button"
+                @click="activeSection = 'sharedSkills'"
+              >
+                <PhFolder :size="18" weight="bold" class="settings-menu-icon" />
+                <span>{{ t('settings.sections.sharedSkills') }}</span>
+              </button>
+              <button
+                class="settings-menu-item"
                 :class="{ active: activeSection === 'git' }"
                 type="button"
                 @click="activeSection = 'git'"
@@ -816,12 +825,17 @@
                 @update-preset="emit('updateSkillPreset', $event)"
                 @delete-preset="emit('deleteSkillPreset', $event)"
               />
+              <ManagedSkillsPanel v-if="activeSection === 'sharedSkills'" @changed="emit('managedSkillsChanged')" />
             </div>
           </main>
         </section>
       </div>
     </Transition>
   </Teleport>
+  <ConfirmModal :visible="Boolean(closeConfirm)" variant="warning" @confirm="confirmClose" @cancel="closeConfirm = null">
+    <template #title>{{ t('components.confirmModal.confirmAction') }}</template>
+    <template #message>{{ closeConfirm === 'git' ? t('components.settingsDialog.youHaveUnsavedGitIntegrationChangesClose') : t('components.settingsDialog.youHaveUnsavedGatewayChangesCloseWithout') }}</template>
+  </ConfirmModal>
   <ConfirmModal
     :visible="showWeixinUnpairConfirm"
     variant="danger"
@@ -860,6 +874,7 @@ import DialogCloseButton from './DialogCloseButton.vue';
 import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
 import SkillPresetsPanel from './SkillPresetsPanel.vue';
+import ManagedSkillsPanel from './ManagedSkillsPanel.vue';
 import ModelWindowKickoffPanel from './ModelWindowKickoffPanel.vue';
 import UserPromptsPanel from './UserPromptsPanel.vue';
 import FolderPickerModal from './FolderPickerModal.vue';
@@ -980,7 +995,7 @@ const fullscreenShortcutOptions: CustomSelectOption[] = [
   { value: 'ctrlShiftF', label: 'Ctrl+Shift+F' },
 ];
 
-const activeSection = ref<'general' | 'security' | 'chat' | 'prompts' | 'keyboard' | 'skills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff'>('general');
+const activeSection = ref<'general' | 'security' | 'chat' | 'prompts' | 'keyboard' | 'skills' | 'sharedSkills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff'>('general');
 const { sources: reviewSources, loading: reviewSourcesLoading, error: reviewSourcesError, load: loadReviewSources, add: addReviewSource, remove: removeReviewSourceFn } = useReviewSources();
 const reviewSourceTypes = ref<ReviewSourceType[]>([]);
 const newReviewSourceType = ref('devin');
@@ -1096,6 +1111,7 @@ const wecomBusy = ref(false);
 const wecomError = ref('');
 const wecomNotice = ref('');
 const showWecomDisconnectConfirm = ref(false);
+const closeConfirm = ref<'git' | 'gateway' | null>(null);
 
 const giteaDirty = computed(() => draftGiteaServerUrl.value !== props.giteaServerUrl || Boolean(draftGiteaToken.value));
 const githubDirty = computed(() => draftGithubServerUrl.value !== props.githubServerUrl || Boolean(draftGithubToken.value));
@@ -1168,8 +1184,17 @@ function resetGatewayDrafts() {
 }
 
 function requestClose() {
-  if (gitDirty.value && !window.confirm(t('components.settingsDialog.youHaveUnsavedGitIntegrationChangesClose'))) return;
-  if (gatewayDirty.value && !window.confirm(t('components.settingsDialog.youHaveUnsavedGatewayChangesCloseWithout'))) return;
+  if (gitDirty.value) closeConfirm.value = 'git';
+  else if (gatewayDirty.value) closeConfirm.value = 'gateway';
+  else emit('close');
+}
+
+function confirmClose() {
+  if (closeConfirm.value === 'git' && gatewayDirty.value) {
+    closeConfirm.value = 'gateway';
+    return;
+  }
+  closeConfirm.value = null;
   emit('close');
 }
 
@@ -1645,6 +1670,7 @@ const sectionHeading = computed(() => {
   if (activeSection.value === 'prompts') return t('settings.sections.promptsHeading');
   if (activeSection.value === 'keyboard') return t('settings.sections.keyboardHeading');
   if (activeSection.value === 'skills') return t('settings.sections.skillsHeading');
+  if (activeSection.value === 'sharedSkills') return t('settings.sections.sharedSkills');
   if (activeSection.value === 'git') return t('settings.sections.gitHeading');
   if (activeSection.value === 'gateway') return t('settings.sections.gateway');
   if (activeSection.value === 'reviewSources') return t('settings.sections.reviewSources');
@@ -1674,6 +1700,7 @@ const emit = defineEmits<{
   'update:soundNotification': [value: SoundNotificationPreference];
   'update:autoSpeakAssistant': [value: boolean];
   'update:gitCloneParentPath': [value: string];
+  managedSkillsChanged: [];
   createSkillPreset: [payload: SkillPresetInput];
   updateSkillPreset: [payload: { id: string; changes: SkillPresetInput }];
   deleteSkillPreset: [id: string];
