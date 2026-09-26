@@ -33,9 +33,9 @@ export function validMindMapLabel(label: string): boolean {
     && !/^(?:%%|:::|::icon\()/i.test(label);
 }
 
-export function rectangularMindMapRoot(source: string): string {
+export function distinctiveMindMapRoot(source: string): string {
   if (!/^mindmap(?:\s|$)/.test(source)) return source;
-  return source.replace(/^((?:mindmap[^\r\n]*\r?\n)[ \t]*)root\(\((.*)\)\)([ \t]*)(?=\r?$)/m, '$1$2$3');
+  return source.replace(/^((?:mindmap[^\r\n]*\r?\n)[ \t]*)(?!root\(\()(\S.*?)([ \t]*)(?=\r?$)/m, '$1root(($2))$3');
 }
 
 export function parseMindMap(source: string): MindMapNode {

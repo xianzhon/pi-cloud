@@ -512,7 +512,7 @@ import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
 import TreeNode, { type TreeNodeData } from './FileTreeNode.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import MindMapVisualEditor from './MindMapVisualEditor.vue';
-import { parseMindMap, rectangularMindMapRoot } from '../utils/mindMap';
+import { distinctiveMindMapRoot, parseMindMap } from '../utils/mindMap';
 import { diagramTypes, diagramTemplates, type DiagramType } from '../utils/diagramTemplates';
 import InputPromptModal from './InputPromptModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
@@ -854,7 +854,12 @@ const activeIsDiagram = computed(() => !!activeTab.value && activeTabInfo.value?
 const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMhtmlFile(activeTab.value));
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
 const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value || activeIsDiagram.value);
-const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
+const activePreviewMode = computed(() => {
+  if (!activeTab.value) return 'preview';
+  const selectedMode = previewModes.value.get(activeTab.value);
+  if (selectedMode) return selectedMode;
+  return activeIsMindMap.value && !activeMindMapError.value ? 'visual' : 'preview';
+});
 const mindMapTabs = computed(() => {
   void previewVersion.value;
   return tabs.value.filter(tab => tab.kind === 'text' && isDiagramFile(tab.path) && !mindMapError(tab.path));
@@ -918,7 +923,7 @@ const activeMarkdownHtml = computed(() => {
   if (!filePath) return '';
   const model = models.get(filePath);
   if (!model) return '';
-  if (activeIsDiagram.value) return `<div class="mermaid-diagram">${escapeHtml(rectangularMindMapRoot(model.getValue()))}</div>`;
+  if (activeIsDiagram.value) return `<div class="mermaid-diagram">${escapeHtml(distinctiveMindMapRoot(model.getValue()))}</div>`;
   return sanitizeHtmlFragment(renderMarkdownPreview(model.getValue()));
 });
 interface MarkdownOutlineItem {

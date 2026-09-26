@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, mount } from '@vue/test-utils';
 import { i18n } from '../i18n';
 import MindMapVisualEditor from './MindMapVisualEditor.vue';
@@ -10,7 +10,9 @@ const mountEditor = () => mount(MindMapVisualEditor, { props: { source }, global
 describe('mind map visual editing', () => {
   it('edits source, preserves history on own update and invalidates it on raw changes', async () => {
     const wrapper = mountEditor();
-    expect(wrapper.findAll('.mindmap-toolbar > button').map(button => button.text())).toEqual(['Undo', 'Redo']);
+    const historyButtons = wrapper.findAll('.mindmap-history-button');
+    expect(historyButtons.map(button => button.attributes('aria-label'))).toEqual(['Undo', 'Redo']);
+    expect(historyButtons.every(button => button.find('svg').exists())).toBe(true);
     await wrapper.findAll('.mindmap-node')[1].trigger('dblclick');
     expect(wrapper.findAll('.mindmap-node')[1].find('input').exists()).toBe(true);
     await wrapper.find('#mindmap-label').setValue('Renamed');
@@ -252,7 +254,8 @@ describe('MindMapVisualEditor', () => {
     expect(wrapper.find('.mindmap-icon-panel').exists()).toBe(false);
   });
 
-  it('changes layout and palette without changing source', async () => {
+  it('changes and caches the global layout, palette, and structure without changing source', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })));
     const wrapper = mountEditor();
     expect(wrapper.findAll('.mindmap-item')[1].attributes('style')).toContain('#e45b65');
     expect(wrapper.findAll('.mindmap-item')[2].attributes('style')).toContain('#e58b3f');
@@ -275,6 +278,9 @@ describe('MindMapVisualEditor', () => {
     await wrapper.get('button[aria-label="Structure"]').trigger('click');
     await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Branches')!.trigger('click');
     expect(wrapper.classes()).toContain('branches');
+    expect(localStorage.getItem('pi-cloud.mindMapLayout')).toBe('right');
+    expect(localStorage.getItem('pi-cloud.mindMapTheme')).toBe('rainbow');
+    expect(localStorage.getItem('pi-cloud.mindMapStructure')).toBe('branches');
     expect(wrapper.emitted('change')).toBeUndefined();
     wrapper.unmount();
   });

@@ -595,8 +595,8 @@ describe('EditorPanel', () => {
     expect(wrapper.find('pre code.language-ts').text()).toBe('const untouched = true;');
   });
 
-  it('previews a circular mind-map root as a rectangle without changing the model source', async () => {
-    const content = 'mindmap\n  root((Long center label))\n    Child\n';
+  it('opens supported mind maps visually by default and gives the Mermaid preview a distinctive root', async () => {
+    const content = 'mindmap\n  Long center label\n    Child\n';
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
       if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content, mtime: 1 }) };
@@ -612,9 +612,13 @@ describe('EditorPanel', () => {
 
     const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
     await wrapper.vm.openFile('/project/map.mmd');
-    await vi.waitFor(() => expect(mermaidMock.render).toHaveBeenCalled());
+    await flushPromises();
 
-    expect(mermaidMock.render.mock.calls.at(-1)?.[1]).toBe('mindmap\n  Long center label\n    Child\n');
+    expect(wrapper.find('.mindmap-visual-pane').isVisible()).toBe(true);
+    expect(wrapper.find('.mindmap-node.root').text()).toBe('Long center label');
+    await wrapper.get('[title="Preview diagram"]').trigger('click');
+    await vi.waitFor(() => expect(mermaidMock.render).toHaveBeenCalled());
+    expect(mermaidMock.render.mock.calls.at(-1)?.[1]).toBe('mindmap\n  root((Long center label))\n    Child\n');
   });
 
   it('creates a mind map in the selected directory using the file API', async () => {
@@ -644,7 +648,8 @@ describe('EditorPanel', () => {
       body: JSON.stringify({ path: '/project/mindmap.mmd', content: 'mindmap\n  Root\n    Idea\n' }),
     }));
     expect(wrapper.text()).toContain('mindmap.mmd');
-    expect(wrapper.find('.mermaid-diagram svg').text()).toBe('Root');
+    expect(wrapper.find('.mindmap-visual-pane').isVisible()).toBe(true);
+    expect(wrapper.find('.mindmap-node.root').text()).toBe('Root');
     await wrapper.get('[title="Edit Mermaid source"]').trigger('click');
     expect(wrapper.find('.mermaid-diagram').exists()).toBe(false);
   });

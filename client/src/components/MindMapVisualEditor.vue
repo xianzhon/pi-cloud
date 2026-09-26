@@ -1,8 +1,8 @@
 <template>
   <div class="mindmap-editor" :class="[structure, { dragging: draggedId !== null }]" :style="palette" @keydown="onKeydown">
     <div class="mindmap-toolbar">
-      <button type="button" :disabled="!past.length" @click="undo">{{ t('undo') }}</button>
-      <button type="button" :disabled="!future.length" @click="redo">{{ t('redo') }}</button>
+      <button type="button" class="mindmap-history-button" :disabled="!past.length" :aria-label="t('undo')" :title="t('undo')" @click="undo"><PhArrowCounterClockwise aria-hidden="true" /></button>
+      <button type="button" class="mindmap-history-button" :disabled="!future.length" :aria-label="t('redo')" :title="t('redo')" @click="redo"><PhArrowClockwise aria-hidden="true" /></button>
       <div class="mindmap-levels mindmap-level-depth"><span>{{ t('levels') }}</span>
         <CustomSelect model-value="" :options="levelOptions" :aria-label="t('levels')" :placeholder="t('chooseLevel')" @update:model-value="setLevel(Number($event))" />
       </div>
@@ -80,12 +80,13 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from 'vue';
-import { PhPencilSimple, PhRowsPlusBottom, PhTrash, PhTreeStructure } from '@phosphor-icons/vue';
+import { PhArrowClockwise, PhArrowCounterClockwise, PhPencilSimple, PhRowsPlusBottom, PhTrash, PhTreeStructure } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import ConfirmModal from './ConfirmModal.vue';
 import CustomSelect from './CustomSelect.vue';
 import { editMindMap, mindMapFlagColors, mindMapIcons, parseMindMap, serializeMindMap, validMindMapLabel, type MindMapNode } from '../utils/mindMap';
 import { layoutMindMap, type NodeSize } from '../utils/mindMapLayout';
+import { usePreferences, type MindMapLayout, type MindMapStructure, type MindMapTheme } from '../composables/usePreferences';
 
 const props = defineProps<{ source: string }>();
 const emit = defineEmits<{ change: [source: string]; save: [] }>();
@@ -102,9 +103,14 @@ const draft = ref('');
 const labelError = ref(false);
 const confirmDelete = ref(false);
 const menu = ref<{ id: number; x: number; y: number } | null>(null);
-const direction = ref<'both' | 'right'>('both');
-const theme = ref<keyof typeof palettes>('rainbow');
-const structure = ref<'cards' | 'pills' | 'branches'>('cards');
+const {
+  mindMapLayout: direction,
+  mindMapTheme: theme,
+  mindMapStructure: structure,
+  setMindMapLayout,
+  setMindMapTheme,
+  setMindMapStructure,
+} = usePreferences();
 const levelOptions = computed(() => [
   ...[1, 2, 3].map(level => ({ value: String(level), label: t('level', { level }) })),
   { value: '0', label: t('expandAll') },
@@ -152,9 +158,9 @@ function toggleIconPicker() {
   });
 }
 function chooseIcon(icon: string) { setIcon(icon); closeIconPicker(); }
-function setDirection(value: string) { direction.value = value as typeof direction.value; }
-function setTheme(value: string) { theme.value = value as typeof theme.value; }
-function setStructure(value: string) { structure.value = value as typeof structure.value; }
+function setDirection(value: string) { void setMindMapLayout(value as MindMapLayout); }
+function setTheme(value: string) { void setMindMapTheme(value as MindMapTheme); }
+function setStructure(value: string) { void setMindMapStructure(value as MindMapStructure); }
 function setIcon(value: string) { if (selected.value) operate({ type: 'icon', target: selected.value.id, icon: value || undefined }); }
 const palettes = {
   ocean: { accent: '#58a6a0', strong: '#358e88' },
@@ -487,6 +493,8 @@ function endPan() { pointer = null; }
 .mindmap-toolbar, .mindmap-mobile-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border-bottom: 1px solid var(--border-color); }
 .mindmap-toolbar button, .mindmap-mobile-controls button, .mindmap-context-menu button { border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 9px; background: var(--bg-secondary); color: inherit; cursor: pointer; }
 .mindmap-toolbar button:disabled { opacity: .4; cursor: default; }
+.mindmap-history-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0 !important; }
+.mindmap-history-button svg { width: 18px; height: 18px; }
 .mindmap-toolbar-spacer { flex: 1; }
 .mindmap-view-controls { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--border-color); }
 .mindmap-inline-edit input, .mindmap-mobile-controls select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
@@ -513,7 +521,7 @@ function endPan() { pointer = null; }
 .mindmap-colored-flag { font-family: sans-serif; font-size: 1.2em; }
 .mindmap-editor.pills .mindmap-node { border-radius: 999px; background: color-mix(in srgb, var(--mindmap-accent) 14%, var(--bg-secondary)); }
 .mindmap-editor.branches .mindmap-node { border: 0; border-bottom: 3px solid var(--mindmap-accent); border-radius: 0; background: transparent; box-shadow: none; }
-.mindmap-editor.branches .mindmap-node.root { border: 2px solid var(--mindmap-strong); border-radius: 12px; background: var(--bg-secondary); }
+.mindmap-editor.branches .mindmap-node.root { border: 3px solid var(--mindmap-strong); border-radius: 12px; background: linear-gradient(135deg, color-mix(in srgb, var(--mindmap-accent) 32%, var(--bg-secondary)), var(--bg-secondary)); }
 .mindmap-shortcuts { padding: 4px 8px; color: var(--text-tertiary); font-size: 11px; }
 .mindmap-viewport { flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; background: var(--bg-primary); background-image: radial-gradient(circle, var(--border-color) .7px, transparent 1px); background-size: 28px 28px; }
 .mindmap-canvas { position: relative; transform-origin: 0 0; }
@@ -524,7 +532,7 @@ function endPan() { pointer = null; }
 .mindmap-fold.left { right: auto; left: -12px; }
 .mindmap-node { position: relative; box-sizing: border-box; width: max-content; max-width: 320px; min-height: 44px; display: flex; align-items: center; justify-content: center; text-align: center; overflow-wrap: anywhere; border: 1px solid var(--border-color); border-radius: 12px; padding: 8px 16px; background: var(--bg-secondary); box-shadow: 0 3px 12px #0002; cursor: grab; user-select: none; line-height: 1.4; font-size: 18px; }
 .mindmap-node.branch { border: 2px solid var(--mindmap-accent); font-size: 19px; font-weight: 600; }
-.mindmap-node.root { border: 2px solid var(--mindmap-strong); border-radius: 22px; background: var(--bg-secondary); font-size: 21px; font-weight: 700; cursor: default; }
+.mindmap-node.root { min-height: 58px; border: 3px solid var(--mindmap-strong); border-radius: 22px; padding: 12px 24px; background: linear-gradient(135deg, color-mix(in srgb, var(--mindmap-accent) 32%, var(--bg-secondary)), var(--bg-secondary)); box-shadow: 0 6px 20px color-mix(in srgb, var(--mindmap-strong) 28%, transparent); font-size: 22px; font-weight: 750; cursor: default; }
 .mindmap-node.selected { outline: 3px solid var(--mindmap-accent); outline-offset: 3px; }
 .mindmap-node.drop-child { background: color-mix(in srgb, var(--mindmap-accent) 30%, var(--bg-secondary)); border-color: var(--mindmap-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mindmap-accent) 55%, transparent); }
 .mindmap-node.drop-before::before, .mindmap-node.drop-after::after { content: ''; position: absolute; left: -12px; right: -12px; height: 5px; border-radius: 3px; background: var(--mindmap-accent); box-shadow: 0 0 0 2px var(--bg-secondary); }

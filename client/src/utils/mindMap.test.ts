@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseMindMap, rectangularMindMapRoot, serializeMindMap, editMindMap, type MindMapNode } from './mindMap';
+import { distinctiveMindMapRoot, parseMindMap, serializeMindMap, editMindMap, type MindMapNode } from './mindMap';
 
 const source = 'mindmap\n  Root\n    Alpha\n      Grand child\n    Beta\n';
 
@@ -27,8 +27,9 @@ describe('mind map source', () => {
     expect(serializeMindMap(root)).toBe(text);
     expect(serializeMindMap(editMindMap(root, { type: 'rename', target: root.id, label: '新智能体' })))
       .toBe('mindmap\n  root((新智能体))\n    核心组成\n      大语言模型\n');
-    expect(rectangularMindMapRoot(text)).toBe('mindmap\n  AI 智能体\n    核心组成\n      大语言模型\n');
-    expect(rectangularMindMapRoot('mindmap\n  Root\n    root((Child))\n')).toBe('mindmap\n  Root\n    root((Child))\n');
+    expect(distinctiveMindMapRoot(text)).toBe(text);
+    expect(distinctiveMindMapRoot('mindmap\n  Root\n    Child\n')).toBe('mindmap\n  root((Root))\n    Child\n');
+    expect(distinctiveMindMapRoot('mindmap\n  Root\n    root((Child))\n')).toBe('mindmap\n  root((Root))\n    root((Child))\n');
   });
 
   it('round trips colored flags and preserves existing country flags', () => {
