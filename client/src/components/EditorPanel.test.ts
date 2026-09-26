@@ -591,6 +591,38 @@ describe('EditorPanel', () => {
     expect(wrapper.find('pre code.language-ts').text()).toBe('const untouched = true;');
   });
 
+  it('creates a mind map in the selected directory using the file API', async () => {
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (url === '/api/files/create') return { ok: true, json: async () => ({ path: '/project/mindmap.mmd' }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: 'mindmap\n  Root\n    Idea\n' }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url} ${options?.method}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => 'mindmap\n  Root\n    Idea\n'),
+      dispose: vi.fn(),
+    } as any);
+    mermaidMock.render.mockResolvedValue({ svg: '<svg><text>Root</text></svg>' });
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.get('[aria-label="New mind map"]').trigger('click');
+    await flushPromises();
+    expect((document.querySelector('.prompt-input') as HTMLInputElement).value).toBe('mindmap.mmd');
+    (document.querySelector('.prompt-form') as HTMLFormElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/files/create', expect.objectContaining({
+      body: JSON.stringify({ path: '/project/mindmap.mmd', content: 'mindmap\n  Root\n    Idea\n' }),
+    }));
+    expect(wrapper.text()).toContain('mindmap.mmd');
+    expect(wrapper.find('.mermaid-diagram svg').text()).toBe('Root');
+    await wrapper.get('[title="Edit Mermaid source"]').trigger('click');
+    expect(wrapper.find('.mermaid-diagram').exists()).toBe(false);
+  });
+
   it('previews HTML in a sandboxed iframe with local asset support', async () => {
     const html = '<!doctype html><html><head><link href="styles/site.css"></head><body><h1>Hello</h1><script>alert(1)</script></body></html>';
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {

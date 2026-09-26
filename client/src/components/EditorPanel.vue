@@ -152,6 +152,14 @@
           </button>
           <button
             class="file-tree-toolbar-btn tooltip"
+            @click="createMindMap"
+            :data-tooltip="t('components.editorPanel.newMindMap')"
+            :aria-label="t('components.editorPanel.newMindMap')"
+          >
+            <PhGraph :size="15" />
+          </button>
+          <button
+            class="file-tree-toolbar-btn tooltip"
             @click="createNewFolder()"
             :data-tooltip="t('components.editorPanel.newFolder')"
             :aria-label="t('components.editorPanel.createNewFolder')"
@@ -231,7 +239,7 @@
       <div v-if="showTree" class="file-tree-backdrop" @click="toggleFileTree" />
       
       <div
-        v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+        v-if="(activeIsMarkdown || activeIsDiagram) && activePreviewMode === 'preview'"
         ref="markdownPreviewLayoutEl"
         class="markdown-preview-layout"
       >
@@ -243,7 +251,7 @@
           @click="handleMarkdownPreviewClick"
         ></div>
         <nav
-          v-if="showMarkdownOutline && activeMarkdownOutline.length"
+          v-if="activeIsMarkdown && showMarkdownOutline && activeMarkdownOutline.length"
           class="markdown-outline"
           :style="markdownOutlineStyle"
           :aria-label="t('components.editorPanel.markdownOutline')"
@@ -434,7 +442,7 @@ import { i18n } from '../i18n';
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/basic-languages/monaco.contribution';
-import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple } from '@phosphor-icons/vue';
+import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple, PhGraph } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
@@ -778,9 +786,10 @@ function setActivePreviewScale(scale: number): void {
   }
 }
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
+const activeIsDiagram = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isDiagramFile(activeTab.value));
 const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMhtmlFile(activeTab.value));
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
-const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value);
+const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value || activeIsDiagram.value);
 const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
 type MhtmlFont = 'original' | 'sans' | 'serif' | 'terminal' | 'palatino' | 'garamond' | 'baskerville' | 'literata' | 'songti' | 'noto-serif-cjk' | 'pingfang';
 const storedMhtmlFont = localStorage.getItem('pi-cloud-mhtml-font');
@@ -803,21 +812,22 @@ function setMhtmlFont(value: string): void {
   mhtmlFont.value = value as MhtmlFont;
   localStorage.setItem('pi-cloud-mhtml-font', value);
 }
-const activeViewModeLabel = computed(() => t(activeIsHtml.value
-  ? 'components.editorPanel.htmlViewMode'
-  : 'components.editorPanel.markdownViewMode'));
-const activePreviewTitle = computed(() => t(activeIsHtml.value
-  ? 'components.editorPanel.previewHtml'
-  : 'components.editorPanel.previewMarkdown'));
-const activeEditTitle = computed(() => t(activeIsHtml.value
-  ? 'components.editorPanel.editHtmlSource'
-  : 'components.editorPanel.editMarkdownSource'));
+const activeViewModeLabel = computed(() => t(activeIsDiagram.value
+  ? 'components.editorPanel.diagramViewMode'
+  : activeIsHtml.value ? 'components.editorPanel.htmlViewMode' : 'components.editorPanel.markdownViewMode'));
+const activePreviewTitle = computed(() => t(activeIsDiagram.value
+  ? 'components.editorPanel.previewDiagram'
+  : activeIsHtml.value ? 'components.editorPanel.previewHtml' : 'components.editorPanel.previewMarkdown'));
+const activeEditTitle = computed(() => t(activeIsDiagram.value
+  ? 'components.editorPanel.editDiagramSource'
+  : activeIsHtml.value ? 'components.editorPanel.editHtmlSource' : 'components.editorPanel.editMarkdownSource'));
 const activeMarkdownHtml = computed(() => {
   void previewVersion.value;
   const filePath = activeTab.value;
   if (!filePath) return '';
   const model = models.get(filePath);
   if (!model) return '';
+  if (activeIsDiagram.value) return `<div class="mermaid-diagram">${escapeHtml(model.getValue())}</div>`;
   return sanitizeHtmlFragment(renderMarkdownPreview(model.getValue()));
 });
 interface MarkdownOutlineItem {
@@ -1028,6 +1038,10 @@ function monacoLanguageForFile(filePath: string): string | undefined {
   )?.id;
 }
 
+function isDiagramFile(filePath: string): boolean {
+  return /\.mmd$/i.test(filePath);
+}
+
 function isMarkdownFile(filePath: string): boolean {
   return /\.(md|markdown|mdown|mkdn|mdx)$/i.test(filePath);
 }
@@ -1041,7 +1055,7 @@ function isMhtmlFile(filePath: string): boolean {
 }
 
 function isPreviewableFile(filePath: string): boolean {
-  return isMarkdownFile(filePath) || isHtmlFile(filePath) || isMhtmlFile(filePath);
+  return isMarkdownFile(filePath) || isHtmlFile(filePath) || isMhtmlFile(filePath) || isDiagramFile(filePath);
 }
 
 function encodeBase64Url(value: string): string {
@@ -2306,11 +2320,16 @@ async function toggleHiddenFiles() {
   await refreshFileTree();
 }
 
-async function createNewFile(targetDirectory = selectedDirectoryPath.value || rootDirectory()) {
+function createMindMap() {
+  void createNewFile(selectedDirectoryPath.value || rootDirectory(), true);
+}
+
+async function createNewFile(targetDirectory = selectedDirectoryPath.value || rootDirectory(), mindMap = false) {
   const input = await requestInput({
-    title: t('components.editorPanel.createNewFile'),
+    title: t(mindMap ? 'components.editorPanel.newMindMap' : 'components.editorPanel.createNewFile'),
     label: t('components.editorPanel.filePath'),
     description: t('components.editorPanel.enterAFilePathRelativeToThe'),
+    value: mindMap ? 'mindmap.mmd' : '',
     confirmText: t('components.editorPanel.createFile'),
   });
   if (input === null) return;
@@ -2319,6 +2338,13 @@ async function createNewFile(targetDirectory = selectedDirectoryPath.value || ro
   if (!trimmed || trimmed.endsWith('/')) {
     statusType.value = 'error';
     statusMessage.value = t('components.editorPanel.invalidPath');
+    scheduleStatusClear();
+    return;
+  }
+
+  if (mindMap && !isDiagramFile(trimmed)) {
+    statusType.value = 'error';
+    statusMessage.value = t('components.editorPanel.mindMapExtension');
     scheduleStatusClear();
     return;
   }
@@ -2332,7 +2358,7 @@ async function createNewFile(targetDirectory = selectedDirectoryPath.value || ro
     const response = await fetch('/api/files/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: filePath, content: '' }),
+      body: JSON.stringify({ path: filePath, content: mindMap ? 'mindmap\n  Root\n    Idea\n' : '' }),
     });
 
     if (response.status === 409) {
@@ -3047,7 +3073,7 @@ watch(resolvedTheme, (theme) => {
 });
 
 watch([
-  () => activeIsMarkdown.value ? activeMarkdownHtml.value : '',
+  () => (activeIsMarkdown.value || activeIsDiagram.value) ? activeMarkdownHtml.value : '',
   activePreviewMode,
   resolvedTheme,
 ], () => {
