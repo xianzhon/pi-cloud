@@ -832,6 +832,10 @@
       </div>
     </Transition>
   </Teleport>
+  <ConfirmModal :visible="Boolean(closeConfirm)" variant="warning" @confirm="confirmClose" @cancel="closeConfirm = null">
+    <template #title>{{ t('components.confirmModal.confirmAction') }}</template>
+    <template #message>{{ closeConfirm === 'git' ? t('components.settingsDialog.youHaveUnsavedGitIntegrationChangesClose') : t('components.settingsDialog.youHaveUnsavedGatewayChangesCloseWithout') }}</template>
+  </ConfirmModal>
   <ConfirmModal
     :visible="showWeixinUnpairConfirm"
     variant="danger"
@@ -1107,6 +1111,7 @@ const wecomBusy = ref(false);
 const wecomError = ref('');
 const wecomNotice = ref('');
 const showWecomDisconnectConfirm = ref(false);
+const closeConfirm = ref<'git' | 'gateway' | null>(null);
 
 const giteaDirty = computed(() => draftGiteaServerUrl.value !== props.giteaServerUrl || Boolean(draftGiteaToken.value));
 const githubDirty = computed(() => draftGithubServerUrl.value !== props.githubServerUrl || Boolean(draftGithubToken.value));
@@ -1179,8 +1184,17 @@ function resetGatewayDrafts() {
 }
 
 function requestClose() {
-  if (gitDirty.value && !window.confirm(t('components.settingsDialog.youHaveUnsavedGitIntegrationChangesClose'))) return;
-  if (gatewayDirty.value && !window.confirm(t('components.settingsDialog.youHaveUnsavedGatewayChangesCloseWithout'))) return;
+  if (gitDirty.value) closeConfirm.value = 'git';
+  else if (gatewayDirty.value) closeConfirm.value = 'gateway';
+  else emit('close');
+}
+
+function confirmClose() {
+  if (closeConfirm.value === 'git' && gatewayDirty.value) {
+    closeConfirm.value = 'gateway';
+    return;
+  }
+  closeConfirm.value = null;
   emit('close');
 }
 

@@ -223,6 +223,10 @@
       </div>
     </div>
   </Teleport>
+  <ConfirmModal :visible="Boolean(pendingDiscardPath)" variant="danger" :confirm-text="t('components.gitChanges.discardFile')" @confirm="confirmDiscardFile" @cancel="pendingDiscardPath = ''">
+    <template #title>{{ t('components.gitChanges.discardFile') }}</template>
+    <template #message>{{ t('components.gitChanges.discardFileConfirm', { path: pendingDiscardPath }) }}</template>
+  </ConfirmModal>
 </template>
 
 <script setup lang="ts">
@@ -231,6 +235,7 @@ import { PhCheck, PhFile, PhFileText, PhFolder, PhGitBranch, PhGitCommit, PhLigh
 import { i18n } from '../i18n';
 import { createGitOperations } from '../services/gitOperations';
 import { diffLineClass, shouldHideDiffHeaderLine } from '../utils/gitDiff';
+import ConfirmModal from './ConfirmModal.vue';
 
 type DiffScope = 'staged' | 'unstaged';
 type FileStatusKind = 'modified' | 'untracked' | 'missing' | 'staged';
@@ -275,6 +280,7 @@ const diffContent = ref('');
 const loading = ref(false);
 const diffLoading = ref(false);
 const updating = ref(false);
+const pendingDiscardPath = ref('');
 const statusError = ref('');
 const diffError = ref('');
 const backdrop = ref<HTMLElement>();
@@ -504,8 +510,14 @@ function mutateFile(path: string, scope: DiffScope): void {
   void applyIndexUpdate({ cwd: props.cwd, path, scope, mode: 'file' });
 }
 
-async function discardFile(path: string): Promise<void> {
-  if (updating.value || !window.confirm(t('components.gitChanges.discardFileConfirm', { path }))) return;
+function discardFile(path: string): void {
+  if (!updating.value) pendingDiscardPath.value = path;
+}
+
+async function confirmDiscardFile(): Promise<void> {
+  const path = pendingDiscardPath.value;
+  pendingDiscardPath.value = '';
+  if (!path || updating.value) return;
   updating.value = true;
   diffError.value = '';
   try {

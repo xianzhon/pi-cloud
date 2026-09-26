@@ -166,6 +166,28 @@ describe('CloneRepositoryModal', () => {
     expect(wrapper.emitted('cloned')).toEqual([[{ projectPath: '/Users/test/git/github/acme/tool' }]]);
   });
 
+  it('confirms before closing an active clone', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/preview')) return ok({ preview: { suggestedPath: '/tmp/tool' } });
+      return ok({ jobId: 'clone_1' });
+    }));
+    vi.stubGlobal('EventSource', FakeEventSource as any);
+    const wrapper = mountModal();
+    await wrapper.find('[data-testid="clone-url-input"]').setValue('https://github.com/acme/tool.git');
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="clone-start-button"]').attributes('disabled')).toBeUndefined());
+    await wrapper.find('[data-testid="clone-start-button"]').trigger('click');
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+
+    await wrapper.find('.icon-button').trigger('click');
+    expect(wrapper.find('.confirm-modal').text()).toContain('partial folder');
+    await wrapper.find('.confirm-modal .btn-cancel').trigger('click');
+    expect(wrapper.emitted('close')).toBeUndefined();
+    await wrapper.find('.icon-button').trigger('click');
+    await wrapper.find('.confirm-modal .btn-confirm').trigger('click');
+    expect(wrapper.emitted('close')).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledWith('/api/sessions/clone-repository/clone_1/cancel', { method: 'POST' });
+  });
+
   it('disables Clone while the start request is in flight', async () => {
     let resolveStart: (response: Response) => void = () => {};
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {

@@ -38,6 +38,10 @@
       <p class="skill-description">{{ t('components.managedSkills.githubTip') }}</p>
     </form>
   </section>
+  <ConfirmModal :visible="Boolean(skillToDelete)" variant="danger" :confirm-text="t('components.managedSkills.delete')" @confirm="confirmDelete" @cancel="skillToDelete = ''">
+    <template #title>{{ t('components.managedSkills.delete') }}</template>
+    <template #message>{{ t('components.managedSkills.deleteConfirm', { name: skillToDelete }) }}</template>
+  </ConfirmModal>
 </template>
 
 <script setup lang="ts">
@@ -45,6 +49,7 @@ import { onMounted, ref, watch } from 'vue';
 import { PhPencilSimple, PhTrash } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import { apiRequest, getApiErrorMessage } from '../services/apiClient';
+import ConfirmModal from './ConfirmModal.vue';
 
 const t = i18n.global.t;
 const emit = defineEmits<{ changed: [] }>();
@@ -58,6 +63,7 @@ const error = ref('');
 const cloneError = ref('');
 const busy = ref(false);
 const cloning = ref(false);
+const skillToDelete = ref('');
 
 function sample(skillName: string) {
   return `---\nname: ${skillName}\ndescription: Helps with a specific task using a repeatable workflow.\n---\n\n# ${skillName}\n\n## Instructions\n\n1. Describe when to use this skill.\n2. List the steps the agent should follow.\n`;
@@ -107,9 +113,14 @@ async function save() {
   const path = `/api/sessions/managed-skills${editing.value ? `/${encodeURIComponent(skillName)}` : ''}`;
   await run(() => apiRequest(path, { method: editing.value ? 'PUT' : 'POST', body: editing.value ? { content: content.value } : { name: skillName, content: content.value } }));
 }
-async function deleteSkill(skill: { name: string; content: string }) {
-  if (!window.confirm(t('components.managedSkills.deleteConfirm', { name: skill.name }))) return;
-  await run(() => apiRequest(`/api/sessions/managed-skills/${encodeURIComponent(skill.name)}`, { method: 'DELETE' }));
+function deleteSkill(skill: { name: string; content: string }) {
+  skillToDelete.value = skill.name;
+}
+async function confirmDelete() {
+  const skillName = skillToDelete.value;
+  skillToDelete.value = '';
+  if (!skillName || busy.value) return;
+  await run(() => apiRequest(`/api/sessions/managed-skills/${encodeURIComponent(skillName)}`, { method: 'DELETE' }));
 }
 async function cloneSkill() {
   cloning.value = true;

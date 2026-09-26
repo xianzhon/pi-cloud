@@ -341,15 +341,18 @@ describe('SettingsDialog', () => {
   });
 
   it('prompts before closing with unsaved Git changes', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const wrapper = mountSettingsDialog({ giteaServerUrl: 'https://git.example.com' });
 
     await wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!.trigger('click');
     await wrapper.find('.git-settings input').setValue('https://dirty.example.com');
     await wrapper.find('.settings-close').trigger('click');
 
-    expect(confirm).toHaveBeenCalled();
+    expect(wrapper.find('.confirm-modal').text()).toContain('unsaved Git');
+    await wrapper.find('.confirm-modal .btn-cancel').trigger('click');
     expect(wrapper.emitted('close')).toBeUndefined();
+    await wrapper.find('.settings-close').trigger('click');
+    await wrapper.find('.confirm-modal .btn-confirm').trigger('click');
+    expect(wrapper.emitted('close')).toHaveLength(1);
   });
 
   it('shows persisted WeChat pairing status in gateway settings', async () => {

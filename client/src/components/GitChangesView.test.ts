@@ -71,7 +71,6 @@ describe('GitChangesView', () => {
   });
 
   it('confirms and discards the selected file\'s unstaged changes', async () => {
-    vi.stubGlobal('confirm', vi.fn(() => true));
     const wrapper = mount(GitChangesView, { props: { visible: true, cwd: '/workspace' } });
     await flushPromises();
 
@@ -79,8 +78,16 @@ describe('GitChangesView', () => {
       .find(button => button.textContent?.includes('Discard'))!;
     discard.click();
     await flushPromises();
+    expect(document.querySelector('.confirm-modal')?.textContent).toContain('src/app.ts');
+    expect(fetch).not.toHaveBeenCalledWith('/api/git/discard', expect.anything());
+    (document.querySelector('.confirm-modal .btn-cancel') as HTMLButtonElement).click();
+    await flushPromises();
+    expect(fetch).not.toHaveBeenCalledWith('/api/git/discard', expect.anything());
+    discard.click();
+    await flushPromises();
+    (document.querySelector('.confirm-modal .btn-confirm') as HTMLButtonElement).click();
+    await flushPromises();
 
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('src/app.ts'));
     expect(fetch).toHaveBeenCalledWith('/api/git/discard', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ cwd: '/workspace', path: 'src/app.ts' }),

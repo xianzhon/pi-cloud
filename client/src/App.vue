@@ -617,6 +617,7 @@ import ConfirmModal from './components/ConfirmModal.vue';
 import SearchModal from './components/SearchModal.vue';
 import MemoryToast from './components/MemoryToast.vue';
 import ToastHost from './components/ToastHost.vue';
+import { useToasts } from './composables/useToasts';
 import { useAvailableSkills } from './composables/useAvailableSkills';
 import { useSkillPresets } from './composables/useSkillPresets';
 import { useWorktreeBranches } from './composables/useWorktreeBranches';
@@ -654,6 +655,7 @@ function loadTerminalRuntime(): Promise<TerminalRuntime> {
   return terminalRuntimePromise;
 }
 
+const { showToast } = useToasts();
 const router = useRouter();
 const route = useRoute();
 const { isConnected, clientId, connect, retry, close } = useWebSocket({ autoConnect: false });
@@ -1358,7 +1360,7 @@ async function createNewSession(options?: { cwd?: string; firstMessage?: string;
       message = error.message;
     }
     console.error('Failed to create session:', error);
-    window.alert(message);
+    showToast(message, 'error');
   } finally {
     window.clearTimeout(timeout);
   }
@@ -1442,10 +1444,10 @@ async function confirmDelete() {
       handleSessionDeleted(sessionId);
       window.dispatchEvent(new Event('refresh-sessions'));
     } else {
-      alert('Failed to delete session: ' + (data.error || 'Unknown error'));
+      showToast('Failed to delete session: ' + (data.error || 'Unknown error'), 'error');
     }
   } catch (error) {
-    alert('Failed to delete session');
+    showToast('Failed to delete session', 'error');
     console.error('Delete failed:', error);
   }
 }
@@ -1491,7 +1493,7 @@ async function finishWorktreeSession() {
     window.dispatchEvent(new Event('refresh-sessions'));
     await refreshActiveSessionMetadata();
   } catch (error: any) {
-    alert(error?.message || 'Failed to finish worktree session');
+    showToast(error?.message || 'Failed to finish worktree session', 'error');
   } finally {
     finishingWorktree.value = false;
   }
@@ -1703,7 +1705,7 @@ async function startTaskFromQueryIfPresent(): Promise<void> {
   try {
     await handleTaskStarted(await startProjectTask(taskId));
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : t('app.failedToStartTask'));
+    showToast(error instanceof Error ? error.message : t('app.failedToStartTask'), 'error');
   }
 }
 
@@ -1737,7 +1739,7 @@ async function handleTaskStarted(result: ProjectTaskStartResult): Promise<void> 
   await nextTick();
   const sent = await chatPanelRef.value?.submitExternalPrompt?.(result.prompt);
   if (sent === false) {
-    window.alert(t('app.promptNotSent'));
+    showToast(t('app.promptNotSent'), 'error');
   }
 }
 
@@ -1881,7 +1883,7 @@ async function handleSaveGitSettings(payload: {
     await Promise.all(saves);
     gitSaveSuccessTick.value += 1;
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : t('app.failedToSaveGitSettings'));
+    showToast(error instanceof Error ? error.message : t('app.failedToSaveGitSettings'), 'error');
   } finally {
     gitSettingsSaving.value = false;
   }
@@ -1893,7 +1895,7 @@ async function handleSaveGatewaySettings(payload: { cwds: string[]; defaultProfi
     await gatewaySettings.saveSettings(payload);
     gatewaySaveSuccessTick.value += 1;
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : t('app.failedToSaveGatewaySettings'));
+    showToast(error instanceof Error ? error.message : t('app.failedToSaveGatewaySettings'), 'error');
   } finally {
     gatewaySettingsSaving.value = false;
   }
@@ -1903,16 +1905,16 @@ async function handleClearGiteaSettings() {
   try {
     await gitHosting.clearSettings();
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : t('app.failedToClearGiteaSettings'));
+    showToast(error instanceof Error ? error.message : t('app.failedToClearGiteaSettings'), 'error');
   }
 }
 
 async function handleTestGiteaConnection(payload: { serverUrl: string; token: string }) {
   try {
     await gitHosting.testConnection(payload);
-    window.alert(t('app.giteaConnectionSucceeded'));
+    showToast(t('app.giteaConnectionSucceeded'), 'success');
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : t('app.giteaConnectionFailed'));
+    showToast(error instanceof Error ? error.message : t('app.giteaConnectionFailed'), 'error');
   }
 }
 
@@ -1920,16 +1922,16 @@ async function handleClearGithubSettings() {
   try {
     await gitHosting.clearGithubSettings();
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : t('app.failedToClearGithubSettings'));
+    showToast(error instanceof Error ? error.message : t('app.failedToClearGithubSettings'), 'error');
   }
 }
 
 async function handleTestGithubConnection(payload: { serverUrl: string; token: string }) {
   try {
     await gitHosting.testGithubConnection(payload);
-    window.alert(t('app.githubConnectionSucceeded'));
+    showToast(t('app.githubConnectionSucceeded'), 'success');
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : t('app.githubConnectionFailed'));
+    showToast(error instanceof Error ? error.message : t('app.githubConnectionFailed'), 'error');
   }
 }
 
@@ -1943,7 +1945,7 @@ async function handleTestGithubProxy(value: string) {
     githubProxyCountry.value = result.ok ? result.country || '' : '';
   } catch (error) {
     githubProxyCheckResult.value = 'failed';
-    window.alert(error instanceof Error ? error.message : t('app.githubProxyCheckFailed'));
+    showToast(error instanceof Error ? error.message : t('app.githubProxyCheckFailed'), 'error');
   } finally {
     githubProxyChecking.value = false;
   }

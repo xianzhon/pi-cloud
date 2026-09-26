@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, expect, it, vi } from 'vitest';
 import ManagedSkillsPanel from './ManagedSkillsPanel.vue';
+import ConfirmModal from './ConfirmModal.vue';
 
 const content = '---\nname: example\ndescription: Example\n---\n# Example';
 afterEach(() => vi.unstubAllGlobals());
@@ -86,15 +87,17 @@ it('confirms before deleting a shared skill and reports a successful change', as
     .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ name: 'example' }) })
     .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ skills: [] }) });
   vi.stubGlobal('fetch', fetch);
-  const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
-  vi.stubGlobal('confirm', confirm);
   const wrapper = mount(ManagedSkillsPanel);
   await flushPromises();
   await wrapper.find('.skill-row button[aria-label="Delete"]').trigger('click');
+  expect(wrapper.getComponent(ConfirmModal).props('visible')).toBe(true);
   expect(fetch).toHaveBeenCalledTimes(1);
+  wrapper.getComponent(ConfirmModal).vm.$emit('cancel');
+  await wrapper.vm.$nextTick();
+  expect(wrapper.getComponent(ConfirmModal).props('visible')).toBe(false);
   await wrapper.find('.skill-row button[aria-label="Delete"]').trigger('click');
+  wrapper.getComponent(ConfirmModal).vm.$emit('confirm');
   await flushPromises();
-  expect(confirm).toHaveBeenCalledWith(expect.stringContaining('example'));
   expect(fetch).toHaveBeenCalledWith('/api/sessions/managed-skills/example', expect.objectContaining({ method: 'DELETE' }));
   expect(wrapper.findAll('.skill-row')).toHaveLength(0);
   expect(wrapper.emitted('changed')).toHaveLength(1);

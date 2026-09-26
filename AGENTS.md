@@ -72,6 +72,7 @@ The client uses Vue 3, TypeScript, Vue I18n, Monaco, and xterm.js. Tests run wit
 - Make the smallest change that satisfies the request; do not refactor unrelated code.
 - Match the style and patterns in neighboring files.
 - Keep tests co-located as `*.test.ts` and add or update focused tests for behavior changes.
+- Use `ConfirmModal` for confirmations and the existing toast UI for notices/errors; do not use native `window.confirm`, `window.alert`, or `window.prompt` in the client.
 - Run the narrowest relevant tests while iterating, then run `pnpm build` and `pnpm test` when the scope warrants it.
 - Do not edit generated output in `client/dist/`, `server/dist/`, package tarballs, `.logs/`, or `.pids/`.
 - Keep REST endpoints under `/api/*` and WebSocket endpoints under `/ws/*`.
