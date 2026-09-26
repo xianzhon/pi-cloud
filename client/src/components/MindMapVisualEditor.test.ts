@@ -26,6 +26,7 @@ describe('mind map visual editing', () => {
 
   it('fits the diagram at its center and preserves manual view after edits', async () => {
     const wrapper = mountEditor();
+    expect((wrapper.find('.mindmap-item').element as HTMLElement).style.width).toBe('');
     const viewport = wrapper.find('.mindmap-viewport').element;
     Object.defineProperties(viewport, { clientWidth: { value: 900 }, clientHeight: { value: 500 } });
     await wrapper.find('.mindmap-view-controls button:last-child').trigger('click');

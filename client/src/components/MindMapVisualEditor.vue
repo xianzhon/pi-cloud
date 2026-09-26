@@ -40,7 +40,7 @@
         <svg class="mindmap-connections" :width="canvasWidth" :height="canvasHeight" aria-hidden="true">
           <path v-for="(path, index) in diagram.connectors" :key="index" :d="path" :transform="`translate(${originX} ${originY})`" />
         </svg>
-        <div v-for="entry in positionedNodes" :key="entry.node.id" class="mindmap-item" :style="{ left: `${entry.position.x + originX}px`, top: `${entry.position.y + originY}px`, width: `${entry.position.width}px` }">
+        <div v-for="entry in positionedNodes" :key="entry.node.id" class="mindmap-item" :style="{ left: `${entry.position.x + originX}px`, top: `${entry.position.y + originY}px` }">
           <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1, 'drop-child': dropTarget?.id === entry.node.id && dropTarget.placement === 'child', 'drop-before': dropTarget?.id === entry.node.id && dropTarget.placement === 'before', 'drop-after': dropTarget?.id === entry.node.id && dropTarget.placement === 'after' }" :draggable="!editing && entry.node.id !== root.id" @click="selectNode(entry.node.id)" @dblclick="startEdit('rename', entry.node.id)" @contextmenu.prevent="openMenu($event, entry.node.id)" @dragstart="draggedId = entry.node.id" @dragend="clearDrag" @dragover.prevent="showDrop(entry.node.id, 'child')" @drop.prevent="drop(entry.node.id, 'child')">
             <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'before')" @drop.stop.prevent="drop(entry.node.id, 'before')" />
             <form v-if="editing && editNodeId === entry.node.id" class="mindmap-inline-edit" @submit.stop.prevent="submitEdit" @click.stop @dblclick.stop>
@@ -492,12 +492,12 @@ function endPan() { pointer = null; }
 .mindmap-canvas { position: relative; transform-origin: 0 0; }
 .mindmap-connections { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
 .mindmap-connections path { fill: none; stroke: var(--mindmap-accent); stroke-width: 2; opacity: .65; }
-.mindmap-item { position: absolute; transform: translate(-50%, -50%); }
+.mindmap-item { position: absolute; width: max-content; transform: translate(-50%, -50%); }
 .mindmap-fold { position: absolute; top: 50%; right: -12px; transform: translateY(-50%); width: 24px; height: 24px; border: 1px solid var(--mindmap-accent); border-radius: 50%; background: var(--bg-secondary); color: inherit; cursor: pointer; }
 .mindmap-fold.left { right: auto; left: -12px; }
-.mindmap-node { position: relative; box-sizing: border-box; width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: center; text-align: center; overflow-wrap: anywhere; border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 22px; background: var(--bg-secondary); box-shadow: 0 3px 12px #0002; cursor: grab; user-select: none; line-height: 1.4; font-size: 14px; }
-.mindmap-node.branch { border: 2px solid var(--mindmap-accent); font-size: 16px; font-weight: 600; }
-.mindmap-node.root { border: 2px solid var(--mindmap-strong); border-radius: 22px; background: var(--bg-secondary); font-size: 18px; font-weight: 700; cursor: default; }
+.mindmap-node { position: relative; box-sizing: border-box; width: max-content; max-width: 320px; min-height: 44px; display: flex; align-items: center; justify-content: center; text-align: center; overflow-wrap: anywhere; border: 1px solid var(--border-color); border-radius: 12px; padding: 8px 16px; background: var(--bg-secondary); box-shadow: 0 3px 12px #0002; cursor: grab; user-select: none; line-height: 1.4; font-size: 18px; }
+.mindmap-node.branch { border: 2px solid var(--mindmap-accent); font-size: 19px; font-weight: 600; }
+.mindmap-node.root { border: 2px solid var(--mindmap-strong); border-radius: 22px; background: var(--bg-secondary); font-size: 21px; font-weight: 700; cursor: default; }
 .mindmap-node.selected { outline: 3px solid var(--mindmap-accent); outline-offset: 3px; }
 .mindmap-node.drop-child { background: color-mix(in srgb, var(--mindmap-accent) 30%, var(--bg-secondary)); border-color: var(--mindmap-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mindmap-accent) 55%, transparent); }
 .mindmap-node.drop-before::before, .mindmap-node.drop-after::after { content: ''; position: absolute; left: -12px; right: -12px; height: 5px; border-radius: 3px; background: var(--mindmap-accent); box-shadow: 0 0 0 2px var(--bg-secondary); }
