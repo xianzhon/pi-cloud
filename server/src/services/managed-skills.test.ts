@@ -25,6 +25,31 @@ describe('managed skills', () => {
     expect(await fs.readFile(join(root, 'skills', 'my-skill', 'helper.sh'), 'utf8')).toBe('helper');
   });
 
+  it('deletes a shared skill and its supporting files without touching other directories', async () => {
+    const { root, service } = await setup();
+    await service.save('example', markdown('example'));
+    await fs.writeFile(join(root, 'skills', 'example', 'helper.sh'), 'helper');
+    await service.save('other', markdown('other'));
+    await service.delete('example');
+    expect(await service.list()).toEqual([{ name: 'other', content: markdown('other') }]);
+    await expect(fs.lstat(join(root, 'skills', 'example'))).rejects.toThrow();
+    await expect(service.delete('example')).rejects.toThrow('not found');
+  });
+
+  it('refuses to delete unsafe names, symlinks, and non-skill directories', async () => {
+    const { root, service } = await setup();
+    const skills = join(root, 'skills');
+    await fs.mkdir(join(skills, 'ordinary'), { recursive: true });
+    await fs.symlink(join(skills, 'ordinary'), join(skills, 'linked'));
+    await fs.mkdir(join(skills, 'linked-file'));
+    await fs.symlink(join(skills, 'ordinary'), join(skills, 'linked-file', 'SKILL.md'));
+    await expect(service.delete('../outside')).rejects.toThrow('Skill name');
+    await expect(service.delete('ordinary')).rejects.toThrow('not a regular skill');
+    await expect(service.delete('linked')).rejects.toThrow('not a regular skill');
+    await expect(service.delete('linked-file')).rejects.toThrow('not a regular skill');
+    expect(await fs.readdir(skills)).toEqual(['linked', 'linked-file', 'ordinary']);
+  });
+
   it('rejects unsafe names and invalid skill content', async () => {
     const { service } = await setup();
     await expect(service.save('../outside', markdown('outside'))).rejects.toThrow('Skill name');

@@ -77,6 +77,16 @@ export class ManagedSkills {
     }
   }
 
+  async delete(name: string) {
+    const directory = this.directory(name);
+    const file = join(directory, 'SKILL.md');
+    if (!await fs.lstat(directory).then((stat) => stat.isDirectory(), () => false)
+      || !await fs.lstat(file).then((stat) => stat.isFile(), () => false)) {
+      throw new SkillInputError('Skill not found or not a regular skill directory');
+    }
+    await fs.rm(directory, { recursive: true });
+  }
+
   async clone(url: string) {
     let parsed: URL;
     try { parsed = new URL(url); } catch { throw new SkillInputError('Enter an HTTPS GitHub repository URL'); }

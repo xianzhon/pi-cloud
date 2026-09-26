@@ -1350,7 +1350,7 @@ export default {
       title: 'Shared skills',
       description: 'Skills stored in ~/.agents/skills are available across agent profiles. Review GitHub skills before using them. Edit SKILL.md here; other files in cloned skills are preserved. GitHub subdirectory URLs use /tree/branch/path (single-segment branch).',
       name: 'Skill name', content: 'SKILL.md', githubUrl: 'GitHub repository or skill directory URL',
-      edit: 'Edit', add: 'Add skill', update: 'Update skill', cancel: 'Cancel', clone: 'Clone skill', failed: 'Skill operation failed',
+      edit: 'Edit', add: 'Add skill', useSample: 'Use sample SKILL.md', update: 'Update skill', cancel: 'Cancel', clone: 'Clone skill', delete: 'Delete', deleteConfirm: 'Delete shared skill “{name}” and all its files?', failed: 'Skill operation failed',
     },
     skillPresetsPanel: {
       existingPresets: 'Existing presets',

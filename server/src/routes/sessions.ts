@@ -591,6 +591,14 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     } catch (error) { return skillError(reply, error); }
   });
 
+  app.delete('/managed-skills/:name', async (req, reply) => {
+    try {
+      const { name } = req.params as { name: string };
+      await managedSkills.delete(name);
+      return { name };
+    } catch (error) { return skillError(reply, error); }
+  });
+
   app.post('/managed-skills/clone', async (req, reply) => {
     try {
       const { url } = (req.body || {}) as { url: string };

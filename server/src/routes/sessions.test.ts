@@ -1195,6 +1195,23 @@ describe('session routes', () => {
     expect(reply.send).toHaveBeenCalledWith({ error: 'Provide either enabledSkills or disabledSkills, not both' });
   });
 
+  it('deletes managed skills and returns validation errors', async () => {
+    const { ManagedSkills, SkillInputError } = await import('../services/managed-skills.js');
+    const remove = vi.spyOn(ManagedSkills.prototype, 'delete').mockResolvedValue(undefined);
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+
+    expect(await handlers['DELETE /managed-skills/:name']({ params: { name: 'example' } })).toEqual({ name: 'example' });
+    expect(remove).toHaveBeenCalledWith('example');
+    remove.mockRejectedValueOnce(new SkillInputError('Skill not found'));
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+    await handlers['DELETE /managed-skills/:name']({ params: { name: 'missing' } }, reply);
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(reply.send).toHaveBeenCalledWith({ error: 'Skill not found' });
+    remove.mockRestore();
+  });
+
   it('returns available skills for the selected client profile', async () => {
     vi.mocked(sessionService.listAvailableSkills).mockResolvedValue([
       { name: 'brainstorming', description: 'Use before creative work' },
