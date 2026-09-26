@@ -438,6 +438,16 @@ export default {
     editorPanel: {
       preview: '预览',
       raw: '源码',
+      mindMap: {
+        visual: '可视化',
+        unsupported: '可视化编辑需要标准 mindmap 格式和单个根节点。请在源码中修正。',
+        unsupportedLine: '无法解析第 {line} 行。请在源码中使用两个空格缩进和纯文本标签。',
+        child: '添加子节点', sibling: '添加同级节点', rename: '重命名', delete: '删除分支',
+        undo: '撤销', redo: '重做', zoomIn: '放大', zoomOut: '缩小', fit: '适应窗口',
+        label: '节点名称', apply: '确定', cancel: '取消', invalidLabel: '仅可使用文字、数字、空格、下划线和连字符，首尾不能有空格。',
+        expand: '展开分支', collapse: '折叠分支', parent: '移动到', chooseParent: '选择父节点',
+        up: '上移', down: '下移', promote: '提升一级', deleteBranch: '删除此节点及其所有子节点？',
+      },
       addToReference: '添加为引用',
       copyRelativePath: '复制相对路径',
       download: '下载',

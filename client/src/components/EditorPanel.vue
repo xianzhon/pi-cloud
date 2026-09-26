@@ -126,7 +126,9 @@
           >
             {{ t('components.editorPanel.raw') }}
           </button>
+          <button v-if="activeIsDiagram" :class="{ active: activePreviewMode === 'visual' }" :disabled="!!activeMindMapError" :title="activeMindMapError || t('components.editorPanel.mindMap.visual')" @click="setActivePreviewMode('visual')">{{ t('components.editorPanel.mindMap.visual') }}</button>
         </div>
+        <span v-if="activeIsDiagram && activeMindMapError" class="mindmap-unavailable" role="status">{{ activeMindMapError }}</span>
         <button class="window-btn tooltip" @click="$emit('close')" :data-tooltip="t('components.editorPanel.minimize')" :aria-label="t('components.editorPanel.minimizeEditor')">—</button>
         <button class="window-btn maximize-btn tooltip" @click="toggleMaximize" :data-tooltip="isMaximized ? t('components.editorPanel.restore') : t('components.editorPanel.maximize')" :aria-label="isMaximized ? t('components.editorPanel.restoreEditor') : t('components.editorPanel.maximizeEditor')">
           {{ isMaximized ? '❐' : '▢' }}
@@ -318,9 +320,18 @@
         :initial-scale="activeTabInfo?.previewScale"
         @scale-change="setActivePreviewScale"
       />
+      <MindMapVisualEditor
+        v-for="tab in mindMapTabs"
+        v-show="tab.path === activeTab && activePreviewMode === 'visual'"
+        :key="tab.path"
+        class="mindmap-visual-pane"
+        :source="mindMapSource(tab.path)"
+        @change="source => applyMindMapSource(tab.path, source)"
+        @save="saveFile"
+      />
       <div
         class="editor-container"
-        :class="{ hidden: (activeIsPreviewable && activePreviewMode === 'preview') || !!activeImageSrc || !!activePdfSrc || (activeIsVirtual && diffViewMode === 'split') }"
+        :class="{ hidden: (activeIsPreviewable && activePreviewMode !== 'edit') || !!activeImageSrc || !!activePdfSrc || (activeIsVirtual && diffViewMode === 'split') }"
         ref="editorContainer"
       ></div>
       <div
@@ -457,6 +468,8 @@ import HtmlWorker from 'monaco-editor/language/html/html.worker?worker';
 import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
 import TreeNode, { type TreeNodeData } from './FileTreeNode.vue';
 import ConfirmModal from './ConfirmModal.vue';
+import MindMapVisualEditor from './MindMapVisualEditor.vue';
+import { parseMindMap } from '../utils/mindMap';
 import InputPromptModal from './InputPromptModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 import MediaAnnotationPreview from './MediaAnnotationPreview.vue';
@@ -629,7 +642,7 @@ const expandedPaths = ref(new Set<string>());
 const selectedDirectoryPath = ref<string>();
 const dirtyPaths = ref(new Set<string>());
 const cutFilePath = ref<string>();
-type PreviewMode = 'preview' | 'edit';
+type PreviewMode = 'preview' | 'edit' | 'visual';
 const previewModes = ref(new Map<string, PreviewMode>());
 const previewVersion = ref(0);
 const statusMessage = ref('');
@@ -791,6 +804,31 @@ const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.k
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
 const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value || activeIsDiagram.value);
 const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
+const mindMapTabs = computed(() => {
+  void previewVersion.value;
+  return tabs.value.filter(tab => tab.kind === 'text' && isDiagramFile(tab.path) && !mindMapError(tab.path));
+});
+function mindMapSource(path: string): string {
+  void previewVersion.value;
+  return models.get(path)?.getValue() || '';
+}
+function mindMapError(path: string): string {
+  const source = mindMapSource(path);
+  try { parseMindMap(source); return ''; }
+  catch (error) {
+    const reason = error instanceof Error ? error.message : '';
+    const line = reason.split(':')[1];
+    return t(line ? 'components.editorPanel.mindMap.unsupportedLine' : 'components.editorPanel.mindMap.unsupported', line ? { line } : {});
+  }
+}
+const activeMindMapError = computed(() => activeIsDiagram.value && activeTab.value ? mindMapError(activeTab.value) : '');
+watch(activeMindMapError, error => {
+  if (error && activePreviewMode.value === 'visual') setActivePreviewMode('edit');
+});
+function applyMindMapSource(path: string, source: string): void {
+  const model = models.get(path);
+  if (model && model.getValue() !== source) model.setValue(source);
+}
 type MhtmlFont = 'original' | 'sans' | 'serif' | 'terminal' | 'palatino' | 'garamond' | 'baskerville' | 'literata' | 'songti' | 'noto-serif-cjk' | 'pingfang';
 const storedMhtmlFont = localStorage.getItem('pi-cloud-mhtml-font');
 const mhtmlFont = ref<MhtmlFont>(['original', 'sans', 'serif', 'terminal', 'palatino', 'garamond', 'baskerville', 'literata', 'songti', 'noto-serif-cjk', 'pingfang'].includes(storedMhtmlFont || '')
@@ -3722,6 +3760,17 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 .file-tree-backdrop {
   display: none;
+}
+
+.mindmap-visual-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mindmap-unavailable {
+  max-width: 260px;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .editor-container {
