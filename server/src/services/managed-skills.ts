@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { basename, join, sep } from 'node:path';
+import { join, sep } from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -15,14 +15,13 @@ function checkName(name: unknown): asserts name is string {
   }
 }
 
-function checkContent(name: string, content: unknown): asserts content is string {
+function checkContent(content: unknown): asserts content is string {
   if (typeof content !== 'string' || !content.trim() || Buffer.byteLength(content) > 1024 * 1024) {
     throw new SkillInputError('SKILL.md content is required (maximum 1 MB)');
   }
   const header = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content)?.[1];
-  const declared = header?.match(/^name:\s*['"]?([^\s'"#]+)['"]?\s*$/m)?.[1];
-  if (declared !== name || !/^description:\s*\S/m.test(header || '')) {
-    throw new SkillInputError('SKILL.md must declare the matching name and a description in YAML frontmatter');
+  if (!/^name:[ \t]*[^\s#]/m.test(header || '') || !/^description:[ \t]*[^\s#]/m.test(header || '')) {
+    throw new SkillInputError('SKILL.md must declare a name and description in YAML frontmatter');
   }
 }
 
@@ -73,7 +72,7 @@ export class ManagedSkills {
 
   async save(name: string, content: string, update = false) {
     const directory = update ? await this.existingDirectory(name) : this.directory(name);
-    checkContent(basename(directory), content);
+    checkContent(content);
     const exists = await fs.lstat(directory).then(() => true, () => false);
     if (!update && exists) throw new SkillInputError('Skill already exists');
     if (update) {
@@ -148,7 +147,7 @@ export class ManagedSkills {
           if (entry.isSymbolicLink()) throw new SkillInputError('Skills containing symlinks cannot be cloned');
           if (entry.name === 'SKILL.md') {
             if (!entry.isFile()) throw new SkillInputError('Repository path has no regular SKILL.md');
-            checkContent(dir === source ? name : basename(dir), await fs.readFile(join(dir, entry.name), 'utf8'));
+            checkContent(await fs.readFile(join(dir, entry.name), 'utf8'));
             found = true;
           }
           if (entry.isDirectory() && await checkTree(join(dir, entry.name))) found = true;

@@ -22,8 +22,8 @@ describe('managed skills', () => {
     await service.save('my-skill', markdown('my-skill'));
     await fs.writeFile(join(root, 'skills', 'my-skill', 'helper.sh'), 'helper');
     await expect(service.save('my-skill', markdown('my-skill'))).rejects.toThrow('already exists');
-    await service.save('my-skill', markdown('my-skill') + 'Updated', true);
-    expect(await service.list()).toEqual([{ name: 'my-skill', content: markdown('my-skill') + 'Updated' }]);
+    await service.save('my-skill', markdown('Display Name') + 'Updated', true);
+    expect(await service.list()).toEqual([{ name: 'my-skill', content: markdown('Display Name') + 'Updated' }]);
     expect(await fs.readFile(join(root, 'skills', 'my-skill', 'helper.sh'), 'utf8')).toBe('helper');
   });
 
@@ -58,7 +58,8 @@ describe('managed skills', () => {
   it('rejects unsafe names and invalid skill content', async () => {
     const { service } = await setup();
     await expect(service.save('../outside', markdown('outside'))).rejects.toThrow('Skill name');
-    await expect(service.save('safe', markdown('other'))).rejects.toThrow('matching name');
+    await expect(service.save('safe', '---\ndescription: Missing name\n---\n')).rejects.toThrow('name and description');
+    await expect(service.save('safe', '---\nname: safe\n---\n')).rejects.toThrow('name and description');
     await expect(service.save('missing', markdown('missing'), true)).rejects.toThrow('not found');
     await expect(service.clone('https://github.com.evil.test/a/b')).rejects.toThrow('github.com');
     await expect(service.clone('https://github.com/a/b/tree/main/../outside')).rejects.toThrow();
@@ -96,7 +97,7 @@ describe('managed skills', () => {
     await fs.mkdir(join(fixture, '.git'));
     await fs.writeFile(join(fixture, 'collection', 'example', 'SKILL.md'), markdown('example'));
     await fs.mkdir(join(fixture, 'collection', 'other'));
-    await fs.writeFile(join(fixture, 'collection', 'other', 'SKILL.md'), markdown('other'));
+    await fs.writeFile(join(fixture, 'collection', 'other', 'SKILL.md'), markdown('Other Skill'));
     await fs.writeFile(join(bin, 'git'), '#!/bin/sh\nfor dest; do :; done\ncp -R "$SKILL_TEST_FIXTURE" "$dest"\n', { mode: 0o755 });
     const originalPath = process.env.PATH;
     process.env.PATH = `${bin}:${originalPath}`;
@@ -105,12 +106,12 @@ describe('managed skills', () => {
       expect(await service.clone('https://github.com/owner/repo')).toBe('repo');
       expect(await service.list()).toEqual([
         { name: 'repo/collection/example', content: markdown('example') },
-        { name: 'repo/collection/other', content: markdown('other') },
+        { name: 'repo/collection/other', content: markdown('Other Skill') },
       ]);
       await service.save('repo/collection/example', markdown('example') + 'Updated', true);
       expect(await fs.readFile(join(root, 'skills', 'repo', 'collection', 'example', 'SKILL.md'), 'utf8')).toBe(markdown('example') + 'Updated');
       await service.delete('repo/collection/example');
-      expect(await service.list()).toEqual([{ name: 'repo/collection/other', content: markdown('other') }]);
+      expect(await service.list()).toEqual([{ name: 'repo/collection/other', content: markdown('Other Skill') }]);
       await expect(fs.lstat(join(root, 'skills', 'repo', '.git'))).rejects.toThrow();
     } finally {
       process.env.PATH = originalPath;
