@@ -83,6 +83,15 @@
           <PhDownloadSimple :size="16" weight="bold" />
         </button>
         <button
+          v-if="activeIsDiagram && activePreviewMode === 'preview'"
+          class="window-btn tooltip"
+          @click="handleExportDiagramPng"
+          :data-tooltip="t('components.editorPanel.exportDiagramPng')"
+          :aria-label="t('components.editorPanel.exportDiagramPng')"
+        >
+          <PhImage :size="16" weight="bold" />
+        </button>
+        <button
           v-if="activeIsMarkdown && activePreviewMode === 'preview'"
           class="window-btn tooltip"
           @click="handleCreateMarkdownPdfCopy"
@@ -486,13 +495,13 @@ import { i18n } from '../i18n';
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/basic-languages/monaco.contribution';
-import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple, PhGraph } from '@phosphor-icons/vue';
+import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple, PhGraph, PhImage } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
 import { normalizePathSeparators } from '../utils/paths';
 import { createMarkdownPdfCopy, exportMarkdownPdf } from '../utils/markdownPdfExport';
-import { exportDiagramImage } from '../utils/diagramImageExport';
+import { exportDiagramImage, exportDiagramPng } from '../utils/diagramImageExport';
 import { renderMhtmlDocument } from '../utils/mhtmlPreview';
 import terminalFontUrl from '../assets/fonts/MesloLGMNerdFontMono-Regular.ttf?url';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
@@ -1214,12 +1223,28 @@ function handleExportDiagramImage(): void {
   try {
     exportDiagramImage(filePath, svg, resolvedTheme.value);
   } catch (error) {
-    const errorMessage = t('components.editorPanel.exportDiagramImageFailed');
-    console.error(errorMessage, error);
-    statusType.value = 'error';
-    statusMessage.value = errorMessage;
-    scheduleStatusClear();
+    showDiagramExportError(error);
   }
+}
+
+async function handleExportDiagramPng(): Promise<void> {
+  const filePath = activeTab.value;
+  const svg = markdownPreviewEl.value?.querySelector<SVGSVGElement>('.mermaid-diagram svg');
+  if (!filePath || !svg) return;
+
+  try {
+    await exportDiagramPng(filePath, svg, resolvedTheme.value);
+  } catch (error) {
+    showDiagramExportError(error);
+  }
+}
+
+function showDiagramExportError(error: unknown): void {
+  const errorMessage = t('components.editorPanel.exportDiagramImageFailed');
+  console.error(errorMessage, error);
+  statusType.value = 'error';
+  statusMessage.value = errorMessage;
+  scheduleStatusClear();
 }
 
 async function handleCreateMarkdownPdfCopy(): Promise<void> {

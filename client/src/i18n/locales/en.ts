@@ -479,6 +479,7 @@ export default {
       newDiagram: 'New diagram',
       diagramExtension: 'Diagrams must use a .mmd file name',
       exportDiagramImage: 'Download diagram as SVG',
+      exportDiagramPng: 'Download diagram as PNG',
       exportDiagramImageFailed: 'Could not export diagram as an image',
       diagramType: 'Diagram type',
       diagramTypes: {
