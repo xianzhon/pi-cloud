@@ -1,5 +1,5 @@
 <template>
-  <div class="mindmap-editor" @keydown.ctrl.s.prevent="emit('save')" @keydown.meta.s.prevent="emit('save')" @keydown.ctrl.z.prevent="handleUndoKey" @keydown.meta.z.prevent="handleUndoKey">
+  <div class="mindmap-editor" @keydown="onKeydown">
     <div class="mindmap-toolbar">
       <button type="button" :disabled="!selected" @click="startEdit('child')">{{ t('child') }}</button>
       <button type="button" :disabled="!selected || selected.id === root.id" @click="startEdit('sibling')">{{ t('sibling') }}</button>
@@ -7,6 +7,13 @@
       <button type="button" :disabled="!selected || selected.id === root.id" @click="confirmDelete = true">{{ t('delete') }}</button>
       <button type="button" :disabled="!past.length" @click="undo">{{ t('undo') }}</button>
       <button type="button" :disabled="!future.length" @click="redo">{{ t('redo') }}</button>
+      <label class="mindmap-levels">{{ t('levels') }}
+        <select :aria-label="t('levels')" @change="changeLevel">
+          <option value="" selected disabled>{{ t('chooseLevel') }}</option>
+          <option v-for="level in 3" :key="level" :value="level">{{ t('throughLevel', { level }) }}</option>
+          <option value="0">{{ t('expandAll') }}</option>
+        </select>
+      </label>
       <span class="mindmap-toolbar-spacer" />
       <div class="mindmap-view-controls">
         <button type="button" @click="zoom(-0.1)" :aria-label="t('zoomOut')">−</button>
@@ -15,23 +22,22 @@
         <button type="button" @click="fit">{{ t('fit') }}</button>
       </div>
     </div>
-    <form v-if="editing" class="mindmap-edit-form" @submit.prevent="submitEdit">
-      <label for="mindmap-label">{{ t('label') }}</label>
-      <input id="mindmap-label" ref="labelInput" v-model="draft" :aria-invalid="!!labelError" />
-      <button type="submit">{{ t('apply') }}</button>
-      <button type="button" @click="editing = null">{{ t('cancel') }}</button>
-      <span v-if="labelError" role="alert">{{ t('invalidLabel') }}</span>
-    </form>
+    <div class="mindmap-shortcuts">{{ t('shortcuts') }}</div>
     <div ref="viewport" class="mindmap-viewport" tabindex="0" @pointerdown="startPan" @pointermove="pan" @pointerup="endPan" @pointercancel="endPan" @wheel.prevent="onWheel">
       <div class="mindmap-canvas" :style="{ width: `${canvasWidth}px`, height: `${canvasHeight}px`, transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})` }">
         <svg class="mindmap-connections" :width="canvasWidth" :height="canvasHeight" aria-hidden="true">
           <path v-for="(path, index) in diagram.connectors" :key="index" :d="path" :transform="`translate(${originX} ${originY})`" />
         </svg>
         <div v-for="entry in positionedNodes" :key="entry.node.id" class="mindmap-item" :style="{ left: `${entry.position.x + originX}px`, top: `${entry.position.y + originY}px`, width: `${entry.position.width}px` }">
-          <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1 }" :draggable="entry.node.id !== root.id" @click="selectedId = entry.node.id" @keydown.enter="selectedId = entry.node.id" @dragstart="draggedId = entry.node.id" @dragend="draggedId = null" @dragover.prevent @drop.prevent="drop(entry.node.id, 'child')">
-            <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.prevent @drop.stop.prevent="drop(entry.node.id, 'before')" />
-            {{ entry.node.label }}
-            <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.prevent @drop.stop.prevent="drop(entry.node.id, 'after')" />
+          <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1, 'drop-child': dropTarget?.id === entry.node.id && dropTarget.placement === 'child', 'drop-before': dropTarget?.id === entry.node.id && dropTarget.placement === 'before', 'drop-after': dropTarget?.id === entry.node.id && dropTarget.placement === 'after' }" :draggable="!editing && entry.node.id !== root.id" @click="selectNode(entry.node.id)" @dblclick="startEdit('rename', entry.node.id)" @dragstart="draggedId = entry.node.id" @dragend="clearDrag" @dragover.prevent="showDrop(entry.node.id, 'child')" @drop.prevent="drop(entry.node.id, 'child')">
+            <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'before')" @drop.stop.prevent="drop(entry.node.id, 'before')" />
+            <form v-if="editing && selectedId === entry.node.id" class="mindmap-inline-edit" @submit.stop.prevent="submitEdit" @click.stop @dblclick.stop>
+              <input id="mindmap-label" v-model="draft" :aria-label="t('label')" :aria-invalid="labelError" @keydown.esc.stop.prevent="editing = null" />
+              <span v-if="labelError" role="alert">{{ t('invalidLabel') }}</span>
+              <div class="mindmap-edit-actions"><button type="submit">{{ t('apply') }}</button><button type="button" @click="editing = null">{{ t('cancel') }}</button></div>
+            </form>
+            <span v-else>{{ entry.node.label }}</span>
+            <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'after')" @drop.stop.prevent="drop(entry.node.id, 'after')" />
           </div>
           <button v-if="entry.node.children.length" type="button" class="mindmap-fold" :class="{ left: entry.position.side < 0 }" :aria-label="folded.has(entry.node.id) ? t('expand') : t('collapse')" @click="toggleFold(entry.node.id)">{{ folded.has(entry.node.id) ? '+' : '−' }}</button>
         </div>
@@ -64,17 +70,17 @@ import { layoutMindMap, type NodeSize } from '../utils/mindMapLayout';
 
 const props = defineProps<{ source: string }>();
 const emit = defineEmits<{ change: [source: string]; save: [] }>();
-const t = (key: string) => i18n.global.t(`components.editorPanel.mindMap.${key}`);
+const t = (key: string, params?: Record<string, number>) => i18n.global.t(`components.editorPanel.mindMap.${key}`, params || {});
 const root = ref<MindMapNode>(parseMindMap(props.source));
 const past = ref<MindMapNode[]>([]);
 const future = ref<MindMapNode[]>([]);
 const selectedId = ref<number | null>(root.value.id);
 const folded = ref(new Set<number>());
 const draggedId = ref<number | null>(null);
+const dropTarget = ref<{ id: number; placement: 'child' | 'before' | 'after' } | null>(null);
 const editing = ref<'child' | 'sibling' | 'rename' | null>(null);
 const draft = ref('');
 const labelError = ref(false);
-const labelInput = ref<HTMLInputElement>();
 const confirmDelete = ref(false);
 const viewport = ref<HTMLElement>();
 const sizes = ref(new Map<number, NodeSize>());
@@ -99,6 +105,7 @@ watch(() => props.source, source => {
   past.value = [];
   future.value = [];
   selectedId.value = root.value.id;
+  editing.value = null;
   folded.value = new Set();
   sides.value = new Map();
   sizes.value = new Map();
@@ -159,18 +166,29 @@ function redo() {
   emittedSource = serializeMindMap(root.value);
   emit('change', emittedSource);
 }
-function startEdit(type: 'child' | 'sibling' | 'rename') {
+function startEdit(type: 'child' | 'sibling' | 'rename', id = selectedId.value) {
+  if (id === null || (type === 'sibling' && id === root.value.id)) return;
+  selectedId.value = id;
   editing.value = type;
   draft.value = type === 'rename' ? selected.value?.label || '' : '';
   labelError.value = false;
-  void nextTick(() => labelInput.value?.focus());
+  void nextTick(() => observed.get(id)?.querySelector('input')?.focus());
 }
 function submitEdit() {
   if (!selected.value) return;
   if (!validMindMapLabel(draft.value)) { labelError.value = true; return; }
   if (editing.value === 'rename') operate({ type: 'rename', target: selected.value.id, label: draft.value });
-  else if (editing.value) operate({ type: 'add', target: selected.value.id, placement: editing.value, label: draft.value });
+  else if (editing.value) {
+    const target = selected.value.id;
+    const ids: number[] = [];
+    const collect = (node: MindMapNode) => { ids.push(node.id); node.children.forEach(collect); };
+    collect(root.value);
+    operate({ type: 'add', target, placement: editing.value, label: draft.value });
+    if (editing.value === 'child') { const next = new Set(folded.value); next.delete(target); folded.value = next; }
+    selectedId.value = Math.max(...ids) + 1;
+  }
   editing.value = null;
+  void nextTick(() => observed.get(selectedId.value!)?.focus());
 }
 function deleteSelected() {
   confirmDelete.value = false;
@@ -178,9 +196,14 @@ function deleteSelected() {
   operate({ type: 'delete', target: selected.value.id });
   selectedId.value = root.value.id;
 }
+function clearDrag() { draggedId.value = null; dropTarget.value = null; }
+function showDrop(id: number, placement: 'child' | 'before' | 'after') {
+  if (draggedId.value !== null && draggedId.value !== id) dropTarget.value = { id, placement };
+  else dropTarget.value = null;
+}
 function drop(destination: number, placement: 'child' | 'before' | 'after') {
-  if (draggedId.value !== null) operate({ type: 'move', target: draggedId.value, destination, placement });
-  draggedId.value = null;
+  if (draggedId.value !== null && draggedId.value !== destination) operate({ type: 'move', target: draggedId.value, destination, placement });
+  clearDrag();
 }
 function move(placement: 'up' | 'down' | 'promote') {
   if (selected.value) operate({ type: 'move', target: selected.value.id, placement });
@@ -195,6 +218,57 @@ function toggleFold(id: number) {
   const next = new Set(folded.value);
   if (next.has(id)) next.delete(id); else next.add(id);
   folded.value = next;
+}
+function changeLevel(event: Event) {
+  const select = event.target as HTMLSelectElement;
+  setLevel(Number(select.value));
+  select.value = '';
+}
+function setLevel(level: number) {
+  sides.value = new Map([...sides.value, ...diagram.value.sides]);
+  const next = new Set<number>();
+  // The root is depth 0; a level-1 view keeps its immediate children visible.
+  const visit = (node: MindMapNode, depth: number) => {
+    if (level && depth >= level && node.children.length) next.add(node.id);
+    node.children.forEach(child => visit(child, depth + 1));
+  };
+  visit(root.value, 0);
+  folded.value = next;
+  if (selectedId.value !== null && !visibleNodes.value.some(entry => entry.node.id === selectedId.value)) selectedId.value = root.value.id;
+}
+function selectNode(id: number) {
+  if (editing.value) return;
+  selectedId.value = id;
+  observed.get(id)?.focus();
+}
+function onKeydown(event: KeyboardEvent) {
+  const target = event.target as HTMLElement;
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); emit('save'); return; }
+  if (target.closest('input, select, textarea, button')) return;
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); handleUndoKey(event); return; }
+  if (editing.value || !selected.value || !target.closest('.mindmap-viewport')) return;
+  const id = selected.value.id;
+  // Navigate tree order rather than screen coordinates, which change across left/right branches.
+  const visible = visibleNodes.value.map(entry => entry.node.id);
+  const index = visible.indexOf(id);
+  let next: number | undefined;
+  if (event.key === 'ArrowUp') next = visible[index - 1];
+  else if (event.key === 'ArrowDown') next = visible[index + 1];
+  else if (event.key === 'ArrowLeft') {
+    if (selected.value.children.length && !folded.value.has(id)) toggleFold(id);
+    else next = parentOptions.value.find(node => node.children.some(child => child.id === id))?.id;
+  } else if (event.key === 'ArrowRight') {
+    if (folded.value.has(id)) toggleFold(id);
+    else next = selected.value.children[0]?.id;
+  } else if (event.key === 'Tab') {
+    if (event.shiftKey) move('promote'); else startEdit('child');
+  } else if (event.key === 'Enter') startEdit(id === root.value.id ? 'child' : 'sibling');
+  else if (event.key === 'F2') startEdit('rename');
+  else if (event.key === 'Delete' || event.key === 'Backspace') { if (id !== root.value.id) confirmDelete.value = true; }
+  else if (event.key === ' ' && selected.value.children.length) toggleFold(id);
+  else return;
+  event.preventDefault();
+  if (next !== undefined) selectNode(next);
 }
 function zoom(delta: number) { scale.value = Math.max(0.4, Math.min(2, Math.round((scale.value + delta) * 10) / 10)); }
 function fit() {
@@ -262,13 +336,18 @@ function endPan() { pointer = null; }
 
 <style scoped>
 .mindmap-editor { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--text-primary); background: var(--bg-primary); }
-.mindmap-toolbar, .mindmap-mobile-controls, .mindmap-edit-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border-bottom: 1px solid var(--border-color); }
-.mindmap-toolbar button, .mindmap-mobile-controls button, .mindmap-edit-form button { border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 9px; background: var(--bg-secondary); color: inherit; cursor: pointer; }
+.mindmap-toolbar, .mindmap-mobile-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border-bottom: 1px solid var(--border-color); }
+.mindmap-toolbar button, .mindmap-mobile-controls button, .mindmap-inline-edit button { border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 9px; background: var(--bg-secondary); color: inherit; cursor: pointer; }
 .mindmap-toolbar button:disabled { opacity: .4; cursor: default; }
 .mindmap-toolbar-spacer { flex: 1; }
 .mindmap-view-controls { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--border-color); }
-.mindmap-edit-form input, .mindmap-mobile-controls select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
-.mindmap-edit-form [role="alert"] { color: #d14d4d; }
+.mindmap-inline-edit input, .mindmap-mobile-controls select, .mindmap-levels select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
+.mindmap-inline-edit { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.mindmap-inline-edit input { width: 100%; min-width: 0; box-sizing: border-box; }
+.mindmap-edit-actions { display: flex; justify-content: center; gap: 4px; }
+.mindmap-inline-edit [role="alert"] { color: #d14d4d; font-size: 12px; }
+.mindmap-levels { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.mindmap-shortcuts { padding: 4px 8px; color: var(--text-tertiary); font-size: 11px; }
 .mindmap-viewport { flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; background: var(--bg-primary); background-image: radial-gradient(circle, var(--border-color) .7px, transparent 1px); background-size: 28px 28px; }
 .mindmap-canvas { position: relative; transform-origin: 0 0; }
 .mindmap-connections { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
@@ -280,6 +359,10 @@ function endPan() { pointer = null; }
 .mindmap-node.branch { border: 2px solid #58a6a0; font-size: 16px; font-weight: 600; }
 .mindmap-node.root { border: 2px solid #358e88; border-radius: 22px; background: var(--bg-secondary); font-size: 18px; font-weight: 700; cursor: default; }
 .mindmap-node.selected { outline: 3px solid #58a6a0; outline-offset: 3px; }
+.mindmap-node.drop-child { background: color-mix(in srgb, #58a6a0 30%, var(--bg-secondary)); border-color: #58a6a0; box-shadow: 0 0 0 4px #58a6a088; }
+.mindmap-node.drop-before::before, .mindmap-node.drop-after::after { content: ''; position: absolute; left: -12px; right: -12px; height: 5px; border-radius: 3px; background: #58a6a0; box-shadow: 0 0 0 2px var(--bg-secondary); }
+.mindmap-node.drop-before::before { top: -9px; }
+.mindmap-node.drop-after::after { bottom: -9px; }
 .mindmap-drop-edge { position: absolute; left: 12px; right: 12px; height: 12px; z-index: 1; border-radius: 4px; }
 .mindmap-drop-edge:first-child { top: -6px; }
 .mindmap-drop-edge:last-child { bottom: -6px; }

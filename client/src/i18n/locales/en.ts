@@ -447,6 +447,8 @@ export default {
         label: 'Node label', apply: 'Apply', cancel: 'Cancel', invalidLabel: 'Use letters, numbers, spaces, _ or -; no leading or trailing spaces.',
         expand: 'Expand branch', collapse: 'Collapse branch', parent: 'Move under', chooseParent: 'Choose parent',
         up: 'Move up', down: 'Move down', promote: 'Promote', deleteBranch: 'Delete this node and all its descendants?',
+        levels: 'Show levels', chooseLevel: 'Choose depth', throughLevel: 'Through level {level}', expandAll: 'Expand all',
+        shortcuts: '↑↓ navigate · ←→ fold / enter branch · Tab child · Enter sibling · F2 rename · Shift+Tab promote · Delete remove',
       },
       addToReference: 'Add to reference',
       copyRelativePath: 'Copy relative path',

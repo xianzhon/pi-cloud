@@ -12,8 +12,9 @@ describe('mind map visual editing', () => {
     const wrapper = mountEditor();
     await wrapper.findAll('.mindmap-node')[1].trigger('click');
     await wrapper.findAll('.mindmap-toolbar button')[2].trigger('click');
+    expect(wrapper.findAll('.mindmap-node')[1].find('input').exists()).toBe(true);
     await wrapper.find('#mindmap-label').setValue('Renamed');
-    await wrapper.find('.mindmap-edit-form').trigger('submit');
+    await wrapper.find('.mindmap-inline-edit').trigger('submit');
     expect(wrapper.emitted('change')?.[0]).toEqual(['mindmap\n  Root\n    Renamed\n    Two\n']);
     await wrapper.setProps({ source: 'mindmap\n  Root\n    Renamed\n    Two\n' });
     await wrapper.findAll('.mindmap-toolbar button')[4].trigger('click');
@@ -41,8 +42,43 @@ describe('mind map visual editing', () => {
     await wrapper.findAll('.mindmap-node')[1].trigger('click');
     await wrapper.findAll('.mindmap-toolbar button')[2].trigger('click');
     await wrapper.find('#mindmap-label').setValue('New label');
-    await wrapper.find('.mindmap-edit-form').trigger('submit');
+    await wrapper.find('.mindmap-inline-edit').trigger('submit');
     expect(canvas.attributes('style')).toBe(panned);
+  });
+
+  it('navigates, edits with shortcuts, and folds through a selected level', async () => {
+    const wrapper = mount(MindMapVisualEditor, {
+      props: { source: 'mindmap\n  Root\n    One\n      Child\n        Deep\n    Two\n' },
+      global: { plugins: [i18n] },
+    });
+    const nodes = () => wrapper.findAll('.mindmap-node');
+    await wrapper.find('.mindmap-levels select').setValue('1');
+    expect(nodes().map(node => node.attributes('aria-label'))).toEqual(['Root', 'One', 'Two']);
+    await wrapper.find('.mindmap-levels select').setValue('2');
+    expect(nodes().map(node => node.attributes('aria-label'))).toEqual(['Root', 'One', 'Child', 'Two']);
+    await wrapper.find('.mindmap-levels select').setValue('3');
+    expect(nodes()).toHaveLength(5);
+    await nodes()[0].trigger('keydown', { key: 'ArrowDown' });
+    expect(nodes()[1].attributes('aria-pressed')).toBe('true');
+    await nodes()[1].trigger('keydown', { key: 'ArrowRight' });
+    expect(nodes()[2].attributes('aria-pressed')).toBe('true');
+    await nodes()[2].trigger('keydown', { key: 'ArrowLeft' });
+    expect(nodes()[2].attributes('aria-pressed')).toBe('true');
+    expect(nodes()).toHaveLength(4);
+    await nodes()[2].trigger('keydown', { key: 'ArrowLeft' });
+    expect(nodes()[1].attributes('aria-pressed')).toBe('true');
+    await nodes()[1].trigger('keydown', { key: 'Tab' });
+    await wrapper.find('#mindmap-label').setValue('Added');
+    await wrapper.find('.mindmap-inline-edit').trigger('submit');
+    expect(wrapper.emitted('change')?.[0]?.[0]).toContain('      Added\n');
+    await wrapper.find('.mindmap-node.selected').trigger('keydown', { key: 'Enter' });
+    await wrapper.find('#mindmap-label').setValue('Sibling');
+    await wrapper.find('.mindmap-inline-edit').trigger('submit');
+    expect(wrapper.emitted('change')?.[1]?.[0]).toContain('      Added\n      Sibling\n');
+    await wrapper.find('.mindmap-node.selected').trigger('keydown', { key: 'F2' });
+    await wrapper.find('#mindmap-label').setValue('Renamed');
+    await wrapper.find('.mindmap-inline-edit').trigger('submit');
+    expect(wrapper.emitted('change')?.[2]?.[0]).toContain('      Renamed\n');
   });
 
   it('folds and zooms without emitting source, and moves with desktop drop and mobile controls', async () => {
@@ -56,7 +92,10 @@ describe('mind map visual editing', () => {
     expect(wrapper.find('.mindmap-canvas').attributes('style')).toContain('translate(-12px, -8px)');
     expect(wrapper.emitted('change')).toBeUndefined();
     await wrapper.findAll('.mindmap-node')[2].trigger('dragstart');
+    await wrapper.findAll('.mindmap-drop-edge')[0].trigger('dragover');
+    expect(wrapper.findAll('.mindmap-node')[1].classes()).toContain('drop-before');
     await wrapper.findAll('.mindmap-drop-edge')[0].trigger('drop');
+    expect(wrapper.find('.drop-before').exists()).toBe(false);
     expect(wrapper.emitted('change')?.[0]).toEqual(['mindmap\n  Root\n    Two\n    One\n']);
     await wrapper.findAll('.mindmap-node')[2].trigger('click');
     await wrapper.find('.mindmap-mobile-controls select').setValue('3');

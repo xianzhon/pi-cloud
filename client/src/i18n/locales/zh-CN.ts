@@ -447,6 +447,8 @@ export default {
         label: '节点名称', apply: '确定', cancel: '取消', invalidLabel: '仅可使用文字、数字、空格、下划线和连字符，首尾不能有空格。',
         expand: '展开分支', collapse: '折叠分支', parent: '移动到', chooseParent: '选择父节点',
         up: '上移', down: '下移', promote: '提升一级', deleteBranch: '删除此节点及其所有子节点？',
+        levels: '显示层级', chooseLevel: '选择层级', throughLevel: '展开至第 {level} 级', expandAll: '全部展开',
+        shortcuts: '↑↓ 导航 · ←→ 折叠 / 进入分支 · Tab 添加子节点 · Enter 添加同级节点 · F2 重命名 · Shift+Tab 提升 · Delete 删除',
       },
       addToReference: '添加为引用',
       copyRelativePath: '复制相对路径',
