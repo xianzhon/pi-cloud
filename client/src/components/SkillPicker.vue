@@ -69,7 +69,7 @@ const selectedCount = computed(() => props.modelValue.length);
 const filteredSkills = computed(() => {
   const normalized = query.value.trim().toLowerCase();
   if (!normalized) return props.skills;
-  return props.skills.filter((skill) => `${skill.name} ${skill.description}`.toLowerCase().includes(normalized));
+  return props.skills.filter((skill) => `${skill.name} ${skill.description} ${skill.path ?? ''}`.toLowerCase().includes(normalized));
 });
 const visibleSkillGroups = computed(() => [
   { title: t('components.skillPicker.selected'), skills: filteredSkills.value.filter((skill) => selectedNames.value.has(skill.name)) },

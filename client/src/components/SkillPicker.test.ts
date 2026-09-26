@@ -52,6 +52,21 @@ describe('SkillPicker', () => {
     ]);
   });
 
+  it('filters skills by directory name when the skill name differs', async () => {
+    const wrapper = mount(SkillPicker, {
+      props: {
+        skills: [
+          { name: 'review', description: 'checks changes', path: '/repo/.pi/skills/code-review' },
+          { name: 'format', description: 'checks style', path: '/repo/.pi/skills/formatter' },
+        ],
+        modelValue: [],
+      },
+    });
+
+    await wrapper.find('.skill-picker-search').setValue('CODE-REVIEW');
+    expect(wrapper.findAll('.skill-option-name').map((item) => item.text())).toEqual(['review']);
+  });
+
   it('groups selected visible skills before available skills', async () => {
     const wrapper = mount(SkillPicker, {
       props: {
