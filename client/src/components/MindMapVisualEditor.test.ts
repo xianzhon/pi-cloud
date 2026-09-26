@@ -227,15 +227,22 @@ describe('MindMapVisualEditor', () => {
     const wrapper = mountEditor();
     await wrapper.findAll('.mindmap-node')[1].trigger('click');
     await wrapper.get('button[aria-label="Icon"]').trigger('click');
-    await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === '🚩')!.trigger('click');
-    expect(wrapper.emitted('change')?.[0]).toEqual(['mindmap\n  Root\n    🚩 One\n    Two\n']);
-    expect(wrapper.findAll('.mindmap-node')[1].text()).toContain('🚩');
+    expect(wrapper.findAll('.mindmap-icon-grid button').slice(0, 10).map(button => button.text())).toEqual(['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩']);
+    expect(wrapper.find('.mindmap-icon-grid button[aria-label="🇺🇸"]').exists()).toBe(false);
+    await wrapper.get('.mindmap-icon-grid button[aria-label="🔵⚑"]').trigger('click');
+    expect(wrapper.find('.mindmap-icon-panel').exists()).toBe(false);
+    expect(wrapper.emitted('change')?.[0]).toEqual(['mindmap\n  Root\n    🔵⚑ One\n    Two\n']);
+    expect(wrapper.findAll('.mindmap-node')[1].find('.mindmap-colored-flag').attributes('style')).toContain('#1e88e5');
     await wrapper.findAll('.mindmap-toolbar > button')[0].trigger('click');
     expect(wrapper.emitted('change')?.[1]).toEqual([source]);
     await wrapper.findAll('.mindmap-toolbar > button')[1].trigger('click');
     await wrapper.get('button[aria-label="Icon"]').trigger('click');
-    await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'No icon')!.trigger('click');
+    expect(wrapper.get('.mindmap-icon-grid button[aria-label="🔵⚑"]').attributes('aria-pressed')).toBe('true');
+    await wrapper.get('.mindmap-icon-clear').trigger('click');
     expect(wrapper.emitted('change')?.[3]).toEqual([source]);
+    await wrapper.get('button[aria-label="Icon"]').trigger('click');
+    await wrapper.get('.mindmap-icon-panel').trigger('keydown', { key: 'Escape' });
+    expect(wrapper.find('.mindmap-icon-panel').exists()).toBe(false);
   });
 
   it('changes layout and palette without changing source', async () => {

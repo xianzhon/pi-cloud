@@ -14,11 +14,16 @@ type Operation =
   | { type: 'move'; target: number; destination?: number; placement: 'child' | 'before' | 'after' | 'up' | 'down' | 'promote' };
 
 // Icon prefixes remain ordinary Mermaid node text, so Raw and Preview can display them too.
+export const mindMapFlagColors: Record<string, string> = {
+  '🔴⚑': '#e53935', '🟠⚑': '#f57c00', '🟡⚑': '#fbc02d', '🟢⚑': '#43a047',
+  '🔵⚑': '#1e88e5', '🟣⚑': '#8e24aa', '⚫⚑': '#424242',
+};
 export const mindMapIcons = [
   '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
-  '🚩', '🏁', '🏳️', '🇺🇸', '🇨🇳', '🇬🇧', '🇯🇵', '🇩🇪', '🇫🇷',
+  ...Object.keys(mindMapFlagColors),
   '⭐', '✅', '❌', '⚠️', '💡', '📌', '📅', '📎', '📝', '🔗', '🔒', '🎯', '❤️', '🔥',
 ];
+const legacyFlags = ['🚩', '🏁', '🏳️', '🇺🇸', '🇨🇳', '🇬🇧', '🇯🇵', '🇩🇪', '🇫🇷'];
 
 export function validMindMapLabel(label: string): boolean {
   return !!label && label.trim() === label && /^[\p{L}\p{N}_ -]+$/u.test(label);
@@ -38,7 +43,7 @@ export function parseMindMap(source: string): MindMapNode {
     // Mermaid's root((label)) form gives the root a circular shape.
     const circleRoot = depth === 0 && /^root\(\((.*)\)\)$/.exec(match[2]);
     const text = circleRoot ? circleRoot[1] : match[2];
-    const icon = mindMapIcons.find(value => text.startsWith(`${value} `));
+    const icon = [...mindMapIcons, ...legacyFlags].find(value => text.startsWith(`${value} `));
     const label = icon ? text.slice(icon.length + 1) : text;
     if (!validMindMapLabel(label)) throw new Error(`line:${i + 1}`);
     if (depth > stack.length || (depth === 0 && root)) throw new Error(`hierarchy:${i + 1}`);
@@ -77,7 +82,7 @@ export function editMindMap(root: MindMapNode, operation: Operation): MindMapNod
   if (!found) throw new Error('target');
   const { node, parent } = found;
   if (operation.type === 'icon') {
-    if (operation.icon && !mindMapIcons.includes(operation.icon)) throw new Error('icon');
+    if (operation.icon && !mindMapIcons.includes(operation.icon) && !legacyFlags.includes(operation.icon)) throw new Error('icon');
     if (node.icon === operation.icon) throw new Error('unchanged');
     node.icon = operation.icon;
   } else if (operation.type === 'rename' || operation.type === 'add') {

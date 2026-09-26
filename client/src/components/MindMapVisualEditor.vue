@@ -15,8 +15,16 @@
       <div class="mindmap-levels"><span>{{ t('structure') }}</span>
         <CustomSelect :model-value="structure" :options="structureOptions" :aria-label="t('structure')" @update:model-value="setStructure" />
       </div>
-      <div class="mindmap-levels"><span>{{ t('icon') }}</span>
-        <CustomSelect :model-value="selected?.icon || ''" :options="iconOptions" :aria-label="t('icon')" :disabled="!selected || !!editing" @update:model-value="setIcon" />
+      <div ref="iconPicker" class="mindmap-levels mindmap-icon-picker"><span>{{ t('icon') }}</span>
+        <button ref="iconTrigger" type="button" class="mindmap-icon-trigger" :aria-label="t('icon')" :aria-expanded="iconPickerOpen" aria-haspopup="dialog" :disabled="!selected || !!editing" @click="toggleIconPicker" @keydown.esc.stop="closeIconPicker">
+          <span v-if="selected?.icon && mindMapFlagColors[selected.icon]" class="mindmap-colored-flag" :style="{ color: mindMapFlagColors[selected.icon] }">⚑</span><span v-else>{{ selected?.icon || t('noIcon') }}</span><span aria-hidden="true">⌄</span>
+        </button>
+        <div v-if="iconPickerOpen" ref="iconPanel" class="mindmap-icon-panel" role="dialog" :aria-label="t('icon')" :style="iconPanelStyle" @keydown.esc.stop="closeIconPicker">
+          <button type="button" class="mindmap-icon-clear" :class="{ active: !selected?.icon }" :aria-pressed="!selected?.icon" @click="chooseIcon('')">{{ t('noIcon') }}</button>
+          <div class="mindmap-icon-grid">
+            <button v-for="icon in mindMapIcons" :key="icon" type="button" :aria-label="icon" :aria-pressed="selected?.icon === icon" :class="{ active: selected?.icon === icon }" @click="chooseIcon(icon)"><span v-if="mindMapFlagColors[icon]" class="mindmap-colored-flag" :style="{ color: mindMapFlagColors[icon] }">⚑</span><template v-else>{{ icon }}</template></button>
+          </div>
+        </div>
       </div>
       <span class="mindmap-toolbar-spacer" />
       <div class="mindmap-view-controls">
@@ -39,7 +47,7 @@
               <input id="mindmap-label" v-model="draft" :aria-label="t('label')" :aria-invalid="labelError" @keydown.esc.stop.prevent="cancelEdit" @blur="submitEdit" />
               <span v-if="labelError" role="alert">{{ t('invalidLabel') }}</span>
             </form>
-            <span v-else><span v-if="entry.node.icon" class="mindmap-icon">{{ entry.node.icon }}</span>{{ entry.node.label }}</span>
+            <span v-else><span v-if="entry.node.icon" class="mindmap-icon"><span v-if="mindMapFlagColors[entry.node.icon]" class="mindmap-colored-flag" :style="{ color: mindMapFlagColors[entry.node.icon] }">⚑</span><template v-else>{{ entry.node.icon }}</template></span>{{ entry.node.label }}</span>
             <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'after')" @drop.stop.prevent="drop(entry.node.id, 'after')" />
           </div>
           <button v-if="entry.node.children.length" type="button" class="mindmap-fold" :class="{ left: entry.position.side < 0 }" :aria-label="folded.has(entry.node.id) ? t('expand') : t('collapse')" @click="toggleFold(entry.node.id)">{{ folded.has(entry.node.id) ? '+' : '−' }}</button>
@@ -75,7 +83,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Compon
 import { i18n } from '../i18n';
 import ConfirmModal from './ConfirmModal.vue';
 import CustomSelect from './CustomSelect.vue';
-import { editMindMap, mindMapIcons, parseMindMap, serializeMindMap, validMindMapLabel, type MindMapNode } from '../utils/mindMap';
+import { editMindMap, mindMapFlagColors, mindMapIcons, parseMindMap, serializeMindMap, validMindMapLabel, type MindMapNode } from '../utils/mindMap';
 import { layoutMindMap, type NodeSize } from '../utils/mindMapLayout';
 
 const props = defineProps<{ source: string }>();
@@ -118,10 +126,30 @@ const structureOptions = computed(() => [
   { value: 'pills', label: t('pills') },
   { value: 'branches', label: t('branches') },
 ]);
-const iconOptions = computed(() => [
-  { value: '', label: t('noIcon') },
-  ...mindMapIcons.map(icon => ({ value: icon, label: icon })),
-]);
+const iconPicker = ref<HTMLElement>();
+const iconTrigger = ref<HTMLButtonElement>();
+const iconPanel = ref<HTMLElement>();
+const iconPickerOpen = ref(false);
+const iconPanelStyle = ref<Record<string, string>>({});
+function closeIconPicker() { iconPickerOpen.value = false; iconTrigger.value?.focus(); }
+function toggleIconPicker() {
+  if (iconPickerOpen.value) { closeIconPicker(); return; }
+  const rect = iconTrigger.value!.getBoundingClientRect();
+  const width = Math.min(420, window.innerWidth - 16);
+  iconPanelStyle.value = {
+    width: `${width}px`,
+    left: `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`,
+    top: `${rect.bottom + 4}px`,
+  };
+  iconPickerOpen.value = true;
+  void nextTick(() => {
+    const height = iconPanel.value?.offsetHeight || 0;
+    if (rect.bottom + height + 4 > window.innerHeight) {
+      iconPanelStyle.value = { ...iconPanelStyle.value, top: `${Math.max(8, rect.top - height - 4)}px` };
+    }
+  });
+}
+function chooseIcon(icon: string) { setIcon(icon); closeIconPicker(); }
 function setDirection(value: string) { direction.value = value as typeof direction.value; }
 function setTheme(value: string) { theme.value = value as typeof theme.value; }
 function setStructure(value: string) { structure.value = value as typeof structure.value; }
@@ -274,6 +302,7 @@ function openMenu(event: MouseEvent, id: number) {
 }
 function closeMenu(event: PointerEvent) {
   if (!(event.target as HTMLElement).closest('.mindmap-context-menu')) menu.value = null;
+  if (iconPickerOpen.value && !iconPicker.value?.contains(event.target as Node)) iconPickerOpen.value = false;
 }
 function menuEdit(type: 'rename' | 'child' | 'sibling') {
   const id = menu.value?.id;
@@ -327,6 +356,7 @@ function setLevel(level: number) {
 }
 function selectNode(id: number) {
   if (editing.value) return;
+  iconPickerOpen.value = false;
   selectedId.value = id;
   observed.get(id)?.focus();
 }
@@ -436,6 +466,14 @@ function endPan() { pointer = null; }
 .mindmap-inline-edit input, .mindmap-mobile-controls select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
 .mindmap-levels :deep(.custom-select) { min-width: 120px; max-width: 180px; }
 .mindmap-level-depth :deep(.custom-select) { min-width: 165px; }
+.mindmap-icon-trigger { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 90px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.65rem 0.8rem; background: var(--bg-surface); color: var(--text-primary); cursor: pointer; }
+.mindmap-icon-trigger:disabled { opacity: .65; cursor: not-allowed; }
+.mindmap-icon-trigger:focus-visible, .mindmap-icon-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mindmap-icon-panel { position: fixed; z-index: 50; box-sizing: border-box; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-surface); box-shadow: var(--shadow-lg); max-height: calc(100vh - 16px); overflow-y: auto; }
+.mindmap-icon-clear { width: 100%; margin-bottom: 8px; padding: 6px; text-align: left; border-bottom: 1px solid var(--border) !important; }
+.mindmap-icon-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 2px; }
+.mindmap-icon-panel button { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 34px; padding: 2px; border: 0; border-radius: 5px; background: transparent; color: var(--text-primary); font-size: 18px; cursor: pointer; }
+.mindmap-icon-panel button:hover, .mindmap-icon-panel button.active { background: var(--accent-muted); color: var(--accent); }
 .mindmap-inline-edit { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .mindmap-inline-edit input { width: 100%; min-width: 0; box-sizing: border-box; }
 .mindmap-context-menu { position: fixed; z-index: 100; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); box-shadow: 0 6px 20px #0004; }
@@ -445,6 +483,7 @@ function endPan() { pointer = null; }
 .mindmap-levels { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .mindmap-levels > span { white-space: nowrap; }
 .mindmap-icon { margin-right: 6px; }
+.mindmap-colored-flag { font-family: sans-serif; font-size: 1.2em; }
 .mindmap-editor.pills .mindmap-node { border-radius: 999px; background: color-mix(in srgb, var(--mindmap-accent) 14%, var(--bg-secondary)); }
 .mindmap-editor.branches .mindmap-node { border: 0; border-bottom: 3px solid var(--mindmap-accent); border-radius: 0; background: transparent; box-shadow: none; }
 .mindmap-editor.branches .mindmap-node.root { border: 2px solid var(--mindmap-strong); border-radius: 12px; background: var(--bg-secondary); }

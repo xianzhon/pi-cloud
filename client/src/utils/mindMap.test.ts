@@ -24,6 +24,14 @@ describe('mind map source', () => {
       .toBe('mindmap\n  root((新智能体))\n    核心组成\n      大语言模型\n');
   });
 
+  it('round trips colored flags and preserves existing country flags', () => {
+    const text = 'mindmap\n  Root\n    🔵⚑ Priority\n    🇺🇸 Legacy\n';
+    const root = parseMindMap(text);
+    expect(root.children.map(node => node.icon)).toEqual(['🔵⚑', '🇺🇸']);
+    expect(serializeMindMap(root)).toBe(text);
+    expect(serializeMindMap(editMindMap(root, { type: 'icon', target: 2, icon: '🟢⚑' }))).toContain('    🟢⚑ Priority\n');
+  });
+
   it('round trips icons on roots and descendants through rename, move and removal', () => {
     const text = 'mindmap\n  root((🚩 Root))\n    ⑩ Step\n      💡 Idea\n';
     const root = parseMindMap(text);
