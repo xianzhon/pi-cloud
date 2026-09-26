@@ -58,15 +58,16 @@ describe('mind map visual editing', () => {
     expect(nodes().map(node => node.attributes('aria-label'))).toEqual(['Root', 'One', 'Child', 'Two']);
     await wrapper.find('.mindmap-levels select').setValue('3');
     expect(nodes()).toHaveLength(5);
-    await nodes()[0].trigger('keydown', { key: 'ArrowDown' });
+    await nodes()[0].trigger('keydown', { key: 'ArrowLeft' });
     expect(nodes()[1].attributes('aria-pressed')).toBe('true');
-    await nodes()[1].trigger('keydown', { key: 'ArrowRight' });
+    await nodes()[1].trigger('keydown', { key: 'ArrowLeft' });
     expect(nodes()[2].attributes('aria-pressed')).toBe('true');
-    await nodes()[2].trigger('keydown', { key: 'ArrowLeft' });
-    expect(nodes()[2].attributes('aria-pressed')).toBe('true');
-    expect(nodes()).toHaveLength(4);
-    await nodes()[2].trigger('keydown', { key: 'ArrowLeft' });
+    await nodes()[2].trigger('keydown', { key: 'ArrowRight' });
     expect(nodes()[1].attributes('aria-pressed')).toBe('true');
+    await nodes()[1].trigger('keydown', { key: ' ' });
+    expect(nodes()).toHaveLength(3);
+    await nodes()[1].trigger('keydown', { key: ' ' });
+    expect(nodes()).toHaveLength(5);
     await nodes()[1].trigger('keydown', { key: 'Tab' });
     await wrapper.find('#mindmap-label').setValue('Added');
     await wrapper.find('.mindmap-inline-edit').trigger('submit');
@@ -79,6 +80,37 @@ describe('mind map visual editing', () => {
     await wrapper.find('#mindmap-label').setValue('Renamed');
     await wrapper.find('.mindmap-inline-edit').trigger('submit');
     expect(wrapper.emitted('change')?.[2]?.[0]).toContain('      Renamed\n');
+  });
+
+  it('navigates visually within a level and toward or away from the root on either side', async () => {
+    const wrapper = mount(MindMapVisualEditor, {
+      props: { source: 'mindmap\n  Root\n    Left A\n      Left Child\n    Right A\n      Right Child\n    Left B\n      Left B Child\n    Right B\n      Right B Child\n' },
+      global: { plugins: [i18n] },
+    });
+    const node = (label: string) => wrapper.findAll('.mindmap-node').find(item => item.attributes('aria-label') === label)!;
+    const press = async (label: string, key: string, expected: string) => {
+      await node(label).trigger('keydown', { key });
+      expect(node(expected).attributes('aria-pressed')).toBe('true');
+    };
+    await press('Root', 'ArrowLeft', 'Left A');
+    await press('Left A', 'ArrowDown', 'Left B');
+    await press('Left B', 'ArrowUp', 'Left A');
+    await press('Left A', 'ArrowLeft', 'Left Child');
+    await press('Left Child', 'ArrowDown', 'Left B Child');
+    await press('Left B Child', 'ArrowRight', 'Left B');
+    await press('Left B', 'ArrowRight', 'Root');
+    await press('Root', 'ArrowRight', 'Right A');
+    await press('Right A', 'ArrowDown', 'Right B');
+    await press('Right B', 'ArrowRight', 'Right B Child');
+    await press('Right B Child', 'ArrowUp', 'Right Child');
+    await press('Right Child', 'ArrowLeft', 'Right A');
+    await press('Right A', 'ArrowLeft', 'Root');
+    await press('Root', 'ArrowUp', 'Root');
+    await node('Left A').trigger('click');
+    await node('Left A').trigger('keydown', { key: ' ' });
+    await node('Root').trigger('click');
+    await press('Root', 'ArrowLeft', 'Left A');
+    await press('Left A', 'ArrowLeft', 'Left A');
   });
 
   it('places the add input at the child or following sibling position without changing source until submission', async () => {

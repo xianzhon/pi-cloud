@@ -260,18 +260,18 @@ function onKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); handleUndoKey(event); return; }
   if (editing.value || !selected.value || !target.closest('.mindmap-viewport')) return;
   const id = selected.value.id;
-  // Navigate tree order rather than screen coordinates, which change across left/right branches.
-  const visible = visibleNodes.value.map(entry => entry.node.id);
-  const index = visible.indexOf(id);
+  const position = positions.value.get(id)!;
   let next: number | undefined;
-  if (event.key === 'ArrowUp') next = visible[index - 1];
-  else if (event.key === 'ArrowDown') next = visible[index + 1];
-  else if (event.key === 'ArrowLeft') {
-    if (selected.value.children.length && !folded.value.has(id)) toggleFold(id);
-    else next = parentOptions.value.find(node => node.children.some(child => child.id === id))?.id;
-  } else if (event.key === 'ArrowRight') {
-    if (folded.value.has(id)) toggleFold(id);
-    else next = selected.value.children[0]?.id;
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    const level = diagram.value.nodes.filter(node => node.side === position.side && node.depth === position.depth).sort((a, b) => a.y - b.y);
+    next = level[level.findIndex(node => node.id === id) + (event.key === 'ArrowUp' ? -1 : 1)]?.id;
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    const direction = event.key === 'ArrowLeft' ? -1 : 1;
+    if (position.side === direction || position.side === 0) {
+      next = selected.value.children.find(child => positions.value.get(child.id)?.side === direction)?.id;
+    } else {
+      next = parentOptions.value.find(node => node.children.some(child => child.id === id))?.id;
+    }
   } else if (event.key === 'Tab') {
     if (event.shiftKey) move('promote'); else startEdit('child');
   } else if (event.key === 'Enter') startEdit(id === root.value.id ? 'child' : 'sibling');
