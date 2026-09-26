@@ -81,6 +81,28 @@ describe('mind map visual editing', () => {
     expect(wrapper.emitted('change')?.[2]?.[0]).toContain('      Renamed\n');
   });
 
+  it('places the add input at the child or following sibling position without changing source until submission', async () => {
+    const wrapper = mountEditor();
+    const nodes = () => wrapper.findAll('.mindmap-node');
+    const item = (index: number) => nodes()[index].element.parentElement as HTMLElement;
+    await nodes()[1].trigger('click');
+    await nodes()[1].trigger('keydown', { key: 'Tab' });
+    expect(nodes()).toHaveLength(4);
+    expect(nodes()[1].find('input').exists()).toBe(false);
+    expect(nodes()[2].find('input').exists()).toBe(true);
+    expect(parseFloat(item(2).style.left)).toBeLessThan(parseFloat(item(1).style.left));
+    expect(wrapper.emitted('change')).toBeUndefined();
+    await wrapper.find('.mindmap-edit-actions button[type="button"]').trigger('click');
+    expect(nodes()).toHaveLength(3);
+    await nodes()[1].trigger('keydown', { key: 'Enter' });
+    expect(nodes()).toHaveLength(4);
+    expect(nodes()[2].find('input').exists()).toBe(true);
+    expect(parseFloat(item(2).style.top)).toBeGreaterThan(parseFloat(item(1).style.top));
+    await wrapper.find('#mindmap-label').setValue('Next');
+    await wrapper.find('.mindmap-inline-edit').trigger('submit');
+    expect(wrapper.emitted('change')?.[0]).toEqual(['mindmap\n  Root\n    One\n    Next\n    Two\n']);
+  });
+
   it('folds and zooms without emitting source, and moves with desktop drop and mobile controls', async () => {
     const wrapper = mountEditor();
     await wrapper.find('.mindmap-fold').trigger('click');

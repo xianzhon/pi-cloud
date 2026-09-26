@@ -31,7 +31,7 @@
         <div v-for="entry in positionedNodes" :key="entry.node.id" class="mindmap-item" :style="{ left: `${entry.position.x + originX}px`, top: `${entry.position.y + originY}px`, width: `${entry.position.width}px` }">
           <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1, 'drop-child': dropTarget?.id === entry.node.id && dropTarget.placement === 'child', 'drop-before': dropTarget?.id === entry.node.id && dropTarget.placement === 'before', 'drop-after': dropTarget?.id === entry.node.id && dropTarget.placement === 'after' }" :draggable="!editing && entry.node.id !== root.id" @click="selectNode(entry.node.id)" @dblclick="startEdit('rename', entry.node.id)" @dragstart="draggedId = entry.node.id" @dragend="clearDrag" @dragover.prevent="showDrop(entry.node.id, 'child')" @drop.prevent="drop(entry.node.id, 'child')">
             <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'before')" @drop.stop.prevent="drop(entry.node.id, 'before')" />
-            <form v-if="editing && selectedId === entry.node.id" class="mindmap-inline-edit" @submit.stop.prevent="submitEdit" @click.stop @dblclick.stop>
+            <form v-if="editing && editNodeId === entry.node.id" class="mindmap-inline-edit" @submit.stop.prevent="submitEdit" @click.stop @dblclick.stop>
               <input id="mindmap-label" v-model="draft" :aria-label="t('label')" :aria-invalid="labelError" @keydown.esc.stop.prevent="editing = null" />
               <span v-if="labelError" role="alert">{{ t('invalidLabel') }}</span>
               <div class="mindmap-edit-actions"><button type="submit">{{ t('apply') }}</button><button type="button" @click="editing = null">{{ t('cancel') }}</button></div>
@@ -85,7 +85,19 @@ const confirmDelete = ref(false);
 const viewport = ref<HTMLElement>();
 const sizes = ref(new Map<number, NodeSize>());
 const sides = ref(new Map<number, -1 | 1>());
-const diagram = computed(() => layoutMindMap(root.value, folded.value, sizes.value, sides.value));
+const previewId = computed(() => {
+  let max = 0;
+  const visit = (node: MindMapNode) => { max = Math.max(max, node.id); node.children.forEach(visit); };
+  visit(root.value);
+  return max + 1;
+});
+const previewRoot = computed(() => editing.value === 'child' || editing.value === 'sibling'
+  ? editMindMap(root.value, { type: 'add', target: selectedId.value!, placement: editing.value, label: selected.value!.label })
+  : root.value);
+const previewFolded = computed(() => editing.value === 'child' && selectedId.value !== null
+  ? new Set([...folded.value].filter(id => id !== selectedId.value)) : folded.value);
+const editNodeId = computed(() => editing.value === 'rename' ? selectedId.value : previewId.value);
+const diagram = computed(() => layoutMindMap(previewRoot.value, previewFolded.value, sizes.value, sides.value));
 const positions = computed(() => new Map(diagram.value.nodes.map(position => [position.id, position])));
 const positionedNodes = computed(() => visibleNodes.value.map(entry => ({ ...entry, position: positions.value.get(entry.node.id)! })));
 const margin = 96;
@@ -127,7 +139,7 @@ const visibleNodes = computed(() => {
     entries.push({ node, depth });
     if (!folded.value.has(node.id)) node.children.forEach(child => visit(child, depth + 1));
   };
-  visit(root.value, 0);
+  visit(previewRoot.value, 0);
   return entries;
 });
 const parentOptions = computed(() => {
@@ -172,7 +184,7 @@ function startEdit(type: 'child' | 'sibling' | 'rename', id = selectedId.value) 
   editing.value = type;
   draft.value = type === 'rename' ? selected.value?.label || '' : '';
   labelError.value = false;
-  void nextTick(() => observed.get(id)?.querySelector('input')?.focus());
+  void nextTick(() => observed.get(editNodeId.value!)?.querySelector('input')?.focus());
 }
 function submitEdit() {
   if (!selected.value) return;
