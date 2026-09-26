@@ -10,11 +10,15 @@ const mermaidMock = vi.hoisted(() => ({
 }));
 const markdownPdfExportMock = vi.hoisted(() => vi.fn());
 const markdownPdfCopyMock = vi.hoisted(() => vi.fn());
+const diagramImageExportMock = vi.hoisted(() => vi.fn());
 
 vi.mock('mermaid', () => ({ default: mermaidMock }));
 vi.mock('../utils/markdownPdfExport', () => ({
   createMarkdownPdfCopy: markdownPdfCopyMock,
   exportMarkdownPdf: markdownPdfExportMock,
+}));
+vi.mock('../utils/diagramImageExport', () => ({
+  exportDiagramImage: diagramImageExportMock,
 }));
 vi.mock('./MediaAnnotationPreview.vue', () => ({
   default: {
@@ -678,6 +682,9 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.view-mode-toggle').text()).toContain('Raw');
     expect(wrapper.find('.view-mode-toggle').text()).not.toContain('Visual');
     expect(wrapper.find('.mindmap-unavailable').exists()).toBe(false);
+
+    await wrapper.get('[aria-label="Download diagram as SVG"]').trigger('click');
+    expect(diagramImageExportMock).toHaveBeenCalledWith('/project/model.mmd', wrapper.get('.mermaid-diagram svg').element, 'light');
   });
 
   it('previews HTML in a sandboxed iframe with local asset support', async () => {

@@ -478,6 +478,8 @@ export default {
       editDiagramSource: 'Edit Mermaid source',
       newDiagram: 'New diagram',
       diagramExtension: 'Diagrams must use a .mmd file name',
+      exportDiagramImage: 'Download diagram as SVG',
+      exportDiagramImageFailed: 'Could not export diagram as an image',
       diagramType: 'Diagram type',
       diagramTypes: {
         mindmap: 'Mind map',

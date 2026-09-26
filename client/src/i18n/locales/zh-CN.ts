@@ -478,6 +478,8 @@ export default {
       editDiagramSource: '编辑 Mermaid 源码',
       newDiagram: '新建图表',
       diagramExtension: '图表文件名必须以 .mmd 结尾',
+      exportDiagramImage: '将图表下载为 SVG',
+      exportDiagramImageFailed: '无法将图表导出为图片',
       diagramType: '图表类型',
       diagramTypes: {
         mindmap: '思维导图',

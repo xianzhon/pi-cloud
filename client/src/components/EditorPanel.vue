@@ -74,6 +74,15 @@
           </button>
         </div>
         <button
+          v-if="activeIsDiagram && activePreviewMode === 'preview'"
+          class="window-btn tooltip"
+          @click="handleExportDiagramImage"
+          :data-tooltip="t('components.editorPanel.exportDiagramImage')"
+          :aria-label="t('components.editorPanel.exportDiagramImage')"
+        >
+          <PhDownloadSimple :size="16" weight="bold" />
+        </button>
+        <button
           v-if="activeIsMarkdown && activePreviewMode === 'preview'"
           class="window-btn tooltip"
           @click="handleCreateMarkdownPdfCopy"
@@ -483,6 +492,7 @@ import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
 import { normalizePathSeparators } from '../utils/paths';
 import { createMarkdownPdfCopy, exportMarkdownPdf } from '../utils/markdownPdfExport';
+import { exportDiagramImage } from '../utils/diagramImageExport';
 import { renderMhtmlDocument } from '../utils/mhtmlPreview';
 import terminalFontUrl from '../assets/fonts/MesloLGMNerdFontMono-Regular.ttf?url';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
@@ -1194,6 +1204,22 @@ function setActivePreviewMode(mode: PreviewMode) {
   nextModes.set(activeTab.value, mode);
   previewModes.value = nextModes;
   if (mode === 'edit') nextTick(() => editor?.layout());
+}
+
+function handleExportDiagramImage(): void {
+  const filePath = activeTab.value;
+  const svg = markdownPreviewEl.value?.querySelector<SVGSVGElement>('.mermaid-diagram svg');
+  if (!filePath || !svg) return;
+
+  try {
+    exportDiagramImage(filePath, svg, resolvedTheme.value);
+  } catch (error) {
+    const errorMessage = t('components.editorPanel.exportDiagramImageFailed');
+    console.error(errorMessage, error);
+    statusType.value = 'error';
+    statusMessage.value = errorMessage;
+    scheduleStatusClear();
+  }
 }
 
 async function handleCreateMarkdownPdfCopy(): Promise<void> {
