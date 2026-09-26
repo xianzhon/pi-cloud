@@ -18,6 +18,14 @@ describe('mind map layout', () => {
     expect(Math.abs(right[0].y - right[1].y)).toBeGreaterThan((right[0].height + right[1].height) / 2);
   });
 
+  it('places every branch to the right even when previously assigned left', () => {
+    const both = layoutMindMap(tree, new Set(), new Map());
+    const right = layoutMindMap(tree, new Set(), new Map(), both.sides, 'right');
+    expect(right.nodes.filter(node => node.depth > 0).every(node => node.side === 1)).toBe(true);
+    expect(right.connectors).toHaveLength(6);
+    expect(layoutMindMap(tree, new Set(), new Map(), new Map(), 'both').nodes.some(node => node.side === -1)).toBe(true);
+  });
+
   it('keeps assigned sides through folding and changing dimensions', () => {
     const original = layoutMindMap(tree, new Set(), new Map());
     const folded = layoutMindMap(tree, new Set([2]), new Map([[2, { width: 240, height: 100 }]]), original.sides);

@@ -124,7 +124,7 @@ describe('mind map visual editing', () => {
     expect(nodes()[2].find('input').exists()).toBe(true);
     expect(parseFloat(item(2).style.left)).toBeLessThan(parseFloat(item(1).style.left));
     expect(wrapper.emitted('change')).toBeUndefined();
-    await wrapper.find('.mindmap-edit-actions button[type="button"]').trigger('click');
+    await wrapper.find('#mindmap-label').trigger('keydown', { key: 'Escape' });
     expect(nodes()).toHaveLength(3);
     await nodes()[1].trigger('keydown', { key: 'Enter' });
     expect(nodes()).toHaveLength(4);
@@ -157,5 +157,53 @@ describe('mind map visual editing', () => {
     await wrapper.findAll('.mindmap-node')[2].trigger('click');
     await wrapper.find('.mindmap-mobile-controls select').setValue('3');
     expect(wrapper.emitted('change')?.[1]).toEqual(['mindmap\n  Root\n    Two\n      One\n']);
+  });
+});
+
+describe('MindMapVisualEditor', () => {
+  it('offers node actions on right click and commits edits on blur', async () => {
+    const wrapper = mountEditor();
+    await wrapper.findAll('.mindmap-node')[1].trigger('contextmenu', { clientX: 30, clientY: 30 });
+    expect(wrapper.findAll('[role="menuitem"]')).toHaveLength(4);
+    await wrapper.findAll('[role="menuitem"]')[1].trigger('click');
+    const input = wrapper.get('#mindmap-label');
+    await input.setValue('New child');
+    await input.trigger('blur');
+    expect(wrapper.emitted('change')?.[0]?.[0]).toContain('      New child\n');
+    expect(wrapper.find('#mindmap-label').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('renames and deletes from the node menu', async () => {
+    const wrapper = mountEditor();
+    await wrapper.findAll('.mindmap-node')[1].trigger('contextmenu');
+    await wrapper.findAll('[role="menuitem"]')[0].trigger('click');
+    await wrapper.get('#mindmap-label').setValue('Updated');
+    await wrapper.get('.mindmap-inline-edit').trigger('submit');
+    expect(wrapper.emitted('change')?.[0]?.[0]).toContain('    Updated\n');
+    await wrapper.findAll('.mindmap-node')[1].trigger('contextmenu');
+    await wrapper.findAll('[role="menuitem"]')[3].trigger('click');
+    expect(wrapper.findComponent({ name: 'ConfirmModal' }).props('visible')).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('cancels on Escape and does not emit an edit', async () => {
+    const wrapper = mountEditor();
+    await wrapper.findAll('.mindmap-node')[1].trigger('dblclick');
+    const input = wrapper.get('#mindmap-label');
+    await input.setValue('Changed');
+    await input.trigger('keydown', { key: 'Escape' });
+    await input.trigger('blur');
+    expect(wrapper.emitted('change')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('changes layout and palette without changing source', async () => {
+    const wrapper = mountEditor();
+    await wrapper.get('select[aria-label="Layout"]').setValue('right');
+    await wrapper.get('select[aria-label="Theme"]').setValue('forest');
+    expect(wrapper.attributes('style')).toContain('#72a873');
+    expect(wrapper.emitted('change')).toBeUndefined();
+    wrapper.unmount();
   });
 });

@@ -1,5 +1,5 @@
 <template>
-  <div class="mindmap-editor" :class="{ dragging: draggedId !== null }" @keydown="onKeydown">
+  <div class="mindmap-editor" :class="{ dragging: draggedId !== null }" :style="palette" @keydown="onKeydown">
     <div class="mindmap-toolbar">
       <button type="button" :disabled="!selected" @click="startEdit('child')">{{ t('child') }}</button>
       <button type="button" :disabled="!selected || selected.id === root.id" @click="startEdit('sibling')">{{ t('sibling') }}</button>
@@ -10,8 +10,21 @@
       <label class="mindmap-levels">{{ t('levels') }}
         <select :aria-label="t('levels')" @change="changeLevel">
           <option value="" selected disabled>{{ t('chooseLevel') }}</option>
-          <option v-for="level in 3" :key="level" :value="level">{{ t('throughLevel', { level }) }}</option>
+          <option v-for="level in 3" :key="level" :value="level">{{ t('level', { level }) }}</option>
           <option value="0">{{ t('expandAll') }}</option>
+        </select>
+      </label>
+      <label class="mindmap-levels">{{ t('layout') }}
+        <select v-model="direction" :aria-label="t('layout')">
+          <option value="both">{{ t('bothSides') }}</option>
+          <option value="right">{{ t('rightSide') }}</option>
+        </select>
+      </label>
+      <label class="mindmap-levels">{{ t('theme') }}
+        <select v-model="theme" :aria-label="t('theme')">
+          <option value="ocean">{{ t('ocean') }}</option>
+          <option value="forest">{{ t('forest') }}</option>
+          <option value="sunset">{{ t('sunset') }}</option>
         </select>
       </label>
       <span class="mindmap-toolbar-spacer" />
@@ -29,12 +42,11 @@
           <path v-for="(path, index) in diagram.connectors" :key="index" :d="path" :transform="`translate(${originX} ${originY})`" />
         </svg>
         <div v-for="entry in positionedNodes" :key="entry.node.id" class="mindmap-item" :style="{ left: `${entry.position.x + originX}px`, top: `${entry.position.y + originY}px`, width: `${entry.position.width}px` }">
-          <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1, 'drop-child': dropTarget?.id === entry.node.id && dropTarget.placement === 'child', 'drop-before': dropTarget?.id === entry.node.id && dropTarget.placement === 'before', 'drop-after': dropTarget?.id === entry.node.id && dropTarget.placement === 'after' }" :draggable="!editing && entry.node.id !== root.id" @click="selectNode(entry.node.id)" @dblclick="startEdit('rename', entry.node.id)" @dragstart="draggedId = entry.node.id" @dragend="clearDrag" @dragover.prevent="showDrop(entry.node.id, 'child')" @drop.prevent="drop(entry.node.id, 'child')">
+          <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1, 'drop-child': dropTarget?.id === entry.node.id && dropTarget.placement === 'child', 'drop-before': dropTarget?.id === entry.node.id && dropTarget.placement === 'before', 'drop-after': dropTarget?.id === entry.node.id && dropTarget.placement === 'after' }" :draggable="!editing && entry.node.id !== root.id" @click="selectNode(entry.node.id)" @dblclick="startEdit('rename', entry.node.id)" @contextmenu.prevent="openMenu($event, entry.node.id)" @dragstart="draggedId = entry.node.id" @dragend="clearDrag" @dragover.prevent="showDrop(entry.node.id, 'child')" @drop.prevent="drop(entry.node.id, 'child')">
             <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'before')" @drop.stop.prevent="drop(entry.node.id, 'before')" />
             <form v-if="editing && editNodeId === entry.node.id" class="mindmap-inline-edit" @submit.stop.prevent="submitEdit" @click.stop @dblclick.stop>
-              <input id="mindmap-label" v-model="draft" :aria-label="t('label')" :aria-invalid="labelError" @keydown.esc.stop.prevent="editing = null" />
+              <input id="mindmap-label" v-model="draft" :aria-label="t('label')" :aria-invalid="labelError" @keydown.esc.stop.prevent="cancelEdit" @blur="submitEdit" />
               <span v-if="labelError" role="alert">{{ t('invalidLabel') }}</span>
-              <div class="mindmap-edit-actions"><button type="submit">{{ t('apply') }}</button><button type="button" @click="editing = null">{{ t('cancel') }}</button></div>
             </form>
             <span v-else>{{ entry.node.label }}</span>
             <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'after')" @drop.stop.prevent="drop(entry.node.id, 'after')" />
@@ -42,6 +54,12 @@
           <button v-if="entry.node.children.length" type="button" class="mindmap-fold" :class="{ left: entry.position.side < 0 }" :aria-label="folded.has(entry.node.id) ? t('expand') : t('collapse')" @click="toggleFold(entry.node.id)">{{ folded.has(entry.node.id) ? '+' : '−' }}</button>
         </div>
       </div>
+    </div>
+    <div v-if="menu" class="mindmap-context-menu" :style="{ left: `${menu.x}px`, top: `${menu.y}px` }" role="menu" @contextmenu.prevent>
+      <button type="button" role="menuitem" @click="menuEdit('rename')">{{ t('rename') }}</button>
+      <button type="button" role="menuitem" @click="menuEdit('child')">{{ t('child') }}</button>
+      <button v-if="menu.id !== root.id" type="button" role="menuitem" @click="menuEdit('sibling')">{{ t('sibling') }}</button>
+      <button v-if="menu.id !== root.id" type="button" role="menuitem" @click="menuDelete">{{ t('delete') }}</button>
     </div>
     <div v-if="selected && selected.id !== root.id" class="mindmap-mobile-controls">
       <label>{{ t('parent') }}
@@ -82,9 +100,20 @@ const editing = ref<'child' | 'sibling' | 'rename' | null>(null);
 const draft = ref('');
 const labelError = ref(false);
 const confirmDelete = ref(false);
+const menu = ref<{ id: number; x: number; y: number } | null>(null);
+const direction = ref<'both' | 'right'>('both');
+const theme = ref<'ocean' | 'forest' | 'sunset'>('ocean');
+const palettes = {
+  ocean: { accent: '#58a6a0', strong: '#358e88' },
+  forest: { accent: '#72a873', strong: '#438650' },
+  sunset: { accent: '#d88b63', strong: '#bd694d' },
+};
+const palette = computed(() => ({ '--mindmap-accent': palettes[theme.value].accent, '--mindmap-strong': palettes[theme.value].strong }));
 const viewport = ref<HTMLElement>();
 const sizes = ref(new Map<number, NodeSize>());
 const sides = ref(new Map<number, -1 | 1>());
+// Switching layouts should redistribute branches instead of retaining the previous side assignments.
+watch(direction, () => { sides.value = new Map(); });
 const previewId = computed(() => {
   let max = 0;
   const visit = (node: MindMapNode) => { max = Math.max(max, node.id); node.children.forEach(visit); };
@@ -97,7 +126,7 @@ const previewRoot = computed(() => editing.value === 'child' || editing.value ==
 const previewFolded = computed(() => editing.value === 'child' && selectedId.value !== null
   ? new Set([...folded.value].filter(id => id !== selectedId.value)) : folded.value);
 const editNodeId = computed(() => editing.value === 'rename' ? selectedId.value : previewId.value);
-const diagram = computed(() => layoutMindMap(previewRoot.value, previewFolded.value, sizes.value, sides.value));
+const diagram = computed(() => layoutMindMap(previewRoot.value, previewFolded.value, sizes.value, sides.value, direction.value));
 const positions = computed(() => new Map(diagram.value.nodes.map(position => [position.id, position])));
 const positionedNodes = computed(() => visibleNodes.value.map(entry => ({ ...entry, position: positions.value.get(entry.node.id)! })));
 const margin = 96;
@@ -118,6 +147,7 @@ watch(() => props.source, source => {
   future.value = [];
   selectedId.value = root.value.id;
   editing.value = null;
+  menu.value = null;
   folded.value = new Set();
   sides.value = new Map();
   sizes.value = new Map();
@@ -186,11 +216,19 @@ function startEdit(type: 'child' | 'sibling' | 'rename', id = selectedId.value) 
   labelError.value = false;
   void nextTick(() => observed.get(editNodeId.value!)?.querySelector('input')?.focus());
 }
+function cancelEdit() {
+  editing.value = null;
+  labelError.value = false;
+}
 function submitEdit() {
-  if (!selected.value) return;
-  if (!validMindMapLabel(draft.value)) { labelError.value = true; return; }
-  if (editing.value === 'rename') operate({ type: 'rename', target: selected.value.id, label: draft.value });
-  else if (editing.value) {
+  if (!selected.value || !editing.value) return;
+  if (!validMindMapLabel(draft.value)) {
+    labelError.value = true;
+    void nextTick(() => observed.get(editNodeId.value!)?.querySelector('input')?.focus());
+    return;
+  }
+  if (editing.value === 'rename' && draft.value !== selected.value.label) operate({ type: 'rename', target: selected.value.id, label: draft.value });
+  else if (editing.value === 'child' || editing.value === 'sibling') {
     const target = selected.value.id;
     const ids: number[] = [];
     const collect = (node: MindMapNode) => { ids.push(node.id); node.children.forEach(collect); };
@@ -201,6 +239,23 @@ function submitEdit() {
   }
   editing.value = null;
   void nextTick(() => observed.get(selectedId.value!)?.focus());
+}
+function openMenu(event: MouseEvent, id: number) {
+  if (editing.value) return;
+  selectedId.value = id;
+  menu.value = { id, x: Math.max(0, Math.min(event.clientX, window.innerWidth - 180)), y: Math.max(0, Math.min(event.clientY, window.innerHeight - 170)) };
+}
+function closeMenu(event: PointerEvent) {
+  if (!(event.target as HTMLElement).closest('.mindmap-context-menu')) menu.value = null;
+}
+function menuEdit(type: 'rename' | 'child' | 'sibling') {
+  const id = menu.value?.id;
+  menu.value = null;
+  if (id !== undefined) startEdit(type, id);
+}
+function menuDelete() {
+  menu.value = null;
+  confirmDelete.value = true;
 }
 function deleteSelected() {
   confirmDelete.value = false;
@@ -255,6 +310,7 @@ function selectNode(id: number) {
 }
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement;
+  if (event.key === 'Escape' && menu.value) { menu.value = null; return; }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); emit('save'); return; }
   if (target.closest('input, select, textarea, button')) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); handleUndoKey(event); return; }
@@ -323,10 +379,11 @@ function observeNode(element: Element | ComponentPublicInstance | null, id: numb
   observer?.observe(element);
 }
 onMounted(() => {
+  document.addEventListener('pointerdown', closeMenu);
   if (viewport.value) observer?.observe(viewport.value);
   void nextTick(() => { if (!observer) fit(); });
 });
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => { observer?.disconnect(); document.removeEventListener('pointerdown', closeMenu); });
 function onWheel(event: WheelEvent) {
   if (event.ctrlKey || event.metaKey) zoom(event.deltaY < 0 ? 0.1 : -0.1);
   else { offsetX.value -= event.deltaX; offsetY.value -= event.deltaY; }
@@ -349,36 +406,38 @@ function endPan() { pointer = null; }
 <style scoped>
 .mindmap-editor { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--text-primary); background: var(--bg-primary); }
 .mindmap-toolbar, .mindmap-mobile-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border-bottom: 1px solid var(--border-color); }
-.mindmap-toolbar button, .mindmap-mobile-controls button, .mindmap-inline-edit button { border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 9px; background: var(--bg-secondary); color: inherit; cursor: pointer; }
+.mindmap-toolbar button, .mindmap-mobile-controls button, .mindmap-context-menu button { border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 9px; background: var(--bg-secondary); color: inherit; cursor: pointer; }
 .mindmap-toolbar button:disabled { opacity: .4; cursor: default; }
 .mindmap-toolbar-spacer { flex: 1; }
 .mindmap-view-controls { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--border-color); }
 .mindmap-inline-edit input, .mindmap-mobile-controls select, .mindmap-levels select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
 .mindmap-inline-edit { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .mindmap-inline-edit input { width: 100%; min-width: 0; box-sizing: border-box; }
-.mindmap-edit-actions { display: flex; justify-content: center; gap: 4px; }
+.mindmap-context-menu { position: fixed; z-index: 100; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); box-shadow: 0 6px 20px #0004; }
+.mindmap-context-menu button { text-align: left; border: 0; background: transparent; }
+.mindmap-context-menu button:hover { background: color-mix(in srgb, var(--mindmap-accent) 20%, var(--bg-secondary)); }
 .mindmap-inline-edit [role="alert"] { color: #d14d4d; font-size: 12px; }
 .mindmap-levels { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .mindmap-shortcuts { padding: 4px 8px; color: var(--text-tertiary); font-size: 11px; }
 .mindmap-viewport { flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; background: var(--bg-primary); background-image: radial-gradient(circle, var(--border-color) .7px, transparent 1px); background-size: 28px 28px; }
 .mindmap-canvas { position: relative; transform-origin: 0 0; }
 .mindmap-connections { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
-.mindmap-connections path { fill: none; stroke: #58a6a0; stroke-width: 2; opacity: .65; }
+.mindmap-connections path { fill: none; stroke: var(--mindmap-accent); stroke-width: 2; opacity: .65; }
 .mindmap-item { position: absolute; transform: translate(-50%, -50%); }
-.mindmap-fold { position: absolute; top: 50%; right: -12px; transform: translateY(-50%); width: 24px; height: 24px; border: 1px solid #58a6a0; border-radius: 50%; background: var(--bg-secondary); color: inherit; cursor: pointer; }
+.mindmap-fold { position: absolute; top: 50%; right: -12px; transform: translateY(-50%); width: 24px; height: 24px; border: 1px solid var(--mindmap-accent); border-radius: 50%; background: var(--bg-secondary); color: inherit; cursor: pointer; }
 .mindmap-fold.left { right: auto; left: -12px; }
 .mindmap-node { position: relative; box-sizing: border-box; width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: center; text-align: center; overflow-wrap: anywhere; border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 22px; background: var(--bg-secondary); box-shadow: 0 3px 12px #0002; cursor: grab; user-select: none; line-height: 1.4; font-size: 14px; }
-.mindmap-node.branch { border: 2px solid #58a6a0; font-size: 16px; font-weight: 600; }
-.mindmap-node.root { border: 2px solid #358e88; border-radius: 22px; background: var(--bg-secondary); font-size: 18px; font-weight: 700; cursor: default; }
-.mindmap-node.selected { outline: 3px solid #58a6a0; outline-offset: 3px; }
-.mindmap-node.drop-child { background: color-mix(in srgb, #58a6a0 30%, var(--bg-secondary)); border-color: #58a6a0; box-shadow: 0 0 0 4px #58a6a088; }
-.mindmap-node.drop-before::before, .mindmap-node.drop-after::after { content: ''; position: absolute; left: -12px; right: -12px; height: 5px; border-radius: 3px; background: #58a6a0; box-shadow: 0 0 0 2px var(--bg-secondary); }
+.mindmap-node.branch { border: 2px solid var(--mindmap-accent); font-size: 16px; font-weight: 600; }
+.mindmap-node.root { border: 2px solid var(--mindmap-strong); border-radius: 22px; background: var(--bg-secondary); font-size: 18px; font-weight: 700; cursor: default; }
+.mindmap-node.selected { outline: 3px solid var(--mindmap-accent); outline-offset: 3px; }
+.mindmap-node.drop-child { background: color-mix(in srgb, var(--mindmap-accent) 30%, var(--bg-secondary)); border-color: var(--mindmap-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mindmap-accent) 55%, transparent); }
+.mindmap-node.drop-before::before, .mindmap-node.drop-after::after { content: ''; position: absolute; left: -12px; right: -12px; height: 5px; border-radius: 3px; background: var(--mindmap-accent); box-shadow: 0 0 0 2px var(--bg-secondary); }
 .mindmap-node.drop-before::before { top: -9px; }
 .mindmap-node.drop-after::after { bottom: -9px; }
 .mindmap-drop-edge { position: absolute; left: 12px; right: 12px; height: 12px; z-index: 1; border-radius: 4px; }
 .mindmap-drop-edge:first-child { top: -6px; }
 .mindmap-drop-edge:last-child { bottom: -6px; }
-.mindmap-editor.dragging .mindmap-drop-edge:hover { background: #58a6a0; box-shadow: 0 0 0 2px var(--bg-secondary); }
-.mindmap-node:hover { border-color: #58a6a0; }
+.mindmap-editor.dragging .mindmap-drop-edge:hover { background: var(--mindmap-accent); box-shadow: 0 0 0 2px var(--bg-secondary); }
+.mindmap-node:hover { border-color: var(--mindmap-accent); }
 @media (min-width: 769px) { .mindmap-mobile-controls { display: none; } }
 </style>

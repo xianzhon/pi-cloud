@@ -12,7 +12,7 @@ export interface MapLayout {
 const horizontalGap = 76;
 const verticalGap = 24;
 
-export function layoutMindMap(root: MindMapNode, folded: ReadonlySet<number>, sizes: ReadonlyMap<number, NodeSize>, previousSides: ReadonlyMap<number, -1 | 1> = new Map()): MapLayout {
+export function layoutMindMap(root: MindMapNode, folded: ReadonlySet<number>, sizes: ReadonlyMap<number, NodeSize>, previousSides: ReadonlyMap<number, -1 | 1> = new Map(), direction: 'both' | 'right' = 'both'): MapLayout {
   const size = (node: MindMapNode): NodeSize => sizes.get(node.id) ?? { width: node === root ? 210 : node.children.length ? 190 : 170, height: 64 };
   const children = (node: MindMapNode) => folded.has(node.id) ? [] : node.children;
   const heights = new Map<number, number>();
@@ -28,7 +28,7 @@ export function layoutMindMap(root: MindMapNode, folded: ReadonlySet<number>, si
   const sides = new Map<number, -1 | 1>();
   const totals = { '-1': 0, '1': 0 };
   for (const child of children(root)) {
-    const side = previousSides.get(child.id) ?? (totals['-1'] <= totals['1'] ? -1 : 1);
+    const side = direction === 'right' ? 1 : previousSides.get(child.id) ?? (totals['-1'] <= totals['1'] ? -1 : 1);
     sides.set(child.id, side);
     totals[side] += heights.get(child.id)! + verticalGap;
   }
