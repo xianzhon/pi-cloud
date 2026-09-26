@@ -8,10 +8,12 @@
       <button type="button" :disabled="!past.length" @click="undo">{{ t('undo') }}</button>
       <button type="button" :disabled="!future.length" @click="redo">{{ t('redo') }}</button>
       <span class="mindmap-toolbar-spacer" />
-      <button type="button" @click="zoom(-0.1)" :aria-label="t('zoomOut')">−</button>
-      <span>{{ Math.round(scale * 100) }}%</span>
-      <button type="button" @click="zoom(0.1)" :aria-label="t('zoomIn')">+</button>
-      <button type="button" @click="fit">{{ t('fit') }}</button>
+      <div class="mindmap-view-controls">
+        <button type="button" @click="zoom(-0.1)" :aria-label="t('zoomOut')">−</button>
+        <span>{{ Math.round(scale * 100) }}%</span>
+        <button type="button" @click="zoom(0.1)" :aria-label="t('zoomIn')">+</button>
+        <button type="button" @click="fit">{{ t('fit') }}</button>
+      </div>
     </div>
     <form v-if="editing" class="mindmap-edit-form" @submit.prevent="submitEdit">
       <label for="mindmap-label">{{ t('label') }}</label>
@@ -21,15 +23,17 @@
       <span v-if="labelError" role="alert">{{ t('invalidLabel') }}</span>
     </form>
     <div ref="viewport" class="mindmap-viewport" tabindex="0" @pointerdown="startPan" @pointermove="pan" @pointerup="endPan" @pointercancel="endPan" @wheel.prevent="onWheel">
-      <div ref="canvas" class="mindmap-canvas" :style="{ transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})` }">
-        <div v-for="entry in visibleNodes" :key="entry.node.id" class="mindmap-row" :style="{ paddingLeft: `${entry.depth * 42 + 18}px` }">
-          <button v-if="entry.node.children.length" type="button" class="mindmap-fold" :aria-label="folded.has(entry.node.id) ? t('expand') : t('collapse')" @click="toggleFold(entry.node.id)">{{ folded.has(entry.node.id) ? '+' : '−' }}</button>
-          <span v-else class="mindmap-fold-placeholder" />
-          <div class="mindmap-node" role="button" tabindex="0" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id }" draggable="true" @click="selectedId = entry.node.id" @keydown.enter="selectedId = entry.node.id" @dragstart="draggedId = entry.node.id" @dragend="draggedId = null" @dragover.prevent @drop.prevent="drop(entry.node.id, 'child')">
-            <div class="mindmap-drop-edge" @dragover.prevent @drop.stop.prevent="drop(entry.node.id, 'before')" />
+      <div class="mindmap-canvas" :style="{ width: `${canvasWidth}px`, height: `${canvasHeight}px`, transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})` }">
+        <svg class="mindmap-connections" :width="canvasWidth" :height="canvasHeight" aria-hidden="true">
+          <path v-for="(path, index) in diagram.connectors" :key="index" :d="path" :transform="`translate(${originX} ${originY})`" />
+        </svg>
+        <div v-for="entry in positionedNodes" :key="entry.node.id" class="mindmap-item" :style="{ left: `${entry.position.x + originX}px`, top: `${entry.position.y + originY}px`, width: `${entry.position.width}px` }">
+          <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1 }" :draggable="entry.node.id !== root.id" @click="selectedId = entry.node.id" @keydown.enter="selectedId = entry.node.id" @dragstart="draggedId = entry.node.id" @dragend="draggedId = null" @dragover.prevent @drop.prevent="drop(entry.node.id, 'child')">
+            <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.prevent @drop.stop.prevent="drop(entry.node.id, 'before')" />
             {{ entry.node.label }}
-            <div class="mindmap-drop-edge" @dragover.prevent @drop.stop.prevent="drop(entry.node.id, 'after')" />
+            <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.prevent @drop.stop.prevent="drop(entry.node.id, 'after')" />
           </div>
+          <button v-if="entry.node.children.length" type="button" class="mindmap-fold" :class="{ left: entry.position.side < 0 }" :aria-label="folded.has(entry.node.id) ? t('expand') : t('collapse')" @click="toggleFold(entry.node.id)">{{ folded.has(entry.node.id) ? '+' : '−' }}</button>
         </div>
       </div>
     </div>
@@ -52,10 +56,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from 'vue';
 import { i18n } from '../i18n';
 import ConfirmModal from './ConfirmModal.vue';
 import { editMindMap, parseMindMap, serializeMindMap, validMindMapLabel, type MindMapNode } from '../utils/mindMap';
+import { layoutMindMap, type NodeSize } from '../utils/mindMapLayout';
 
 const props = defineProps<{ source: string }>();
 const emit = defineEmits<{ change: [source: string]; save: [] }>();
@@ -72,7 +77,16 @@ const labelError = ref(false);
 const labelInput = ref<HTMLInputElement>();
 const confirmDelete = ref(false);
 const viewport = ref<HTMLElement>();
-const canvas = ref<HTMLElement>();
+const sizes = ref(new Map<number, NodeSize>());
+const sides = ref(new Map<number, -1 | 1>());
+const diagram = computed(() => layoutMindMap(root.value, folded.value, sizes.value, sides.value));
+const positions = computed(() => new Map(diagram.value.nodes.map(position => [position.id, position])));
+const positionedNodes = computed(() => visibleNodes.value.map(entry => ({ ...entry, position: positions.value.get(entry.node.id)! })));
+const margin = 96;
+const originX = computed(() => margin - diagram.value.bounds.left);
+const originY = computed(() => margin - diagram.value.bounds.top);
+const canvasWidth = computed(() => diagram.value.bounds.right - diagram.value.bounds.left + margin * 2);
+const canvasHeight = computed(() => diagram.value.bounds.bottom - diagram.value.bounds.top + margin * 2);
 const scale = ref(1);
 const offsetX = ref(0);
 const offsetY = ref(0);
@@ -86,6 +100,10 @@ watch(() => props.source, source => {
   future.value = [];
   selectedId.value = root.value.id;
   folded.value = new Set();
+  sides.value = new Map();
+  sizes.value = new Map();
+  initialFit = true;
+  void nextTick(fit);
 });
 
 const selected = computed(() => findNode(root.value, selectedId.value));
@@ -116,6 +134,7 @@ const parentOptions = computed(() => {
   return result;
 });
 function apply(next: MindMapNode) {
+  sides.value = new Map([...sides.value, ...diagram.value.sides]);
   past.value.push(root.value);
   future.value = [];
   root.value = next;
@@ -172,17 +191,56 @@ function changeParent(event: Event) {
   select.value = '';
 }
 function toggleFold(id: number) {
+  sides.value = new Map([...sides.value, ...diagram.value.sides]);
   const next = new Set(folded.value);
   if (next.has(id)) next.delete(id); else next.add(id);
   folded.value = next;
 }
 function zoom(delta: number) { scale.value = Math.max(0.4, Math.min(2, Math.round((scale.value + delta) * 10) / 10)); }
 function fit() {
-  if (!viewport.value || !canvas.value) return;
-  scale.value = Math.max(0.4, Math.min(2, Math.min(viewport.value.clientWidth / canvas.value.offsetWidth, viewport.value.clientHeight / canvas.value.offsetHeight)));
-  offsetX.value = 0;
-  offsetY.value = 0;
+  if (!viewport.value) return;
+  const { clientWidth, clientHeight } = viewport.value;
+  if (!clientWidth || !clientHeight) return;
+  scale.value = Math.max(0.4, Math.min(2, Math.min(clientWidth / canvasWidth.value, clientHeight / canvasHeight.value)));
+  offsetX.value = (clientWidth - canvasWidth.value * scale.value) / 2;
+  offsetY.value = (clientHeight - canvasHeight.value * scale.value) / 2;
 }
+const observed = new Map<number, HTMLElement>();
+const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {
+  const next = new Map(sizes.value);
+  let changed = false;
+  for (const entry of entries) {
+    if (entry.target === viewport.value) continue;
+    const id = Number((entry.target as HTMLElement).dataset.nodeId);
+    const width = (entry.target as HTMLElement).offsetWidth;
+    const height = (entry.target as HTMLElement).offsetHeight;
+    if (!width || !height) continue;
+    if (next.get(id)?.width !== width || next.get(id)?.height !== height) {
+      next.set(id, { width, height });
+      changed = true;
+    }
+  }
+  if (changed) sizes.value = next;
+  if (initialFit && viewport.value?.clientWidth && viewport.value.clientHeight && visibleNodes.value.every(entry => next.has(entry.node.id))) {
+    initialFit = false;
+    void nextTick(fit);
+  }
+});
+let initialFit = true;
+function observeNode(element: Element | ComponentPublicInstance | null, id: number) {
+  const old = observed.get(id);
+  if (old === element) return;
+  if (old) { observer?.unobserve(old); observed.delete(id); }
+  if (!(element instanceof HTMLElement)) return;
+  element.dataset.nodeId = String(id);
+  observed.set(id, element);
+  observer?.observe(element);
+}
+onMounted(() => {
+  if (viewport.value) observer?.observe(viewport.value);
+  void nextTick(() => { if (!observer) fit(); });
+});
+onBeforeUnmount(() => observer?.disconnect());
 function onWheel(event: WheelEvent) {
   if (event.ctrlKey || event.metaKey) zoom(event.deltaY < 0 ? 0.1 : -0.1);
   else { offsetX.value -= event.deltaX; offsetY.value -= event.deltaY; }
@@ -208,17 +266,24 @@ function endPan() { pointer = null; }
 .mindmap-toolbar button, .mindmap-mobile-controls button, .mindmap-edit-form button { border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 9px; background: var(--bg-secondary); color: inherit; cursor: pointer; }
 .mindmap-toolbar button:disabled { opacity: .4; cursor: default; }
 .mindmap-toolbar-spacer { flex: 1; }
+.mindmap-view-controls { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--border-color); }
 .mindmap-edit-form input, .mindmap-mobile-controls select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
 .mindmap-edit-form [role="alert"] { color: #d14d4d; }
-.mindmap-viewport { flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; background-image: radial-gradient(circle, var(--border-color) 1px, transparent 1px); background-size: 22px 22px; }
-.mindmap-canvas { transform-origin: 0 0; width: max-content; min-width: 100%; padding: 24px 32px 80px 0; }
-.mindmap-row { display: flex; align-items: center; gap: 8px; min-height: 58px; }
-.mindmap-fold, .mindmap-fold-placeholder { width: 22px; flex: none; text-align: center; }
-.mindmap-fold { border: 1px solid var(--border-color); border-radius: 50%; background: var(--bg-secondary); color: inherit; cursor: pointer; }
-.mindmap-node { position: relative; min-width: 90px; border: 1px solid var(--border-color); border-left: 3px solid #58a6a0; border-radius: 7px; padding: 8px 14px; background: var(--bg-secondary); box-shadow: 0 3px 12px #0002; cursor: grab; user-select: none; }
-.mindmap-node.selected { outline: 2px solid #58a6a0; outline-offset: 2px; }
-.mindmap-drop-edge { position: absolute; left: 0; right: 0; height: 10px; }
-.mindmap-drop-edge:first-child { top: -7px; }
-.mindmap-drop-edge:last-child { bottom: -7px; }
+.mindmap-viewport { flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; background: var(--bg-primary); background-image: radial-gradient(circle, var(--border-color) .7px, transparent 1px); background-size: 28px 28px; }
+.mindmap-canvas { position: relative; transform-origin: 0 0; }
+.mindmap-connections { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.mindmap-connections path { fill: none; stroke: #58a6a0; stroke-width: 2; opacity: .65; }
+.mindmap-item { position: absolute; transform: translate(-50%, -50%); }
+.mindmap-fold { position: absolute; top: 50%; right: -12px; transform: translateY(-50%); width: 24px; height: 24px; border: 1px solid #58a6a0; border-radius: 50%; background: var(--bg-secondary); color: inherit; cursor: pointer; }
+.mindmap-fold.left { right: auto; left: -12px; }
+.mindmap-node { position: relative; box-sizing: border-box; width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: center; text-align: center; overflow-wrap: anywhere; border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 22px; background: var(--bg-secondary); box-shadow: 0 3px 12px #0002; cursor: grab; user-select: none; line-height: 1.4; font-size: 14px; }
+.mindmap-node.branch { border: 2px solid #58a6a0; font-size: 16px; font-weight: 600; }
+.mindmap-node.root { border: 2px solid #358e88; border-radius: 22px; background: var(--bg-secondary); font-size: 18px; font-weight: 700; cursor: default; }
+.mindmap-node.selected { outline: 3px solid #58a6a0; outline-offset: 3px; }
+.mindmap-drop-edge { position: absolute; left: 12px; right: 12px; height: 12px; z-index: 1; border-radius: 4px; }
+.mindmap-drop-edge:first-child { top: -6px; }
+.mindmap-drop-edge:last-child { bottom: -6px; }
+.mindmap-drop-edge:hover, .mindmap-drop-edge:focus { background: #58a6a0; box-shadow: 0 0 0 2px var(--bg-secondary); }
+.mindmap-node:hover { border-color: #58a6a0; }
 @media (min-width: 769px) { .mindmap-mobile-controls { display: none; } }
 </style>
