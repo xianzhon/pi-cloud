@@ -1346,6 +1346,12 @@ export default {
       noSkillsMatch: '没有与“{query}”匹配的技能。',
       selectionSummary: '已选择 {selected} 个 · 共 {available} 个',
     },
+    managedSkills: {
+      title: '共享技能',
+      description: '保存在 ~/.agents/skills 中的技能可供所有智能体配置使用。使用前请检查 GitHub 技能内容。此处只编辑 SKILL.md，克隆的其他文件会保留。子目录 URL 格式为 /tree/分支/路径（分支名不含斜杠）。',
+      name: '技能名称', content: 'SKILL.md', githubUrl: 'GitHub 仓库或技能目录 URL',
+      edit: '编辑', add: '添加技能', update: '更新技能', cancel: '取消', clone: '克隆技能', failed: '技能操作失败',
+    },
     skillPresetsPanel: {
       existingPresets: '现有预设',
       savedPresetsAreAvailableWhenCreatingA: '创建新会话时可以使用保存的预设。',
@@ -1475,8 +1481,9 @@ export default {
       promptsHeading: '自定义提示词',
       keyboard: '键盘',
       keyboardHeading: '键盘快捷键',
-      skills: '技能',
+      skills: '技能预设',
       skillsHeading: '技能预设',
+      sharedSkills: '共享技能',
       git: 'Git',
       gitHeading: 'Git 集成',
       gateway: '微信聊天机器人',

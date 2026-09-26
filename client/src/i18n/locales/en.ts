@@ -1346,6 +1346,12 @@ export default {
       noSkillsMatch: 'No skills match “{query}”.',
       selectionSummary: '{selected} selected · {available} available',
     },
+    managedSkills: {
+      title: 'Shared skills',
+      description: 'Skills stored in ~/.agents/skills are available across agent profiles. Review GitHub skills before using them. Edit SKILL.md here; other files in cloned skills are preserved. GitHub subdirectory URLs use /tree/branch/path (single-segment branch).',
+      name: 'Skill name', content: 'SKILL.md', githubUrl: 'GitHub repository or skill directory URL',
+      edit: 'Edit', add: 'Add skill', update: 'Update skill', cancel: 'Cancel', clone: 'Clone skill', failed: 'Skill operation failed',
+    },
     skillPresetsPanel: {
       existingPresets: 'Existing presets',
       savedPresetsAreAvailableWhenCreatingA: 'Saved presets are available when creating a new session.',
@@ -1475,8 +1481,9 @@ export default {
       promptsHeading: 'User prompts',
       keyboard: 'Keyboard',
       keyboardHeading: 'Keyboard shortcuts',
-      skills: 'Skills',
+      skills: 'Skill presets',
       skillsHeading: 'Skill presets',
+      sharedSkills: 'Shared skills',
       git: 'Git',
       gitHeading: 'Git integration',
       gateway: 'Gateway',

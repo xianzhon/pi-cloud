@@ -555,6 +555,7 @@
       @update:sound-notification="setSoundNotification"
       @update:auto-speak-assistant="setAutoSpeakAssistant"
       @update:git-clone-parent-path="setGitCloneParentPath"
+      @managed-skills-changed="handleManagedSkillsChanged"
       @create-skill-preset="handleCreateSkillPreset"
       @update-skill-preset="handleUpdateSkillPreset"
       @delete-skill-preset="handleDeleteSkillPreset"
@@ -1946,6 +1947,11 @@ async function handleTestGithubProxy(value: string) {
   } finally {
     githubProxyChecking.value = false;
   }
+}
+
+async function handleManagedSkillsChanged() {
+  invalidateLaunchResourceCache();
+  await loadSkills(clientId, selectedProjectPath.value);
 }
 
 async function handleCreateSkillPreset(payload: { name: string; mode: 'enabled' | 'disabled'; skills: string[] }) {
