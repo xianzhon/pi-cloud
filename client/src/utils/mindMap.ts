@@ -3,13 +3,22 @@ export interface MindMapNode {
   label: string;
   children: MindMapNode[];
   circleRoot?: boolean;
+  icon?: string;
 }
 
 type Operation =
   | { type: 'add'; target: number; placement: 'child' | 'sibling'; label: string }
   | { type: 'rename'; target: number; label: string }
+  | { type: 'icon'; target: number; icon?: string }
   | { type: 'delete'; target: number }
   | { type: 'move'; target: number; destination?: number; placement: 'child' | 'before' | 'after' | 'up' | 'down' | 'promote' };
+
+// Icon prefixes remain ordinary Mermaid node text, so Raw and Preview can display them too.
+export const mindMapIcons = [
+  '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
+  '🚩', '🏁', '🏳️', '🇺🇸', '🇨🇳', '🇬🇧', '🇯🇵', '🇩🇪', '🇫🇷',
+  '⭐', '✅', '❌', '⚠️', '💡', '📌', '📅', '📎', '📝', '🔗', '🔒', '🎯', '❤️', '🔥',
+];
 
 export function validMindMapLabel(label: string): boolean {
   return !!label && label.trim() === label && /^[\p{L}\p{N}_ -]+$/u.test(label);
@@ -28,10 +37,12 @@ export function parseMindMap(source: string): MindMapNode {
     const depth = match[1].length / 2 - 1;
     // Mermaid's root((label)) form gives the root a circular shape.
     const circleRoot = depth === 0 && /^root\(\((.*)\)\)$/.exec(match[2]);
-    const label = circleRoot ? circleRoot[1] : match[2];
+    const text = circleRoot ? circleRoot[1] : match[2];
+    const icon = mindMapIcons.find(value => text.startsWith(`${value} `));
+    const label = icon ? text.slice(icon.length + 1) : text;
     if (!validMindMapLabel(label)) throw new Error(`line:${i + 1}`);
     if (depth > stack.length || (depth === 0 && root)) throw new Error(`hierarchy:${i + 1}`);
-    const node: MindMapNode = { id: i, label, children: [], ...(circleRoot ? { circleRoot: true } : {}) };
+    const node: MindMapNode = { id: i, label, children: [], ...(circleRoot ? { circleRoot: true } : {}), ...(icon ? { icon } : {}) };
     if (depth === 0) root = node;
     else stack[depth - 1].children.push(node);
     stack[depth] = node;
@@ -44,7 +55,8 @@ export function parseMindMap(source: string): MindMapNode {
 export function serializeMindMap(root: MindMapNode): string {
   const lines = ['mindmap'];
   const visit = (node: MindMapNode, depth: number) => {
-    lines.push(`${'  '.repeat(depth)}${node.circleRoot ? `root((${node.label}))` : node.label}`);
+    const text = `${node.icon ? `${node.icon} ` : ''}${node.label}`;
+    lines.push(`${'  '.repeat(depth)}${node.circleRoot ? `root((${text}))` : text}`);
     node.children.forEach(child => visit(child, depth + 1));
   };
   visit(root, 1);
@@ -64,7 +76,11 @@ export function editMindMap(root: MindMapNode, operation: Operation): MindMapNod
   const found = locate(operation.target);
   if (!found) throw new Error('target');
   const { node, parent } = found;
-  if (operation.type === 'rename' || operation.type === 'add') {
+  if (operation.type === 'icon') {
+    if (operation.icon && !mindMapIcons.includes(operation.icon)) throw new Error('icon');
+    if (node.icon === operation.icon) throw new Error('unchanged');
+    node.icon = operation.icon;
+  } else if (operation.type === 'rename' || operation.type === 'add') {
     if (!validMindMapLabel(operation.label)) throw new Error('label');
     if (operation.type === 'rename') {
       if (node.label === operation.label) throw new Error('unchanged');

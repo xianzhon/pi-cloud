@@ -1,9 +1,9 @@
 <template>
-  <div class="mindmap-editor" :class="{ dragging: draggedId !== null }" :style="palette" @keydown="onKeydown">
+  <div class="mindmap-editor" :class="[structure, { dragging: draggedId !== null }]" :style="palette" @keydown="onKeydown">
     <div class="mindmap-toolbar">
       <button type="button" :disabled="!past.length" @click="undo">{{ t('undo') }}</button>
       <button type="button" :disabled="!future.length" @click="redo">{{ t('redo') }}</button>
-      <div class="mindmap-levels"><span>{{ t('levels') }}</span>
+      <div class="mindmap-levels mindmap-level-depth"><span>{{ t('levels') }}</span>
         <CustomSelect model-value="" :options="levelOptions" :aria-label="t('levels')" :placeholder="t('chooseLevel')" @update:model-value="setLevel(Number($event))" />
       </div>
       <div class="mindmap-levels"><span>{{ t('layout') }}</span>
@@ -11,6 +11,12 @@
       </div>
       <div class="mindmap-levels"><span>{{ t('theme') }}</span>
         <CustomSelect :model-value="theme" :options="themeOptions" :aria-label="t('theme')" @update:model-value="setTheme" />
+      </div>
+      <div class="mindmap-levels"><span>{{ t('structure') }}</span>
+        <CustomSelect :model-value="structure" :options="structureOptions" :aria-label="t('structure')" @update:model-value="setStructure" />
+      </div>
+      <div class="mindmap-levels"><span>{{ t('icon') }}</span>
+        <CustomSelect :model-value="selected?.icon || ''" :options="iconOptions" :aria-label="t('icon')" :disabled="!selected || !!editing" @update:model-value="setIcon" />
       </div>
       <span class="mindmap-toolbar-spacer" />
       <div class="mindmap-view-controls">
@@ -33,7 +39,7 @@
               <input id="mindmap-label" v-model="draft" :aria-label="t('label')" :aria-invalid="labelError" @keydown.esc.stop.prevent="cancelEdit" @blur="submitEdit" />
               <span v-if="labelError" role="alert">{{ t('invalidLabel') }}</span>
             </form>
-            <span v-else>{{ entry.node.label }}</span>
+            <span v-else><span v-if="entry.node.icon" class="mindmap-icon">{{ entry.node.icon }}</span>{{ entry.node.label }}</span>
             <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'after')" @drop.stop.prevent="drop(entry.node.id, 'after')" />
           </div>
           <button v-if="entry.node.children.length" type="button" class="mindmap-fold" :class="{ left: entry.position.side < 0 }" :aria-label="folded.has(entry.node.id) ? t('expand') : t('collapse')" @click="toggleFold(entry.node.id)">{{ folded.has(entry.node.id) ? '+' : '−' }}</button>
@@ -69,7 +75,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Compon
 import { i18n } from '../i18n';
 import ConfirmModal from './ConfirmModal.vue';
 import CustomSelect from './CustomSelect.vue';
-import { editMindMap, parseMindMap, serializeMindMap, validMindMapLabel, type MindMapNode } from '../utils/mindMap';
+import { editMindMap, mindMapIcons, parseMindMap, serializeMindMap, validMindMapLabel, type MindMapNode } from '../utils/mindMap';
 import { layoutMindMap, type NodeSize } from '../utils/mindMapLayout';
 
 const props = defineProps<{ source: string }>();
@@ -88,7 +94,8 @@ const labelError = ref(false);
 const confirmDelete = ref(false);
 const menu = ref<{ id: number; x: number; y: number } | null>(null);
 const direction = ref<'both' | 'right'>('both');
-const theme = ref<'ocean' | 'forest' | 'sunset'>('ocean');
+const theme = ref<keyof typeof palettes>('ocean');
+const structure = ref<'cards' | 'pills' | 'branches'>('cards');
 const levelOptions = computed(() => [
   ...[1, 2, 3].map(level => ({ value: String(level), label: t('level', { level }) })),
   { value: '0', label: t('expandAll') },
@@ -101,13 +108,32 @@ const themeOptions = computed(() => [
   { value: 'ocean', label: t('ocean') },
   { value: 'forest', label: t('forest') },
   { value: 'sunset', label: t('sunset') },
+  { value: 'lavender', label: t('lavender') },
+  { value: 'rose', label: t('rose') },
+  { value: 'gold', label: t('gold') },
+  { value: 'slate', label: t('slate') },
+]);
+const structureOptions = computed(() => [
+  { value: 'cards', label: t('cards') },
+  { value: 'pills', label: t('pills') },
+  { value: 'branches', label: t('branches') },
+]);
+const iconOptions = computed(() => [
+  { value: '', label: t('noIcon') },
+  ...mindMapIcons.map(icon => ({ value: icon, label: icon })),
 ]);
 function setDirection(value: string) { direction.value = value as typeof direction.value; }
 function setTheme(value: string) { theme.value = value as typeof theme.value; }
+function setStructure(value: string) { structure.value = value as typeof structure.value; }
+function setIcon(value: string) { if (selected.value) operate({ type: 'icon', target: selected.value.id, icon: value || undefined }); }
 const palettes = {
   ocean: { accent: '#58a6a0', strong: '#358e88' },
   forest: { accent: '#72a873', strong: '#438650' },
   sunset: { accent: '#d88b63', strong: '#bd694d' },
+  lavender: { accent: '#a58ad8', strong: '#7855b7' },
+  rose: { accent: '#d783a6', strong: '#ad507d' },
+  gold: { accent: '#cba34a', strong: '#9c7520' },
+  slate: { accent: '#8295ad', strong: '#536e8c' },
 };
 const palette = computed(() => ({ '--mindmap-accent': palettes[theme.value].accent, '--mindmap-strong': palettes[theme.value].strong }));
 const viewport = ref<HTMLElement>();
@@ -408,7 +434,8 @@ function endPan() { pointer = null; }
 .mindmap-toolbar-spacer { flex: 1; }
 .mindmap-view-controls { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--border-color); }
 .mindmap-inline-edit input, .mindmap-mobile-controls select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
-.mindmap-levels :deep(.custom-select) { max-width: 180px; }
+.mindmap-levels :deep(.custom-select) { min-width: 120px; max-width: 180px; }
+.mindmap-level-depth :deep(.custom-select) { min-width: 165px; }
 .mindmap-inline-edit { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .mindmap-inline-edit input { width: 100%; min-width: 0; box-sizing: border-box; }
 .mindmap-context-menu { position: fixed; z-index: 100; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); box-shadow: 0 6px 20px #0004; }
@@ -416,6 +443,11 @@ function endPan() { pointer = null; }
 .mindmap-context-menu button:hover { background: color-mix(in srgb, var(--mindmap-accent) 20%, var(--bg-secondary)); }
 .mindmap-inline-edit [role="alert"] { color: #d14d4d; font-size: 12px; }
 .mindmap-levels { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.mindmap-levels > span { white-space: nowrap; }
+.mindmap-icon { margin-right: 6px; }
+.mindmap-editor.pills .mindmap-node { border-radius: 999px; background: color-mix(in srgb, var(--mindmap-accent) 14%, var(--bg-secondary)); }
+.mindmap-editor.branches .mindmap-node { border: 0; border-bottom: 3px solid var(--mindmap-accent); border-radius: 0; background: transparent; box-shadow: none; }
+.mindmap-editor.branches .mindmap-node.root { border: 2px solid var(--mindmap-strong); border-radius: 12px; background: var(--bg-secondary); }
 .mindmap-shortcuts { padding: 4px 8px; color: var(--text-tertiary); font-size: 11px; }
 .mindmap-viewport { flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; background: var(--bg-primary); background-image: radial-gradient(circle, var(--border-color) .7px, transparent 1px); background-size: 28px 28px; }
 .mindmap-canvas { position: relative; transform-origin: 0 0; }

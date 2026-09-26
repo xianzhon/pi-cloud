@@ -24,6 +24,19 @@ describe('mind map source', () => {
       .toBe('mindmap\n  root((新智能体))\n    核心组成\n      大语言模型\n');
   });
 
+  it('round trips icons on roots and descendants through rename, move and removal', () => {
+    const text = 'mindmap\n  root((🚩 Root))\n    ⑩ Step\n      💡 Idea\n';
+    const root = parseMindMap(text);
+    expect(serializeMindMap(root)).toBe(text);
+    const renamed = editMindMap(root, { type: 'rename', target: 2, label: 'Next' });
+    expect(serializeMindMap(renamed)).toContain('    ⑩ Next\n');
+    const cleared = editMindMap(renamed, { type: 'icon', target: 2 });
+    expect(serializeMindMap(cleared)).toContain('    Next\n');
+    expect(serializeMindMap(editMindMap(cleared, { type: 'icon', target: 3, icon: '⭐' }))).toContain('      ⭐ Idea\n');
+    expect(() => editMindMap(root, { type: 'icon', target: 2, icon: 'bad' })).toThrow();
+    expect(serializeMindMap(root)).toBe(text);
+  });
+
   it.each([
     '', 'mindmap\n', 'mindmap\n  Root\n\n', 'mindmap\r\n  Root',
     'mindmap\n Root', 'mindmap\n  Root\n  Second',

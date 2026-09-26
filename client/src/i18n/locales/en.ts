@@ -449,6 +449,8 @@ export default {
         up: 'Move up', down: 'Move down', promote: 'Promote', deleteBranch: 'Delete this node and all its descendants?',
         levels: 'Show levels', chooseLevel: 'Choose depth', level: 'Up to level {level}', expandAll: 'Expand all',
         layout: 'Layout', bothSides: 'Both sides', rightSide: 'Right side', theme: 'Theme', ocean: 'Ocean', forest: 'Forest', sunset: 'Sunset',
+        lavender: 'Lavender', rose: 'Rose', gold: 'Gold', slate: 'Slate',
+        structure: 'Structure', cards: 'Cards', pills: 'Pills', branches: 'Branches', icon: 'Icon', noIcon: 'No icon',
         shortcuts: '↑↓ navigate · ←→ fold / enter branch · Tab child · Enter sibling · F2 rename · Shift+Tab promote · Delete remove',
       },
       addToReference: 'Add to reference',

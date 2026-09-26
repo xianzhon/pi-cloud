@@ -223,6 +223,21 @@ describe('MindMapVisualEditor', () => {
     wrapper.unmount();
   });
 
+  it('adds and removes a selected node icon with undo and source round trips', async () => {
+    const wrapper = mountEditor();
+    await wrapper.findAll('.mindmap-node')[1].trigger('click');
+    await wrapper.get('button[aria-label="Icon"]').trigger('click');
+    await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === '🚩')!.trigger('click');
+    expect(wrapper.emitted('change')?.[0]).toEqual(['mindmap\n  Root\n    🚩 One\n    Two\n']);
+    expect(wrapper.findAll('.mindmap-node')[1].text()).toContain('🚩');
+    await wrapper.findAll('.mindmap-toolbar > button')[0].trigger('click');
+    expect(wrapper.emitted('change')?.[1]).toEqual([source]);
+    await wrapper.findAll('.mindmap-toolbar > button')[1].trigger('click');
+    await wrapper.get('button[aria-label="Icon"]').trigger('click');
+    await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'No icon')!.trigger('click');
+    expect(wrapper.emitted('change')?.[3]).toEqual([source]);
+  });
+
   it('changes layout and palette without changing source', async () => {
     const wrapper = mountEditor();
     await wrapper.get('button[aria-label="Layout"]').trigger('click');
@@ -230,6 +245,12 @@ describe('MindMapVisualEditor', () => {
     await wrapper.get('button[aria-label="Theme"]').trigger('click');
     await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Forest')!.trigger('click');
     expect(wrapper.attributes('style')).toContain('#72a873');
+    await wrapper.get('button[aria-label="Theme"]').trigger('click');
+    await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Lavender')!.trigger('click');
+    expect(wrapper.attributes('style')).toContain('#a58ad8');
+    await wrapper.get('button[aria-label="Structure"]').trigger('click');
+    await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Branches')!.trigger('click');
+    expect(wrapper.classes()).toContain('branches');
     expect(wrapper.emitted('change')).toBeUndefined();
     wrapper.unmount();
   });
