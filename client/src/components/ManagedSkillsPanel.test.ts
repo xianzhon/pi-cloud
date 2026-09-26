@@ -64,6 +64,23 @@ it('edits a shared skill and reports changes to the existing picker', async () =
   expect(wrapper.emitted('changed')).toHaveLength(1);
 });
 
+it('shows and edits a nested skill using its relative path', async () => {
+  const nested = 'repo/collection/example';
+  const fetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ skills: [{ name: nested, content }] }) })
+    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ name: nested }) })
+    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ skills: [{ name: nested, content }] }) });
+  vi.stubGlobal('fetch', fetch);
+  const wrapper = mount(ManagedSkillsPanel);
+  await flushPromises();
+  expect(wrapper.find('.skill-row strong').text()).toBe(nested);
+  await wrapper.find('.skill-row button[aria-label="Edit"]').trigger('click');
+  await wrapper.find('textarea').setValue(`${content}\nUpdated`);
+  await wrapper.find('.skill-editor').trigger('submit');
+  await flushPromises();
+  expect(fetch).toHaveBeenCalledWith('/api/sessions/managed-skills/repo%2Fcollection%2Fexample', expect.objectContaining({ method: 'PUT' }));
+  expect(wrapper.emitted('changed')).toHaveLength(1);
+});
+
 it('confirms before deleting a shared skill and reports a successful change', async () => {
   const fetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ skills: [{ name: 'example', content }] }) })
     .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ name: 'example' }) })
@@ -83,6 +100,26 @@ it('confirms before deleting a shared skill and reports a successful change', as
   expect(wrapper.emitted('changed')).toHaveLength(1);
 });
 
+it('shows a spinner while cloning and hides it after completion', async () => {
+  let finishClone!: (response: unknown) => void;
+  const fetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ skills: [] }) })
+    .mockImplementationOnce(() => new Promise((resolve) => { finishClone = resolve; }))
+    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ skills: [] }) });
+  vi.stubGlobal('fetch', fetch);
+  const wrapper = mount(ManagedSkillsPanel);
+  await flushPromises();
+  await wrapper.find('input[type="url"]').setValue('https://github.com/owner/repo');
+  await wrapper.find('.skill-clone').trigger('submit');
+  const button = wrapper.find('.skill-clone-row button');
+  expect(button.attributes('aria-busy')).toBe('true');
+  expect(button.attributes('disabled')).toBeDefined();
+  expect(button.find('.skill-clone-spinner').exists()).toBe(true);
+  finishClone({ ok: true, status: 200, json: async () => ({ name: 'repo' }) });
+  await flushPromises();
+  expect(button.attributes('aria-busy')).toBe('false');
+  expect(button.find('.skill-clone-spinner').exists()).toBe(false);
+});
+
 it('shows clone failures without claiming success', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ skills: [] }) })
     .mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({ error: 'GitHub clone failed: repository unavailable' }) }));
@@ -91,6 +128,7 @@ it('shows clone failures without claiming success', async () => {
   await wrapper.find('input[type="url"]').setValue('https://github.com/owner/repo');
   await wrapper.findAll('form')[1].trigger('submit');
   await flushPromises();
-  expect(wrapper.find('[role="alert"]').text()).toContain('repository unavailable');
+  expect(wrapper.find('.skill-clone-row + [role="alert"]').text()).toContain('repository unavailable');
+  expect(wrapper.find('.managed-skills > [role="alert"]').exists()).toBe(false);
   expect(wrapper.emitted('changed')).toBeUndefined();
 });

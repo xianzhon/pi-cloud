@@ -29,8 +29,12 @@
       <label for="skill-clone-url">{{ t('components.managedSkills.githubUrl') }}</label>
       <div class="skill-clone-row">
         <input id="skill-clone-url" v-model="url" type="url" required placeholder="https://github.com/owner/repo/tree/main/skills/example" />
-        <button type="submit" class="skill-primary-btn" :disabled="busy">{{ t('components.managedSkills.clone') }}</button>
+        <button type="submit" class="skill-primary-btn" :disabled="busy" :aria-busy="cloning">
+          <span v-if="cloning" class="skill-clone-spinner" aria-hidden="true" />
+          {{ t('components.managedSkills.clone') }}
+        </button>
       </div>
+      <p v-if="cloneError" role="alert" class="skill-error">{{ cloneError }}</p>
       <p class="skill-description">{{ t('components.managedSkills.githubTip') }}</p>
     </form>
   </section>
@@ -51,7 +55,9 @@ const editing = ref(false);
 const showEditor = ref(false);
 const url = ref('');
 const error = ref('');
+const cloneError = ref('');
 const busy = ref(false);
+const cloning = ref(false);
 
 function sample(skillName: string) {
   return `---\nname: ${skillName}\ndescription: Helps with a specific task using a repeatable workflow.\n---\n\n# ${skillName}\n\n## Instructions\n\n1. Describe when to use this skill.\n2. List the steps the agent should follow.\n`;
@@ -82,16 +88,16 @@ function reset() {
   editing.value = false;
   showEditor.value = false;
 }
-async function run(action: () => Promise<unknown>) {
+async function run(action: () => Promise<unknown>, errorTarget = error) {
   busy.value = true;
-  error.value = '';
+  errorTarget.value = '';
   try {
     await action();
     await load();
     reset();
     emit('changed');
   } catch (cause) {
-    error.value = getApiErrorMessage(cause, t('components.managedSkills.failed'));
+    errorTarget.value = getApiErrorMessage(cause, t('components.managedSkills.failed'));
   } finally {
     busy.value = false;
   }
@@ -106,8 +112,13 @@ async function deleteSkill(skill: { name: string; content: string }) {
   await run(() => apiRequest(`/api/sessions/managed-skills/${encodeURIComponent(skill.name)}`, { method: 'DELETE' }));
 }
 async function cloneSkill() {
-  await run(() => apiRequest('/api/sessions/managed-skills/clone', { method: 'POST', body: { url: url.value.trim() } }));
-  if (!error.value) url.value = '';
+  cloning.value = true;
+  try {
+    await run(() => apiRequest('/api/sessions/managed-skills/clone', { method: 'POST', body: { url: url.value.trim() } }), cloneError);
+    if (!cloneError.value) url.value = '';
+  } finally {
+    cloning.value = false;
+  }
 }
 </script>
 
@@ -165,6 +176,8 @@ async function cloneSkill() {
 .skill-clone label { color: var(--text-secondary); font-size: 0.875rem; }
 .skill-clone-row { display: flex; align-items: center; gap: 0.5rem; }
 .skill-clone-row input { flex: 1; width: 100%; }
+.skill-clone-spinner { display: inline-block; width: 0.85em; height: 0.85em; margin-right: 0.35em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -0.1em; animation: skill-clone-spin 0.7s linear infinite; }
+@keyframes skill-clone-spin { to { transform: rotate(360deg); } }
 @media (max-width: 540px) {
   .skill-clone-row { flex-wrap: wrap; }
   .skill-clone-row button { margin-left: auto; }

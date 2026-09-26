@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { basename, join, sep } from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -27,30 +27,54 @@ function checkContent(name: string, content: unknown): asserts content is string
 }
 
 export class ManagedSkills {
-  constructor(private readonly root: string = join(homedir(), '.agents', 'skills')) {}
+  constructor(
+    private readonly root: string = join(homedir(), '.agents', 'skills'),
+    private readonly githubProxyEnv: () => Record<string, string> = () => ({}),
+  ) {}
 
   private directory(name: string) {
     checkName(name);
     return join(this.root, name);
   }
 
+  private async existingDirectory(path: string) {
+    const parts = path.split('/');
+    if (!parts.every((part) => part && part !== '.' && part !== '..' && part !== '.git' && !part.includes('\\') && !part.includes('\0'))) {
+      throw new SkillInputError('Invalid skill path');
+    }
+    let directory = this.root;
+    for (const part of parts) {
+      directory = join(directory, part);
+      if (!await fs.lstat(directory).then((stat) => stat.isDirectory(), () => false)) {
+        throw new SkillInputError('Skill not found or not a regular skill directory');
+      }
+    }
+    return directory;
+  }
+
   async list() {
-    const entries = await fs.readdir(this.root, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOENT') return [];
-      throw error;
-    });
-    return (await Promise.all(entries.filter((entry) => entry.isDirectory() && validName.test(entry.name)).map(async (entry) => {
-      const file = join(this.root, entry.name, 'SKILL.md');
-      if (!await fs.lstat(file).then((stat) => stat.isFile(), () => false)) return null;
-      return { name: entry.name, content: await fs.readFile(file, 'utf8') };
-    }))).filter((skill): skill is { name: string; content: string } => skill !== null);
+    const skills: { name: string; content: string }[] = [];
+    const visit = async (directory: string, prefix: string): Promise<void> => {
+      const entries = await fs.readdir(directory, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name === '.git') continue;
+        const name = prefix ? `${prefix}/${entry.name}` : entry.name;
+        const path = join(directory, entry.name);
+        const file = join(path, 'SKILL.md');
+        if (await fs.lstat(file).then((stat) => stat.isFile(), () => false)) {
+          skills.push({ name, content: await fs.readFile(file, 'utf8') });
+        }
+        await visit(path, name);
+      }
+    };
+    if (await fs.lstat(this.root).then((stat) => stat.isDirectory(), () => false)) await visit(this.root, '');
+    return skills;
   }
 
   async save(name: string, content: string, update = false) {
-    const directory = this.directory(name);
-    checkContent(name, content);
+    const directory = update ? await this.existingDirectory(name) : this.directory(name);
+    checkContent(basename(directory), content);
     const exists = await fs.lstat(directory).then(() => true, () => false);
-    if (update && !exists) throw new SkillInputError('Skill not found');
     if (!update && exists) throw new SkillInputError('Skill already exists');
     if (update) {
       const file = join(directory, 'SKILL.md');
@@ -78,7 +102,7 @@ export class ManagedSkills {
   }
 
   async delete(name: string) {
-    const directory = this.directory(name);
+    const directory = await this.existingDirectory(name);
     const file = join(directory, 'SKILL.md');
     if (!await fs.lstat(directory).then((stat) => stat.isDirectory(), () => false)
       || !await fs.lstat(file).then((stat) => stat.isFile(), () => false)) {
@@ -108,25 +132,30 @@ export class ManagedSkills {
       if (subpath.length) args.push('--branch', parts[3]);
       args.push(`https://github.com/${parts[0]}/${repo}.git`, join(temporary, 'repo'));
       try {
-        await execFileAsync('git', args, { timeout: 60_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' } });
+        await execFileAsync('git', args, { timeout: 60_000, env: { ...process.env, ...this.githubProxyEnv(), GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' } });
       } catch (error) {
         throw new SkillInputError(`GitHub clone failed: ${error instanceof Error ? error.message : String(error)}`);
       }
       const source = join(temporary, 'repo', ...subpath);
-      if (!await fs.lstat(source).then((stat) => stat.isDirectory(), () => false)
-        || !await fs.lstat(join(source, 'SKILL.md')).then((stat) => stat.isFile(), () => false)) {
+      if (!await fs.lstat(source).then((stat) => stat.isDirectory(), () => false)) {
         throw new SkillInputError('Repository path has no regular SKILL.md');
       }
-      const content = await fs.readFile(join(source, 'SKILL.md'), 'utf8');
-      checkContent(name, content);
-      // Never publish links into an untrusted checkout as managed skills.
-      async function checkTree(dir: string): Promise<void> {
+      // Pi discovers nested skill directories; reject invalid skills and links before publishing.
+      async function checkTree(dir: string): Promise<boolean> {
+        let found = false;
         for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+          if (entry.name === '.git') continue;
           if (entry.isSymbolicLink()) throw new SkillInputError('Skills containing symlinks cannot be cloned');
-          if (entry.isDirectory()) await checkTree(join(dir, entry.name));
+          if (entry.name === 'SKILL.md') {
+            if (!entry.isFile()) throw new SkillInputError('Repository path has no regular SKILL.md');
+            checkContent(dir === source ? name : basename(dir), await fs.readFile(join(dir, entry.name), 'utf8'));
+            found = true;
+          }
+          if (entry.isDirectory() && await checkTree(join(dir, entry.name))) found = true;
         }
+        return found;
       }
-      await checkTree(source);
+      if (!await checkTree(source)) throw new SkillInputError('Repository path has no regular SKILL.md');
       await fs.mkdir(this.root, { recursive: true });
       await fs.mkdir(destination);
       created = true;

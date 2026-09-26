@@ -174,6 +174,7 @@ interface SessionRouteOptions {
   activityStore?: Pick<SessionActivityStore, 'listForSession'> & Partial<Pick<SessionActivityStore, 'listLatestPrForSessions' | 'updatePrStatus'>>;
   refreshPrStatus?: (activity: SessionActivityRecord) => Promise<PullRequestStatus>;
   repositoryCloner?: Pick<RepositoryCloner, 'preview' | 'start' | 'getJob' | 'subscribe' | 'cancel'>;
+  managedSkillProxyEnv?: () => Record<string, string>;
 }
 
 const PR_STATUS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -568,7 +569,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     return { results, total: results.length };
   });
 
-  const managedSkills = new ManagedSkills();
+  const managedSkills = new ManagedSkills(undefined, options.managedSkillProxyEnv);
   const skillError = (reply: FastifyReply, error: unknown) => reply.status(error instanceof SkillInputError ? 400 : 500)
     .send({ error: error instanceof Error ? error.message : 'Skill operation failed' });
 

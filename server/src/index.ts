@@ -383,6 +383,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     activityStore: sessionActivityStore,
     refreshPrStatus: (activity: SessionActivityRecord) => refreshPullRequestStatus(activity, { giteaSettings, githubSettings }),
     repositoryCloner,
+    managedSkillProxyEnv: () => githubSettings.proxyEnv(),
   });
   await app.register(memoryRoutes, { prefix: '/api/memories' });
   await app.register(taskRoutes, { prefix: '/api/tasks', store: projectTaskStore, starter: projectTaskStarter, activityStore: sessionActivityStore });

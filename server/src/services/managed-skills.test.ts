@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { GithubSettingsStore } from './github-settings-store';
+import { openPiCloudDatabase } from '../db/database';
 import { ManagedSkills } from './managed-skills';
 
 const directories: string[] = [];
@@ -43,10 +45,13 @@ describe('managed skills', () => {
     await fs.symlink(join(skills, 'ordinary'), join(skills, 'linked'));
     await fs.mkdir(join(skills, 'linked-file'));
     await fs.symlink(join(skills, 'ordinary'), join(skills, 'linked-file', 'SKILL.md'));
-    await expect(service.delete('../outside')).rejects.toThrow('Skill name');
+    await expect(service.delete('../outside')).rejects.toThrow('Invalid skill path');
     await expect(service.delete('ordinary')).rejects.toThrow('not a regular skill');
     await expect(service.delete('linked')).rejects.toThrow('not a regular skill');
     await expect(service.delete('linked-file')).rejects.toThrow('not a regular skill');
+    await expect(service.delete('linked/ordinary')).rejects.toThrow('not a regular skill');
+    await expect(service.save('linked/ordinary', markdown('ordinary'), true)).rejects.toThrow('not a regular skill');
+    await expect(service.delete('ordinary/../other')).rejects.toThrow('Invalid skill path');
     expect(await fs.readdir(skills)).toEqual(['linked', 'linked-file', 'ordinary']);
   });
 
@@ -79,6 +84,59 @@ describe('managed skills', () => {
     } finally {
       process.env.PATH = originalPath;
       delete process.env.SKILL_TEST_FIXTURE;
+    }
+  });
+
+  it('clones a repository containing nested skills for Pi to discover recursively', async () => {
+    const { root, service } = await setup();
+    const bin = join(root, 'bin');
+    const fixture = join(root, 'fixture');
+    await fs.mkdir(bin);
+    await fs.mkdir(join(fixture, 'collection', 'example'), { recursive: true });
+    await fs.mkdir(join(fixture, '.git'));
+    await fs.writeFile(join(fixture, 'collection', 'example', 'SKILL.md'), markdown('example'));
+    await fs.mkdir(join(fixture, 'collection', 'other'));
+    await fs.writeFile(join(fixture, 'collection', 'other', 'SKILL.md'), markdown('other'));
+    await fs.writeFile(join(bin, 'git'), '#!/bin/sh\nfor dest; do :; done\ncp -R "$SKILL_TEST_FIXTURE" "$dest"\n', { mode: 0o755 });
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath}`;
+    process.env.SKILL_TEST_FIXTURE = fixture;
+    try {
+      expect(await service.clone('https://github.com/owner/repo')).toBe('repo');
+      expect(await service.list()).toEqual([
+        { name: 'repo/collection/example', content: markdown('example') },
+        { name: 'repo/collection/other', content: markdown('other') },
+      ]);
+      await service.save('repo/collection/example', markdown('example') + 'Updated', true);
+      expect(await fs.readFile(join(root, 'skills', 'repo', 'collection', 'example', 'SKILL.md'), 'utf8')).toBe(markdown('example') + 'Updated');
+      await service.delete('repo/collection/example');
+      expect(await service.list()).toEqual([{ name: 'repo/collection/other', content: markdown('other') }]);
+      await expect(fs.lstat(join(root, 'skills', 'repo', '.git'))).rejects.toThrow();
+    } finally {
+      process.env.PATH = originalPath;
+      delete process.env.SKILL_TEST_FIXTURE;
+    }
+  });
+
+  it('applies the saved GitHub proxy to the git clone process', async () => {
+    const { root } = await setup();
+    const db = openPiCloudDatabase(':memory:');
+    const githubSettings = new GithubSettingsStore(db);
+    githubSettings.saveProxyUrl('http://proxy.example:8080');
+    const service = new ManagedSkills(join(root, 'skills'), () => githubSettings.proxyEnv());
+    const bin = join(root, 'bin');
+    await fs.mkdir(bin);
+    await fs.writeFile(join(bin, 'git'), '#!/bin/sh\nprintf "%s" "$HTTPS_PROXY" > "$SKILL_TEST_PROXY_FILE"\nexit 128\n', { mode: 0o755 });
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath}`;
+    process.env.SKILL_TEST_PROXY_FILE = join(root, 'proxy');
+    try {
+      await expect(service.clone('https://github.com/owner/repo')).rejects.toThrow('GitHub clone failed');
+      expect(await fs.readFile(join(root, 'proxy'), 'utf8')).toBe('http://proxy.example:8080');
+    } finally {
+      process.env.PATH = originalPath;
+      delete process.env.SKILL_TEST_PROXY_FILE;
+      db.close();
     }
   });
 
