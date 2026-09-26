@@ -1348,7 +1348,8 @@ export default {
     },
     managedSkills: {
       title: '共享技能',
-      description: '保存在 ~/.agents/skills 中的技能可供所有智能体配置使用。使用前请检查 GitHub 技能内容。此处只编辑 SKILL.md，克隆的其他文件会保留。子目录 URL 格式为 /tree/分支/路径（分支名不含斜杠）。',
+      description: '保存在 ~/.agents/skills 中的技能可供所有智能体配置使用。此处只编辑 SKILL.md，克隆的其他文件会保留。',
+      githubTip: '使用前请检查 GitHub 技能内容。子目录 URL 格式为 /tree/分支/路径（分支名不含斜杠）。',
       name: '技能名称', content: 'SKILL.md', githubUrl: 'GitHub 仓库或技能目录 URL',
       edit: '编辑', add: '添加技能', useSample: '使用 SKILL.md 示例', update: '更新技能', cancel: '取消', clone: '克隆技能', delete: '删除', deleteConfirm: '删除共享技能“{name}”及其所有文件？', failed: '技能操作失败',
     },

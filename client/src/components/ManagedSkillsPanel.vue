@@ -1,31 +1,37 @@
 <template>
   <section class="managed-skills">
-    <h4>{{ t('components.managedSkills.title') }}</h4>
-    <p>{{ t('components.managedSkills.description') }}</p>
+    <p class="skill-description">{{ t('components.managedSkills.description') }}</p>
     <p v-if="error" role="alert" class="skill-error">{{ error }}</p>
-    <div v-for="skill in skills" :key="skill.name" class="skill-row">
-      <strong>{{ skill.name }}</strong>
-      <div class="skill-actions">
-        <button type="button" class="skill-icon-btn" :aria-label="t('components.managedSkills.edit')" :title="t('components.managedSkills.edit')" :disabled="busy" @click="editSkill(skill)">
-          <PhPencilSimple :size="15" weight="bold" />
-        </button>
-        <button type="button" class="skill-icon-btn danger" :aria-label="t('components.managedSkills.delete')" :title="t('components.managedSkills.delete')" :disabled="busy" @click="deleteSkill(skill)">
-          <PhTrash :size="15" weight="bold" />
-        </button>
+    <div class="skill-list">
+      <div v-for="skill in skills" :key="skill.name" class="skill-row">
+        <strong>{{ skill.name }}</strong>
+        <div class="skill-actions">
+          <button type="button" class="skill-icon-btn" :aria-label="t('components.managedSkills.edit')" :title="t('components.managedSkills.edit')" :disabled="busy" @click="editSkill(skill)">
+            <PhPencilSimple :size="15" weight="bold" />
+          </button>
+          <button type="button" class="skill-icon-btn danger" :aria-label="t('components.managedSkills.delete')" :title="t('components.managedSkills.delete')" :disabled="busy" @click="deleteSkill(skill)">
+            <PhTrash :size="15" weight="bold" />
+          </button>
+        </div>
       </div>
     </div>
-    <form @submit.prevent="save">
-      <label>{{ t('components.managedSkills.name') }} <input v-model="name" :disabled="!!editing" required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="64" /></label>
+    <button v-if="!showEditor" type="button" class="skill-add-toggle" :disabled="busy" @click="showEditor = true">{{ t('components.managedSkills.add') }}</button>
+    <form v-show="showEditor" class="skill-editor" @submit.prevent="save">
+      <label>{{ t('components.managedSkills.name') }} <input v-model="name" class="skill-name-input" :disabled="editing" required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="64" /></label>
       <label>{{ t('components.managedSkills.content') }} <textarea v-model="content" required rows="9" spellcheck="false" /></label>
-      <button v-if="!editing" type="button" class="skill-sample-btn" @click="useSample">{{ t('components.managedSkills.useSample') }}</button>
-      <div class="skill-actions">
-        <button type="submit" :disabled="busy">{{ editing ? t('components.managedSkills.update') : t('components.managedSkills.add') }}</button>
-        <button v-if="editing" type="button" @click="reset">{{ t('components.managedSkills.cancel') }}</button>
+      <div class="skill-form-actions">
+        <button v-if="!editing" type="button" class="skill-sample-btn" @click="useSample">{{ t('components.managedSkills.useSample') }}</button>
+        <button type="submit" class="skill-primary-btn" :disabled="busy">{{ editing ? t('components.managedSkills.update') : t('components.managedSkills.add') }}</button>
+        <button type="button" class="skill-cancel-btn" @click="reset">{{ t('components.managedSkills.cancel') }}</button>
       </div>
     </form>
-    <form @submit.prevent="cloneSkill">
-      <label>{{ t('components.managedSkills.githubUrl') }} <input v-model="url" type="url" required placeholder="https://github.com/owner/repo/tree/main/skills/example" /></label>
-      <button type="submit" :disabled="busy">{{ t('components.managedSkills.clone') }}</button>
+    <form class="skill-clone" @submit.prevent="cloneSkill">
+      <label for="skill-clone-url">{{ t('components.managedSkills.githubUrl') }}</label>
+      <div class="skill-clone-row">
+        <input id="skill-clone-url" v-model="url" type="url" required placeholder="https://github.com/owner/repo/tree/main/skills/example" />
+        <button type="submit" class="skill-primary-btn" :disabled="busy">{{ t('components.managedSkills.clone') }}</button>
+      </div>
+      <p class="skill-description">{{ t('components.managedSkills.githubTip') }}</p>
     </form>
   </section>
 </template>
@@ -42,6 +48,7 @@ const skills = ref<{ name: string; content: string }[]>([]);
 const name = ref('');
 const content = ref('');
 const editing = ref(false);
+const showEditor = ref(false);
 const url = ref('');
 const error = ref('');
 const busy = ref(false);
@@ -66,12 +73,14 @@ function editSkill(skill: { name: string; content: string }) {
   name.value = skill.name;
   content.value = skill.content;
   editing.value = true;
+  showEditor.value = true;
   error.value = '';
 }
 function reset() {
   name.value = '';
   content.value = '';
   editing.value = false;
+  showEditor.value = false;
 }
 async function run(action: () => Promise<unknown>) {
   busy.value = true;
@@ -103,14 +112,15 @@ async function cloneSkill() {
 </script>
 
 <style scoped>
-.managed-skills, .managed-skills form { display: grid; gap: 0.75rem; }
-
-.managed-skills h4, .managed-skills p { margin: 0; }
-.managed-skills label { display: grid; gap: 0.3rem; }
-.managed-skills input, .managed-skills textarea { width: 100%; min-width: 0; box-sizing: border-box; }
-.skill-row, .skill-actions { display: flex; align-items: center; gap: 0.75rem; }
-.skill-row { justify-content: space-between; }
-.skill-sample-btn { justify-self: start; }
+.managed-skills { display: grid; gap: 1rem; }
+.managed-skills p { margin: 0; }
+.skill-description { color: var(--text-secondary); font-size: 0.875rem; line-height: 1.5; }
+.skill-error { color: var(--error-color, #ef4444); }
+.skill-list { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.skill-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 0.75rem; min-height: 2.75rem; }
+.skill-row + .skill-row { border-top: 1px solid var(--border); }
+.skill-row strong { min-width: 0; overflow-wrap: anywhere; font-size: 0.875rem; }
+.skill-actions { display: flex; align-items: center; gap: 0.4rem; flex: 0 0 auto; }
 .skill-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -123,9 +133,40 @@ async function cloneSkill() {
   color: var(--text-secondary);
   background: transparent;
   cursor: pointer;
-  transition: color 120ms ease, background 120ms ease, transform 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
 }
 .skill-icon-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
 .skill-icon-btn.danger { color: var(--error-color, #ef4444); }
-.skill-error { color: var(--error-color, #ef4444); }
+.skill-icon-btn.danger:hover { background: color-mix(in srgb, var(--error-color, #ef4444) 10%, transparent); }
+.skill-add-toggle, .skill-form-actions button, .skill-clone-row button {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.skill-add-toggle { justify-self: start; }
+.skill-add-toggle:hover, .skill-form-actions button:hover, .skill-clone-row button:hover { background: var(--bg-tertiary); }
+.skill-form-actions .skill-primary-btn, .skill-clone-row .skill-primary-btn { background: var(--accent); border-color: var(--accent); color: white; }
+.skill-form-actions .skill-primary-btn:hover, .skill-clone-row .skill-primary-btn:hover { background: var(--accent-hover, var(--accent)); }
+.managed-skills button:disabled { opacity: 0.5; cursor: not-allowed; }
+.skill-editor { display: grid; gap: 0.85rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); }
+.skill-editor label { display: grid; justify-items: start; gap: 0.4rem; color: var(--text-secondary); font-size: 0.875rem; }
+.skill-editor input, .skill-editor textarea, .skill-clone input { min-width: 0; box-sizing: border-box; }
+.skill-editor .skill-name-input { width: min(100%, 20rem); }
+.skill-editor textarea { width: 100%; resize: vertical; font-family: var(--font-mono, monospace); }
+.skill-form-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.skill-form-actions .skill-primary-btn { margin-left: auto; }
+.skill-clone { display: grid; gap: 0.4rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.skill-clone label { color: var(--text-secondary); font-size: 0.875rem; }
+.skill-clone-row { display: flex; align-items: center; gap: 0.5rem; }
+.skill-clone-row input { flex: 1; width: 100%; }
+@media (max-width: 540px) {
+  .skill-clone-row { flex-wrap: wrap; }
+  .skill-clone-row button { margin-left: auto; }
+}
 </style>

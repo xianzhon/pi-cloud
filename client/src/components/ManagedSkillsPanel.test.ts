@@ -5,6 +5,18 @@ import ManagedSkillsPanel from './ManagedSkillsPanel.vue';
 const content = '---\nname: example\ndescription: Example\n---\n# Example';
 afterEach(() => vi.unstubAllGlobals());
 
+it('shows editing guidance above and GitHub guidance beside the clone URL', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ skills: [] }) }));
+  const wrapper = mount(ManagedSkillsPanel);
+  await flushPromises();
+  expect(wrapper.find('.managed-skills > .skill-description').text()).toContain('Edit SKILL.md here; other files in cloned skills are preserved.');
+  const cloneForm = wrapper.find('.skill-clone');
+  expect(cloneForm.find('.skill-description').text()).toContain('Review GitHub skills before using them.');
+  expect(cloneForm.find('.skill-description').text()).not.toContain('Edit SKILL.md');
+  expect(cloneForm.find('.skill-description').text()).toContain('/tree/branch/path');
+  expect(cloneForm.find('.skill-clone-row + .skill-description').exists()).toBe(true);
+});
+
 it('inserts a valid sample skill and keeps its YAML name in sync until edited', async () => {
   const fetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ skills: [] }) })
     .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ name: 'my-skill' }) })
