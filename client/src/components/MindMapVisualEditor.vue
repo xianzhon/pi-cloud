@@ -1,5 +1,5 @@
 <template>
-  <div class="mindmap-editor" @keydown="onKeydown">
+  <div class="mindmap-editor" :class="{ dragging: draggedId !== null }" @keydown="onKeydown">
     <div class="mindmap-toolbar">
       <button type="button" :disabled="!selected" @click="startEdit('child')">{{ t('child') }}</button>
       <button type="button" :disabled="!selected || selected.id === root.id" @click="startEdit('sibling')">{{ t('sibling') }}</button>
@@ -378,7 +378,7 @@ function endPan() { pointer = null; }
 .mindmap-drop-edge { position: absolute; left: 12px; right: 12px; height: 12px; z-index: 1; border-radius: 4px; }
 .mindmap-drop-edge:first-child { top: -6px; }
 .mindmap-drop-edge:last-child { bottom: -6px; }
-.mindmap-drop-edge:hover, .mindmap-drop-edge:focus { background: #58a6a0; box-shadow: 0 0 0 2px var(--bg-secondary); }
+.mindmap-editor.dragging .mindmap-drop-edge:hover { background: #58a6a0; box-shadow: 0 0 0 2px var(--bg-secondary); }
 .mindmap-node:hover { border-color: #58a6a0; }
 @media (min-width: 769px) { .mindmap-mobile-controls { display: none; } }
 </style>

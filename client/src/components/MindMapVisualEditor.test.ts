@@ -113,11 +113,14 @@ describe('mind map visual editing', () => {
     await wrapper.find('.mindmap-viewport').trigger('wheel', { deltaX: 12, deltaY: 8 });
     expect(wrapper.find('.mindmap-canvas').attributes('style')).toContain('translate(-12px, -8px)');
     expect(wrapper.emitted('change')).toBeUndefined();
+    expect(wrapper.find('.mindmap-editor').classes()).not.toContain('dragging');
     await wrapper.findAll('.mindmap-node')[2].trigger('dragstart');
+    expect(wrapper.find('.mindmap-editor').classes()).toContain('dragging');
     await wrapper.findAll('.mindmap-drop-edge')[0].trigger('dragover');
     expect(wrapper.findAll('.mindmap-node')[1].classes()).toContain('drop-before');
     await wrapper.findAll('.mindmap-drop-edge')[0].trigger('drop');
     expect(wrapper.find('.drop-before').exists()).toBe(false);
+    expect(wrapper.find('.mindmap-editor').classes()).not.toContain('dragging');
     expect(wrapper.emitted('change')?.[0]).toEqual(['mindmap\n  Root\n    Two\n    One\n']);
     await wrapper.findAll('.mindmap-node')[2].trigger('click');
     await wrapper.find('.mindmap-mobile-controls select').setValue('3');
