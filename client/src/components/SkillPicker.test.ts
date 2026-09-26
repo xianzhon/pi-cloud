@@ -31,6 +31,27 @@ describe('SkillPicker', () => {
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([['brainstorming', 'systematic-debugging']]);
   });
 
+  it('shows paths alongside names so identically named skills can be distinguished', () => {
+    const wrapper = mount(SkillPicker, {
+      props: {
+        skills: [
+          { name: 'review', description: 'first', path: '~/.pi/skills/review' },
+          { name: 'review', description: 'second', path: '/repo/.pi/skills/review' },
+        ],
+        modelValue: [],
+      },
+    });
+
+    expect(wrapper.findAll('.skill-option-header').map((item) => item.text())).toEqual([
+      'review~/.pi/skills/review',
+      'review/repo/.pi/skills/review',
+    ]);
+    expect(wrapper.findAll('.skill-option-path').map((item) => item.attributes('title'))).toEqual([
+      '~/.pi/skills/review',
+      '/repo/.pi/skills/review',
+    ]);
+  });
+
   it('groups selected visible skills before available skills', async () => {
     const wrapper = mount(SkillPicker, {
       props: {

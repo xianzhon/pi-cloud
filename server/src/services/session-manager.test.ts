@@ -891,14 +891,27 @@ describe('PiSessionService', () => {
     await service.setClientAgentProfile('client-1', 'work');
 
     await expect(service.listAvailableSkills('client-1', '/repo/app')).resolves.toEqual([
-      { name: 'brainstorming', description: 'Creative work', path: '/skills/brainstorming/SKILL.md' },
-      { name: 'frontend-design', description: 'Design work', path: '/skills/frontend-design/SKILL.md' },
-      { name: 'systematic-debugging', description: 'Bug fixing', path: '/skills/systematic-debugging/SKILL.md' },
+      { name: 'brainstorming', description: 'Creative work', path: '/skills/brainstorming' },
+      { name: 'frontend-design', description: 'Design work', path: '/skills/frontend-design' },
+      { name: 'systematic-debugging', description: 'Bug fixing', path: '/skills/systematic-debugging' },
     ]);
     expect(defaultResourceLoaderCtor).toHaveBeenCalledWith(expect.objectContaining({
       cwd: '/repo/app',
       agentDir: '/Users/test/.pi/work',
     }));
+  });
+
+  it('abbreviates home paths without abbreviating similarly prefixed paths', async () => {
+    discoveredSkills = [
+      { name: 'home', description: '', filePath: '/Users/test/.pi/skills/home/SKILL.md' },
+      { name: 'other', description: '', filePath: '/Users/testing/skills/other/SKILL.md' },
+    ];
+    const service = new PiSessionService();
+
+    await expect(service.listAvailableSkills('client-1')).resolves.toEqual([
+      { name: 'home', description: '', path: '~/.pi/skills/home' },
+      { name: 'other', description: '', path: '/Users/testing/skills/other' },
+    ]);
   });
 
   it('lists project skills for an explicit profile without changing client selection', async () => {
@@ -907,9 +920,9 @@ describe('PiSessionService', () => {
     const setProfile = vi.spyOn(service, 'setClientAgentProfile');
 
     await expect(service.listAgentProfileSkills('work', '/repo/app')).resolves.toEqual([
-      { name: 'brainstorming', description: 'Creative work', path: '/skills/brainstorming/SKILL.md' },
-      { name: 'frontend-design', description: 'Design work', path: '/skills/frontend-design/SKILL.md' },
-      { name: 'systematic-debugging', description: 'Bug fixing', path: '/skills/systematic-debugging/SKILL.md' },
+      { name: 'brainstorming', description: 'Creative work', path: '/skills/brainstorming' },
+      { name: 'frontend-design', description: 'Design work', path: '/skills/frontend-design' },
+      { name: 'systematic-debugging', description: 'Bug fixing', path: '/skills/systematic-debugging' },
     ]);
     expect(defaultResourceLoaderCtor).toHaveBeenCalledWith(expect.objectContaining({
       cwd: '/repo/app',
