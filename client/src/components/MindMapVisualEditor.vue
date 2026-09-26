@@ -55,10 +55,10 @@
       </div>
     </div>
     <div v-if="menu" class="mindmap-context-menu" :style="{ left: `${menu.x}px`, top: `${menu.y}px` }" role="menu" @contextmenu.prevent>
-      <button type="button" role="menuitem" @click="menuEdit('rename')">{{ t('rename') }}</button>
-      <button type="button" role="menuitem" @click="menuEdit('child')">{{ t('child') }}</button>
-      <button v-if="menu.id !== root.id" type="button" role="menuitem" @click="menuEdit('sibling')">{{ t('sibling') }}</button>
-      <button v-if="menu.id !== root.id" type="button" role="menuitem" @click="menuDelete">{{ t('delete') }}</button>
+      <button type="button" role="menuitem" @click="menuEdit('rename')"><PhPencilSimple aria-hidden="true" />{{ t('rename') }}</button>
+      <button type="button" role="menuitem" @click="menuEdit('child')"><PhTreeStructure aria-hidden="true" />{{ t('child') }}</button>
+      <button v-if="menu.id !== root.id" type="button" role="menuitem" @click="menuEdit('sibling')"><PhRowsPlusBottom aria-hidden="true" />{{ t('sibling') }}</button>
+      <button v-if="menu.id !== root.id" type="button" role="menuitem" @click="menuDelete"><PhTrash aria-hidden="true" />{{ t('delete') }}</button>
     </div>
     <div v-if="selected && selected.id !== root.id" class="mindmap-mobile-controls">
       <label>{{ t('parent') }}
@@ -80,6 +80,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from 'vue';
+import { PhPencilSimple, PhRowsPlusBottom, PhTrash, PhTreeStructure } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import ConfirmModal from './ConfirmModal.vue';
 import CustomSelect from './CustomSelect.vue';
@@ -102,7 +103,7 @@ const labelError = ref(false);
 const confirmDelete = ref(false);
 const menu = ref<{ id: number; x: number; y: number } | null>(null);
 const direction = ref<'both' | 'right'>('both');
-const theme = ref<keyof typeof palettes>('ocean');
+const theme = ref<keyof typeof palettes>('rainbow');
 const structure = ref<'cards' | 'pills' | 'branches'>('cards');
 const levelOptions = computed(() => [
   ...[1, 2, 3].map(level => ({ value: String(level), label: t('level', { level }) })),
@@ -502,7 +503,8 @@ function endPan() { pointer = null; }
 .mindmap-inline-edit { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .mindmap-inline-edit input { width: 100%; min-width: 0; box-sizing: border-box; }
 .mindmap-context-menu { position: fixed; z-index: 100; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); box-shadow: 0 6px 20px #0004; }
-.mindmap-context-menu button { text-align: left; border: 0; background: transparent; }
+.mindmap-context-menu button { display: flex; align-items: center; gap: 8px; text-align: left; border: 0; background: transparent; }
+.mindmap-context-menu button svg { flex: 0 0 auto; font-size: 16px; }
 .mindmap-context-menu button:hover { background: color-mix(in srgb, var(--mindmap-accent) 20%, var(--bg-secondary)); }
 .mindmap-inline-edit [role="alert"] { color: #d14d4d; font-size: 12px; }
 .mindmap-levels { display: flex; align-items: center; gap: 6px; font-size: 13px; }

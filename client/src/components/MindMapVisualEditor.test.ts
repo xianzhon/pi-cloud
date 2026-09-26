@@ -196,6 +196,7 @@ describe('MindMapVisualEditor', () => {
     const wrapper = mountEditor();
     await wrapper.findAll('.mindmap-node')[1].trigger('contextmenu', { clientX: 30, clientY: 30 });
     expect(wrapper.findAll('[role="menuitem"]')).toHaveLength(4);
+    expect(wrapper.findAll('[role="menuitem"] svg')).toHaveLength(4);
     await wrapper.findAll('[role="menuitem"]')[1].trigger('click');
     const input = wrapper.get('#mindmap-label');
     await input.setValue('New child');
@@ -253,6 +254,8 @@ describe('MindMapVisualEditor', () => {
 
   it('changes layout and palette without changing source', async () => {
     const wrapper = mountEditor();
+    expect(wrapper.findAll('.mindmap-item')[1].attributes('style')).toContain('#e45b65');
+    expect(wrapper.findAll('.mindmap-item')[2].attributes('style')).toContain('#e58b3f');
     await wrapper.get('button[aria-label="Layout"]').trigger('click');
     await wrapper.findAll('.mindmap-levels [role="option"]').find(option => option.text() === 'Right side')!.trigger('click');
     await wrapper.get('button[aria-label="Theme"]').trigger('click');

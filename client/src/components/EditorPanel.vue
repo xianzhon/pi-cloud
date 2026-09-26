@@ -512,7 +512,7 @@ import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
 import TreeNode, { type TreeNodeData } from './FileTreeNode.vue';
 import ConfirmModal from './ConfirmModal.vue';
 import MindMapVisualEditor from './MindMapVisualEditor.vue';
-import { parseMindMap } from '../utils/mindMap';
+import { parseMindMap, rectangularMindMapRoot } from '../utils/mindMap';
 import { diagramTypes, diagramTemplates, type DiagramType } from '../utils/diagramTemplates';
 import InputPromptModal from './InputPromptModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
@@ -918,7 +918,7 @@ const activeMarkdownHtml = computed(() => {
   if (!filePath) return '';
   const model = models.get(filePath);
   if (!model) return '';
-  if (activeIsDiagram.value) return `<div class="mermaid-diagram">${escapeHtml(model.getValue())}</div>`;
+  if (activeIsDiagram.value) return `<div class="mermaid-diagram">${escapeHtml(rectangularMindMapRoot(model.getValue()))}</div>`;
   return sanitizeHtmlFragment(renderMarkdownPreview(model.getValue()));
 });
 interface MarkdownOutlineItem {

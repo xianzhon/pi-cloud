@@ -33,6 +33,11 @@ export function validMindMapLabel(label: string): boolean {
     && !/^(?:%%|:::|::icon\()/i.test(label);
 }
 
+export function rectangularMindMapRoot(source: string): string {
+  if (!/^mindmap(?:\s|$)/.test(source)) return source;
+  return source.replace(/^((?:mindmap[^\r\n]*\r?\n)[ \t]*)root\(\((.*)\)\)([ \t]*)(?=\r?$)/m, '$1$2$3');
+}
+
 export function parseMindMap(source: string): MindMapNode {
   const lines = source.split('\n');
   if (lines.at(-1) === '') lines.pop();

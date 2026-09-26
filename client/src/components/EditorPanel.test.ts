@@ -595,6 +595,28 @@ describe('EditorPanel', () => {
     expect(wrapper.find('pre code.language-ts').text()).toBe('const untouched = true;');
   });
 
+  it('previews a circular mind-map root as a rectangle without changing the model source', async () => {
+    const content = 'mindmap\n  root((Long center label))\n    Child\n';
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => content),
+      dispose: vi.fn(),
+    } as any);
+    mermaidMock.render.mockResolvedValue({ svg: '<svg />' });
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/map.mmd');
+    await vi.waitFor(() => expect(mermaidMock.render).toHaveBeenCalled());
+
+    expect(mermaidMock.render.mock.calls.at(-1)?.[1]).toBe('mindmap\n  Long center label\n    Child\n');
+  });
+
   it('creates a mind map in the selected directory using the file API', async () => {
     const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
       if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
