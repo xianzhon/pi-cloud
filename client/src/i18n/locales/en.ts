@@ -444,7 +444,7 @@ export default {
         unsupportedLine: 'Visual editing cannot read line {line}. Use two-space indentation and plain labels in Raw.',
         child: 'Add child', sibling: 'Add sibling', rename: 'Rename', delete: 'Delete branch',
         undo: 'Undo', redo: 'Redo', zoomIn: 'Zoom in', zoomOut: 'Zoom out', fit: 'Fit',
-        label: 'Node label', apply: 'Apply', cancel: 'Cancel', invalidLabel: 'Use letters, numbers, spaces, _ or -; no leading or trailing spaces.',
+        label: 'Node label', apply: 'Apply', cancel: 'Cancel', invalidLabel: 'Do not use Mermaid brackets, backticks, directives, or leading or trailing spaces.',
         expand: 'Expand branch', collapse: 'Collapse branch', parent: 'Move under', chooseParent: 'Choose parent',
         up: 'Move up', down: 'Move down', promote: 'Promote', deleteBranch: 'Delete this node and all its descendants?',
         levels: 'Show levels', chooseLevel: 'Choose depth', level: 'Up to level {level}', expandAll: 'Expand all',

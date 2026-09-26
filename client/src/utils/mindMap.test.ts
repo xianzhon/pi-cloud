@@ -11,7 +11,12 @@ describe('mind map source', () => {
     expect(serializeMindMap(parseMindMap('mindmap\n  Root'))).toBe('mindmap\n  Root\n');
   });
 
-  it.each(['mindmap\n  Root\n    中文 Å_42 - ok\n', 'mindmap\n  你好\n'])('accepts Unicode letters, numbers, spaces, underscore and hyphen', text => {
+  it.each([
+    'mindmap\n  Root\n    中文 Å_42 - ok\n',
+    'mindmap\n  你好\n',
+    'mindmap\n  项目规划\n    目标：整理相关信息\n      分类方法，形成方案\n      重点、步骤及注意事项\n',
+    'mindmap\n  Root: overview\n    Risk/reward, 2.5% — acceptable!\n',
+  ])('accepts plain labels with ordinary Unicode punctuation: %j', text => {
     expect(serializeMindMap(parseMindMap(text))).toBe(text);
   });
 
@@ -49,8 +54,9 @@ describe('mind map source', () => {
     '', 'mindmap\n', 'mindmap\n  Root\n\n', 'mindmap\r\n  Root',
     'mindmap\n Root', 'mindmap\n  Root\n  Second',
     'mindmap\n  Root\n      Skip', 'mindmap\n\tRoot',
-    'mindmap\n  Root\n    Bad(thing)', 'mindmap\n  Root\n    root((Not a root))', 'mindmap\n  root((Bad!))', 'mindmap\n  Root\n    Bad trailing ',
-    'mindmap\n  Root\n    Bad: label', 'mindmap\n  Root\n    Bad`label',
+    'mindmap\n  Root\n    Bad(thing)', 'mindmap\n  Root\n    root((Not a root))', 'mindmap\n  root((Bad[shape]))', 'mindmap\n  Root\n    Bad trailing ',
+    'mindmap\n  Root\n    Bad`label', 'mindmap\n  Root\n    %% comment',
+    'mindmap\n  Root\n    :::danger', 'mindmap\n  Root\n    ::icon(fa fa-book)',
     'graph TD\n  Root',
   ])('rejects unsupported source without importing it: %j', text => {
     expect(() => parseMindMap(text)).toThrow();
@@ -68,7 +74,7 @@ describe('mind map operations', () => {
     expect(serializeMindMap(editMindMap(added, { type: 'rename', target: beta, label: 'Renamed' }))).toContain('    Renamed\n');
     expect(serializeMindMap(editMindMap(root, { type: 'delete', target: alpha }))).toBe('mindmap\n  Root\n    Beta\n');
     expect(serializeMindMap(root)).toBe(source);
-    expect(() => editMindMap(root, { type: 'add', target: beta, placement: 'child', label: 'Bad!' })).toThrow();
+    expect(() => editMindMap(root, { type: 'add', target: beta, placement: 'child', label: 'Bad(thing)' })).toThrow();
   });
 
   it('moves before, after, under, up, down and promotes with cycle/root guards', () => {

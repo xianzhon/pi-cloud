@@ -26,7 +26,11 @@ export const mindMapIcons = [
 const legacyFlags = ['🚩', '🏁', '🏳️', '🇺🇸', '🇨🇳', '🇬🇧', '🇯🇵', '🇩🇪', '🇫🇷'];
 
 export function validMindMapLabel(label: string): boolean {
-  return !!label && label.trim() === label && /^[\p{L}\p{N}_ -]+$/u.test(label);
+  return !!label
+    && label.trim() === label
+    && !/[()[\]{}]/.test(label)
+    && !/[\p{Cc}`]/u.test(label)
+    && !/^(?:%%|:::|::icon\()/i.test(label);
 }
 
 export function parseMindMap(source: string): MindMapNode {
