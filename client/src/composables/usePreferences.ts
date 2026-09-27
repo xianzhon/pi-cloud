@@ -18,6 +18,9 @@ const GIT_CLONE_PARENT_PATH_KEY = 'pi-cloud.gitCloneParentPath';
 const ANNOTATION_TOOL_SHORTCUTS_KEY = 'pi-cloud.annotationToolShortcuts';
 const ANNOTATION_PEN_COLOR_KEY = 'pi-cloud.annotationPenColor';
 const ANNOTATION_PEN_WIDTH_KEY = 'pi-cloud.annotationPenWidth';
+const MIND_MAP_LAYOUT_KEY = 'pi-cloud.mindMapLayout';
+const MIND_MAP_THEME_KEY = 'pi-cloud.mindMapTheme';
+const MIND_MAP_STRUCTURE_KEY = 'pi-cloud.mindMapStructure';
 
 export type AnnotationShortcutTool = 'select' | 'pen' | 'highlighter' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'move' | 'whiteout' | 'eraser';
 export type AnnotationToolShortcuts = Record<AnnotationShortcutTool, string>;
@@ -31,6 +34,12 @@ export type FullscreenShortcut = 'f11' | 'ctrlShiftF';
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type LanguagePreference = 'en' | 'zh-CN';
 export type SoundNotificationPreference = 'off' | 'beep' | 'chime' | 'ding';
+const MIND_MAP_LAYOUTS = ['both', 'right'] as const;
+const MIND_MAP_THEMES = ['ocean', 'forest', 'sunset', 'lavender', 'rose', 'gold', 'slate', 'rainbow'] as const;
+const MIND_MAP_STRUCTURES = ['cards', 'pills', 'branches'] as const;
+export type MindMapLayout = typeof MIND_MAP_LAYOUTS[number];
+export type MindMapTheme = typeof MIND_MAP_THEMES[number];
+export type MindMapStructure = typeof MIND_MAP_STRUCTURES[number];
 
 type PreferencePayload = {
   showHintInfo?: unknown;
@@ -49,6 +58,9 @@ type PreferencePayload = {
   autoSpeakAssistant?: unknown;
   gitCloneParentPath?: unknown;
   annotationToolShortcuts?: unknown;
+  mindMapLayout?: unknown;
+  mindMapTheme?: unknown;
+  mindMapStructure?: unknown;
 };
 
 function readCachedBoolean(key: string, defaultValue: boolean = true): boolean {
@@ -163,6 +175,15 @@ function cacheString(key: string, value: string): void {
   localStorage.setItem(key, value);
 }
 
+function isOneOf<T extends string>(value: unknown, options: readonly T[]): value is T {
+  return typeof value === 'string' && options.includes(value as T);
+}
+
+function readCachedOption<T extends string>(key: string, options: readonly T[], fallback: T): T {
+  const value = readCachedString(key, fallback);
+  return isOneOf(value, options) ? value : fallback;
+}
+
 function parseAnnotationToolShortcuts(value: unknown): AnnotationToolShortcuts | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
   const shortcuts = { ...DEFAULT_ANNOTATION_TOOL_SHORTCUTS };
@@ -213,6 +234,9 @@ const gitCloneParentPath = ref(readCachedString(GIT_CLONE_PARENT_PATH_KEY, '~/gi
 const annotationToolShortcuts = ref<AnnotationToolShortcuts>(readCachedAnnotationToolShortcuts());
 const annotationPenColor = ref(readCachedString(ANNOTATION_PEN_COLOR_KEY, '#ef4444'));
 const annotationPenWidth = ref(readCachedAnnotationPenWidth());
+const mindMapLayout = ref<MindMapLayout>(readCachedOption(MIND_MAP_LAYOUT_KEY, MIND_MAP_LAYOUTS, 'both'));
+const mindMapTheme = ref<MindMapTheme>(readCachedOption(MIND_MAP_THEME_KEY, MIND_MAP_THEMES, 'rainbow'));
+const mindMapStructure = ref<MindMapStructure>(readCachedOption(MIND_MAP_STRUCTURE_KEY, MIND_MAP_STRUCTURES, 'cards'));
 
 function readCachedAnnotationPenWidth(): number {
   const width = Number(typeof localStorage === 'undefined' ? 1 : localStorage.getItem(ANNOTATION_PEN_WIDTH_KEY));
@@ -289,6 +313,18 @@ function applyPreferences(data: PreferencePayload) {
   if (typeof data.gitCloneParentPath === 'string' && data.gitCloneParentPath.trim()) {
     gitCloneParentPath.value = data.gitCloneParentPath;
     cacheString(GIT_CLONE_PARENT_PATH_KEY, data.gitCloneParentPath);
+  }
+  if (isOneOf(data.mindMapLayout, MIND_MAP_LAYOUTS)) {
+    mindMapLayout.value = data.mindMapLayout;
+    cacheString(MIND_MAP_LAYOUT_KEY, data.mindMapLayout);
+  }
+  if (isOneOf(data.mindMapTheme, MIND_MAP_THEMES)) {
+    mindMapTheme.value = data.mindMapTheme;
+    cacheString(MIND_MAP_THEME_KEY, data.mindMapTheme);
+  }
+  if (isOneOf(data.mindMapStructure, MIND_MAP_STRUCTURES)) {
+    mindMapStructure.value = data.mindMapStructure;
+    cacheString(MIND_MAP_STRUCTURE_KEY, data.mindMapStructure);
   }
   const shortcuts = parseAnnotationToolShortcuts(data.annotationToolShortcuts);
   if (shortcuts) {
@@ -419,6 +455,32 @@ async function setGitCloneParentPath(value: string): Promise<void> {
   await patchPreferences({ gitCloneParentPath: next });
 }
 
+let mindMapPreferencePatch = Promise.resolve();
+
+async function persistMindMapPreference(payload: PreferencePayload): Promise<void> {
+  // Serialize rapid control changes so an older request cannot overwrite the latest selection.
+  mindMapPreferencePatch = mindMapPreferencePatch.then(() => patchPreferences(payload, false));
+  await mindMapPreferencePatch;
+}
+
+async function setMindMapLayout(value: MindMapLayout): Promise<void> {
+  mindMapLayout.value = value;
+  cacheString(MIND_MAP_LAYOUT_KEY, value);
+  await persistMindMapPreference({ mindMapLayout: value });
+}
+
+async function setMindMapTheme(value: MindMapTheme): Promise<void> {
+  mindMapTheme.value = value;
+  cacheString(MIND_MAP_THEME_KEY, value);
+  await persistMindMapPreference({ mindMapTheme: value });
+}
+
+async function setMindMapStructure(value: MindMapStructure): Promise<void> {
+  mindMapStructure.value = value;
+  cacheString(MIND_MAP_STRUCTURE_KEY, value);
+  await persistMindMapPreference({ mindMapStructure: value });
+}
+
 let annotationToolShortcutsPatch = Promise.resolve();
 
 async function setAnnotationToolShortcuts(value: AnnotationToolShortcuts): Promise<void> {
@@ -449,6 +511,9 @@ function resetPreferenceRefsFromCache(): void {
   annotationToolShortcuts.value = readCachedAnnotationToolShortcuts();
   annotationPenColor.value = readCachedString(ANNOTATION_PEN_COLOR_KEY, '#ef4444');
   annotationPenWidth.value = readCachedAnnotationPenWidth();
+  mindMapLayout.value = readCachedOption(MIND_MAP_LAYOUT_KEY, MIND_MAP_LAYOUTS, 'both');
+  mindMapTheme.value = readCachedOption(MIND_MAP_THEME_KEY, MIND_MAP_THEMES, 'rainbow');
+  mindMapStructure.value = readCachedOption(MIND_MAP_STRUCTURE_KEY, MIND_MAP_STRUCTURES, 'cards');
 }
 
 export function usePreferences() {
@@ -473,6 +538,9 @@ export function usePreferences() {
     annotationToolShortcuts,
     annotationPenColor,
     annotationPenWidth,
+    mindMapLayout,
+    mindMapTheme,
+    mindMapStructure,
     setAnnotationPenColor,
     setAnnotationPenWidth,
     loadPreferences,
@@ -491,6 +559,9 @@ export function usePreferences() {
     setSoundNotification,
     setAutoSpeakAssistant,
     setGitCloneParentPath,
+    setMindMapLayout,
+    setMindMapTheme,
+    setMindMapStructure,
     setAnnotationToolShortcuts,
   };
 }

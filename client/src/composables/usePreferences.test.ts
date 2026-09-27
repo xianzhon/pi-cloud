@@ -24,6 +24,7 @@ describe('usePreferences', () => {
     expect(preferences.language.value).toBe('en');
     expect(preferences.soundNotification.value).toBe('beep');
     expect(preferences.autoSpeakAssistant.value).toBe(false);
+    expect([preferences.mindMapLayout.value, preferences.mindMapTheme.value, preferences.mindMapStructure.value]).toEqual(['both', 'rainbow', 'cards']);
   });
 
   it('initializes display preferences from localStorage cache', () => {
@@ -94,6 +95,23 @@ describe('usePreferences', () => {
     expect(localStorage.getItem('pi-cloud.soundNotification')).toBe('ding');
     expect(localStorage.getItem('pi-cloud.autoSpeakAssistant')).toBe('true');
     expect(fetch).toHaveBeenCalledWith('/api/auth/preferences');
+  });
+
+  it('caches and persists global mind map visual preferences', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })));
+    const preferences = usePreferences();
+
+    await preferences.setMindMapLayout('right');
+    await preferences.setMindMapTheme('forest');
+    await preferences.setMindMapStructure('branches');
+
+    expect([preferences.mindMapLayout.value, preferences.mindMapTheme.value, preferences.mindMapStructure.value]).toEqual(['right', 'forest', 'branches']);
+    expect(localStorage.getItem('pi-cloud.mindMapLayout')).toBe('right');
+    expect(localStorage.getItem('pi-cloud.mindMapTheme')).toBe('forest');
+    expect(localStorage.getItem('pi-cloud.mindMapStructure')).toBe('branches');
+    expect(fetch).toHaveBeenNthCalledWith(1, '/api/auth/preferences', expect.objectContaining({ body: JSON.stringify({ mindMapLayout: 'right' }) }));
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/auth/preferences', expect.objectContaining({ body: JSON.stringify({ mindMapTheme: 'forest' }) }));
+    expect(fetch).toHaveBeenNthCalledWith(3, '/api/auth/preferences', expect.objectContaining({ body: JSON.stringify({ mindMapStructure: 'branches' }) }));
   });
 
   it('migrates cached annotation shortcuts when the backend has no persisted value', async () => {

@@ -38,7 +38,14 @@ type PreferencePatchBody = {
   autoSpeakAssistant?: unknown;
   gitCloneParentPath?: unknown;
   annotationToolShortcuts?: unknown;
+  mindMapLayout?: unknown;
+  mindMapTheme?: unknown;
+  mindMapStructure?: unknown;
 };
+
+const MIND_MAP_LAYOUTS = ['both', 'right'] as const;
+const MIND_MAP_THEMES = ['ocean', 'forest', 'sunset', 'lavender', 'rose', 'gold', 'slate', 'rainbow'] as const;
+const MIND_MAP_STRUCTURES = ['cards', 'pills', 'branches'] as const;
 
 const DEFAULT_ANNOTATION_TOOL_SHORTCUTS = {
   pen: '1', highlighter: '2', line: '3', arrow: '4', rectangle: '5',
@@ -73,6 +80,11 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
       .prepare('SELECT value FROM application_settings WHERE key = ?')
       .get(key) as { value: string } | undefined;
     return row?.value;
+  }
+
+  function getAllowedPreference<T extends string>(key: string, options: readonly T[], fallback: T): T {
+    const value = getPreferenceValue(key);
+    return options.includes(value as T) ? value as T : fallback;
   }
 
   function setPreferenceValue(key: string, value: string): void {
@@ -145,6 +157,9 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
       soundNotification: getSoundNotification(),
       autoSpeakAssistant: getPreferenceValue('ui.autoSpeakAssistant') === 'true',
       annotationToolShortcuts: getAnnotationToolShortcuts(),
+      mindMapLayout: getAllowedPreference('ui.mindMapLayout', MIND_MAP_LAYOUTS, 'both'),
+      mindMapTheme: getAllowedPreference('ui.mindMapTheme', MIND_MAP_THEMES, 'rainbow'),
+      mindMapStructure: getAllowedPreference('ui.mindMapStructure', MIND_MAP_STRUCTURES, 'cards'),
     };
   }
 
@@ -324,8 +339,11 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     const hasAutoSpeakAssistant = hasPreference(body, 'autoSpeakAssistant');
     const hasGitCloneParentPath = hasPreference(body, 'gitCloneParentPath');
     const hasAnnotationToolShortcuts = hasPreference(body, 'annotationToolShortcuts');
+    const hasMindMapLayout = hasPreference(body, 'mindMapLayout');
+    const hasMindMapTheme = hasPreference(body, 'mindMapTheme');
+    const hasMindMapStructure = hasPreference(body, 'mindMapStructure');
 
-    if (!hasShowHintInfo && !hasShowCodeBlockLanguageHeaders && !hasStreamingMessageBehavior && !hasEditorAutoRefresh && !hasConfirmSessionDelete && !hasNewSessionShortcut && !hasFullscreenShortcut && !hasShowGoToTopButton && !hasShowChatViewOptionsButton && !hasAutoExtractMemory && !hasTheme && !hasLanguage && !hasSoundNotification && !hasAutoSpeakAssistant && !hasGitCloneParentPath && !hasAnnotationToolShortcuts) {
+    if (!hasShowHintInfo && !hasShowCodeBlockLanguageHeaders && !hasStreamingMessageBehavior && !hasEditorAutoRefresh && !hasConfirmSessionDelete && !hasNewSessionShortcut && !hasFullscreenShortcut && !hasShowGoToTopButton && !hasShowChatViewOptionsButton && !hasAutoExtractMemory && !hasTheme && !hasLanguage && !hasSoundNotification && !hasAutoSpeakAssistant && !hasGitCloneParentPath && !hasAnnotationToolShortcuts && !hasMindMapLayout && !hasMindMapTheme && !hasMindMapStructure) {
       return reply.status(400).send({ error: 'At least one preference must be provided' });
     }
     if (hasShowHintInfo && typeof body.showHintInfo !== 'boolean') {
@@ -373,6 +391,15 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     if (hasGitCloneParentPath && (typeof body.gitCloneParentPath !== 'string' || !body.gitCloneParentPath.trim())) {
       return reply.status(400).send({ error: 'gitCloneParentPath must be a non-empty string' });
     }
+    if (hasMindMapLayout && !MIND_MAP_LAYOUTS.includes(body.mindMapLayout as typeof MIND_MAP_LAYOUTS[number])) {
+      return reply.status(400).send({ error: 'mindMapLayout must be both or right' });
+    }
+    if (hasMindMapTheme && !MIND_MAP_THEMES.includes(body.mindMapTheme as typeof MIND_MAP_THEMES[number])) {
+      return reply.status(400).send({ error: 'Invalid mindMapTheme' });
+    }
+    if (hasMindMapStructure && !MIND_MAP_STRUCTURES.includes(body.mindMapStructure as typeof MIND_MAP_STRUCTURES[number])) {
+      return reply.status(400).send({ error: 'mindMapStructure must be cards, pills, or branches' });
+    }
     const parsedAnnotationToolShortcuts = hasAnnotationToolShortcuts
       ? parseAnnotationToolShortcuts(body.annotationToolShortcuts)
       : undefined;
@@ -396,6 +423,9 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     if (hasAutoSpeakAssistant) setPreferenceValue('ui.autoSpeakAssistant', String(body.autoSpeakAssistant));
     if (hasGitCloneParentPath) setPreferenceValue('ui.gitCloneParentPath', String(body.gitCloneParentPath).trim());
     if (parsedAnnotationToolShortcuts) setPreferenceValue('ui.annotationToolShortcuts', JSON.stringify(parsedAnnotationToolShortcuts));
+    if (hasMindMapLayout) setPreferenceValue('ui.mindMapLayout', String(body.mindMapLayout));
+    if (hasMindMapTheme) setPreferenceValue('ui.mindMapTheme', String(body.mindMapTheme));
+    if (hasMindMapStructure) setPreferenceValue('ui.mindMapStructure', String(body.mindMapStructure));
     return getPreferences();
   });
 

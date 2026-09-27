@@ -22,7 +22,7 @@ A web-based, mobile-friendly interface for the [Pi coding agent](http://pi.dev).
 - **GitHub and Gitea integration** — review changes and create pull requests with `/pr`.
 - **Memory support** — maintain project and global memories with optional automatic extraction and adaptive recall.
 - **Messaging gateways** — connect Feishu, WeCom, and WeChat through a focused setup.
-- **Workspace tools** — browse and search files, edit code, and use an embedded terminal alongside the conversation.
+- **Workspace tools** — browse and search files, edit code, and use an embedded terminal alongside the conversation. In the file editor, select **New mind map** (graph icon), name a `.mmd` file, edit its Mermaid source in **Raw**, and switch to **Preview** to see the diagram. Save with the toolbar button or Ctrl/Cmd+S while editing.
 - **Secure access** — protect the WebUI with password and optional TOTP authentication.
 
 ## Quick Start

@@ -74,6 +74,24 @@
           </button>
         </div>
         <button
+          v-if="activeIsDiagram && activePreviewMode === 'preview'"
+          class="window-btn tooltip"
+          @click="handleExportDiagramImage"
+          :data-tooltip="t('components.editorPanel.exportDiagramImage')"
+          :aria-label="t('components.editorPanel.exportDiagramImage')"
+        >
+          <PhDownloadSimple :size="16" weight="bold" />
+        </button>
+        <button
+          v-if="activeIsDiagram && activePreviewMode === 'preview'"
+          class="window-btn tooltip"
+          @click="handleExportDiagramPng"
+          :data-tooltip="t('components.editorPanel.exportDiagramPng')"
+          :aria-label="t('components.editorPanel.exportDiagramPng')"
+        >
+          <PhImage :size="16" weight="bold" />
+        </button>
+        <button
           v-if="activeIsMarkdown && activePreviewMode === 'preview'"
           class="window-btn tooltip"
           @click="handleCreateMarkdownPdfCopy"
@@ -126,7 +144,9 @@
           >
             {{ t('components.editorPanel.raw') }}
           </button>
+          <button v-if="activeIsMindMap" :class="{ active: activePreviewMode === 'visual' }" :disabled="!!activeMindMapError" :title="activeMindMapError || t('components.editorPanel.mindMap.visual')" @click="setActivePreviewMode('visual')">{{ t('components.editorPanel.mindMap.visual') }}</button>
         </div>
+        <span v-if="activeIsMindMap && activeMindMapError" class="mindmap-unavailable" role="status">{{ activeMindMapError }}</span>
         <button class="window-btn tooltip" @click="$emit('close')" :data-tooltip="t('components.editorPanel.minimize')" :aria-label="t('components.editorPanel.minimizeEditor')">—</button>
         <button class="window-btn maximize-btn tooltip" @click="toggleMaximize" :data-tooltip="isMaximized ? t('components.editorPanel.restore') : t('components.editorPanel.maximize')" :aria-label="isMaximized ? t('components.editorPanel.restoreEditor') : t('components.editorPanel.maximizeEditor')">
           {{ isMaximized ? '❐' : '▢' }}
@@ -149,6 +169,14 @@
             :aria-label="t('components.editorPanel.createNewFile')"
           >
             <PhFilePlus :size="15" />
+          </button>
+          <button
+            class="file-tree-toolbar-btn tooltip"
+            @click="createDiagram"
+            :data-tooltip="t('components.editorPanel.newDiagram')"
+            :aria-label="t('components.editorPanel.newDiagram')"
+          >
+            <PhGraph :size="15" />
           </button>
           <button
             class="file-tree-toolbar-btn tooltip"
@@ -231,7 +259,7 @@
       <div v-if="showTree" class="file-tree-backdrop" @click="toggleFileTree" />
       
       <div
-        v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+        v-if="(activeIsMarkdown || activeIsDiagram) && activePreviewMode === 'preview'"
         ref="markdownPreviewLayoutEl"
         class="markdown-preview-layout"
       >
@@ -243,7 +271,7 @@
           @click="handleMarkdownPreviewClick"
         ></div>
         <nav
-          v-if="showMarkdownOutline && activeMarkdownOutline.length"
+          v-if="activeIsMarkdown && showMarkdownOutline && activeMarkdownOutline.length"
           class="markdown-outline"
           :style="markdownOutlineStyle"
           :aria-label="t('components.editorPanel.markdownOutline')"
@@ -310,9 +338,18 @@
         :initial-scale="activeTabInfo?.previewScale"
         @scale-change="setActivePreviewScale"
       />
+      <MindMapVisualEditor
+        v-for="tab in mindMapTabs"
+        v-show="tab.path === activeTab && activePreviewMode === 'visual'"
+        :key="tab.path"
+        class="mindmap-visual-pane"
+        :source="mindMapSource(tab.path)"
+        @change="source => applyMindMapSource(tab.path, source)"
+        @save="saveFile"
+      />
       <div
         class="editor-container"
-        :class="{ hidden: (activeIsPreviewable && activePreviewMode === 'preview') || !!activeImageSrc || !!activePdfSrc || (activeIsVirtual && diffViewMode === 'split') }"
+        :class="{ hidden: (activeIsPreviewable && activePreviewMode !== 'edit') || !!activeImageSrc || !!activePdfSrc || (activeIsVirtual && diffViewMode === 'split') }"
         ref="editorContainer"
       ></div>
       <div
@@ -414,6 +451,30 @@
       @cancel="handleInputPromptCancel"
     />
 
+    <InputPromptModal
+      :key="diagramType"
+      :visible="diagramPromptVisible"
+      :title="t('components.editorPanel.newDiagram')"
+      :label="t('components.editorPanel.filePath')"
+      :description="t('components.editorPanel.enterAFilePathRelativeToThe')"
+      :model-value="`${diagramType}.mmd`"
+      :confirm-text="t('components.editorPanel.createFile')"
+      @confirm="confirmDiagram"
+      @cancel="diagramPromptVisible = false"
+    >
+      <template #fields>
+        <label class="diagram-type-label" for="diagram-type">{{ t('components.editorPanel.diagramType') }}</label>
+        <CustomSelect
+          id="diagram-type"
+          class="diagram-type-select"
+          :model-value="diagramType"
+          :options="diagramTypeOptions"
+          :aria-label="t('components.editorPanel.diagramType')"
+          @update:model-value="diagramType = $event as DiagramType"
+        />
+      </template>
+    </InputPromptModal>
+
     <ConfirmModal
       :visible="confirmPrompt.visible"
       :variant="confirmPrompt.variant"
@@ -434,12 +495,13 @@ import { i18n } from '../i18n';
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/basic-languages/monaco.contribution';
-import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple } from '@phosphor-icons/vue';
+import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple, PhGraph, PhImage } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
 import { normalizePathSeparators } from '../utils/paths';
 import { createMarkdownPdfCopy, exportMarkdownPdf } from '../utils/markdownPdfExport';
+import { exportDiagramImage, exportDiagramPng } from '../utils/diagramImageExport';
 import { renderMhtmlDocument } from '../utils/mhtmlPreview';
 import terminalFontUrl from '../assets/fonts/MesloLGMNerdFontMono-Regular.ttf?url';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
@@ -449,6 +511,9 @@ import HtmlWorker from 'monaco-editor/language/html/html.worker?worker';
 import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
 import TreeNode, { type TreeNodeData } from './FileTreeNode.vue';
 import ConfirmModal from './ConfirmModal.vue';
+import MindMapVisualEditor from './MindMapVisualEditor.vue';
+import { distinctiveMindMapRoot, parseMindMap } from '../utils/mindMap';
+import { diagramTypes, diagramTemplates, type DiagramType } from '../utils/diagramTemplates';
 import InputPromptModal from './InputPromptModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 import MediaAnnotationPreview from './MediaAnnotationPreview.vue';
@@ -621,7 +686,7 @@ const expandedPaths = ref(new Set<string>());
 const selectedDirectoryPath = ref<string>();
 const dirtyPaths = ref(new Set<string>());
 const cutFilePath = ref<string>();
-type PreviewMode = 'preview' | 'edit';
+type PreviewMode = 'preview' | 'edit' | 'visual';
 const previewModes = ref(new Map<string, PreviewMode>());
 const previewVersion = ref(0);
 const statusMessage = ref('');
@@ -702,6 +767,13 @@ interface FilePinGroup {
   filePaths: string[];
 }
 const filePinGroups = ref<FilePinGroup[]>([]);
+const diagramPromptVisible = ref(false);
+const diagramType = ref<DiagramType>('mindmap');
+const diagramTypeOptions = computed<CustomSelectOption[]>(() => diagramTypes.map(type => ({
+  value: type,
+  label: t(`components.editorPanel.diagramTypes.${type}`),
+})));
+const diagramDirectory = ref('');
 const inputPrompt = ref({
   visible: false,
   title: '',
@@ -778,10 +850,43 @@ function setActivePreviewScale(scale: number): void {
   }
 }
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
+const activeIsDiagram = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isDiagramFile(activeTab.value));
 const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMhtmlFile(activeTab.value));
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
-const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value);
-const activePreviewMode = computed(() => activeTab.value ? (previewModes.value.get(activeTab.value) || 'preview') : 'preview');
+const activeIsPreviewable = computed(() => activeIsMarkdown.value || activeIsHtml.value || activeIsDiagram.value);
+const activePreviewMode = computed(() => {
+  if (!activeTab.value) return 'preview';
+  const selectedMode = previewModes.value.get(activeTab.value);
+  if (selectedMode) return selectedMode;
+  return activeIsMindMap.value && !activeMindMapError.value ? 'visual' : 'preview';
+});
+const mindMapTabs = computed(() => {
+  void previewVersion.value;
+  return tabs.value.filter(tab => tab.kind === 'text' && isDiagramFile(tab.path) && !mindMapError(tab.path));
+});
+function mindMapSource(path: string): string {
+  void previewVersion.value;
+  return models.get(path)?.getValue() || '';
+}
+const activeIsMindMap = computed(() => activeIsDiagram.value && !!activeTab.value && /^mindmap(?:\s|$)/.test(mindMapSource(activeTab.value)));
+
+function mindMapError(path: string): string {
+  const source = mindMapSource(path);
+  try { parseMindMap(source); return ''; }
+  catch (error) {
+    const reason = error instanceof Error ? error.message : '';
+    const line = reason.split(':')[1];
+    return t(line ? 'components.editorPanel.mindMap.unsupportedLine' : 'components.editorPanel.mindMap.unsupported', line ? { line } : {});
+  }
+}
+const activeMindMapError = computed(() => activeIsMindMap.value && activeTab.value ? mindMapError(activeTab.value) : '');
+watch([activeIsMindMap, activeMindMapError], ([isMindMap, error]) => {
+  if ((!isMindMap || error) && activePreviewMode.value === 'visual') setActivePreviewMode('edit');
+});
+function applyMindMapSource(path: string, source: string): void {
+  const model = models.get(path);
+  if (model && model.getValue() !== source) model.setValue(source);
+}
 type MhtmlFont = 'original' | 'sans' | 'serif' | 'terminal' | 'palatino' | 'garamond' | 'baskerville' | 'literata' | 'songti' | 'noto-serif-cjk' | 'pingfang';
 const storedMhtmlFont = localStorage.getItem('pi-cloud-mhtml-font');
 const mhtmlFont = ref<MhtmlFont>(['original', 'sans', 'serif', 'terminal', 'palatino', 'garamond', 'baskerville', 'literata', 'songti', 'noto-serif-cjk', 'pingfang'].includes(storedMhtmlFont || '')
@@ -803,21 +908,21 @@ function setMhtmlFont(value: string): void {
   mhtmlFont.value = value as MhtmlFont;
   localStorage.setItem('pi-cloud-mhtml-font', value);
 }
-const activeViewModeLabel = computed(() => t(activeIsHtml.value
-  ? 'components.editorPanel.htmlViewMode'
-  : 'components.editorPanel.markdownViewMode'));
-const activePreviewTitle = computed(() => t(activeIsHtml.value
-  ? 'components.editorPanel.previewHtml'
-  : 'components.editorPanel.previewMarkdown'));
-const activeEditTitle = computed(() => t(activeIsHtml.value
-  ? 'components.editorPanel.editHtmlSource'
-  : 'components.editorPanel.editMarkdownSource'));
+const activePreviewLabels = computed(() => {
+  if (activeIsDiagram.value) return { mode: 'diagramViewMode', preview: 'previewDiagram', edit: 'editDiagramSource' };
+  if (activeIsHtml.value) return { mode: 'htmlViewMode', preview: 'previewHtml', edit: 'editHtmlSource' };
+  return { mode: 'markdownViewMode', preview: 'previewMarkdown', edit: 'editMarkdownSource' };
+});
+const activeViewModeLabel = computed(() => t(`components.editorPanel.${activePreviewLabels.value.mode}`));
+const activePreviewTitle = computed(() => t(`components.editorPanel.${activePreviewLabels.value.preview}`));
+const activeEditTitle = computed(() => t(`components.editorPanel.${activePreviewLabels.value.edit}`));
 const activeMarkdownHtml = computed(() => {
   void previewVersion.value;
   const filePath = activeTab.value;
   if (!filePath) return '';
   const model = models.get(filePath);
   if (!model) return '';
+  if (activeIsDiagram.value) return `<div class="mermaid-diagram">${escapeHtml(distinctiveMindMapRoot(model.getValue()))}</div>`;
   return sanitizeHtmlFragment(renderMarkdownPreview(model.getValue()));
 });
 interface MarkdownOutlineItem {
@@ -1028,6 +1133,10 @@ function monacoLanguageForFile(filePath: string): string | undefined {
   )?.id;
 }
 
+function isDiagramFile(filePath: string): boolean {
+  return /\.mmd$/i.test(filePath);
+}
+
 function isMarkdownFile(filePath: string): boolean {
   return /\.(md|markdown|mdown|mkdn|mdx)$/i.test(filePath);
 }
@@ -1041,7 +1150,7 @@ function isMhtmlFile(filePath: string): boolean {
 }
 
 function isPreviewableFile(filePath: string): boolean {
-  return isMarkdownFile(filePath) || isHtmlFile(filePath) || isMhtmlFile(filePath);
+  return isMarkdownFile(filePath) || isHtmlFile(filePath) || isMhtmlFile(filePath) || isDiagramFile(filePath);
 }
 
 function encodeBase64Url(value: string): string {
@@ -1108,6 +1217,38 @@ function setActivePreviewMode(mode: PreviewMode) {
   nextModes.set(activeTab.value, mode);
   previewModes.value = nextModes;
   if (mode === 'edit') nextTick(() => editor?.layout());
+}
+
+function handleExportDiagramImage(): void {
+  const filePath = activeTab.value;
+  const svg = markdownPreviewEl.value?.querySelector<SVGSVGElement>('.mermaid-diagram svg');
+  if (!filePath || !svg) return;
+
+  try {
+    exportDiagramImage(filePath, svg, resolvedTheme.value);
+  } catch (error) {
+    showDiagramExportError(error);
+  }
+}
+
+async function handleExportDiagramPng(): Promise<void> {
+  const filePath = activeTab.value;
+  const svg = markdownPreviewEl.value?.querySelector<SVGSVGElement>('.mermaid-diagram svg');
+  if (!filePath || !svg) return;
+
+  try {
+    await exportDiagramPng(filePath, svg, resolvedTheme.value);
+  } catch (error) {
+    showDiagramExportError(error);
+  }
+}
+
+function showDiagramExportError(error: unknown): void {
+  const errorMessage = t('components.editorPanel.exportDiagramImageFailed');
+  console.error(errorMessage, error);
+  statusType.value = 'error';
+  statusMessage.value = errorMessage;
+  scheduleStatusClear();
 }
 
 async function handleCreateMarkdownPdfCopy(): Promise<void> {
@@ -2306,8 +2447,19 @@ async function toggleHiddenFiles() {
   await refreshFileTree();
 }
 
-async function createNewFile(targetDirectory = selectedDirectoryPath.value || rootDirectory()) {
-  const input = await requestInput({
+function createDiagram() {
+  diagramDirectory.value = selectedDirectoryPath.value || rootDirectory();
+  diagramType.value = 'mindmap';
+  diagramPromptVisible.value = true;
+}
+
+function confirmDiagram(name: string) {
+  diagramPromptVisible.value = false;
+  void createNewFile(diagramDirectory.value, { name, type: diagramType.value });
+}
+
+async function createNewFile(targetDirectory = selectedDirectoryPath.value || rootDirectory(), diagram?: { name: string; type: DiagramType }) {
+  const input = diagram?.name ?? await requestInput({
     title: t('components.editorPanel.createNewFile'),
     label: t('components.editorPanel.filePath'),
     description: t('components.editorPanel.enterAFilePathRelativeToThe'),
@@ -2323,6 +2475,13 @@ async function createNewFile(targetDirectory = selectedDirectoryPath.value || ro
     return;
   }
 
+  if (diagram && !isDiagramFile(trimmed)) {
+    statusType.value = 'error';
+    statusMessage.value = t('components.editorPanel.diagramExtension');
+    scheduleStatusClear();
+    return;
+  }
+
   const filePath = resolveNewFilePath(trimmed, targetDirectory);
   clearStatusTimer();
   statusType.value = 'saving';
@@ -2332,7 +2491,7 @@ async function createNewFile(targetDirectory = selectedDirectoryPath.value || ro
     const response = await fetch('/api/files/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: filePath, content: '' }),
+      body: JSON.stringify({ path: filePath, content: diagram ? diagramTemplates[diagram.type] : '' }),
     });
 
     if (response.status === 409) {
@@ -3047,7 +3206,7 @@ watch(resolvedTheme, (theme) => {
 });
 
 watch([
-  () => activeIsMarkdown.value ? activeMarkdownHtml.value : '',
+  () => (activeIsMarkdown.value || activeIsDiagram.value) ? activeMarkdownHtml.value : '',
   activePreviewMode,
   resolvedTheme,
 ], () => {
@@ -3696,6 +3855,17 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 
 .file-tree-backdrop {
   display: none;
+}
+
+.mindmap-visual-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mindmap-unavailable {
+  max-width: 260px;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .editor-container {
