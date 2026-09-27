@@ -517,6 +517,8 @@ export default {
       showMhtmlOutline: '显示 MHTML 大纲',
       resizeMarkdownOutline: '调整 Markdown 大纲大小',
       previewMarkdown: '预览 Markdown',
+      previousSlide: '上一张幻灯片',
+      nextSlide: '下一张幻灯片',
       editMarkdownSource: '编辑 Markdown 源',
       createMarkdownPdfCopy: '创建 PDF 副本以供批注',
       markdownPdfCopyCreated: '已创建并打开 PDF 副本',

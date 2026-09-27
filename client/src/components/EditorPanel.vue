@@ -92,7 +92,7 @@
           <PhImage :size="16" weight="bold" />
         </button>
         <button
-          v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+          v-if="activeIsMarkdown && !activeIsSlides && activePreviewMode === 'preview'"
           class="window-btn tooltip"
           @click="handleCreateMarkdownPdfCopy"
           :data-tooltip="t('components.editorPanel.createMarkdownPdfCopy')"
@@ -101,7 +101,7 @@
           <PhFilePdf :size="16" weight="bold" />
         </button>
         <button
-          v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+          v-if="activeIsMarkdown && !activeIsSlides && activePreviewMode === 'preview'"
           class="window-btn tooltip"
           @click="handleExportMarkdownPdf"
           :data-tooltip="t('components.editorPanel.exportMarkdownPdf')"
@@ -110,7 +110,7 @@
           <PhDownloadSimple :size="16" weight="bold" />
         </button>
         <button
-          v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+          v-if="activeIsMarkdown && !activeIsSlides && activePreviewMode === 'preview'"
           class="window-btn tooltip"
           :class="{ active: showMarkdownOutline }"
           :disabled="!activeMarkdownOutline.length"
@@ -263,7 +263,21 @@
         ref="markdownPreviewLayoutEl"
         class="markdown-preview-layout"
       >
+        <div v-if="activeIsSlides" class="slides-preview">
+          <div
+            ref="markdownPreviewEl"
+            class="markdown-preview slide-content"
+            v-html="activeSlides[slideIndex]"
+            @click="handleMarkdownPreviewClick"
+          ></div>
+          <div class="slide-navigation">
+            <button type="button" :disabled="slideIndex === 0" :aria-label="t('components.editorPanel.previousSlide')" @click="slideIndex--">‹</button>
+            <span>{{ slideIndex + 1 }} / {{ activeSlides.length }}</span>
+            <button type="button" :disabled="slideIndex >= activeSlides.length - 1" :aria-label="t('components.editorPanel.nextSlide')" @click="slideIndex++">›</button>
+          </div>
+        </div>
         <div
+          v-else
           ref="markdownPreviewEl"
           class="markdown-preview"
           :class="{ 'markdown-preview-light': resolvedTheme === 'light' }"
@@ -271,7 +285,7 @@
           @click="handleMarkdownPreviewClick"
         ></div>
         <nav
-          v-if="activeIsMarkdown && showMarkdownOutline && activeMarkdownOutline.length"
+          v-if="activeIsMarkdown && !activeIsSlides && showMarkdownOutline && activeMarkdownOutline.length"
           class="markdown-outline"
           :style="markdownOutlineStyle"
           :aria-label="t('components.editorPanel.markdownOutline')"
@@ -854,6 +868,13 @@ function setActivePreviewScale(scale: number): void {
   }
 }
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
+const activeIsSlides = computed(() => {
+  void previewVersion.value;
+  return activeIsMarkdown.value && !!activeTab.value && /\.slides\.md$/i.test(activeTab.value)
+    && parseFrontmatter(models.get(activeTab.value)?.getValue() || '')?.metadata.some(({ key, value }) => key === 'marp' && value === 'true') === true;
+});
+const slideIndex = ref(0);
+watch([activeTab, previewVersion], () => { slideIndex.value = 0; });
 const activeIsDiagram = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isDiagramFile(activeTab.value));
 const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMhtmlFile(activeTab.value));
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
@@ -934,6 +955,28 @@ const activeMarkdownHtml = computed(() => {
   if (!model) return '';
   if (activeIsDiagram.value) return `<div class="mermaid-diagram">${escapeHtml(distinctiveMindMapRoot(model.getValue()))}</div>`;
   return sanitizeHtmlFragment(renderMarkdownPreview(model.getValue()));
+});
+const activeSlides = computed(() => {
+  void previewVersion.value;
+  const source = activeTab.value ? models.get(activeTab.value)?.getValue() || '' : '';
+  const body = parseFrontmatter(source)?.body || source;
+  const lines = body.split(/\r?\n/);
+  const slides: string[] = [];
+  let start = 0;
+  let fence = '';
+  for (const [index, line] of lines.entries()) {
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = '';
+    }
+    if (!fence && line.trim() === '---') {
+      slides.push(lines.slice(start, index).join('\n'));
+      start = index + 1;
+    }
+  }
+  slides.push(lines.slice(start).join('\n'));
+  return slides.map(slide => sanitizeHtmlFragment(renderMarkdownPreview(slide.replace(/<!--[\s\S]*?-->/g, ''))));
 });
 interface MarkdownOutlineItem {
   id: string;
@@ -3912,6 +3955,51 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   background: var(--bg-primary);
   line-height: 1.65;
 }
+
+.slides-preview {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.slide-content {
+  flex: 0 1 auto;
+  width: min(100%, 960px);
+  aspect-ratio: 16 / 9;
+  overflow: auto;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: #fff;
+  color: #222;
+  font-size: clamp(0.75rem, 1.5vw, 1.25rem);
+  line-height: 1.4;
+  box-shadow: 0 2px 16px #0003;
+}
+
+.slide-content :deep(h1:first-child) { margin-top: 0; }
+.slide-content :deep(blockquote) { color: #555; }
+.slide-content :deep(th),
+.slide-content :deep(td) { border-color: #ddd; }
+.slide-content :deep(tbody tr:nth-child(2n)) { background: #f6f8fa; }
+
+.slide-navigation {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: var(--text-primary);
+}
+
+.slide-navigation button {
+  color: inherit;
+  cursor: pointer;
+}
+
+.slide-navigation button:disabled { opacity: 0.4; cursor: default; }
 
 .markdown-outline {
   position: relative;

@@ -517,6 +517,8 @@ export default {
       showMhtmlOutline: 'Show MHTML outline',
       resizeMarkdownOutline: 'Resize Markdown outline',
       previewMarkdown: 'Preview markdown',
+      previousSlide: 'Previous slide',
+      nextSlide: 'Next slide',
       editMarkdownSource: 'Edit markdown source',
       createMarkdownPdfCopy: 'Create PDF copy for annotation',
       markdownPdfCopyCreated: 'PDF copy created and opened',

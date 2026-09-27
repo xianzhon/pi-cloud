@@ -439,6 +439,40 @@ describe('EditorPanel', () => {
     expect(preview.find('p').text()).toContain('Safe text');
   });
 
+  it('previews Marp slides separately without showing speaker notes or splitting fenced rules', async () => {
+    const markdown = [
+      '---', 'marp: true', 'theme: default', '---',
+      '# First slide', '', '<!-- Speaker notes -->', '', '---',
+      '# Second slide', '', '```md', '---', '```',
+    ].join('\n');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: markdown, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => markdown),
+      dispose: vi.fn(),
+    } as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/presentation.slides.md');
+    await flushPromises();
+
+    expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
+    expect(wrapper.find('.slide-content').html()).not.toContain('Speaker notes');
+    expect(wrapper.find('.slide-navigation').text()).toContain('1 / 2');
+    expect(wrapper.find('.markdown-outline').exists()).toBe(false);
+    await wrapper.get('[aria-label="Next slide"]').trigger('click');
+    expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');
+    expect(wrapper.find('.slide-content code').text()).toBe('---');
+    expect(wrapper.find('.slide-navigation').text()).toContain('2 / 2');
+    await wrapper.get('[aria-label="Previous slide"]').trigger('click');
+    expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
+  });
+
   it('exports the rendered markdown preview as PDF', async () => {
     const markdown = '# Export me\n\nRendered content';
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
