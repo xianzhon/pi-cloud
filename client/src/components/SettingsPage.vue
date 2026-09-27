@@ -1,111 +1,38 @@
 <template>
-  <section class="settings-dialog settings-page-content" aria-labelledby="settings-title">
+  <section class="settings-dialog settings-page-content" :class="{ 'picker-open': sectionPickerOpen }" aria-labelledby="settings-title" @keydown.esc="closeSectionPicker">
           <aside class="settings-sidebar">
-            <button class="settings-back" type="button" @click="requestClose">
+            <button class="settings-back" type="button" :aria-label="t('settings.close')" @click="requestClose">
               <PhArrowLeft :size="18" aria-hidden="true" />
               <span>{{ t('settings.close') }}</span>
             </button>
             <h2 id="settings-title">{{ t('settings.title') }}</h2>
-            <nav class="settings-menu" :aria-label="t('settings.sectionsLabel')">
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'general' }"
-                type="button"
-                @click="activeSection = 'general'"
-              >
-                <PhSliders :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.general') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'security' }"
-                type="button"
-                @click="activeSection = 'security'"
-              >
-                <PhLock :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.security') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'chat' }"
-                type="button"
-                @click="activeSection = 'chat'"
-              >
-                <PhChatCircle :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.chat') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'prompts' }"
-                type="button"
-                @click="activeSection = 'prompts'"
-              >
-                <PhTextT :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.prompts') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'keyboard' }"
-                type="button"
-                @click="activeSection = 'keyboard'"
-              >
-                <PhKeyboard :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.keyboard') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'skills' }"
-                type="button"
-                @click="activeSection = 'skills'"
-              >
-                <PhSparkle :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.skills') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'sharedSkills' }"
-                type="button"
-                @click="activeSection = 'sharedSkills'"
-              >
-                <PhFolder :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.sharedSkills') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'git' }"
-                type="button"
-                @click="activeSection = 'git'"
-              >
-                <PhGitPullRequest :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.git') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'gateway' }"
-                type="button"
-                @click="activeSection = 'gateway'"
-              >
-                <PhPaperPlaneTilt :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.gateway') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'reviewSources' }"
-                type="button"
-                @click="activeSection = 'reviewSources'"
-              >
-                <PhMagnifyingGlass :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.reviewSources') }}</span>
-              </button>
-              <button
-                class="settings-menu-item"
-                :class="{ active: activeSection === 'modelWindowKickoff' }"
-                type="button"
-                @click="activeSection = 'modelWindowKickoff'"
-              >
-                <PhTimer :size="18" weight="bold" class="settings-menu-icon" />
-                <span>{{ t('settings.sections.modelWindowKickoff') }}</span>
-              </button>
+            <button
+              ref="sectionPickerButton"
+              class="settings-section-picker"
+              type="button"
+              :aria-expanded="sectionPickerOpen"
+              aria-controls="settings-sections"
+              @click="toggleSectionPicker"
+            >
+              <span>{{ t('settings.chooseSection') }} <strong>{{ t(`settings.sections.${activeSection}`) }}</strong></span>
+              <PhCaretDown :size="18" aria-hidden="true" />
+            </button>
+            <nav id="settings-sections" ref="sectionMenu" class="settings-menu" :aria-label="t('settings.sectionsLabel')">
+              <div v-for="group in sectionGroups" :key="group.label" class="settings-menu-group">
+                <h3>{{ t(`settings.groups.${group.label}`) }}</h3>
+                <button
+                  v-for="section in group.sections"
+                  :key="section.id"
+                  class="settings-menu-item"
+                  :class="{ active: activeSection === section.id }"
+                  :aria-current="activeSection === section.id ? 'page' : undefined"
+                  type="button"
+                  @click="selectSection(section.id)"
+                >
+                  <component :is="section.icon" :size="18" weight="bold" class="settings-menu-icon" aria-hidden="true" />
+                  <span>{{ t(`settings.sections.${section.id}`) }}</span>
+                </button>
+              </div>
             </nav>
           </aside>
 
@@ -116,7 +43,7 @@
               </div>
             </header>
 
-            <div class="settings-content">
+            <div ref="settingsContent" class="settings-content" :class="{ 'settings-content--preferences': activeSection === 'general' || activeSection === 'chat' }">
               <template v-if="activeSection === 'general'">
                 <section class="settings-card theme-settings" aria-labelledby="theme-settings-title">
                   <div class="settings-card-copy">
@@ -856,12 +783,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import type { FullscreenShortcut, LanguagePreference, NewSessionShortcut, SoundNotificationPreference, StreamingMessageBehavior, ThemePreference } from '../composables/usePreferences';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import type { SkillPreset, SkillPresetInput } from '../composables/useSkillPresets';
 import type { UserPrompt, UserPromptInput } from '../composables/useUserPrompts';
-import { PhArrowLeft, PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh, PhTextT, PhTimer } from '@phosphor-icons/vue';
+import { PhArrowLeft, PhCaretDown, PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh, PhTextT, PhTimer } from '@phosphor-icons/vue';
 import { playTaskNotification } from '../services/soundNotifications';
 import { apiRequest } from '../services/apiClient';
 import { useReviewSources } from '../composables/useReviewSources';
@@ -990,7 +917,47 @@ const fullscreenShortcutOptions: CustomSelectOption[] = [
   { value: 'ctrlShiftF', label: 'Ctrl+Shift+F' },
 ];
 
-const activeSection = ref<'general' | 'security' | 'chat' | 'prompts' | 'keyboard' | 'skills' | 'sharedSkills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff'>('general');
+type SettingsSection = 'general' | 'security' | 'chat' | 'prompts' | 'keyboard' | 'skills' | 'sharedSkills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff';
+const sectionGroups = [
+  { label: 'workspace', sections: [
+    { id: 'general', icon: PhSliders }, { id: 'chat', icon: PhChatCircle },
+    { id: 'prompts', icon: PhTextT }, { id: 'keyboard', icon: PhKeyboard },
+  ] },
+  { label: 'tools', sections: [
+    { id: 'skills', icon: PhSparkle }, { id: 'sharedSkills', icon: PhFolder },
+    { id: 'git', icon: PhGitPullRequest }, { id: 'reviewSources', icon: PhMagnifyingGlass },
+  ] },
+  { label: 'connections', sections: [
+    { id: 'gateway', icon: PhPaperPlaneTilt }, { id: 'modelWindowKickoff', icon: PhTimer },
+  ] },
+  { label: 'account', sections: [{ id: 'security', icon: PhLock }] },
+] satisfies { label: string; sections: { id: SettingsSection; icon: typeof PhSliders }[] }[];
+const activeSection = ref<SettingsSection>('general');
+const sectionPickerOpen = ref(false);
+const sectionPickerButton = ref<HTMLButtonElement | null>(null);
+const sectionMenu = ref<HTMLElement | null>(null);
+const settingsContent = ref<HTMLElement | null>(null);
+
+function toggleSectionPicker() {
+  if (sectionPickerOpen.value) {
+    closeSectionPicker();
+  } else {
+    sectionPickerOpen.value = true;
+    void nextTick(() => sectionMenu.value?.querySelector<HTMLButtonElement>('.settings-menu-item.active')?.focus());
+  }
+}
+
+function closeSectionPicker() {
+  if (!sectionPickerOpen.value) return;
+  sectionPickerOpen.value = false;
+  sectionPickerButton.value?.focus();
+}
+
+function selectSection(section: SettingsSection) {
+  activeSection.value = section;
+  if (settingsContent.value) settingsContent.value.scrollTop = 0;
+  closeSectionPicker();
+}
 const { sources: reviewSources, loading: reviewSourcesLoading, error: reviewSourcesError, load: loadReviewSources, add: addReviewSource, remove: removeReviewSourceFn } = useReviewSources();
 const reviewSourceTypes = ref<ReviewSourceType[]>([]);
 const newReviewSourceType = ref('devin');
@@ -1753,7 +1720,7 @@ const emit = defineEmits<{
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: 268px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   overflow: hidden;
   background: var(--bg-primary);
 }
@@ -1763,7 +1730,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: 0.625rem;
   width: 100%;
-  margin-bottom: 1.25rem;
+  margin-bottom: 2rem;
   padding: 0.75rem;
   color: var(--text-secondary);
   background: transparent;
@@ -1780,20 +1747,45 @@ const emit = defineEmits<{
 .settings-sidebar {
   min-height: 0;
   overflow: auto;
-  padding: 1.25rem;
+  padding: 1.5rem 1rem;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
 }
 
 .settings-sidebar h2 {
-  margin: 0 0 1.25rem;
+  margin: 0 0 2rem 0.75rem;
   color: var(--text-primary);
-  font-size: 1.125rem;
+  font-size: 1.375rem;
+  letter-spacing: -0.02em;
+}
+
+.settings-section-picker {
+  display: none;
 }
 
 .settings-menu {
   display: grid;
-  gap: 0.5rem;
+  gap: 1.5rem;
+}
+
+.settings-menu-group {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.settings-menu-group h3 {
+  margin: 0 0 0.25rem;
+  padding: 0 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.settings-menu-item:focus-visible,
+.settings-back:focus-visible,
+.settings-section-picker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .settings-menu-item {
@@ -1801,7 +1793,8 @@ const emit = defineEmits<{
   align-items: center;
   gap: 0.625rem;
   width: 100%;
-  padding: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
@@ -1818,9 +1811,10 @@ const emit = defineEmits<{
 }
 
 .settings-menu-item.active {
-  color: var(--text-primary);
-  background: var(--bg-surface);
-  border-color: var(--border);
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-color: transparent;
+  font-weight: 600;
 }
 
 .settings-menu-icon {
@@ -1842,14 +1836,15 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1.5rem 1.5rem 1rem;
+  padding: 2.5rem max(2rem, calc((100% - 60rem) / 2 + 2rem)) 1.5rem;
   border-bottom: 1px solid var(--border);
 }
 
 .settings-body-header h3 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 1.25rem;
+  font-size: 1.625rem;
+  letter-spacing: -0.025em;
 }
 
 .settings-content {
@@ -1858,7 +1853,11 @@ const emit = defineEmits<{
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable;
-  padding: 1.5rem;
+  width: 100%;
+  max-width: 60rem;
+  margin-inline: auto;
+  padding: 2rem;
+  box-sizing: border-box;
 }
 
 .settings-card {
@@ -1866,11 +1865,28 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1rem;
-  padding: 1rem;
+  margin-bottom: 0.75rem;
+  padding: 1.25rem 1.5rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+}
+
+.settings-card-copy {
+  min-width: 0;
+}
+
+.settings-content--preferences > .settings-card {
+  margin: 0;
+  padding: 1.5rem 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.settings-content--preferences > .settings-card:first-child {
+  padding-top: 0;
 }
 
 .settings-card-copy h4 {
@@ -2575,53 +2591,104 @@ const emit = defineEmits<{
   border: 0;
 }
 
-@media (max-width: 760px) {
-  .commit-prompt-grid {
-    grid-template-columns: 1fr;
-  }
-
+@media (max-width: 900px) {
   .settings-dialog {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
   }
 
   .settings-sidebar {
-    padding: 0.75rem;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5rem 1rem;
+    padding: 0.75rem 1rem;
     overflow: hidden;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
 
-  .settings-sidebar h2 {
-    margin-bottom: 0.625rem;
-    font-size: 1rem;
+  .settings-back {
+    width: auto;
+    min-height: 2.75rem;
+    margin: 0;
   }
 
-  .settings-menu {
-    display: flex;
-    gap: 0.375rem;
-    overflow-x: auto;
-    padding-bottom: 0.125rem;
-    scrollbar-width: none;
-  }
-
-  .settings-menu::-webkit-scrollbar {
+  .settings-back span {
     display: none;
   }
 
-  .settings-menu-item {
-    flex: 0 0 auto;
-    width: auto;
-    padding: 0.55rem 0.7rem;
-    white-space: nowrap;
+  .settings-sidebar h2 {
+    margin: 0;
+    font-size: 1.125rem;
+  }
+
+  .settings-section-picker {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    width: 100%;
+    min-height: 3rem;
+    padding: 0.65rem 0.875rem;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    text-align: left;
+  }
+
+  .settings-section-picker strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+  }
+
+  .settings-section-picker[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+
+  .settings-menu {
+    display: none;
+  }
+
+  .picker-open {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .picker-open .settings-sidebar {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .picker-open .settings-menu {
+    grid-column: 1 / -1;
+    display: grid;
+    align-content: start;
+    overflow-y: auto;
+    padding: 0.5rem 0 1.5rem;
+  }
+
+  .picker-open .settings-body {
+    display: none;
   }
 
   .settings-body-header {
-    padding: 1rem;
+    padding: 1.25rem 1rem 1rem;
+  }
+
+  .settings-body-header h3 {
+    font-size: 1.375rem;
   }
 
   .settings-content {
     padding: 1rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .commit-prompt-grid {
+    grid-template-columns: 1fr;
   }
 
   .settings-card {

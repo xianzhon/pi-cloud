@@ -1537,6 +1537,13 @@ export default {
   settings: {
     title: '设置',
     sectionsLabel: '设置分类',
+    chooseSection: '分类',
+    groups: {
+      workspace: '工作区',
+      tools: '工具',
+      connections: '连接',
+      account: '账户',
+    },
     close: '返回工作区',
     sections: {
       general: '常规',

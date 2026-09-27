@@ -1537,6 +1537,13 @@ export default {
   settings: {
     title: 'Settings',
     sectionsLabel: 'Settings sections',
+    chooseSection: 'Section',
+    groups: {
+      workspace: 'Workspace',
+      tools: 'Tools',
+      connections: 'Connections',
+      account: 'Account',
+    },
     close: 'Back to workspace',
     sections: {
       general: 'General',
