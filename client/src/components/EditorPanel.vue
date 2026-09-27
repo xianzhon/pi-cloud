@@ -317,6 +317,7 @@
         :file-path="activeTab"
         :font="mhtmlFont"
         @font-loaded="restoreMhtmlFont"
+        @explain-selection="(text, filePath, target) => emit('explain-selection', text, filePath, target)"
       />
       <iframe
         v-else-if="activeIsHtml && activePreviewMode === 'preview'"
@@ -658,6 +659,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   close: [];
   addReference: [path: string];
+  'explain-selection': [text: string, filePath: string, target: 'current' | 'new'];
   workspaceStateChanged: [state: { maximized: boolean; activeFile?: string }];
 }>();
 

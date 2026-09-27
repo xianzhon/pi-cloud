@@ -373,6 +373,12 @@
         >{{ item.title }}</button>
       </div>
     </nav>
+    <Teleport to="body">
+      <div v-if="selectionMenu" class="mhtml-selection-menu" :style="{ left: `${selectionMenu.x}px`, top: `${selectionMenu.y}px` }" role="menu">
+        <button type="button" role="menuitem" @click="sendSelection('current')">{{ t('components.editorPanel.sendSelectionCurrent') }}</button>
+        <button type="button" role="menuitem" @click="sendSelection('new')">{{ t('components.editorPanel.sendSelectionNew') }}</button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -471,7 +477,49 @@ const props = withDefaults(defineProps<{
   initialScale?: number;
   kind?: 'pdf' | 'image' | 'html';
 }>(), { htmlDocument: '', kind: 'pdf' });
-const emit = defineEmits<{ 'scale-change': [scale: number]; 'font-loaded': [font?: string] }>();
+const emit = defineEmits<{ 'scale-change': [scale: number]; 'font-loaded': [font?: string]; 'explain-selection': [text: string, filePath: string, target: 'current' | 'new'] }>();
+const selectionMenu = ref<{ x: number; y: number; text: string }>();
+
+function closeSelectionMenu(): void {
+  selectionMenu.value = undefined;
+  window.document.removeEventListener('pointerdown', closeSelectionMenuOutside);
+  window.document.removeEventListener('keydown', closeSelectionMenuOnEscape);
+}
+
+function closeSelectionMenuOutside(event: PointerEvent): void {
+  if (!(event.target as Element).closest('.mhtml-selection-menu')) closeSelectionMenu();
+}
+
+function closeSelectionMenuOnEscape(event: KeyboardEvent): void {
+  if (event.key === 'Escape') closeSelectionMenu();
+}
+
+function sendSelection(target: 'current' | 'new'): void {
+  if (!selectionMenu.value) return;
+  emit('explain-selection', selectionMenu.value.text, props.filePath, target);
+  closeSelectionMenu();
+}
+
+function showSelectionMenu(event: MouseEvent): void {
+  const text = htmlFrameEl.value?.contentWindow?.getSelection()?.toString().trim();
+  if (!text) {
+    closeSelectionMenu();
+    return;
+  }
+  event.preventDefault();
+  closeSelectionMenu();
+  const rect = htmlFrameEl.value!.getBoundingClientRect();
+  selectionMenu.value = {
+    x: Math.min(rect.left + event.clientX * scale.value, window.innerWidth - 220),
+    y: Math.min(rect.top + event.clientY * scale.value, window.innerHeight - 90),
+    text,
+  };
+  nextTick(() => {
+    window.document.addEventListener('pointerdown', closeSelectionMenuOutside);
+    window.document.addEventListener('keydown', closeSelectionMenuOnEscape);
+  });
+}
+
 const t = i18n.global.t;
 const isImage = computed(() => props.kind === 'image');
 const isHtml = computed(() => props.kind === 'html');
@@ -1531,13 +1579,20 @@ function updateHtmlPageSize(): void {
 }
 
 let htmlShortcutWindow: Window | undefined;
+let selectionDocument: Document | undefined;
 
 async function handleHtmlLoad(): Promise<void> {
   const frame = htmlFrameEl.value;
   const htmlDocument = frame?.contentDocument;
   if (!frame || !htmlDocument || !isHtml.value) return;
+  closeSelectionMenu();
   htmlShortcutWindow?.removeEventListener('keydown', handleToolShortcut);
+  selectionDocument?.removeEventListener('contextmenu', showSelectionMenu);
+  selectionDocument?.removeEventListener('pointerdown', closeSelectionMenu);
   htmlShortcutWindow = frame.contentWindow || undefined;
+  selectionDocument = htmlDocument;
+  htmlDocument.addEventListener('contextmenu', showSelectionMenu);
+  htmlDocument.addEventListener('pointerdown', closeSelectionMenu);
   htmlShortcutWindow?.addEventListener('keydown', handleToolShortcut);
 
   // The outer viewport scrolls the page and its annotation overlay together.
@@ -2159,6 +2214,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  closeSelectionMenu();
+  selectionDocument?.removeEventListener('contextmenu', showSelectionMenu);
+  selectionDocument?.removeEventListener('pointerdown', closeSelectionMenu);
   loadVersion++;
   finishToolbarDrag();
   window.removeEventListener('resize', keepToolbarInBounds);
@@ -2179,6 +2237,27 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.mhtml-selection-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 200px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 20%);
+}
+.mhtml-selection-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.mhtml-selection-menu button:hover { background: var(--bg-hover); }
 .pdf-preview {
   position: relative;
   flex: 1 1 auto;

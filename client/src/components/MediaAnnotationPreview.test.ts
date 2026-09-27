@@ -102,6 +102,34 @@ describe('MediaAnnotationPreview', () => {
     pdfLibMock.drawImage.mockClear();
   });
 
+  it('offers both session targets for selected MHTML text', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/page.mhtml', htmlDocument: '<p>Selected text</p>', kind: 'html' },
+    });
+    await flushPromises();
+    const frame = wrapper.get<HTMLIFrameElement>('iframe.mhtml-document-frame');
+    const htmlDocument = new DOMParser().parseFromString('<p>Selected text</p>', 'text/html');
+    Object.defineProperty(frame.element, 'contentDocument', { value: htmlDocument });
+    Object.defineProperty(frame.element, 'contentWindow', { configurable: true, value: { getSelection: () => ({ toString: () => 'Selected text' }), addEventListener: vi.fn(), removeEventListener: vi.fn() } });
+    await frame.trigger('load');
+    htmlDocument.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 20 }));
+    await flushPromises();
+    const buttons = window.document.querySelectorAll('.mhtml-selection-menu button');
+    expect(buttons).toHaveLength(2);
+    (buttons[0] as HTMLButtonElement).click();
+    expect(wrapper.emitted('explain-selection')?.[0]).toEqual(['Selected text', '/project/page.mhtml', 'current']);
+
+    htmlDocument.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    await flushPromises();
+    (window.document.querySelectorAll('.mhtml-selection-menu button')[1] as HTMLButtonElement).click();
+    expect(wrapper.emitted('explain-selection')?.[1]).toEqual(['Selected text', '/project/page.mhtml', 'new']);
+
+    Object.defineProperty(frame.element, 'contentWindow', { configurable: true, value: { getSelection: () => ({ toString: () => '' }), removeEventListener: vi.fn() } });
+    htmlDocument.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    await flushPromises();
+    expect(window.document.querySelector('.mhtml-selection-menu')).toBeNull();
+  });
+
   it('loads a PDF and supports page navigation and zoom', async () => {
     const wrapper = mount(MediaAnnotationPreview, {
       props: { src: '/api/files/raw?path=document.pdf', filePath: '/project/document.pdf' },

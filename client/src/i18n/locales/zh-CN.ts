@@ -516,6 +516,8 @@ export default {
       editHtmlSource: '编辑 HTML 源',
       htmlPreview: 'HTML 预览',
       mhtmlPreview: 'MHTML 预览',
+      sendSelectionCurrent: '在当前会话中解释',
+      sendSelectionNew: '在新会话中解释',
       mhtmlFont: 'MHTML 预览字体',
       mhtmlFontOriginal: '原始字体',
       mhtmlFontSans: '无衬线体',

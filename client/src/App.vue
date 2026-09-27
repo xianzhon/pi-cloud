@@ -388,6 +388,7 @@
       :initial-maximized="editorMaximized"
       @close="showEditor = false"
       @add-reference="addEditorReference"
+      @explain-selection="explainMhtmlSelection"
       @workspace-state-changed="handleEditorWorkspaceStateChanged"
     />
 
@@ -1719,6 +1720,28 @@ async function waitForSessionContextReady(): Promise<void> {
       resolve();
     });
   });
+}
+
+async function explainMhtmlSelection(text: string, filePath: string, target: 'current' | 'new'): Promise<void> {
+  if (isReviewMode.value) return;
+  const prompt = `Explain the following selected text from the MHTML file ${JSON.stringify(filePath)}. Read the file for context.\n\n${JSON.stringify(text)}`;
+  if (target === 'new') {
+    const sessionId = await createNewSession({ cwd: sessionCwd.value || selectedProjectPath.value, firstMessage: prompt });
+    if (!sessionId) return;
+    if (activeSessionId.value !== sessionId) {
+      await new Promise<void>((resolve) => {
+        const stop = watch(activeSessionId, (id) => {
+          if (id !== sessionId) return;
+          stop();
+          resolve();
+        });
+      });
+    }
+    await waitForSessionContextReady();
+    await nextTick();
+  }
+  const sent = await chatPanelRef.value?.submitExternalPrompt(prompt);
+  if (sent === false || sent === undefined) showToast(t('app.promptNotSent'), 'error');
 }
 
 async function handleTaskStarted(result: ProjectTaskStartResult): Promise<void> {

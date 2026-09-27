@@ -516,6 +516,8 @@ export default {
       editHtmlSource: 'Edit HTML source',
       htmlPreview: 'HTML preview',
       mhtmlPreview: 'MHTML preview',
+      sendSelectionCurrent: 'Explain in current session',
+      sendSelectionNew: 'Explain in new session',
       mhtmlFont: 'MHTML preview font',
       mhtmlFontOriginal: 'Original font',
       mhtmlFontSans: 'Sans-serif',
