@@ -1,8 +1,8 @@
 <template>
-  <div class="mindmap-editor" :class="[structure, { dragging: draggedId !== null }]" :style="palette" @keydown="onKeydown">
+  <div class="mindmap-editor" :class="[structure, { dragging: draggedId !== null, locked }]" :style="palette" @keydown="onKeydown">
     <div class="mindmap-toolbar">
-      <button type="button" class="mindmap-history-button" :disabled="!past.length" :aria-label="t('undo')" :title="t('undo')" @click="undo"><PhArrowCounterClockwise aria-hidden="true" /></button>
-      <button type="button" class="mindmap-history-button" :disabled="!future.length" :aria-label="t('redo')" :title="t('redo')" @click="redo"><PhArrowClockwise aria-hidden="true" /></button>
+      <button type="button" class="mindmap-history-button" :disabled="locked || !past.length" :aria-label="t('undo')" :title="t('undo')" @click="undo"><PhArrowCounterClockwise aria-hidden="true" /></button>
+      <button type="button" class="mindmap-history-button" :disabled="locked || !future.length" :aria-label="t('redo')" :title="t('redo')" @click="redo"><PhArrowClockwise aria-hidden="true" /></button>
       <div class="mindmap-levels mindmap-level-depth"><span>{{ t('levels') }}</span>
         <CustomSelect model-value="" :options="levelOptions" :aria-label="t('levels')" :placeholder="t('chooseLevel')" @update:model-value="setLevel(Number($event))" />
       </div>
@@ -15,8 +15,13 @@
       <div class="mindmap-levels"><span>{{ t('structure') }}</span>
         <CustomSelect :model-value="structure" :options="structureOptions" :aria-label="t('structure')" @update:model-value="setStructure" />
       </div>
+      <label class="mindmap-lock-switch" :title="t('readOnly')">
+        <PhLock v-if="locked" aria-hidden="true" /><PhLockOpen v-else aria-hidden="true" />
+        <input type="checkbox" :checked="locked" :aria-label="t('readOnly')" @change="toggleLock" />
+        <span class="mindmap-switch-track" aria-hidden="true" />
+      </label>
       <div ref="iconPicker" class="mindmap-levels mindmap-icon-picker"><span>{{ t('icon') }}</span>
-        <button ref="iconTrigger" type="button" class="mindmap-icon-trigger" :aria-label="t('icon')" :aria-expanded="iconPickerOpen" aria-haspopup="dialog" :disabled="!selected || !!editing" @click="toggleIconPicker" @keydown.esc.stop="closeIconPicker">
+        <button ref="iconTrigger" type="button" class="mindmap-icon-trigger" :aria-label="t('icon')" :aria-expanded="iconPickerOpen" aria-haspopup="dialog" :disabled="locked || !selected || !!editing" @click="toggleIconPicker" @keydown.esc.stop="closeIconPicker">
           <span v-if="selected?.icon && mindMapFlagColors[selected.icon]" class="mindmap-colored-flag" :style="{ color: mindMapFlagColors[selected.icon] }">⚑</span><span v-else>{{ selected?.icon || t('noIcon') }}</span><span aria-hidden="true">⌄</span>
         </button>
         <div v-if="iconPickerOpen" ref="iconPanel" class="mindmap-icon-panel" role="dialog" :aria-label="t('icon')" :style="iconPanelStyle" @keydown.esc.stop="closeIconPicker">
@@ -35,14 +40,14 @@
         <button type="button" @click="fit">{{ t('fit') }}</button>
       </div>
     </div>
-    <div class="mindmap-shortcuts">{{ t('shortcuts') }}</div>
+    <div v-if="!locked" class="mindmap-shortcuts">{{ t('shortcuts') }}</div>
     <div ref="viewport" class="mindmap-viewport" tabindex="0" @pointerdown="startPan" @pointermove="pan" @pointerup="endPan" @pointercancel="endPan" @wheel.prevent="onWheel">
       <div class="mindmap-canvas" :style="{ width: `${canvasWidth}px`, height: `${canvasHeight}px`, transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})` }">
         <svg class="mindmap-connections" :width="canvasWidth" :height="canvasHeight" aria-hidden="true">
           <path v-for="(path, index) in diagram.connectors" :key="index" :d="path" :style="branchStyle(diagram.nodes[index + 1]?.id)" :transform="`translate(${originX} ${originY})`" />
         </svg>
         <div v-for="entry in positionedNodes" :key="entry.node.id" class="mindmap-item" :style="{ left: `${entry.position.x + originX}px`, top: `${entry.position.y + originY}px`, ...branchStyle(entry.node.id) }">
-          <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1, 'drop-child': dropTarget?.id === entry.node.id && dropTarget.placement === 'child', 'drop-before': dropTarget?.id === entry.node.id && dropTarget.placement === 'before', 'drop-after': dropTarget?.id === entry.node.id && dropTarget.placement === 'after', matched: matches.has(entry.node.id) }" :draggable="!editing && entry.node.id !== root.id" @click="selectNode(entry.node.id)" @dblclick="startEdit('rename', entry.node.id)" @contextmenu.prevent="openMenu($event, entry.node.id)" @dragstart="draggedId = entry.node.id" @dragend="clearDrag" @dragover.prevent="showDrop(entry.node.id, 'child')" @drop.prevent="drop(entry.node.id, 'child')">
+          <div :ref="el => observeNode(el, entry.node.id)" class="mindmap-node" role="button" tabindex="0" :aria-label="entry.node.label" :aria-pressed="selectedId === entry.node.id" :class="{ selected: selectedId === entry.node.id, root: !entry.position.depth, branch: entry.position.depth === 1, 'drop-child': dropTarget?.id === entry.node.id && dropTarget.placement === 'child', 'drop-before': dropTarget?.id === entry.node.id && dropTarget.placement === 'before', 'drop-after': dropTarget?.id === entry.node.id && dropTarget.placement === 'after', matched: matches.has(entry.node.id) }" :draggable="!locked && !editing && entry.node.id !== root.id" @click="selectNode(entry.node.id)" @dblclick="startEdit('rename', entry.node.id)" @contextmenu.prevent="openMenu($event, entry.node.id)" @dragstart="startDrag(entry.node.id)" @dragend="clearDrag" @dragover.prevent="showDrop(entry.node.id, 'child')" @drop.prevent="drop(entry.node.id, 'child')">
             <div v-if="entry.node.id !== root.id" class="mindmap-drop-edge" @dragover.stop.prevent="showDrop(entry.node.id, 'before')" @drop.stop.prevent="drop(entry.node.id, 'before')" />
             <form v-if="editing && editNodeId === entry.node.id" class="mindmap-inline-edit" @submit.stop.prevent="submitEdit" @click.stop @dblclick.stop>
               <input id="mindmap-label" v-model="draft" :aria-label="t('label')" :aria-invalid="labelError" @keydown.esc.stop.prevent="cancelEdit" @blur="submitEdit" />
@@ -55,13 +60,13 @@
         </div>
       </div>
     </div>
-    <div v-if="menu" class="mindmap-context-menu" :style="{ left: `${menu.x}px`, top: `${menu.y}px` }" role="menu" @contextmenu.prevent>
+    <div v-if="menu && !locked" class="mindmap-context-menu" :style="{ left: `${menu.x}px`, top: `${menu.y}px` }" role="menu" @contextmenu.prevent>
       <button type="button" role="menuitem" @click="menuEdit('rename')"><PhPencilSimple aria-hidden="true" />{{ t('rename') }}</button>
       <button type="button" role="menuitem" @click="menuEdit('child')"><PhTreeStructure aria-hidden="true" />{{ t('child') }}</button>
       <button v-if="menu.id !== root.id" type="button" role="menuitem" @click="menuEdit('sibling')"><PhRowsPlusBottom aria-hidden="true" />{{ t('sibling') }}</button>
       <button v-if="menu.id !== root.id" type="button" role="menuitem" @click="menuDelete"><PhTrash aria-hidden="true" />{{ t('delete') }}</button>
     </div>
-    <div v-if="selected && selected.id !== root.id" class="mindmap-mobile-controls">
+    <div v-if="!locked && selected && selected.id !== root.id" class="mindmap-mobile-controls">
       <label>{{ t('parent') }}
         <select :value="''" @change="changeParent">
           <option value="" disabled>{{ t('chooseParent') }}</option>
@@ -81,7 +86,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from 'vue';
-import { PhArrowClockwise, PhArrowCounterClockwise, PhPencilSimple, PhRowsPlusBottom, PhTrash, PhTreeStructure } from '@phosphor-icons/vue';
+import { PhArrowClockwise, PhArrowCounterClockwise, PhLock, PhLockOpen, PhPencilSimple, PhRowsPlusBottom, PhTrash, PhTreeStructure } from '@phosphor-icons/vue';
 import { i18n } from '../i18n';
 import ConfirmModal from './ConfirmModal.vue';
 import CustomSelect from './CustomSelect.vue';
@@ -95,6 +100,17 @@ const t = (key: string, params?: Record<string, number>) => i18n.global.t(`compo
 const root = ref<MindMapNode>(parseMindMap(props.source));
 const past = ref<MindMapNode[]>([]);
 const future = ref<MindMapNode[]>([]);
+const locked = ref(false);
+function toggleLock() {
+  locked.value = !locked.value;
+  if (locked.value) {
+    editing.value = null;
+    menu.value = null;
+    confirmDelete.value = false;
+    iconPickerOpen.value = false;
+    clearDrag();
+  }
+}
 const selectedId = ref<number | null>(root.value.id);
 const folded = ref(new Set<number>());
 const search = ref('');
@@ -310,23 +326,24 @@ function apply(next: MindMapNode) {
   emitChange();
 }
 function operate(operation: Parameters<typeof editMindMap>[1]) {
+  if (locked.value) return;
   try { apply(editMindMap(root.value, operation)); } catch { /* Invalid/no-op moves leave source and dirty state unchanged. */ }
 }
 function undo() {
-  if (!past.value.length) return;
+  if (locked.value || !past.value.length) return;
   future.value.push(root.value);
   root.value = past.value.pop()!;
   emitChange();
 }
 function handleUndoKey(event: KeyboardEvent) { if (event.shiftKey) redo(); else undo(); }
 function redo() {
-  if (!future.value.length) return;
+  if (locked.value || !future.value.length) return;
   past.value.push(root.value);
   root.value = future.value.pop()!;
   emitChange();
 }
 function startEdit(type: 'child' | 'sibling' | 'before' | 'rename', id = selectedId.value) {
-  if (id === null || ((type === 'sibling' || type === 'before') && id === root.value.id)) return;
+  if (locked.value || id === null || ((type === 'sibling' || type === 'before') && id === root.value.id)) return;
   selectedId.value = id;
   editing.value = type;
   draft.value = type === 'rename' ? selected.value?.label || '' : '';
@@ -338,7 +355,7 @@ function cancelEdit() {
   labelError.value = false;
 }
 function submitEdit() {
-  if (!selected.value || !editing.value) return;
+  if (locked.value || !selected.value || !editing.value) return;
   if (!validMindMapLabel(draft.value)) {
     labelError.value = true;
     void nextTick(() => observed.get(editNodeId.value!)?.querySelector('input')?.focus());
@@ -356,7 +373,7 @@ function submitEdit() {
   void nextTick(() => observed.get(selectedId.value!)?.focus());
 }
 function openMenu(event: MouseEvent, id: number) {
-  if (editing.value) return;
+  if (locked.value || editing.value) return;
   selectedId.value = id;
   menu.value = { id, x: Math.max(0, Math.min(event.clientX, window.innerWidth - 180)), y: Math.max(0, Math.min(event.clientY, window.innerHeight - 170)) };
 }
@@ -370,30 +387,32 @@ function menuEdit(type: 'rename' | 'child' | 'sibling') {
   if (id !== undefined) startEdit(type, id);
 }
 function menuDelete() {
+  if (locked.value) return;
   menu.value = null;
   confirmDelete.value = true;
 }
 function deleteSelected() {
   confirmDelete.value = false;
-  if (!selected.value) return;
+  if (locked.value || !selected.value) return;
   operate({ type: 'delete', target: selected.value.id });
   selectedId.value = root.value.id;
 }
 function clearDrag() { draggedId.value = null; dropTarget.value = null; }
+function startDrag(id: number) { if (!locked.value) draggedId.value = id; }
 function showDrop(id: number, placement: 'child' | 'before' | 'after') {
-  if (draggedId.value !== null && draggedId.value !== id) dropTarget.value = { id, placement };
+  if (!locked.value && draggedId.value !== null && draggedId.value !== id) dropTarget.value = { id, placement };
   else dropTarget.value = null;
 }
 function drop(destination: number, placement: 'child' | 'before' | 'after') {
-  if (draggedId.value !== null && draggedId.value !== destination) operate({ type: 'move', target: draggedId.value, destination, placement });
+  if (!locked.value && draggedId.value !== null && draggedId.value !== destination) operate({ type: 'move', target: draggedId.value, destination, placement });
   clearDrag();
 }
 function move(placement: 'up' | 'down' | 'promote') {
-  if (selected.value) operate({ type: 'move', target: selected.value.id, placement });
+  if (!locked.value && selected.value) operate({ type: 'move', target: selected.value.id, placement });
 }
 function changeParent(event: Event) {
   const select = event.target as HTMLSelectElement;
-  if (selected.value && select.value) operate({ type: 'move', target: selected.value.id, destination: Number(select.value), placement: 'child' });
+  if (!locked.value && selected.value && select.value) operate({ type: 'move', target: selected.value.id, destination: Number(select.value), placement: 'child' });
   select.value = '';
 }
 function toggleFold(id: number) {
@@ -425,7 +444,7 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && menu.value) { menu.value = null; return; }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); emit('save'); return; }
   if (target.closest('input, select, textarea, button')) return;
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); handleUndoKey(event); return; }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (!locked.value) handleUndoKey(event); return; }
   if (editing.value || !selected.value || !target.closest('.mindmap-viewport')) return;
   const id = selected.value.id;
   const position = positions.value.get(id)!;
@@ -441,11 +460,11 @@ function onKeydown(event: KeyboardEvent) {
     } else {
       next = parentOptions.value.find(node => node.children.some(child => child.id === id))?.id;
     }
-  } else if (event.key === 'Tab') {
+  } else if (!locked.value && event.key === 'Tab') {
     if (event.shiftKey) move('promote'); else startEdit('child');
-  } else if (event.key === 'Enter') startEdit(event.shiftKey ? 'before' : id === root.value.id ? 'child' : 'sibling');
-  else if (event.key === 'F2') startEdit('rename');
-  else if (event.key === 'Delete' || event.key === 'Backspace') { if (id !== root.value.id) confirmDelete.value = true; }
+  } else if (!locked.value && event.key === 'Enter') startEdit(event.shiftKey ? 'before' : id === root.value.id ? 'child' : 'sibling');
+  else if (!locked.value && event.key === 'F2') startEdit('rename');
+  else if (!locked.value && (event.key === 'Delete' || event.key === 'Backspace')) { if (id !== root.value.id) confirmDelete.value = true; }
   else if (event.key === ' ' && selected.value.children.length) toggleFold(id);
   else return;
   event.preventDefault();
@@ -521,6 +540,14 @@ function endPan() { pointer = null; }
 .mindmap-toolbar, .mindmap-mobile-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border-bottom: 1px solid var(--border-color); }
 .mindmap-toolbar button, .mindmap-mobile-controls button, .mindmap-context-menu button { border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 9px; background: var(--bg-secondary); color: inherit; cursor: pointer; }
 .mindmap-toolbar button:disabled { opacity: .4; cursor: default; }
+.mindmap-lock-switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.mindmap-lock-switch svg { width: 18px; height: 18px; }
+.mindmap-lock-switch input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.mindmap-switch-track { position: relative; width: 32px; height: 18px; border-radius: 999px; background: var(--border-color); transition: background .15s; }
+.mindmap-switch-track::after { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0004; content: ''; transition: transform .15s; }
+.mindmap-lock-switch input:checked + .mindmap-switch-track { background: var(--mindmap-accent); }
+.mindmap-lock-switch input:checked + .mindmap-switch-track::after { transform: translateX(14px); }
+.mindmap-lock-switch input:focus-visible + .mindmap-switch-track { outline: 2px solid var(--mindmap-accent); outline-offset: 2px; }
 .mindmap-history-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0 !important; }
 .mindmap-history-button svg { width: 18px; height: 18px; }
 .mindmap-toolbar-spacer { flex: 1; }
@@ -577,5 +604,6 @@ function endPan() { pointer = null; }
 .mindmap-drop-edge:last-child { bottom: -6px; }
 .mindmap-editor.dragging .mindmap-drop-edge:hover { background: var(--mindmap-accent); box-shadow: 0 0 0 2px var(--bg-secondary); }
 .mindmap-node:hover { border-color: var(--mindmap-accent); }
+.mindmap-editor.locked .mindmap-node { cursor: default; }
 @media (min-width: 769px) { .mindmap-mobile-controls { display: none; } }
 </style>

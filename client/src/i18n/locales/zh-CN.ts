@@ -443,7 +443,7 @@ export default {
         unsupported: '可视化编辑需要标准 mindmap 格式和单个根节点。请在源码中修正。',
         unsupportedLine: '无法解析第 {line} 行。请在源码中使用两个空格缩进和纯文本标签。',
         child: '添加子节点', sibling: '添加同级节点', rename: '重命名', delete: '删除分支',
-        undo: '撤销', redo: '重做', zoomIn: '放大', zoomOut: '缩小', fit: '适应窗口',
+        readOnly: '只读', undo: '撤销', redo: '重做', zoomIn: '放大', zoomOut: '缩小', fit: '适应窗口',
         label: '节点名称', apply: '确定', cancel: '取消', invalidLabel: '不能使用 Mermaid 括号、反引号、指令或首尾空格。',
         expand: '展开分支', expandCount: '展开分支（隐藏 {count} 个节点）', collapse: '折叠分支', search: '搜索节点', matchCount: '匹配 {count} 个节点', parent: '移动到', chooseParent: '选择父节点',
         up: '上移', down: '下移', promote: '提升一级', deleteBranch: '删除此节点及其所有子节点？',

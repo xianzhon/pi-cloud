@@ -443,7 +443,7 @@ export default {
         unsupported: 'Visual editing needs a standard mindmap with one root. Open Raw to fix the source.',
         unsupportedLine: 'Visual editing cannot read line {line}. Use two-space indentation and plain labels in Raw.',
         child: 'Add child', sibling: 'Add sibling', rename: 'Rename', delete: 'Delete branch',
-        undo: 'Undo', redo: 'Redo', zoomIn: 'Zoom in', zoomOut: 'Zoom out', fit: 'Fit',
+        readOnly: 'Read-only', undo: 'Undo', redo: 'Redo', zoomIn: 'Zoom in', zoomOut: 'Zoom out', fit: 'Fit',
         label: 'Node label', apply: 'Apply', cancel: 'Cancel', invalidLabel: 'Do not use Mermaid brackets, backticks, directives, or leading or trailing spaces.',
         expand: 'Expand branch', expandCount: 'Expand branch ({count} hidden nodes)', collapse: 'Collapse branch', search: 'Search nodes', matchCount: '{count} matches', parent: 'Move under', chooseParent: 'Choose parent',
         up: 'Move up', down: 'Move down', promote: 'Promote', deleteBranch: 'Delete this node and all its descendants?',

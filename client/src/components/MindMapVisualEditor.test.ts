@@ -8,6 +8,57 @@ const source = 'mindmap\n  Root\n    One\n    Two\n';
 const mountEditor = () => mount(MindMapVisualEditor, { props: { source }, global: { plugins: [i18n] } });
 
 describe('mind map visual editing', () => {
+  it('locks mutations while preserving navigation and restores editing when unlocked', async () => {
+    const wrapper = mountEditor();
+    const lock = wrapper.get('.mindmap-lock-switch input');
+    const nodes = () => wrapper.findAll('.mindmap-node');
+    expect((lock.element as HTMLInputElement).checked).toBe(false);
+    expect(wrapper.find('.mindmap-lock-switch svg').exists()).toBe(true);
+    await nodes()[1].trigger('dblclick');
+    expect(wrapper.find('#mindmap-label').exists()).toBe(true);
+    await lock.setValue(true);
+    expect((lock.element as HTMLInputElement).checked).toBe(true);
+    expect(wrapper.find('#mindmap-label').exists()).toBe(false);
+    expect(wrapper.find('.mindmap-shortcuts').exists()).toBe(false);
+    expect(nodes()[1].attributes('draggable')).toBe('false');
+    await nodes()[1].trigger('dblclick');
+    await nodes()[1].trigger('contextmenu');
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+    for (const key of ['Tab', 'Enter', 'F2', 'Delete', 'Backspace']) await nodes()[1].trigger('keydown', { key });
+    await nodes()[1].trigger('dragstart');
+    await nodes()[2].trigger('drop');
+    expect(wrapper.find('.mindmap-mobile-controls').exists()).toBe(false);
+    expect(wrapper.find('#mindmap-label').exists()).toBe(false);
+    await nodes()[1].trigger('click');
+    expect(nodes()[1].attributes('aria-pressed')).toBe('true');
+    await wrapper.get('button[aria-label="Icon"]').trigger('click');
+    expect(wrapper.find('.mindmap-icon-panel').exists()).toBe(false);
+    await wrapper.find('.mindmap-fold').trigger('click');
+    expect(nodes()).toHaveLength(1);
+    await wrapper.find('.mindmap-fold').trigger('click');
+    expect(wrapper.emitted('change')).toBeUndefined();
+    await lock.setValue(false);
+    expect(nodes()[1].attributes('draggable')).toBe('true');
+    await nodes()[1].trigger('dblclick');
+    expect(wrapper.find('#mindmap-label').exists()).toBe(true);
+  });
+
+  it('blocks undo and pending deletion while locked', async () => {
+    const wrapper = mountEditor();
+    await wrapper.findAll('.mindmap-node')[1].trigger('dblclick');
+    await wrapper.get('#mindmap-label').setValue('Edited');
+    await wrapper.get('.mindmap-inline-edit').trigger('submit');
+    await wrapper.findAll('.mindmap-node')[1].trigger('keydown', { key: 'Delete' });
+    expect(wrapper.findComponent({ name: 'ConfirmModal' }).props('visible')).toBe(true);
+    await wrapper.get('.mindmap-lock-switch input').setValue(true);
+    expect(wrapper.findComponent({ name: 'ConfirmModal' }).props('visible')).toBe(false);
+    expect(wrapper.get('.mindmap-history-button').attributes('disabled')).toBeDefined();
+    await wrapper.findAll('.mindmap-node')[1].trigger('keydown', { key: 'z', ctrlKey: true });
+    expect(wrapper.emitted('change')).toHaveLength(1);
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
+    await wrapper.get('.mindmap-history-button').trigger('click');
+    expect(wrapper.emitted('change')?.[1]).toEqual([source]);
+  });
   it('edits source, preserves history on own update and invalidates it on raw changes', async () => {
     const wrapper = mountEditor();
     const historyButtons = wrapper.findAll('.mindmap-history-button');
