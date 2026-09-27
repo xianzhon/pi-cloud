@@ -245,15 +245,15 @@ vi.mock('./components/MemoryToast.vue', () => ({
   default: { props: ['toast'], template: '<section />' },
 }));
 
-vi.mock('./components/SettingsDialog.vue', () => ({
+vi.mock('./components/SettingsPage.vue', () => ({
   __esModule: true,
   default: (() => {
     heavyModuleLoads.settings += 1;
     return {
-      props: ['visible', 'totpEnabled', 'showHintInfo'],
+      props: ['totpEnabled', 'showHintInfo'],
       emits: ['close', 'updated', 'update:showHintInfo'],
       template: `
-        <section v-if="visible" class="settings-dialog-stub">
+        <section class="settings-dialog-stub settings-page-content">
           <span class="totp-enabled">{{ totpEnabled ? 'enabled' : 'disabled' }}</span>
           <span class="hint-info-state">{{ showHintInfo ? 'hints shown' : 'hints hidden' }}</span>
           <button class="settings-close-stub" @click="$emit('close')">close</button>
@@ -1375,12 +1375,20 @@ describe('App routing', () => {
     expect(settingsButton.exists()).toBe(true);
     expect(wrapper.find('[data-tooltip="Security"]').exists()).toBe(false);
 
+    const navigationCount = push.mock.calls.length;
     await settingsButton.trigger('click');
     await flushPromises();
 
+    expect(push).toHaveBeenCalledTimes(navigationCount);
     expect(wrapper.find('.settings-dialog-stub').exists()).toBe(true);
     expect(wrapper.find('.totp-enabled').text()).toBe('disabled');
     expect(wrapper.find('.hint-info-state').text()).toBe('hints shown');
+
+    await wrapper.find('.settings-close-stub').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.settings-dialog-stub').exists()).toBe(false);
+    expect(push).toHaveBeenCalledTimes(navigationCount);
+    expect(route.path).toBe('/sessions/session-1');
   });
 
   it('switches directly between dark and light themes from the utility rail', async () => {

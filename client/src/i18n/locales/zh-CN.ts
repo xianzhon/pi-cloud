@@ -1537,7 +1537,7 @@ export default {
   settings: {
     title: '设置',
     sectionsLabel: '设置分类',
-    close: '关闭设置',
+    close: '返回工作区',
     sections: {
       general: '常规',
       security: '安全',

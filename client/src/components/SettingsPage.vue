@@ -1,9 +1,10 @@
 <template>
-  <Teleport to="body">
-    <Transition name="settings-modal">
-      <div v-if="visible" class="settings-backdrop">
-        <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <section class="settings-dialog settings-page-content" aria-labelledby="settings-title">
           <aside class="settings-sidebar">
+            <button class="settings-back" type="button" @click="requestClose">
+              <PhArrowLeft :size="18" aria-hidden="true" />
+              <span>{{ t('settings.close') }}</span>
+            </button>
             <h2 id="settings-title">{{ t('settings.title') }}</h2>
             <nav class="settings-menu" :aria-label="t('settings.sectionsLabel')">
               <button
@@ -113,7 +114,6 @@
               <div>
                 <h3>{{ sectionHeading }}</h3>
               </div>
-              <DialogCloseButton class="settings-close" :label="t('settings.close')" @click="requestClose" />
             </header>
 
             <div class="settings-content">
@@ -828,10 +828,7 @@
               <ManagedSkillsPanel v-if="activeSection === 'sharedSkills'" @changed="emit('managedSkillsChanged')" />
             </div>
           </main>
-        </section>
-      </div>
-    </Transition>
-  </Teleport>
+  </section>
   <ConfirmModal :visible="Boolean(closeConfirm)" variant="warning" @confirm="confirmClose" @cancel="closeConfirm = null">
     <template #title>{{ t('components.confirmModal.confirmAction') }}</template>
     <template #message>{{ closeConfirm === 'git' ? t('components.settingsDialog.youHaveUnsavedGitIntegrationChangesClose') : t('components.settingsDialog.youHaveUnsavedGatewayChangesCloseWithout') }}</template>
@@ -859,18 +856,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import type { FullscreenShortcut, LanguagePreference, NewSessionShortcut, SoundNotificationPreference, StreamingMessageBehavior, ThemePreference } from '../composables/usePreferences';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import type { SkillPreset, SkillPresetInput } from '../composables/useSkillPresets';
 import type { UserPrompt, UserPromptInput } from '../composables/useUserPrompts';
-import { PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh, PhTextT, PhTimer } from '@phosphor-icons/vue';
+import { PhArrowLeft, PhFolder, PhGitPullRequest, PhLock, PhSliders, PhChatCircle, PhKeyboard, PhMagnifyingGlass, PhPaperPlaneTilt, PhSparkle, PhSpeakerHigh, PhTextT, PhTimer } from '@phosphor-icons/vue';
 import { playTaskNotification } from '../services/soundNotifications';
 import { apiRequest } from '../services/apiClient';
 import { useReviewSources } from '../composables/useReviewSources';
 import { listReviewSourceTypes } from '../services/reviewSourceService';
 import type { ReviewSourceType } from '../types/reviewSource';
-import DialogCloseButton from './DialogCloseButton.vue';
 import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
 import SkillPresetsPanel from './SkillPresetsPanel.vue';
@@ -884,7 +880,6 @@ import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 const t = i18n.global.t;
 
 const props = withDefaults(defineProps<{
-  visible: boolean;
   clientId?: string;
   projectPath?: string;
   totpEnabled: boolean;
@@ -1580,24 +1575,10 @@ function forwardUpdateUserPrompt(payload: { id: string; changes: UserPromptInput
   emit('updateUserPrompt', payload, complete);
 }
 
-watch(() => props.visible, (visible) => {
-  if (visible) {
-    resetGitDrafts();
-    resetGatewayDrafts();
-    void Promise.all([loadReviewSources(), loadSupportedReviewSourceTypes()]).catch(() => undefined);
-    if (activeSection.value === 'prompts') emit('loadUserPrompts');
-    if (activeSection.value === 'git') {
-      void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
-    }
-    if (activeSection.value === 'gateway') {
-      void loadGatewayProfiles().catch(() => undefined);
-      void loadGatewayModels().catch(() => undefined);
-      void loadWecomStatus().catch(() => undefined);
-    }
-  } else {
-    window.clearInterval(weixinPairingPoll);
-  }
-});
+resetGitDrafts();
+resetGatewayDrafts();
+void Promise.all([loadReviewSources(), loadSupportedReviewSourceTypes()]).catch(() => undefined);
+onUnmounted(() => window.clearInterval(weixinPairingPoll));
 
 watch(activeSection, (section) => {
   if (section === 'prompts') emit('loadUserPrompts');
@@ -1612,7 +1593,7 @@ watch(activeSection, (section) => {
 });
 
 watch(() => props.projectPath, () => {
-  if (props.visible && activeSection.value === 'git') {
+  if (activeSection.value === 'git') {
     void loadCommitPrompts().catch((error) => { commitPromptError.value = error instanceof Error ? error.message : String(error); });
   }
 });
@@ -1766,29 +1747,34 @@ const emit = defineEmits<{
   resize: vertical;
 }
 
-.settings-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  background: rgba(0, 0, 0, 0.58);
-  backdrop-filter: blur(5px);
-}
-
 .settings-dialog {
-  width: min(980px, calc(100vw - 2rem));
-  height: min(720px, calc(100vh - 2rem));
+  width: 100%;
+  height: 100%;
+  min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 268px minmax(0, 1fr);
   overflow: hidden;
   background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+}
+
+.settings-back {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.settings-back:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 .settings-sidebar {
@@ -2589,30 +2575,14 @@ const emit = defineEmits<{
   border: 0;
 }
 
-.settings-modal-enter-active,
-.settings-modal-leave-active {
-  transition: opacity 0.18s ease;
-}
-
-.settings-modal-enter-from,
-.settings-modal-leave-to {
-  opacity: 0;
-}
-
 @media (max-width: 760px) {
   .commit-prompt-grid {
     grid-template-columns: 1fr;
   }
 
-  .settings-backdrop {
-    padding: 0.5rem;
-  }
-
   .settings-dialog {
-    width: calc(100vw - 1rem);
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
-    height: min(760px, calc(100vh - 1rem));
   }
 
   .settings-sidebar {

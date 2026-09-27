@@ -1537,7 +1537,7 @@ export default {
   settings: {
     title: 'Settings',
     sectionsLabel: 'Settings sections',
-    close: 'Close settings',
+    close: 'Back to workspace',
     sections: {
       general: 'General',
       security: 'Security',
