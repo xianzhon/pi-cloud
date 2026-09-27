@@ -26,6 +26,27 @@ describe('mind map visual editing', () => {
     expect(wrapper.findAll('.mindmap-toolbar > button')[0].attributes('disabled')).toBeDefined();
   });
 
+  it('highlights case-insensitive matches inside folded branches without changing saved folds', async () => {
+    const wrapper = mount(MindMapVisualEditor, {
+      props: { source: 'mindmap\n  Root\n    Branch\n      Target\n        Target leaf\n    Other\n' },
+      global: { plugins: [i18n] },
+    });
+    const nodes = () => wrapper.findAll('.mindmap-node');
+    const branch = () => nodes().find(node => node.attributes('aria-label') === 'Branch')!;
+    await branch().element.parentElement!.querySelector<HTMLButtonElement>('.mindmap-fold')!.click();
+    await wrapper.vm.$nextTick();
+    expect(nodes().map(node => node.attributes('aria-label'))).toEqual(['Root', 'Branch', 'Other']);
+    expect(branch().element.parentElement!.querySelector('.mindmap-fold')!.textContent).toBe('+2');
+    expect(branch().element.parentElement!.querySelector('.mindmap-fold')!.getAttribute('aria-label')).toBe('Expand branch (2 hidden nodes)');
+    await wrapper.get('input[aria-label="Search nodes"]').setValue('TARGET');
+    expect(nodes().filter(node => node.classes('matched')).map(node => node.attributes('aria-label'))).toEqual(['Target', 'Target leaf']);
+    expect(nodes()).toHaveLength(5);
+    await wrapper.get('input[aria-label="Search nodes"]').setValue('');
+    expect(nodes()).toHaveLength(3);
+    expect(branch().element.parentElement!.querySelector('.mindmap-fold')!.textContent).toBe('+2');
+    expect(wrapper.emitted('change')).toBeUndefined();
+  });
+
   it('fits the diagram at its center and preserves manual view after edits', async () => {
     const wrapper = mountEditor();
     expect((wrapper.find('.mindmap-item').element as HTMLElement).style.width).toBe('');
