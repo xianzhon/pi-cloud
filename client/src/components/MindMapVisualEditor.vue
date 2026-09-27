@@ -269,13 +269,16 @@ const parentOptions = computed(() => {
   visit(root.value);
   return result;
 });
+function emitChange(): void {
+  emittedSource = serializeMindMap(root.value);
+  emit('change', emittedSource);
+}
 function apply(next: MindMapNode) {
   sides.value = new Map([...sides.value, ...diagram.value.sides]);
   past.value.push(root.value);
   future.value = [];
   root.value = next;
-  emittedSource = serializeMindMap(next);
-  emit('change', emittedSource);
+  emitChange();
 }
 function operate(operation: Parameters<typeof editMindMap>[1]) {
   try { apply(editMindMap(root.value, operation)); } catch { /* Invalid/no-op moves leave source and dirty state unchanged. */ }
@@ -284,16 +287,14 @@ function undo() {
   if (!past.value.length) return;
   future.value.push(root.value);
   root.value = past.value.pop()!;
-  emittedSource = serializeMindMap(root.value);
-  emit('change', emittedSource);
+  emitChange();
 }
 function handleUndoKey(event: KeyboardEvent) { if (event.shiftKey) redo(); else undo(); }
 function redo() {
   if (!future.value.length) return;
   past.value.push(root.value);
   root.value = future.value.pop()!;
-  emittedSource = serializeMindMap(root.value);
-  emit('change', emittedSource);
+  emitChange();
 }
 function startEdit(type: 'child' | 'sibling' | 'before' | 'rename', id = selectedId.value) {
   if (id === null || ((type === 'sibling' || type === 'before') && id === root.value.id)) return;
@@ -317,12 +318,10 @@ function submitEdit() {
   if (editing.value === 'rename' && draft.value !== selected.value.label) operate({ type: 'rename', target: selected.value.id, label: draft.value });
   else if (editing.value === 'child' || editing.value === 'sibling' || editing.value === 'before') {
     const target = selected.value.id;
-    const ids: number[] = [];
-    const collect = (node: MindMapNode) => { ids.push(node.id); node.children.forEach(collect); };
-    collect(root.value);
+    const newId = previewId.value;
     operate({ type: 'add', target, placement: editing.value, label: draft.value });
     if (editing.value === 'child') { const next = new Set(folded.value); next.delete(target); folded.value = next; }
-    selectedId.value = Math.max(...ids) + 1;
+    selectedId.value = newId;
   }
   editing.value = null;
   void nextTick(() => observed.get(selectedId.value!)?.focus());

@@ -908,15 +908,14 @@ function setMhtmlFont(value: string): void {
   mhtmlFont.value = value as MhtmlFont;
   localStorage.setItem('pi-cloud-mhtml-font', value);
 }
-const activeViewModeLabel = computed(() => t(activeIsDiagram.value
-  ? 'components.editorPanel.diagramViewMode'
-  : activeIsHtml.value ? 'components.editorPanel.htmlViewMode' : 'components.editorPanel.markdownViewMode'));
-const activePreviewTitle = computed(() => t(activeIsDiagram.value
-  ? 'components.editorPanel.previewDiagram'
-  : activeIsHtml.value ? 'components.editorPanel.previewHtml' : 'components.editorPanel.previewMarkdown'));
-const activeEditTitle = computed(() => t(activeIsDiagram.value
-  ? 'components.editorPanel.editDiagramSource'
-  : activeIsHtml.value ? 'components.editorPanel.editHtmlSource' : 'components.editorPanel.editMarkdownSource'));
+const activePreviewLabels = computed(() => {
+  if (activeIsDiagram.value) return { mode: 'diagramViewMode', preview: 'previewDiagram', edit: 'editDiagramSource' };
+  if (activeIsHtml.value) return { mode: 'htmlViewMode', preview: 'previewHtml', edit: 'editHtmlSource' };
+  return { mode: 'markdownViewMode', preview: 'previewMarkdown', edit: 'editMarkdownSource' };
+});
+const activeViewModeLabel = computed(() => t(`components.editorPanel.${activePreviewLabels.value.mode}`));
+const activePreviewTitle = computed(() => t(`components.editorPanel.${activePreviewLabels.value.preview}`));
+const activeEditTitle = computed(() => t(`components.editorPanel.${activePreviewLabels.value.edit}`));
 const activeMarkdownHtml = computed(() => {
   void previewVersion.value;
   const filePath = activeTab.value;
