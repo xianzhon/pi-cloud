@@ -2,6 +2,29 @@
 
 All notable changes to Pi Cloud are documented here.
 
+## [2.0.4] - 2026-09-27
+
+### Added
+
+- Added visual Mermaid diagram editing for mind maps, diagram creation templates, persistent layout and theme preferences, and SVG/PNG diagram exports.
+- Added native MHTML previews with outlines, text selection and copying, font and background-color controls, and annotation support.
+- Added shared skill management in Settings, including creating, editing, deleting, and cloning skills from GitHub repositories.
+- Added project favorites and pinning, plus Git file-change discard actions.
+- Added manual WebSocket connection retry controls and streaming activity indicators in the browser tab.
+
+### Changed
+
+- Git amend previews now include the previous commit together with staged changes, and Git file listings now show status icons and labels.
+- Session and project-history dates now show relative weeks and months; resizable panes can be reset by double-clicking.
+- Added architecture-boundary validation to tests and CI, and servers now shut down gracefully on termination signals.
+
+### Fixed
+
+- Preserved project context when navigating routes and kept the application mounted during authentication refresh.
+- Fixed MHTML preview scrolling, annotation behavior, remote-resource handling, and sidecar moves when media files are renamed.
+- Prevented stale task responses from overwriting newer task data and report missing project folders clearly in Git operations.
+- Fixed saved-prompt menus closing outside the menu and folder history opening on the history tab by default.
+
 ## [2.0.3] - 2026-09-19
 
 ### Added
