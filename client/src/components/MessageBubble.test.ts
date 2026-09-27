@@ -5,7 +5,41 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import MessageBubble from './MessageBubble.vue';
 import { setLocale } from '../i18n';
 
+const mermaidMock = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  render: vi.fn(),
+}));
+vi.mock('mermaid', () => ({ default: mermaidMock }));
+
 describe('MessageBubble', () => {
+  it.each(['user', 'assistant'] as const)('renders Mermaid blocks in %s messages without changing other code blocks', async (role) => {
+    mermaidMock.render.mockReset();
+    mermaidMock.render.mockImplementation(async (_id: string, source: string) => ({
+      svg: `<svg><text>${source.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text></svg>`,
+    }));
+    const wrapper = mount(MessageBubble, {
+      props: { message: { id: role, role, content: 'Before\n\n```mermaid\nflowchart TD\n A --> B\n```\n\n```mermaid\ngraph LR\n X --> Y\n```\n\n```js\nconst x = 1\n```' } },
+    });
+    await vi.waitFor(() => expect(mermaidMock.render).toHaveBeenCalledTimes(2));
+    expect(mermaidMock.render.mock.calls.map(call => call[1])).toEqual(['flowchart TD\n A --> B', 'graph LR\n X --> Y']);
+    expect(mermaidMock.render.mock.calls[0][0]).not.toBe(mermaidMock.render.mock.calls[1][0]);
+    expect(wrapper.findAll('.message-content .mermaid-diagram svg')).toHaveLength(2);
+    expect(wrapper.find('.message-content .language-js').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('keeps invalid Mermaid source visible and rerenders when message content changes', async () => {
+    mermaidMock.render.mockReset();
+    mermaidMock.render.mockRejectedValueOnce(new Error('Invalid diagram'));
+    mermaidMock.render.mockResolvedValue({ svg: '<svg><text>Updated</text></svg>' });
+    const wrapper = mount(MessageBubble, {
+      props: { message: { id: 'diagram', role: 'assistant', content: '```mermaid\ninvalid diagram\n```' } },
+    });
+    await vi.waitFor(() => expect(wrapper.find('.mermaid-error').text()).toBe('invalid diagram'));
+    await wrapper.setProps({ message: { id: 'diagram', role: 'assistant', content: '```mermaid\ngraph TD\n A --> B\n```' } });
+    await vi.waitFor(() => expect(wrapper.find('.mermaid-diagram svg text').text()).toBe('Updated'));
+    wrapper.unmount();
+  });
   afterEach(() => setLocale('en'));
 
   it('renders accessible thumbnails for an image-only user message', () => {
