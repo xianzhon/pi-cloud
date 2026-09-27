@@ -36,7 +36,7 @@
         <button v-if="!isReviewMode" class="utility-rail-btn tooltip" type="button" data-rail-action="new-session" :data-tooltip="newSessionTooltip" :aria-label="t('app.newSession')" @click="openTitleBarNew">
           <PhPlus :size="19" weight="bold" />
         </button>
-        <button class="utility-rail-btn search-btn tooltip" type="button" data-rail-action="search" :data-tooltip="t('app.searchShortcut')" :aria-label="t('app.search')" @click="openSearch">
+        <button class="utility-rail-btn search-btn tooltip" type="button" data-rail-action="search" :data-tooltip="t('app.searchShortcut')" :aria-label="t('components.commandCenter.title')" @click="openSearch">
           <PhMagnifyingGlass :size="19" weight="bold" />
         </button>
         <button class="utility-rail-btn tooltip" :class="{ active: !sidebarCollapsed }" type="button" data-rail-action="expand" :data-tooltip="sidebarToggleTooltip" :aria-label="t('app.toggleSidebar')" @click="toggleSidebarCollapsed">
@@ -472,6 +472,16 @@
       <template #message>{{ t('app.deleteSessionMessage') }}</template>
     </ConfirmModal>
 
+    <CommandCenter
+      :visible="showCommandCenter && isAuthenticated"
+      :client-id="clientId"
+      :project-path="activeProjectPath"
+      @close="showCommandCenter = false"
+      @session="selectSession"
+      @file="openCommandCenterFile"
+      @action="runCommandCenterAction"
+    />
+
     <SearchModal
       :isOpen="showSearch"
       :projectPath="selectedProjectPath"
@@ -609,6 +619,7 @@ import { i18n, setLocale } from './i18n';
 import { PhBrain, PhGear, PhMagnifyingGlass, PhPlus, PhTrash, PhTerminal, PhNotePencil, PhTray, PhGitBranch, PhGitMerge, PhGitPullRequest, PhSidebarSimple, PhRobot, PhFolderSimple, PhDotsThreeVertical, PhCornersOut, PhCornersIn, PhMoon, PhSun, PhX } from '@phosphor-icons/vue';
 import LoginView from './components/LoginView.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
+import CommandCenter from './components/CommandCenter.vue';
 import GitToolPanel from './components/GitToolPanel.vue';
 import NewSessionDialog from './components/NewSessionDialog.vue';
 import ChatPanel from './components/ChatPanel.vue';
@@ -1046,6 +1057,7 @@ const handlePreloadError = createPreloadErrorHandler(() => {
   showNewVersionConfirm.value = true;
 });
 const showSearch = ref(false);
+const showCommandCenter = ref(false);
 const showSettings = ref(false);
 const settingsFeatureLoaded = ref(false);
 const gitSettingsSaving = ref(false);
@@ -1878,7 +1890,25 @@ async function undoMemoryExtraction(runId: string): Promise<void> {
 
 function openSearch() {
   showMobileActions.value = false;
-  showSearch.value = true;
+  showCommandCenter.value = true;
+}
+
+function openCommandCenterFile(path: string): void {
+  void handleOpenFileInEditor(new CustomEvent('open-file-in-editor', { detail: { path } }));
+}
+
+function runCommandCenterAction(id: string): void {
+  switch (id) {
+    case 'new': openTitleBarNew(); break;
+    case 'terminal': toggleTerminalPanel(); break;
+    case 'editor': showEditor.value = !showEditor.value; break;
+    case 'sidebar': toggleSidebarCollapsed(); break;
+    case 'tasks': toggleTaskInbox(); break;
+    case 'memory': openMemoryCenter(); break;
+    case 'settings': void openSettings(); break;
+    case 'search': showSearch.value = true; break;
+    case 'git': toggleGitTool(); break;
+  }
 }
 
 async function openSettings() {
@@ -2041,6 +2071,7 @@ function isTerminalKeyboardTarget(target: EventTarget | null): boolean {
 
 function hasBlockingOverlayOpen() {
   return showSearch.value
+    || showCommandCenter.value
     || showSettings.value
     || showMemoryCenter.value
     || showGitChanges.value
@@ -2151,7 +2182,7 @@ function handleKeydown(event: KeyboardEvent) {
   // Cmd/Ctrl + K to open search
   if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
     event.preventDefault();
-    openSearch();
+    if (!hasBlockingOverlayOpen() && isAuthenticated.value) openSearch();
   }
   // Avoid plain Ctrl/Cmd + N, which browsers use for a new window.
   const isNewSessionShortcut = event.ctrlKey

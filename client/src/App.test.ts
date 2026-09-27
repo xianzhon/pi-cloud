@@ -1424,7 +1424,7 @@ describe('App routing', () => {
     await flushPromises();
 
     expect(document.documentElement.lang).toBe('zh-CN');
-    expect(wrapper.find('.search-btn').attributes('data-tooltip')).toBe('搜索 (⌘K)');
+    expect(wrapper.find('.search-btn').attributes('data-tooltip')).toBe('命令中心 (⌘K)');
   });
 
   it('loads preferences and wires hint info state to chat and settings', async () => {

@@ -14,7 +14,7 @@ export default {
     closeTaskInbox: 'Close task inbox',
     toggleSidebar: 'Toggle sidebar',
     search: 'Search',
-    searchShortcut: 'Search (⌘K)',
+    searchShortcut: 'Command Center (⌘K)',
     memory: 'Memory',
     settings: 'Settings',
     switchToLightTheme: 'Switch to light theme',
@@ -63,6 +63,19 @@ export default {
     taskStartFailed: 'Task start failed ({status})',
   },
   components: {
+    commandCenter: {
+      title: 'Command Center',
+      placeholder: 'Search sessions, files, or actions (> for actions)',
+      actions: 'Actions',
+      sessions: 'Recent sessions',
+      files: 'Files',
+      loading: 'Loading…',
+      noResults: 'No results',
+      navigate: 'Navigate',
+      open: 'Open',
+      close: 'Close',
+      searchMessages: 'Search conversation messages',
+    },
     gitToolPanel: {
       title: 'Git changes',
       actions: 'Git actions',

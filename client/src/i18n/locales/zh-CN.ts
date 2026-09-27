@@ -14,7 +14,7 @@ export default {
     closeTaskInbox: '关闭任务收件箱',
     toggleSidebar: '切换侧边栏',
     search: '搜索',
-    searchShortcut: '搜索 (⌘K)',
+    searchShortcut: '命令中心 (⌘K)',
     memory: '记忆',
     settings: '设置',
     switchToLightTheme: '切换到浅色主题',
@@ -63,6 +63,19 @@ export default {
     taskStartFailed: '任务启动失败（{status}）',
   },
   components: {
+    commandCenter: {
+      title: '命令中心',
+      placeholder: '搜索会话、文件或操作（> 筛选操作）',
+      actions: '操作',
+      sessions: '最近会话',
+      files: '文件',
+      loading: '加载中…',
+      noResults: '没有结果',
+      navigate: '导航',
+      open: '打开',
+      close: '关闭',
+      searchMessages: '搜索会话消息',
+    },
     gitToolPanel: {
       title: 'Git 更改',
       actions: 'Git 操作',
