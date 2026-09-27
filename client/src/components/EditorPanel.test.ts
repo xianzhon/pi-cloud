@@ -23,8 +23,8 @@ vi.mock('../utils/diagramImageExport', () => ({
 vi.mock('./MediaAnnotationPreview.vue', () => ({
   default: {
     name: 'MediaAnnotationPreviewStub',
-    props: ['src', 'filePath', 'htmlDocument', 'initialScale', 'kind'],
-    emits: ['scale-change'],
+    props: ['src', 'filePath', 'htmlDocument', 'initialScale', 'kind', 'font'],
+    emits: ['scale-change', 'font-loaded'],
     template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-html-document="htmlDocument" :data-initial-scale="initialScale" :data-kind="kind" />',
   },
 }));
@@ -799,6 +799,14 @@ describe('EditorPanel', () => {
     expect(srcdoc).toContain('href="data:text/css;base64,');
     expect(srcdoc).toContain("script-src 'none'");
     expect(srcdoc).not.toContain('Pi Terminal Nerd Font');
+    const annotationPreview = wrapper.findComponent({ name: 'MediaAnnotationPreviewStub' });
+    annotationPreview.vm.$emit('font-loaded', 'garamond');
+    await wrapper.vm.$nextTick();
+    expect(annotationPreview.props('font')).toBe('garamond');
+    expect(wrapper.find('.pdf-preview-test').attributes('data-html-document')).toContain('font-family: Garamond');
+    annotationPreview.vm.$emit('font-loaded', 'not-a-font');
+    await wrapper.vm.$nextTick();
+    expect(annotationPreview.props('font')).toBe('original');
 
     await wrapper.find('.mhtml-font-select .custom-select-trigger').trigger('click');
     await wrapper.findAll('.mhtml-font-select [role="option"]')[3].trigger('click');

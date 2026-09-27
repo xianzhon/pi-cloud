@@ -443,6 +443,7 @@ interface PdfViewState {
   tool?: AnnotationTool;
   coverColor?: string;
   pageTone?: PdfPageTone;
+  font?: string;
   toolbarVertical?: boolean;
   toolbarPosition?: ToolbarPosition;
 }
@@ -466,10 +467,11 @@ const props = withDefaults(defineProps<{
   src: string;
   filePath: string;
   htmlDocument?: string;
+  font?: string;
   initialScale?: number;
   kind?: 'pdf' | 'image' | 'html';
 }>(), { htmlDocument: '', kind: 'pdf' });
-const emit = defineEmits<{ 'scale-change': [scale: number] }>();
+const emit = defineEmits<{ 'scale-change': [scale: number]; 'font-loaded': [font?: string] }>();
 const t = i18n.global.t;
 const isImage = computed(() => props.kind === 'image');
 const isHtml = computed(() => props.kind === 'html');
@@ -982,6 +984,7 @@ function currentViewState(): PdfViewState {
     tool: tool.value,
     coverColor: coverColor.value,
     pageTone: pageTone.value,
+    font: isHtml.value ? props.font : undefined,
     toolbarVertical: toolbarVertical.value,
     toolbarPosition: toolbarPosition.value ? { ...toolbarPosition.value } : undefined,
   };
@@ -1002,6 +1005,7 @@ function restoreViewState(view?: PdfViewState): void {
   pageTone.value = 'original';
   if (globalTone && PDF_PAGE_TONES.has(globalTone as PdfPageTone)) pageTone.value = globalTone as PdfPageTone;
   if (view?.pageTone && PDF_PAGE_TONES.has(view.pageTone)) pageTone.value = view.pageTone;
+  if (isHtml.value) emit('font-loaded', view?.font);
   toolbarVertical.value = view?.toolbarVertical === true;
   const position = view?.toolbarPosition;
   toolbarPosition.value = position && Number.isFinite(position.left) && Number.isFinite(position.top)
@@ -2119,6 +2123,11 @@ function clearPage(): void {
 }
 
 watch([() => props.src, () => props.filePath], () => void loadPdf(), { immediate: true });
+watch(() => props.font, font => {
+  if (isHtml.value && !loading.value && loadedFilePath === props.filePath && annotations.value.view?.font !== font) {
+    void saveAnnotations();
+  }
+});
 watch(() => props.htmlDocument, () => { if (!isHtml.value) void loadPdf(); });
 function rerenderVisiblePages(): void {
   renderGeneration++;

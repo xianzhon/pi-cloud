@@ -210,6 +210,42 @@ describe('MediaAnnotationPreview', () => {
     }));
   });
 
+  it('restores and saves the MHTML font alongside existing annotations', async () => {
+    const pages = { '1': [{ type: 'pen', color: '#123456', width: 2, points: [{ x: 0.2, y: 0.3 }] }] };
+    const view = { pageTone: 'warm', font: 'serif', htmlWidthCoordinates: true };
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/files/read')) return {
+        ok: true, status: 200,
+        json: async () => ({ content: JSON.stringify({ version: 1, pages, view }) }),
+      } as Response;
+      if (url === '/api/files/write' && init?.method === 'POST') return { ok: true, status: 200 } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    }));
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/snapshot.mhtml', htmlDocument: '<p>Archived</p>', kind: 'html', font: 'original' },
+    });
+    await flushPromises();
+    expect(wrapper.emitted('font-loaded')).toEqual([['serif']]);
+    expect(fetch).not.toHaveBeenCalledWith('/api/files/write', expect.anything());
+
+    await wrapper.setProps({ font: 'serif' });
+    const frame = wrapper.get('iframe.mhtml-document-frame');
+    Object.defineProperty(frame.element, 'contentDocument', {
+      value: new DOMParser().parseFromString('<p>Archived</p>', 'text/html'),
+    });
+    await frame.trigger('load');
+    await flushPromises();
+    expect(fetch).not.toHaveBeenCalledWith('/api/files/write', expect.anything());
+
+    await wrapper.setProps({ font: 'garamond' });
+    await flushPromises();
+    const writes = vi.mocked(fetch).mock.calls.filter(([url]) => url === '/api/files/write');
+    expect(writes).toHaveLength(1);
+    const saved = JSON.parse(JSON.parse(writes[0]![1]!.body as string).content);
+    expect(saved.pages).toEqual(pages);
+    expect(saved.view).toMatchObject({ pageTone: 'warm', font: 'garamond', htmlWidthCoordinates: true });
+  });
+
   it('uses the global MHTML color unless the annotation file specifies one', async () => {
     localStorage.setItem('pi-cloud.mhtmlPageTone', 'dark');
     vi.mocked(fetch).mockImplementation(async url => {

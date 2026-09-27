@@ -315,6 +315,8 @@
         src=""
         :html-document="activeHtmlDocument"
         :file-path="activeTab"
+        :font="mhtmlFont"
+        @font-loaded="restoreMhtmlFont"
       />
       <iframe
         v-else-if="activeIsHtml && activePreviewMode === 'preview'"
@@ -907,6 +909,12 @@ const mhtmlFontOptions = computed<CustomSelectOption[]>(() => [
 function setMhtmlFont(value: string): void {
   mhtmlFont.value = value as MhtmlFont;
   localStorage.setItem('pi-cloud-mhtml-font', value);
+}
+function restoreMhtmlFont(value?: string): void {
+  const font = value && mhtmlFontOptions.value.some(option => option.value === value)
+    ? value : localStorage.getItem('pi-cloud-mhtml-font');
+  mhtmlFont.value = mhtmlFontOptions.value.some(option => option.value === font)
+    ? font as MhtmlFont : 'original';
 }
 const activePreviewLabels = computed(() => {
   if (activeIsDiagram.value) return { mode: 'diagramViewMode', preview: 'previewDiagram', edit: 'editDiagramSource' };
