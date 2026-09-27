@@ -445,7 +445,7 @@ export default {
         child: '添加子节点', sibling: '添加同级节点', rename: '重命名', delete: '删除分支',
         undo: '撤销', redo: '重做', zoomIn: '放大', zoomOut: '缩小', fit: '适应窗口',
         label: '节点名称', apply: '确定', cancel: '取消', invalidLabel: '不能使用 Mermaid 括号、反引号、指令或首尾空格。',
-        expand: '展开分支', expandCount: '展开分支（隐藏 {count} 个节点）', collapse: '折叠分支', search: '搜索节点', parent: '移动到', chooseParent: '选择父节点',
+        expand: '展开分支', expandCount: '展开分支（隐藏 {count} 个节点）', collapse: '折叠分支', search: '搜索节点', matchCount: '匹配 {count} 个节点', parent: '移动到', chooseParent: '选择父节点',
         up: '上移', down: '下移', promote: '提升一级', deleteBranch: '删除此节点及其所有子节点？',
         levels: '显示层级', chooseLevel: '选择层级', level: '显示至第 {level} 级', expandAll: '全部展开',
         layout: '布局', bothSides: '双侧', rightSide: '仅右侧', theme: '主题', ocean: '海洋', forest: '森林', sunset: '落日',

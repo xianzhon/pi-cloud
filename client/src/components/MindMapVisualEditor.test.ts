@@ -38,10 +38,15 @@ describe('mind map visual editing', () => {
     expect(nodes().map(node => node.attributes('aria-label'))).toEqual(['Root', 'Branch', 'Other']);
     expect(branch().element.parentElement!.querySelector('.mindmap-fold')!.textContent).toBe('+2');
     expect(branch().element.parentElement!.querySelector('.mindmap-fold')!.getAttribute('aria-label')).toBe('Expand branch (2 hidden nodes)');
+    expect(wrapper.find('.mindmap-match-count').exists()).toBe(false);
     await wrapper.get('input[aria-label="Search nodes"]').setValue('TARGET');
+    expect(wrapper.get('.mindmap-match-count').text()).toBe('2 matches');
     expect(nodes().filter(node => node.classes('matched')).map(node => node.attributes('aria-label'))).toEqual(['Target', 'Target leaf']);
     expect(nodes()).toHaveLength(5);
+    await wrapper.get('input[aria-label="Search nodes"]').setValue('missing');
+    expect(wrapper.get('.mindmap-match-count').text()).toBe('0 matches');
     await wrapper.get('input[aria-label="Search nodes"]').setValue('');
+    expect(wrapper.find('.mindmap-match-count').exists()).toBe(false);
     expect(nodes()).toHaveLength(3);
     expect(branch().element.parentElement!.querySelector('.mindmap-fold')!.textContent).toBe('+2');
     expect(wrapper.emitted('change')).toBeUndefined();

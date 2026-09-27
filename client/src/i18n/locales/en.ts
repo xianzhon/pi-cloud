@@ -445,7 +445,7 @@ export default {
         child: 'Add child', sibling: 'Add sibling', rename: 'Rename', delete: 'Delete branch',
         undo: 'Undo', redo: 'Redo', zoomIn: 'Zoom in', zoomOut: 'Zoom out', fit: 'Fit',
         label: 'Node label', apply: 'Apply', cancel: 'Cancel', invalidLabel: 'Do not use Mermaid brackets, backticks, directives, or leading or trailing spaces.',
-        expand: 'Expand branch', expandCount: 'Expand branch ({count} hidden nodes)', collapse: 'Collapse branch', search: 'Search nodes', parent: 'Move under', chooseParent: 'Choose parent',
+        expand: 'Expand branch', expandCount: 'Expand branch ({count} hidden nodes)', collapse: 'Collapse branch', search: 'Search nodes', matchCount: '{count} matches', parent: 'Move under', chooseParent: 'Choose parent',
         up: 'Move up', down: 'Move down', promote: 'Promote', deleteBranch: 'Delete this node and all its descendants?',
         levels: 'Show levels', chooseLevel: 'Choose depth', level: 'Up to level {level}', expandAll: 'Expand all',
         layout: 'Layout', bothSides: 'Both sides', rightSide: 'Right side', theme: 'Theme', ocean: 'Ocean', forest: 'Forest', sunset: 'Sunset',

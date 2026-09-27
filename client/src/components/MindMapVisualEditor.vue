@@ -26,7 +26,7 @@
           </div>
         </div>
       </div>
-      <label class="mindmap-search"><span>{{ t('search') }}</span><input v-model="search" type="search" :aria-label="t('search')" :placeholder="t('search')" /></label>
+      <label class="mindmap-search"><span>{{ t('search') }}</span><input v-model="search" type="search" :aria-label="t('search')" :placeholder="t('search')" /><span v-if="search.trim()" class="mindmap-match-count" role="status">{{ t('matchCount', { count: matches.size }) }}</span></label>
       <span class="mindmap-toolbar-spacer" />
       <div class="mindmap-view-controls">
         <button type="button" @click="zoom(-0.1)" :aria-label="t('zoomOut')">−</button>
@@ -526,6 +526,7 @@ function endPan() { pointer = null; }
 .mindmap-toolbar-spacer { flex: 1; }
 .mindmap-search { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .mindmap-search input { width: 150px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-secondary); color: inherit; }
+.mindmap-match-count { white-space: nowrap; color: var(--text-tertiary); }
 .mindmap-view-controls { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--border-color); }
 .mindmap-inline-edit input, .mindmap-mobile-controls select { max-width: 180px; padding: 5px; background: var(--bg-secondary); color: inherit; border: 1px solid var(--border-color); }
 .mindmap-levels :deep(.custom-select) { min-width: 120px; max-width: 180px; }
