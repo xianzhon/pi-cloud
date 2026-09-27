@@ -439,10 +439,10 @@ describe('EditorPanel', () => {
     expect(preview.find('p').text()).toContain('Safe text');
   });
 
-  it('previews Marp slides separately without showing speaker notes or splitting fenced rules', async () => {
+  it('previews Marp slides with notes, images, navigation, zoom and themes without splitting fenced rules', async () => {
     const markdown = [
       '---', 'marp: true', 'theme: default', '---',
-      '# First slide', '', '<!-- Speaker notes -->', '', '---',
+      '# First slide', '', '![Figure](./figure.png)', '', '<!-- Speaker notes -->', '', '---',
       '# Second slide', '', '```md', '---', '```',
     ].join('\n');
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -463,7 +463,20 @@ describe('EditorPanel', () => {
 
     expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
     expect(wrapper.find('.slide-content').html()).not.toContain('Speaker notes');
+    expect(wrapper.find('.slide-notes').text()).toContain('Speaker notes');
+    expect(wrapper.find('.slide-content img').attributes('src')).toBe('/api/files/raw?path=%2Fproject%2Ffigure.png');
     expect(wrapper.find('.slide-navigation').text()).toContain('1 / 2');
+    await wrapper.get('.slides-preview').trigger('wheel', { ctrlKey: true, deltaY: -100 });
+    expect(wrapper.find('.slide-navigation').text()).toContain('110%');
+    await wrapper.get('[aria-label="Zoom out"]').trigger('click');
+    expect(wrapper.find('.slide-navigation').text()).toContain('100%');
+    await wrapper.get('.slide-navigation select').setValue('dark');
+    expect(wrapper.find('.slide-content').classes()).toContain('slide-theme-dark');
+    await wrapper.get('.slides-preview').trigger('keydown', { key: 'ArrowRight' });
+    expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');
+    expect(wrapper.find('.slide-notes').exists()).toBe(false);
+    await wrapper.get('.slides-preview').trigger('keydown', { key: 'ArrowUp' });
+    expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
     expect(wrapper.find('.markdown-outline').exists()).toBe(false);
     await wrapper.get('[aria-label="Next slide"]').trigger('click');
     expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');

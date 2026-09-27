@@ -263,17 +263,41 @@
         ref="markdownPreviewLayoutEl"
         class="markdown-preview-layout"
       >
-        <div v-if="activeIsSlides" class="slides-preview">
-          <div
-            ref="markdownPreviewEl"
-            class="markdown-preview slide-content"
-            v-html="activeSlides[slideIndex]"
-            @click="handleMarkdownPreviewClick"
-          ></div>
+        <div
+          v-if="activeIsSlides"
+          class="slides-preview"
+          tabindex="0"
+          :aria-label="t('components.editorPanel.slidePreview')"
+          @keydown="handleSlideKeydown"
+          @wheel.ctrl.prevent="handleSlideWheel"
+          @wheel.meta.prevent="handleSlideWheel"
+        >
+          <div class="slide-content" :class="`slide-theme-${slideTheme}`" :style="{ zoom: slideZoom }">
+            <div
+              ref="markdownPreviewEl"
+              class="markdown-preview slide-body"
+              v-html="activeSlides[slideIndex]?.html"
+              @click="handleMarkdownPreviewClick"
+            ></div>
+          </div>
+          <div v-if="activeSlides[slideIndex]?.notes" class="slide-notes">
+            <strong>{{ t('components.editorPanel.speakerNotes') }}</strong>
+            <div v-html="activeSlides[slideIndex].notes"></div>
+          </div>
           <div class="slide-navigation">
             <button type="button" :disabled="slideIndex === 0" :aria-label="t('components.editorPanel.previousSlide')" @click="slideIndex--">‹</button>
             <span>{{ slideIndex + 1 }} / {{ activeSlides.length }}</span>
             <button type="button" :disabled="slideIndex >= activeSlides.length - 1" :aria-label="t('components.editorPanel.nextSlide')" @click="slideIndex++">›</button>
+            <button type="button" :aria-label="t('components.editorPanel.zoomOut')" :disabled="slideZoom <= 0.5" @click="changeSlideZoom(-0.1)">−</button>
+            <span>{{ Math.round(slideZoom * 100) }}%</span>
+            <button type="button" :aria-label="t('components.editorPanel.zoomIn')" :disabled="slideZoom >= 2" @click="changeSlideZoom(0.1)">+</button>
+            <label>{{ t('components.editorPanel.slideTheme') }}
+              <select v-model="slideTheme">
+                <option value="default">{{ t('components.editorPanel.slideThemeDefault') }}</option>
+                <option value="dark">{{ t('components.editorPanel.slideThemeDark') }}</option>
+                <option value="warm">{{ t('components.editorPanel.slideThemeWarm') }}</option>
+              </select>
+            </label>
           </div>
         </div>
         <div
@@ -874,7 +898,22 @@ const activeIsSlides = computed(() => {
     && parseFrontmatter(models.get(activeTab.value)?.getValue() || '')?.metadata.some(({ key, value }) => key === 'marp' && value === 'true') === true;
 });
 const slideIndex = ref(0);
+const slideZoom = ref(1);
+const slideTheme = ref('default');
 watch([activeTab, previewVersion], () => { slideIndex.value = 0; });
+function changeSlideZoom(amount: number): void {
+  slideZoom.value = Math.max(0.5, Math.min(2, Math.round((slideZoom.value + amount) * 10) / 10));
+}
+function handleSlideWheel(event: WheelEvent): void {
+  changeSlideZoom(event.deltaY < 0 ? 0.1 : -0.1);
+}
+function handleSlideKeydown(event: KeyboardEvent): void {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || (event.target as HTMLElement).closest('select, button, a, input, textarea')) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') slideIndex.value = Math.max(0, slideIndex.value - 1);
+  else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') slideIndex.value = Math.min(activeSlides.value.length - 1, slideIndex.value + 1);
+  else return;
+  event.preventDefault();
+}
 const activeIsDiagram = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isDiagramFile(activeTab.value));
 const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMhtmlFile(activeTab.value));
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
@@ -976,7 +1015,14 @@ const activeSlides = computed(() => {
     }
   }
   slides.push(lines.slice(start).join('\n'));
-  return slides.map(slide => sanitizeHtmlFragment(renderMarkdownPreview(slide.replace(/<!--[\s\S]*?-->/g, ''))));
+  return slides.map(slide => {
+    const notes = Array.from(slide.matchAll(/<!--[\s\S]*?-->/g), match => match[0].slice(4, -3).trim())
+      .filter(Boolean).join('\n\n');
+    return {
+      html: sanitizeHtmlFragment(renderMarkdownPreview(slide.replace(/<!--[\s\S]*?-->/g, ''))),
+      notes: notes ? sanitizeHtmlFragment(renderMarkdownPreview(notes)) : '',
+    };
+  });
 });
 interface MarkdownOutlineItem {
   id: string;
@@ -3962,15 +4008,16 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   min-width: 0;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   gap: 1rem;
   overflow: auto;
   padding: 1rem;
+  outline-offset: -3px;
 }
 
 .slide-content {
-  flex: 0 1 auto;
-  width: min(100%, 960px);
+  flex: none;
+  width: min(960px, 100%);
   aspect-ratio: 16 / 9;
   overflow: auto;
   padding: clamp(1rem, 4vw, 3rem);
@@ -3981,11 +4028,30 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   box-shadow: 0 2px 16px #0003;
 }
 
+.slide-body.markdown-preview {
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}
+
+.slide-content.slide-theme-dark { background: #202636; color: #f3f4f8; }
+.slide-content.slide-theme-warm { background: #f9f1df; color: #403525; }
+.slide-theme-dark :deep(blockquote) { color: #c6c9d4; }
+.slide-theme-dark :deep(tbody tr:nth-child(2n)) { background: #303748; }
+.slide-theme-warm :deep(tbody tr:nth-child(2n)) { background: #eee1c9; }
+
+.slide-notes { width: min(960px, 100%); max-height: 25%; overflow: auto; color: var(--text-primary); }
+.slide-notes strong { display: block; margin-bottom: 0.25rem; }
+.slide-notes :deep(p) { margin: 0.25rem 0; }
+
 .slide-content :deep(h1:first-child) { margin-top: 0; }
-.slide-content :deep(blockquote) { color: #555; }
+.slide-theme-default :deep(blockquote) { color: #555; }
 .slide-content :deep(th),
 .slide-content :deep(td) { border-color: #ddd; }
-.slide-content :deep(tbody tr:nth-child(2n)) { background: #f6f8fa; }
+.slide-theme-default :deep(tbody tr:nth-child(2n)) { background: #f6f8fa; }
 
 .slide-navigation {
   display: flex;
