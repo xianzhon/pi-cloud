@@ -317,7 +317,7 @@
             :ref="element => setCanvasElement(page, element, true)"
             class="pdf-annotation-canvas"
             :class="{
-              enabled: tool !== 'pan' && tool !== 'select',
+              enabled: tool !== 'pan' && tool !== 'select' && !(isHtml && tool === 'highlighter'),
               mhtml: isHtml,
               pen: tool === 'pen',
               highlighter: tool === 'highlighter',
@@ -432,6 +432,9 @@ interface AnnotationStroke {
   points: AnnotationPoint[];
   text?: string;
   fontSize?: number;
+  // MHTML text offsets within the iframe body, independent of layout/zoom.
+  textStart?: number;
+  textEnd?: number;
 }
 interface TextEditorState { page: string; point: AnnotationPoint; index?: number; text: string; color: string; fontSize: number }
 interface TooltipState { text: string; left: number; top: number }
@@ -1145,6 +1148,98 @@ function handleToolShortcut(event: KeyboardEvent): void {
   toggleTool(nextTool);
 }
 
+function htmlTextRange(start: number, end: number): Range | undefined {
+  const doc = htmlFrameEl.value?.contentDocument;
+  if (!doc?.body || start >= end) return;
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+  const range = doc.createRange();
+  let offset = 0;
+  let foundStart = false;
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const length = node.textContent?.length || 0;
+    if (!foundStart && start <= offset + length) {
+      range.setStart(node, start - offset);
+      foundStart = true;
+    }
+    if (foundStart && end <= offset + length) {
+      range.setEnd(node, end - offset);
+      return range;
+    }
+    offset += length;
+  }
+}
+
+function htmlHighlightRects(stroke: AnnotationStroke): { left: number; top: number; right: number; bottom: number; width: number; height: number }[] {
+  const frame = htmlFrameEl.value;
+  const range = htmlTextRange(stroke.textStart!, stroke.textEnd!);
+  if (!frame || !range) return [];
+  const frameRect = frame.getBoundingClientRect();
+  return Array.from(range.getClientRects(), rect => {
+    const left = frameRect.left + rect.left * scale.value;
+    const top = frameRect.top + rect.top * scale.value;
+    const width = rect.width * scale.value;
+    const height = rect.height * scale.value;
+    return { left, top, width, height, right: left + width, bottom: top + height };
+  });
+}
+
+function drawHtmlHighlight(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, stroke: AnnotationStroke): void {
+  const pageRect = pageElements.get(1)?.getBoundingClientRect();
+  const canvasRect = canvas.getBoundingClientRect();
+  if (!pageRect || !canvasRect.width) return;
+  const ratio = canvas.width / canvasRect.width;
+  context.save();
+  context.fillStyle = stroke.color;
+  context.globalAlpha = 0.35;
+  for (const rect of htmlHighlightRects(stroke)) {
+    context.fillRect((rect.left - pageRect.left) * ratio, (rect.top - pageRect.top) * ratio,
+      rect.width * ratio, rect.height * ratio);
+  }
+  context.restore();
+}
+
+function htmlHighlightContainsPoint(stroke: AnnotationStroke, point: AnnotationPoint): boolean {
+  const pageRect = pageElements.get(1)?.getBoundingClientRect();
+  if (!pageRect) return false;
+  const x = pageRect.left + point.x * pageRect.width;
+  const y = pageRect.top + point.y * pageRect.width;
+  return htmlHighlightRects(stroke).some(rect => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+}
+
+function highlightHtmlSelection(): void {
+  if (tool.value !== 'highlighter') return;
+  const doc = htmlFrameEl.value?.contentDocument;
+  const selection = htmlFrameEl.value?.contentWindow?.getSelection();
+  if (!doc?.body || !selection?.rangeCount || selection.isCollapsed) return;
+  const range = selection.getRangeAt(0);
+  if (!doc.body.contains(range.startContainer) || !doc.body.contains(range.endContainer)) return;
+  const offsetOf = (container: Node, position: number): number => {
+    const boundary = doc.createRange();
+    boundary.setStart(container, position);
+    boundary.collapse(true);
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    let offset = 0;
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      if (node === container) return offset + position;
+      if (boundary.comparePoint(node, 0) >= 0) return offset;
+      offset += node.textContent?.length || 0;
+    }
+    return offset;
+  };
+  const start = offsetOf(range.startContainer, range.startOffset);
+  const end = offsetOf(range.endContainer, range.endOffset);
+  if (start === end) return;
+  checkpoint();
+  annotations.value.pages['1'] ||= [];
+  annotations.value.pages['1'].push({ type: 'highlighter', color: penColor.value, width: penWidth.value,
+    points: [], textStart: start, textEnd: end });
+  selection.removeAllRanges();
+  drawAnnotations(1);
+  void saveAnnotations();
+}
+
 function drawAnnotations(pageNumberToDraw = pageNumber.value): void {
   const canvas = annotationCanvasElements.get(pageNumberToDraw);
   const context = canvas?.getContext('2d');
@@ -1172,6 +1267,10 @@ function drawAnnotations(pageNumberToDraw = pageNumber.value): void {
   const strokes = annotations.value.pages[String(pageNumberToDraw)] || [];
   strokes.forEach((stroke, index) => {
     if (textEditor.value?.page === String(pageNumberToDraw) && textEditor.value.index === index) return;
+    if (isHtml.value && stroke.textStart !== undefined && stroke.textEnd !== undefined) {
+      drawHtmlHighlight(context, canvas, stroke);
+      return;
+    }
     drawAnnotation(context, surface, stroke, drawingScale);
   });
   if (tool.value === 'move' && selectedAnnotation.value?.page === pageNumberToDraw) {
@@ -1572,7 +1671,10 @@ function updateHtmlPageSize(): void {
     - parseFloat(viewportStyle.paddingTop)
     - parseFloat(viewportStyle.paddingBottom);
   htmlCanvasHeight.value = Math.max(1, Math.min(availableHeight, height * scale.value));
-  if (pageSizes.value[1]?.width === width && pageSizes.value[1]?.height === height) return;
+  if (pageSizes.value[1]?.width === width && pageSizes.value[1]?.height === height) {
+    drawAnnotations(1);
+    return;
+  }
   defaultPageSize.value = { width, height };
   pageSizes.value = { 1: { width, height } };
   void nextTick(() => renderPage(1).catch(handleRenderError));
@@ -1589,10 +1691,12 @@ async function handleHtmlLoad(): Promise<void> {
   htmlShortcutWindow?.removeEventListener('keydown', handleToolShortcut);
   selectionDocument?.removeEventListener('contextmenu', showSelectionMenu);
   selectionDocument?.removeEventListener('pointerdown', closeSelectionMenu);
+  selectionDocument?.removeEventListener('pointerup', highlightHtmlSelection);
   htmlShortcutWindow = frame.contentWindow || undefined;
   selectionDocument = htmlDocument;
   htmlDocument.addEventListener('contextmenu', showSelectionMenu);
   htmlDocument.addEventListener('pointerdown', closeSelectionMenu);
+  htmlDocument.addEventListener('pointerup', highlightHtmlSelection);
   htmlShortcutWindow?.addEventListener('keydown', handleToolShortcut);
 
   // The outer viewport scrolls the page and its annotation overlay together.
@@ -1843,7 +1947,9 @@ function eraseAt(point: AnnotationPoint): void {
   const canvas = annotationCanvasElements.get(pageNumber.value);
   if (!canvas) return;
   const strokes = currentPageStrokes.value;
-  const remaining = strokes.filter(stroke => !annotationContainsPoint(stroke, point, canvas));
+  const remaining = strokes.filter(stroke => !(isHtml.value && stroke.textStart !== undefined && stroke.textEnd !== undefined
+    ? htmlHighlightContainsPoint(stroke, point)
+    : annotationContainsPoint(stroke, point, canvas)));
   if (remaining.length !== strokes.length) {
     annotations.value.pages[String(pageNumber.value)] = remaining;
     annotationChanged = true;
@@ -1936,7 +2042,7 @@ function startAnnotation(event: PointerEvent, page: number): void {
     const strokes = currentPageStrokes.value;
     let index = -1;
     for (let candidate = strokes.length - 1; candidate >= 0; candidate--) {
-      if (annotationContainsPoint(strokes[candidate], point, canvas)) {
+      if (strokes[candidate].textStart === undefined && annotationContainsPoint(strokes[candidate], point, canvas)) {
         index = candidate;
         break;
       }
@@ -2181,6 +2287,7 @@ watch([() => props.src, () => props.filePath], () => void loadPdf(), { immediate
 watch(() => props.font, font => {
   if (isHtml.value && !loading.value && loadedFilePath === props.filePath && annotations.value.view?.font !== font) {
     void saveAnnotations();
+    void nextTick(() => drawAnnotations(1));
   }
 });
 watch(() => props.htmlDocument, () => { if (!isHtml.value) void loadPdf(); });
@@ -2217,6 +2324,7 @@ onUnmounted(() => {
   closeSelectionMenu();
   selectionDocument?.removeEventListener('contextmenu', showSelectionMenu);
   selectionDocument?.removeEventListener('pointerdown', closeSelectionMenu);
+  selectionDocument?.removeEventListener('pointerup', highlightHtmlSelection);
   loadVersion++;
   finishToolbarDrag();
   window.removeEventListener('resize', keepToolbarInBounds);

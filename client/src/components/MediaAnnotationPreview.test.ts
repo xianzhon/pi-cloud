@@ -238,6 +238,56 @@ describe('MediaAnnotationPreview', () => {
     }));
   });
 
+  it('anchors MHTML highlights to selected text and redraws its text rectangles', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: url === '/api/files/write', status: 404 })));
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '', filePath: '/project/highlight.mhtml', htmlDocument: '<p>Hello world</p>', kind: 'html' },
+    });
+    await flushPromises();
+    const frame = wrapper.get<HTMLIFrameElement>('iframe.mhtml-document-frame');
+    const doc = new DOMParser().parseFromString('<p>Hello world</p>', 'text/html');
+    const text = doc.querySelector('p')!.firstChild!;
+    const range = { startContainer: text, endContainer: text, startOffset: 6, endOffset: 11 };
+    const selection = { rangeCount: 1, isCollapsed: false, getRangeAt: () => range, removeAllRanges: vi.fn() };
+    Object.defineProperty(frame.element, 'contentDocument', { value: doc });
+    Object.defineProperty(frame.element, 'contentWindow', { value: {
+      getSelection: () => selection, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    } });
+    const rect = (left: number, top: number, width: number, height: number) => ({
+      left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}),
+    }) as DOMRect;
+    const textRects = vi.spyOn(Range.prototype, 'getClientRects').mockReturnValue([
+      rect(20, 30, 40, 12), rect(5, 45, 15, 12),
+    ] as unknown as DOMRectList);
+    vi.spyOn(frame.element, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 600, 800));
+    vi.spyOn(wrapper.get<HTMLElement>('.pdf-page').element, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 600, 800));
+    const listener = vi.spyOn(doc, 'addEventListener');
+    await frame.trigger('load');
+    await flushPromises();
+    expect(listener).toHaveBeenCalledWith('pointerup', expect.any(Function));
+    wrapper.get<HTMLCanvasElement>('.pdf-annotation-canvas').element.width = 600;
+    await wrapper.get('[aria-label="Highlight MHTML"]').trigger('click');
+    expect(wrapper.get('.pdf-annotation-canvas').classes()).not.toContain('enabled');
+    vi.mocked(context.fillRect).mockClear();
+    expect(doc.body.contains(range.startContainer)).toBe(true);
+    expect(frame.element.contentDocument).toBe(doc);
+    doc.dispatchEvent(new Event('pointerup'));
+    await flushPromises();
+    expect(selection.removeAllRanges).toHaveBeenCalled();
+    expect(context.fillRect).toHaveBeenCalledTimes(2);
+    expect(context.fillRect).toHaveBeenCalledWith(20, 30, 40, 12);
+    textRects.mockReturnValue([rect(35, 60, 40, 12)] as unknown as DOMRectList);
+    vi.mocked(context.fillRect).mockClear();
+    await wrapper.get('.pdf-viewport').trigger('scroll');
+    expect(context.fillRect).toHaveBeenCalledWith(35, 60, 40, 12);
+    expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
+      body: expect.stringContaining('\\"textStart\\": 6'),
+    }));
+    expect(fetch).toHaveBeenCalledWith('/api/files/write', expect.objectContaining({
+      body: expect.stringContaining('\\"textEnd\\": 11'),
+    }));
+  });
+
   it('restores and saves the MHTML font alongside existing annotations', async () => {
     const pages = { '1': [{ type: 'pen', color: '#123456', width: 2, points: [{ x: 0.2, y: 0.3 }] }] };
     const view = { pageTone: 'warm', font: 'serif', htmlWidthCoordinates: true };
