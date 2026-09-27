@@ -60,6 +60,8 @@ const binaryExtensions = new Set([
   '.pptx', '.psd', '.so', '.wav', '.webm', '.xls', '.xlsx', '.zip',
 ]);
 
+const fileNameCollator = new Intl.Collator(undefined, { numeric: true });
+
 interface BuildFileTreeOptions {
   includeHidden: boolean;
   excludeNames: Set<string>;
@@ -242,7 +244,7 @@ async function buildFileTree(
       return (b.mtime! - a.mtime!) || a.name.localeCompare(b.name);
     }
     if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-    return a.name.localeCompare(b.name);
+    return fileNameCollator.compare(a.name, b.name);
   });
 }
 

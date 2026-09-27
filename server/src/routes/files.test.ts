@@ -87,6 +87,26 @@ describe('fileRoutes', () => {
     ]);
   });
 
+  it('sorts numbered file and folder names naturally at each tree level', async () => {
+    const chapters = path.join(tempDir, 'chapters');
+    await fs.mkdir(chapters);
+    for (const name of ['chap 10', 'chap 2']) await fs.mkdir(path.join(chapters, name));
+    for (const name of ['1.引言.md', '10.自主背景编码.md', '2.prompt 的艺术.md', '9.Vibe Coding.md']) {
+      await fs.writeFile(path.join(chapters, name), '');
+    }
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/tree?path=${encodeURIComponent(tempDir)}&depth=2`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const children = response.json().tree.find((node: { name: string }) => node.name === 'chapters').children;
+    expect(children.map((node: { name: string }) => node.name)).toEqual([
+      'chap 2', 'chap 10', '1.引言.md', '2.prompt 的艺术.md', '9.Vibe Coding.md', '10.自主背景编码.md',
+    ]);
+  });
+
   it('rejects tree depths above the bounded traversal limit', async () => {
     const response = await app.inject({
       method: 'GET',
