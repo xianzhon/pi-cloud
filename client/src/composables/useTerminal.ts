@@ -123,8 +123,19 @@ export interface TerminalInstance {
   terminated: boolean
 }
 
+function createDisposalUrl(clientId: string, terminalId: string, resumeToken: string, lastSeq: number): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const params = new URLSearchParams({
+    clientId,
+    terminalId,
+    resumeToken,
+    lastSeq: String(lastSeq),
+  })
+  return `${protocol}://${window.location.host}/ws/terminal?${params}`
+}
+
 /** Create a terminal instance, optionally restoring a detached server PTY. */
-export function createTerminalInstance(resume?: TerminalResumeState): TerminalInstance {
+export function createTerminalInstance(resume?: TerminalResumeState, clientId: string | null = null): TerminalInstance {
   const terminalId = ref<string | undefined>(resume?.terminalId)
   const terminal = new Terminal({
     theme: terminalThemes[currentTerminalTheme()],
@@ -148,12 +159,14 @@ export function createTerminalInstance(resume?: TerminalResumeState): TerminalIn
     reconnectTimer: null,
     reconnectAttempt: 0,
     reconnectNow: null,
-    disposalUrl: null,
+    disposalUrl: clientId && resume
+      ? createDisposalUrl(clientId, resume.terminalId, resume.resumeToken, resume.lastSeq)
+      : null,
     resumeToken: resume?.resumeToken ?? null,
     // A refreshed page has a new xterm screen, so replay the retained buffer from its start.
     lastOutputSeq: 0,
     receivedOutputSeq: 0,
-    clientId: null,
+    clientId,
     cwd: resume?.cwd,
     shell: resume?.shell,
     terminated: false,
@@ -239,13 +252,7 @@ export function connectTerminal(
           instance.resumeToken = message.resumeToken
           const shell = message.shell || instance.shell || 'bash'
           instance.shell = shell
-          const disposalParams = new URLSearchParams({
-            clientId,
-            terminalId: message.terminalId,
-            resumeToken: message.resumeToken,
-            lastSeq: String(instance.lastOutputSeq),
-          })
-          instance.disposalUrl = `${protocol}://${window.location.host}/ws/terminal?${disposalParams}`
+          instance.disposalUrl = createDisposalUrl(clientId, message.terminalId, message.resumeToken, instance.lastOutputSeq)
           instance.reconnectAttempt = 0
           persistResumeState()
           setConnectionState('connected')
@@ -352,13 +359,15 @@ export function disconnectTerminal(instance: TerminalInstance, terminate = false
   instance.reconnectNow = null
 
   const terminalId = instance.terminalId.value
-  if (instance.socket) {
-    if (terminate && instance.socket.readyState === WebSocket.OPEN && terminalId) {
-      instance.socket.send(JSON.stringify({ type: 'dispose', terminalId }))
-    }
-    closeTerminalSocket(instance)
-  } else if (terminate && terminalId && instance.disposalUrl) {
-    // Reattach briefly so Close remains destructive even while the main socket is offline.
+  const socket = instance.socket
+  const canDisposeOnCurrentSocket = terminate && terminalId && socket?.readyState === WebSocket.OPEN
+  if (canDisposeOnCurrentSocket) {
+    socket.send(JSON.stringify({ type: 'dispose', terminalId }))
+  }
+  closeTerminalSocket(instance)
+
+  if (terminate && !canDisposeOnCurrentSocket && terminalId && instance.disposalUrl) {
+    // Reattach briefly so Close remains destructive whenever the main socket cannot send.
     const disposalSocket = new WebSocket(instance.disposalUrl)
     disposalSocket.onmessage = (event) => {
       try {

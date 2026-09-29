@@ -31,7 +31,9 @@ vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { fit = vi.fn(); } }));
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
 
 class MockWebSocket {
+  static CONNECTING = 0;
   static OPEN = 1;
+  static instances: MockWebSocket[] = [];
   readyState = MockWebSocket.OPEN;
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
@@ -42,12 +44,15 @@ class MockWebSocket {
     this.onclose?.({ code: 1000, reason: '' });
   });
 
-  constructor(public readonly url: string) {}
+  constructor(public readonly url: string) {
+    MockWebSocket.instances.push(this);
+  }
 }
 
 describe('useTerminal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    MockWebSocket.instances = [];
     vi.stubGlobal('WebSocket', MockWebSocket);
   });
 
@@ -205,5 +210,46 @@ describe('useTerminal', () => {
 
     expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'dispose', terminalId: 'term-1' }));
     expect(onDisconnect).not.toHaveBeenCalled();
+  });
+
+  it('uses a fallback disposal connection when closing during reconnection', () => {
+    const instance = createTerminalInstance();
+    connectTerminal(instance, 'client-1', '/workspace');
+    const reconnectingSocket = instance.socket as unknown as MockWebSocket;
+    reconnectingSocket.onmessage?.({ data: JSON.stringify({
+      type: 'created',
+      terminalId: 'term-1',
+      resumeToken: 'secret',
+      shell: 'bash',
+    }) });
+    reconnectingSocket.readyState = MockWebSocket.CONNECTING;
+
+    disconnectTerminal(instance, true);
+
+    const disposalSocket = MockWebSocket.instances.at(-1)!;
+    expect(disposalSocket).not.toBe(reconnectingSocket);
+    expect(disposalSocket.url).toContain('terminalId=term-1');
+    disposalSocket.onmessage?.({ data: JSON.stringify({ type: 'reattached' }) });
+    expect(disposalSocket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'dispose', terminalId: 'term-1' }));
+  });
+
+  it('can dispose a restored terminal before its first connection', () => {
+    const resume = {
+      terminalId: 'term-restored',
+      resumeToken: 'secret',
+      lastSeq: 4,
+      cwd: '/workspace',
+      shell: 'bash',
+    };
+    sessionStorage.setItem('pi-cloud-terminals:client-1', JSON.stringify([resume]));
+    const instance = createTerminalInstance(resume, 'client-1');
+
+    disposeTerminal(instance);
+
+    expect(getResumableTerminals('client-1')).toEqual([]);
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockWebSocket.instances[0].url).toContain('terminalId=term-restored');
+    expect(MockWebSocket.instances[0].url).toContain('resumeToken=secret');
+    expect(MockWebSocket.instances[0].url).toContain('lastSeq=4');
   });
 });

@@ -528,6 +528,10 @@ describe('App routing', () => {
 
     await vi.advanceTimersByTimeAsync(200);
 
+    expect(terminalCreateInstance).toHaveBeenCalledWith(expect.objectContaining({
+      terminalId: 'term-resume',
+      resumeToken: 'resume-token',
+    }), 'client-1');
     expect(terminalDispose).toHaveBeenCalledOnce();
     expect(terminalOpen).not.toHaveBeenCalled();
     expect(terminalConnect).not.toHaveBeenCalled();

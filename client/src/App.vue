@@ -2336,7 +2336,7 @@ async function handleCreateTerminal(resume?: Parameters<TerminalRuntime['createT
   const session = createTerminalSession(terminalId, resume?.shell || 'shell', resume?.cwd || activeProjectPath.value);
 
   // Create terminal instance, restoring its server identity after a page refresh when available.
-  const instance = runtime.createTerminalInstance(resume);
+  const instance = runtime.createTerminalInstance(resume, clientId);
   runtime.applyTerminalTheme(instance, resolvedTheme.value);
   terminalInstanceMap.set(terminalId, instance);
 
