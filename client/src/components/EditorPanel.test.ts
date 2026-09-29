@@ -464,8 +464,11 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
     expect(wrapper.find('.slide-content').html()).not.toContain('Speaker notes');
     expect(wrapper.find('.slide-notes').exists()).toBe(false);
-    await wrapper.get('[aria-label="Show speaker notes"]').trigger('click');
+    const notesToggle = wrapper.get('[aria-label="Show speaker notes"]');
+    expect(notesToggle.attributes('data-tooltip')).toBe('Show speaker notes');
+    await notesToggle.trigger('click');
     expect(wrapper.find('.slide-notes').text()).toContain('Speaker notes');
+    expect(wrapper.get('[aria-label="Hide speaker notes"]').attributes('data-tooltip')).toBe('Hide speaker notes');
     expect(wrapper.find('.slide-content img').attributes('src')).toBe('/api/files/raw?path=%2Fproject%2Ffigure.png');
     expect(wrapper.find('.slide-navigation').text()).toContain('1 / 2');
     await wrapper.get('.slides-preview').trigger('wheel', { ctrlKey: true, deltaY: -100 });
@@ -496,8 +499,11 @@ describe('EditorPanel', () => {
         document.dispatchEvent(new Event('fullscreenchange'));
       }),
     });
-    await wrapper.get('[aria-label="Present fullscreen"]').trigger('click');
+    const fullscreenButton = wrapper.get('[aria-label="Present fullscreen"]');
+    expect(fullscreenButton.attributes('data-tooltip')).toBe('Present fullscreen');
+    await fullscreenButton.trigger('click');
     expect(wrapper.find('[aria-label="Exit fullscreen presentation"]').exists()).toBe(true);
+    expect(wrapper.get('[aria-label="Exit fullscreen presentation"]').attributes('data-tooltip')).toBe('Exit fullscreen presentation');
     await wrapper.get('.slide-content').trigger('click');
     expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });

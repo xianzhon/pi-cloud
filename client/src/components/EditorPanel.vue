@@ -302,7 +302,9 @@
             />
             <button
               type="button"
+              class="tooltip"
               :class="{ active: showSpeakerNotes }"
+              :data-tooltip="t(showSpeakerNotes ? 'components.editorPanel.hideSpeakerNotes' : 'components.editorPanel.showSpeakerNotes')"
               :aria-label="t(showSpeakerNotes ? 'components.editorPanel.hideSpeakerNotes' : 'components.editorPanel.showSpeakerNotes')"
               :aria-pressed="showSpeakerNotes"
               @click="showSpeakerNotes = !showSpeakerNotes"
@@ -312,6 +314,8 @@
             </button>
             <button
               type="button"
+              class="tooltip"
+              :data-tooltip="t(isSlideFullscreen ? 'components.editorPanel.exitSlideFullscreen' : 'components.editorPanel.enterSlideFullscreen')"
               :aria-label="t(isSlideFullscreen ? 'components.editorPanel.exitSlideFullscreen' : 'components.editorPanel.enterSlideFullscreen')"
               @click="toggleSlideFullscreen"
             >
@@ -4127,6 +4131,36 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 .slide-navigation button {
   color: inherit;
   cursor: pointer;
+}
+
+.slide-navigation .tooltip {
+  position: relative;
+}
+
+.slide-navigation .tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 10;
+  width: max-content;
+  max-width: 14rem;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
+  font-size: 0.75rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.slide-navigation .tooltip:hover::after,
+.slide-navigation .tooltip:focus-visible::after {
+  opacity: 1;
 }
 
 .slide-navigation button:disabled { opacity: 0.4; cursor: default; }
