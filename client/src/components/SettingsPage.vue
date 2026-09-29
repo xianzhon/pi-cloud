@@ -939,28 +939,42 @@ const sectionGroups = [
   ] },
   { label: 'account', sections: [{ id: 'security', icon: PhLock }] },
 ] satisfies { label: string; sections: { id: SettingsSection; icon: typeof PhSliders }[] }[];
+const sectionHeadingKeys: Record<SettingsSection, string> = {
+  general: 'general',
+  security: 'securityHeading',
+  chat: 'chatHeading',
+  prompts: 'promptsHeading',
+  keyboard: 'keyboardHeading',
+  skills: 'skillsHeading',
+  sharedSkills: 'sharedSkills',
+  git: 'gitHeading',
+  gateway: 'gateway',
+  reviewSources: 'reviewSources',
+  modelWindowKickoff: 'modelWindowKickoff',
+};
 const activeSection = ref<SettingsSection>('general');
 const sectionPickerOpen = ref(false);
 const sectionPickerButton = ref<HTMLButtonElement | null>(null);
 const sectionMenu = ref<HTMLElement | null>(null);
 const settingsContent = ref<HTMLElement | null>(null);
 
-function toggleSectionPicker() {
+function toggleSectionPicker(): void {
   if (sectionPickerOpen.value) {
     closeSectionPicker();
-  } else {
-    sectionPickerOpen.value = true;
-    void nextTick(() => sectionMenu.value?.querySelector<HTMLButtonElement>('.settings-menu-item.active')?.focus());
+    return;
   }
+
+  sectionPickerOpen.value = true;
+  void nextTick(() => sectionMenu.value?.querySelector<HTMLButtonElement>('.settings-menu-item.active')?.focus());
 }
 
-function closeSectionPicker() {
+function closeSectionPicker(): void {
   if (!sectionPickerOpen.value) return;
   sectionPickerOpen.value = false;
   sectionPickerButton.value?.focus();
 }
 
-function selectSection(section: SettingsSection) {
+function selectSection(section: SettingsSection): void {
   activeSection.value = section;
   if (settingsContent.value) settingsContent.value.scrollTop = 0;
   closeSectionPicker();
@@ -1619,19 +1633,7 @@ watch(() => props.gatewaySaveSuccessTick, () => {
   gatewaySavedVisible.value = true;
   window.setTimeout(() => { gatewaySavedVisible.value = false; }, 1800);
 });
-const sectionHeading = computed(() => {
-  if (activeSection.value === 'general') return t('settings.sections.general');
-  if (activeSection.value === 'security') return t('settings.sections.securityHeading');
-  if (activeSection.value === 'prompts') return t('settings.sections.promptsHeading');
-  if (activeSection.value === 'keyboard') return t('settings.sections.keyboardHeading');
-  if (activeSection.value === 'skills') return t('settings.sections.skillsHeading');
-  if (activeSection.value === 'sharedSkills') return t('settings.sections.sharedSkills');
-  if (activeSection.value === 'git') return t('settings.sections.gitHeading');
-  if (activeSection.value === 'gateway') return t('settings.sections.gateway');
-  if (activeSection.value === 'reviewSources') return t('settings.sections.reviewSources');
-  if (activeSection.value === 'modelWindowKickoff') return t('settings.sections.modelWindowKickoff');
-  return t('settings.sections.chatHeading');
-});
+const sectionHeading = computed(() => t(`settings.sections.${sectionHeadingKeys[activeSection.value]}`));
 
 const emit = defineEmits<{
   close: [];

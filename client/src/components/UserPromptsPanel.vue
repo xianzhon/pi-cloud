@@ -44,7 +44,7 @@
         </div>
       </section>
 
-      <section v-if="mode === 'preview'" class="prompt-preview">
+      <section v-if="!formVisible" class="prompt-preview">
         <template v-if="selectedPrompt">
           <div class="preview-header">
             <div>
@@ -109,7 +109,7 @@ const emit = defineEmits<{
 }>();
 const selectedId = ref<string | null>(null);
 const editingId = ref<string | null>(null);
-const mode = ref<'preview' | 'create' | 'edit'>('preview');
+const formVisible = ref(false);
 const name = ref('');
 const content = ref('');
 const saving = ref(false);
@@ -117,7 +117,9 @@ const saveError = ref('');
 const selectedPrompt = computed(() => props.prompts.find((prompt) => prompt.id === selectedId.value) ?? null);
 
 watch(() => props.prompts, (prompts) => {
-  if (!prompts.some((prompt) => prompt.id === selectedId.value)) selectedId.value = prompts[0]?.id ?? null;
+  if (!prompts.some((prompt) => prompt.id === selectedId.value)) {
+    selectedId.value = prompts[0]?.id ?? null;
+  }
 }, { immediate: true });
 
 function selectPrompt(prompt: UserPrompt): void {
@@ -130,7 +132,7 @@ function startCreating(): void {
   name.value = '';
   content.value = '';
   saveError.value = '';
-  mode.value = 'create';
+  formVisible.value = true;
 }
 
 function startEditing(prompt: UserPrompt): void {
@@ -139,7 +141,7 @@ function startEditing(prompt: UserPrompt): void {
   name.value = prompt.name;
   content.value = prompt.content;
   saveError.value = '';
-  mode.value = 'edit';
+  formVisible.value = true;
 }
 
 function showPreview(): void {
@@ -147,7 +149,7 @@ function showPreview(): void {
   name.value = '';
   content.value = '';
   saveError.value = '';
-  mode.value = 'preview';
+  formVisible.value = false;
 }
 
 function formatDate(value: string): string {
