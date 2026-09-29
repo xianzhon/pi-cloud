@@ -1035,10 +1035,10 @@ watch([renderedContent, messageContentEl], async () => {
       bindFunctions?.(diagram);
     } catch {
       if (version !== mermaidRenderVersion || !content.contains(diagram)) return;
-      diagram.replaceChildren(Object.assign(document.createElement('pre'), {
-        className: 'mermaid-error',
-        textContent: source,
-      }));
+      const fallback = document.createElement('pre');
+      fallback.className = 'mermaid-error';
+      fallback.textContent = source;
+      diagram.replaceChildren(fallback);
     }
   }
 }, { flush: 'post', immediate: true });

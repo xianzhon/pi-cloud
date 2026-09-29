@@ -924,8 +924,11 @@ const activeSlideMetadata = computed(() => {
   return Object.fromEntries((parseFrontmatter(source)?.metadata || [])
     .map(({ key, value }) => [key.toLowerCase(), value.replace(/^(['"])(.*)\1$/, '$2')]));
 });
-const activeIsSlides = computed(() => activeIsMarkdown.value && !!activeTab.value && /\.slides\.md$/i.test(activeTab.value)
-  && activeSlideMetadata.value.marp?.toLowerCase() === 'true');
+const activeIsSlides = computed(() => {
+  const path = activeTab.value;
+  return activeIsMarkdown.value && !!path && /\.slides\.md$/i.test(path)
+    && activeSlideMetadata.value.marp?.toLowerCase() === 'true';
+});
 const slideIndex = ref(0);
 const slideZoom = ref(1);
 const slideThemeOverride = ref<string>();
@@ -946,8 +949,9 @@ const slideTheme = computed({
 });
 const slideSize = computed(() => {
   const match = activeSlideMetadata.value.size?.match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
-  const width = Number(match?.[1] || 16);
-  const height = Number(match?.[2] || 9);
+  if (!match) return { width: 16, height: 9 };
+  const width = Number(match[1]);
+  const height = Number(match[2]);
   return width > 0 && height > 0 ? { width, height } : { width: 16, height: 9 };
 });
 const slidePaginate = computed(() => activeSlideMetadata.value.paginate?.toLowerCase() === 'true');
