@@ -92,7 +92,7 @@
           <PhImage :size="16" weight="bold" />
         </button>
         <button
-          v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+          v-if="activeIsMarkdown && !activeIsSlides && activePreviewMode === 'preview'"
           class="window-btn tooltip"
           @click="handleCreateMarkdownPdfCopy"
           :data-tooltip="t('components.editorPanel.createMarkdownPdfCopy')"
@@ -101,7 +101,7 @@
           <PhFilePdf :size="16" weight="bold" />
         </button>
         <button
-          v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+          v-if="activeIsMarkdown && !activeIsSlides && activePreviewMode === 'preview'"
           class="window-btn tooltip"
           @click="handleExportMarkdownPdf"
           :data-tooltip="t('components.editorPanel.exportMarkdownPdf')"
@@ -110,7 +110,7 @@
           <PhDownloadSimple :size="16" weight="bold" />
         </button>
         <button
-          v-if="activeIsMarkdown && activePreviewMode === 'preview'"
+          v-if="activeIsMarkdown && !activeIsSlides && activePreviewMode === 'preview'"
           class="window-btn tooltip"
           :class="{ active: showMarkdownOutline }"
           :disabled="!activeMarkdownOutline.length"
@@ -264,6 +264,69 @@
         class="markdown-preview-layout"
       >
         <div
+          v-if="activeIsSlides"
+          ref="slidesPreviewEl"
+          class="slides-preview"
+          tabindex="0"
+          :aria-label="t('components.editorPanel.slidePreview')"
+          @click="handleSlidePreviewClick"
+          @keydown="handleSlideKeydown"
+          @wheel.ctrl.prevent="handleSlideWheel"
+          @wheel.meta.prevent="handleSlideWheel"
+        >
+          <div class="slide-content" :class="`slide-theme-${slideTheme}`" :style="slideContentStyle">
+            <div
+              ref="markdownPreviewEl"
+              class="markdown-preview slide-body"
+              v-html="activeSlides[slideIndex]?.html"
+              @click="handleMarkdownPreviewClick"
+            ></div>
+            <span v-if="slidePaginate" class="slide-page-number">{{ slideIndex + 1 }}</span>
+          </div>
+          <div v-if="showSpeakerNotes && activeSlides[slideIndex]?.notes" class="slide-notes">
+            <strong>{{ t('components.editorPanel.speakerNotes') }}</strong>
+            <div v-html="activeSlides[slideIndex].notes"></div>
+          </div>
+          <div class="slide-navigation">
+            <button type="button" :disabled="slideIndex === 0" :aria-label="t('components.editorPanel.previousSlide')" @click="slideIndex--">‹</button>
+            <span>{{ slideIndex + 1 }} / {{ activeSlides.length }}</span>
+            <button type="button" :disabled="slideIndex >= activeSlides.length - 1" :aria-label="t('components.editorPanel.nextSlide')" @click="slideIndex++">›</button>
+            <button type="button" :aria-label="t('components.editorPanel.zoomOut')" :disabled="slideZoom <= 0.5" @click="changeSlideZoom(-0.1)">−</button>
+            <span>{{ Math.round(slideZoom * 100) }}%</span>
+            <button type="button" :aria-label="t('components.editorPanel.zoomIn')" :disabled="slideZoom >= 2" @click="changeSlideZoom(0.1)">+</button>
+            <CustomSelect
+              class="slide-theme-select"
+              :model-value="slideTheme"
+              :options="slideThemeOptions"
+              :aria-label="t('components.editorPanel.slideTheme')"
+              @update:model-value="slideTheme = $event"
+            />
+            <button
+              type="button"
+              class="tooltip"
+              :class="{ active: showSpeakerNotes }"
+              :data-tooltip="t(showSpeakerNotes ? 'components.editorPanel.hideSpeakerNotes' : 'components.editorPanel.showSpeakerNotes')"
+              :aria-label="t(showSpeakerNotes ? 'components.editorPanel.hideSpeakerNotes' : 'components.editorPanel.showSpeakerNotes')"
+              :aria-pressed="showSpeakerNotes"
+              @click="showSpeakerNotes = !showSpeakerNotes"
+            >
+              <PhEyeSlash v-if="showSpeakerNotes" :size="16" />
+              <PhEye v-else :size="16" />
+            </button>
+            <button
+              type="button"
+              class="tooltip"
+              :data-tooltip="t(isSlideFullscreen ? 'components.editorPanel.exitSlideFullscreen' : 'components.editorPanel.enterSlideFullscreen')"
+              :aria-label="t(isSlideFullscreen ? 'components.editorPanel.exitSlideFullscreen' : 'components.editorPanel.enterSlideFullscreen')"
+              @click="toggleSlideFullscreen"
+            >
+              <PhCornersIn v-if="isSlideFullscreen" :size="16" />
+              <PhCornersOut v-else :size="16" />
+            </button>
+          </div>
+        </div>
+        <div
+          v-else
           ref="markdownPreviewEl"
           class="markdown-preview"
           :class="{ 'markdown-preview-light': resolvedTheme === 'light' }"
@@ -271,7 +334,7 @@
           @click="handleMarkdownPreviewClick"
         ></div>
         <nav
-          v-if="activeIsMarkdown && showMarkdownOutline && activeMarkdownOutline.length"
+          v-if="activeIsMarkdown && !activeIsSlides && showMarkdownOutline && activeMarkdownOutline.length"
           class="markdown-outline"
           :style="markdownOutlineStyle"
           :aria-label="t('components.editorPanel.markdownOutline')"
@@ -498,7 +561,7 @@ import { i18n } from '../i18n';
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/basic-languages/monaco.contribution';
-import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple, PhGraph, PhImage } from '@phosphor-icons/vue';
+import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple, PhGraph, PhImage, PhCornersIn, PhCornersOut } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
@@ -700,6 +763,7 @@ const editorContainer = ref<HTMLElement>();
 const splitDiffContainer = ref<HTMLElement>();
 const markdownPreviewEl = ref<HTMLElement>();
 const markdownPreviewLayoutEl = ref<HTMLElement>();
+const slidesPreviewEl = ref<HTMLElement>();
 const fileTreeEl = ref<HTMLElement>();
 const defaultEditorWidth = '50vw';
 const editorWidthPx = ref<number>();
@@ -854,6 +918,74 @@ function setActivePreviewScale(scale: number): void {
   }
 }
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
+const activeSlideMetadata = computed(() => {
+  void previewVersion.value;
+  const source = activeTab.value ? models.get(activeTab.value)?.getValue() || '' : '';
+  return Object.fromEntries((parseFrontmatter(source)?.metadata || [])
+    .map(({ key, value }) => [key.toLowerCase(), value.replace(/^(['"])(.*)\1$/, '$2')]));
+});
+const activeIsSlides = computed(() => {
+  const path = activeTab.value;
+  return activeIsMarkdown.value && !!path && /\.slides\.md$/i.test(path)
+    && activeSlideMetadata.value.marp?.toLowerCase() === 'true';
+});
+const slideIndex = ref(0);
+const slideZoom = ref(1);
+const slideThemeOverride = ref<string>();
+const showSpeakerNotes = ref(false);
+const isSlideFullscreen = ref(false);
+const slideThemeOptions = computed<CustomSelectOption[]>(() => [
+  { value: 'default', label: t('components.editorPanel.slideThemeDefault') },
+  { value: 'dark', label: t('components.editorPanel.slideThemeDark') },
+  { value: 'warm', label: t('components.editorPanel.slideThemeWarm') },
+]);
+const slideTheme = computed({
+  get: () => {
+    if (slideThemeOverride.value) return slideThemeOverride.value;
+    const metadataTheme = activeSlideMetadata.value.theme?.toLowerCase();
+    return slideThemeOptions.value.some(option => option.value === metadataTheme) ? metadataTheme : 'default';
+  },
+  set: value => { slideThemeOverride.value = value; },
+});
+const slideSize = computed(() => {
+  const match = activeSlideMetadata.value.size?.match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
+  if (!match) return { width: 16, height: 9 };
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  return width > 0 && height > 0 ? { width, height } : { width: 16, height: 9 };
+});
+const slidePaginate = computed(() => activeSlideMetadata.value.paginate?.toLowerCase() === 'true');
+const slideContentStyle = computed(() => ({
+  zoom: isSlideFullscreen.value ? 1 : slideZoom.value,
+  aspectRatio: `${slideSize.value.width} / ${slideSize.value.height}`,
+  '--slide-ratio': String(slideSize.value.width / slideSize.value.height),
+}));
+watch(activeTab, () => { slideThemeOverride.value = undefined; });
+watch([activeTab, previewVersion], () => { slideIndex.value = 0; });
+function changeSlideZoom(amount: number): void {
+  slideZoom.value = Math.max(0.5, Math.min(2, Math.round((slideZoom.value + amount) * 10) / 10));
+}
+function handleSlideWheel(event: WheelEvent): void {
+  changeSlideZoom(event.deltaY < 0 ? 0.1 : -0.1);
+}
+function handleSlideKeydown(event: KeyboardEvent): void {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || (event.target as HTMLElement).closest('select, button, a, input, textarea')) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') slideIndex.value = Math.max(0, slideIndex.value - 1);
+  else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') slideIndex.value = Math.min(activeSlides.value.length - 1, slideIndex.value + 1);
+  else return;
+  event.preventDefault();
+}
+function handleSlidePreviewClick(event: MouseEvent): void {
+  if (!isSlideFullscreen.value || (event.target as HTMLElement).closest('a, button, input, textarea, [role="listbox"]')) return;
+  slideIndex.value = Math.min(activeSlides.value.length - 1, slideIndex.value + 1);
+}
+async function toggleSlideFullscreen(): Promise<void> {
+  if (document.fullscreenElement === slidesPreviewEl.value) await document.exitFullscreen();
+  else await slidesPreviewEl.value?.requestFullscreen();
+}
+function updateSlideFullscreenState(): void {
+  isSlideFullscreen.value = document.fullscreenElement === slidesPreviewEl.value;
+}
 const activeIsDiagram = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isDiagramFile(activeTab.value));
 const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMhtmlFile(activeTab.value));
 const activeIsHtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && (isHtmlFile(activeTab.value) || activeIsMhtml.value));
@@ -934,6 +1066,35 @@ const activeMarkdownHtml = computed(() => {
   if (!model) return '';
   if (activeIsDiagram.value) return `<div class="mermaid-diagram">${escapeHtml(distinctiveMindMapRoot(model.getValue()))}</div>`;
   return sanitizeHtmlFragment(renderMarkdownPreview(model.getValue()));
+});
+const activeSlides = computed(() => {
+  void previewVersion.value;
+  const source = activeTab.value ? models.get(activeTab.value)?.getValue() || '' : '';
+  const body = parseFrontmatter(source)?.body || source;
+  const lines = body.split(/\r?\n/);
+  const slides: string[] = [];
+  let start = 0;
+  let fence = '';
+  for (const [index, line] of lines.entries()) {
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = '';
+    }
+    if (!fence && line.trim() === '---') {
+      slides.push(lines.slice(start, index).join('\n'));
+      start = index + 1;
+    }
+  }
+  slides.push(lines.slice(start).join('\n'));
+  return slides.map(slide => {
+    const notes = Array.from(slide.matchAll(/<!--[\s\S]*?-->/g), match => match[0].slice(4, -3).trim())
+      .filter(Boolean).join('\n\n');
+    return {
+      html: sanitizeHtmlFragment(renderMarkdownPreview(slide.replace(/<!--[\s\S]*?-->/g, ''))),
+      notes: notes ? sanitizeHtmlFragment(renderMarkdownPreview(notes)) : '',
+    };
+  });
 });
 interface MarkdownOutlineItem {
   id: string;
@@ -3312,6 +3473,7 @@ onMounted(() => {
   window.addEventListener('click', closeContextMenus);
   window.addEventListener('pointerdown', hideTabTooltip);
   window.addEventListener('blur', hideTabTooltip);
+  document.addEventListener('fullscreenchange', updateSlideFullscreenState);
 });
 
 function handleOpenFile(event: Event) {
@@ -3353,6 +3515,7 @@ onUnmounted(() => {
   window.removeEventListener('click', closeContextMenus);
   window.removeEventListener('pointerdown', hideTabTooltip);
   window.removeEventListener('blur', hideTabTooltip);
+  document.removeEventListener('fullscreenchange', updateSlideFullscreenState);
 });
 
 defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
@@ -3912,6 +4075,133 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   background: var(--bg-primary);
   line-height: 1.65;
 }
+
+.slides-preview {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  gap: 1rem;
+  overflow: auto;
+  padding: 1rem;
+  outline-offset: -3px;
+}
+
+.slides-preview:fullscreen {
+  justify-content: center;
+  overflow: hidden;
+  padding: 0;
+  background: #000;
+  cursor: pointer;
+}
+
+.slides-preview:fullscreen .slide-content {
+  width: min(100vw, calc(100vh * var(--slide-ratio)));
+  height: min(100vh, calc(100vw / var(--slide-ratio)));
+  box-shadow: none;
+}
+
+.slides-preview:fullscreen .slide-notes,
+.slides-preview:fullscreen .slide-navigation {
+  display: none;
+}
+
+.slide-content {
+  position: relative;
+  flex: none;
+  width: min(960px, 100%);
+  aspect-ratio: 16 / 9;
+  overflow: auto;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: #fff;
+  color: #222;
+  font-size: clamp(0.75rem, 1.5vw, 1.25rem);
+  line-height: 1.4;
+  box-shadow: 0 2px 16px #0003;
+}
+
+.slide-body.markdown-preview {
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}
+
+.slide-content.slide-theme-dark { background: #202636; color: #f3f4f8; }
+.slide-content.slide-theme-warm { background: #f9f1df; color: #403525; }
+.slide-theme-dark :deep(blockquote) { color: #c6c9d4; }
+.slide-theme-dark :deep(tbody tr:nth-child(2n)) { background: #303748; }
+.slide-theme-warm :deep(tbody tr:nth-child(2n)) { background: #eee1c9; }
+
+.slide-notes { width: min(960px, 100%); max-height: 25%; overflow: auto; color: var(--text-primary); }
+.slide-notes strong { display: block; margin-bottom: 0.25rem; }
+.slide-notes :deep(p) { margin: 0.25rem 0; }
+
+.slide-page-number {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1rem;
+  font-size: 0.75em;
+  opacity: 0.65;
+}
+
+.slide-content :deep(h1:first-child) { margin-top: 0; }
+.slide-theme-default :deep(blockquote) { color: #555; }
+.slide-content :deep(th),
+.slide-content :deep(td) { border-color: #ddd; }
+.slide-theme-default :deep(tbody tr:nth-child(2n)) { background: #f6f8fa; }
+
+.slide-navigation {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: var(--text-primary);
+}
+
+.slide-theme-select {
+  width: 8rem;
+}
+
+.slide-navigation button {
+  color: inherit;
+  cursor: pointer;
+}
+
+.slide-navigation .tooltip {
+  position: relative;
+}
+
+.slide-navigation .tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 10;
+  width: max-content;
+  max-width: 14rem;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
+  font-size: 0.75rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.slide-navigation .tooltip:hover::after,
+.slide-navigation .tooltip:focus-visible::after {
+  opacity: 1;
+}
+
+.slide-navigation button:disabled { opacity: 0.4; cursor: default; }
 
 .markdown-outline {
   position: relative;

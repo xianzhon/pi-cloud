@@ -113,6 +113,7 @@
     <div 
       v-if="message.content && message.content.trim() && renderedContent.trim()"
       class="message-content markdown-body" 
+      ref="messageContentEl"
       v-html="renderedContent"
       @click="handleContentClick"
     ></div>
@@ -189,7 +190,7 @@
 
 <script setup lang="ts">
 import { i18n } from '../i18n';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { marked, Renderer } from 'marked';
 import hljs from 'highlight.js';
 import DOMPurify from 'dompurify';
@@ -756,6 +757,7 @@ function createMarkdownRenderer(showLanguageHeaders: boolean) {
   renderer.code = (code: string, infostring: string | undefined) => {
     const language = normalizeLanguage(infostring);
     if (language === 'diff') return renderDiffCodeBlock(code, showLanguageHeaders);
+    if (language === 'mermaid') return `<div class="mermaid-diagram">${escapeHtml(code)}</div>`;
 
     const languageLabel = language || 'text';
     const highlighted = language && hljs.getLanguage(language)
@@ -1003,6 +1005,45 @@ const renderedContent = computed(() => {
   }
   return renderMarkdown(collapseExpandedSkillReference(props.message.content));
 });
+
+const messageContentEl = ref<HTMLElement | null>(null);
+let mermaidRenderVersion = 0;
+const mermaidInstanceId = useId().replace(/[^\w-]/g, '-');
+
+watch([renderedContent, messageContentEl], async () => {
+  const version = ++mermaidRenderVersion;
+  const content = messageContentEl.value;
+  if (!content) return;
+  const diagrams = Array.from(content.querySelectorAll<HTMLElement>('.mermaid-diagram'));
+  if (!diagrams.length) return;
+
+  const { default: mermaid } = await import('mermaid');
+  if (version !== mermaidRenderVersion || content !== messageContentEl.value) return;
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: document.documentElement.getAttribute('data-theme') === 'light' ? 'default' : 'dark',
+    htmlLabels: false,
+  });
+
+  for (const [index, diagram] of diagrams.entries()) {
+    const source = diagram.textContent || '';
+    try {
+      const { svg, bindFunctions } = await mermaid.render(`chat-mermaid-${mermaidInstanceId}-${version}-${index}`, source);
+      if (version !== mermaidRenderVersion || !content.contains(diagram)) return;
+      diagram.innerHTML = sanitizeHtmlFragment(svg);
+      bindFunctions?.(diagram);
+    } catch {
+      if (version !== mermaidRenderVersion || !content.contains(diagram)) return;
+      const fallback = document.createElement('pre');
+      fallback.className = 'mermaid-error';
+      fallback.textContent = source;
+      diagram.replaceChildren(fallback);
+    }
+  }
+}, { flush: 'post', immediate: true });
+
+onBeforeUnmount(() => { mermaidRenderVersion++; });
 
 const renderedThinking = computed(() => {
   const summaryTitles = thinkingParts.value.summaryTitles;
@@ -1938,6 +1979,22 @@ async function copyContent() {
   margin: 1rem 0;
   border: 0;
   background: var(--border);
+}
+
+.markdown-body :deep(.mermaid-diagram) {
+  margin: 0 0 1rem;
+  overflow: auto;
+  text-align: center;
+}
+
+.markdown-body :deep(.mermaid-diagram svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body :deep(.mermaid-error) {
+  text-align: left;
+  white-space: pre-wrap;
 }
 
 .markdown-body :deep(.code-block) {

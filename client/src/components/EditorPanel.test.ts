@@ -439,6 +439,81 @@ describe('EditorPanel', () => {
     expect(preview.find('p').text()).toContain('Safe text');
   });
 
+  it('previews Marp slides with metadata, notes, images, navigation and zoom without splitting fenced rules', async () => {
+    const markdown = [
+      '---', 'marp: true', 'theme: warm', 'size: 4:3', 'paginate: true', '---',
+      '# First slide', '', '![Figure](./figure.png)', '', '<!-- Speaker notes -->', '', '---',
+      '# Second slide', '', '```md', '---', '```',
+    ].join('\n');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).startsWith('/api/files/tree')) return { ok: true, json: async () => ({ tree: [] }) };
+      if (String(url).startsWith('/api/files/read')) return { ok: true, json: async () => ({ content: markdown, mtime: 1 }) };
+      if (String(url).startsWith('/api/git/changes')) return { ok: true, json: async () => ({ changes: {} }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    vi.spyOn(monaco.editor, 'createModel').mockReturnValue({
+      onDidChangeContent: vi.fn(() => ({ dispose: vi.fn() })),
+      getValue: vi.fn(() => markdown),
+      dispose: vi.fn(),
+    } as any);
+
+    const wrapper = mount(EditorPanel, { props: { visible: true, cwd: '/project' } });
+    await wrapper.vm.openFile('/project/presentation.slides.md');
+    await flushPromises();
+
+    expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
+    expect(wrapper.find('.slide-content').classes()).toContain('slide-theme-warm');
+    expect((wrapper.find('.slide-content').element as HTMLElement).style.aspectRatio).toBe('4 / 3');
+    expect(wrapper.find('.slide-page-number').text()).toBe('1');
+    expect(wrapper.find('.slide-content').html()).not.toContain('Speaker notes');
+    expect(wrapper.find('.slide-notes').exists()).toBe(false);
+    const notesToggle = wrapper.get('[aria-label="Show speaker notes"]');
+    expect(notesToggle.attributes('data-tooltip')).toBe('Show speaker notes');
+    await notesToggle.trigger('click');
+    expect(wrapper.find('.slide-notes').text()).toContain('Speaker notes');
+    expect(wrapper.get('[aria-label="Hide speaker notes"]').attributes('data-tooltip')).toBe('Hide speaker notes');
+    expect(wrapper.find('.slide-content img').attributes('src')).toBe('/api/files/raw?path=%2Fproject%2Ffigure.png');
+    expect(wrapper.find('.slide-navigation').text()).toContain('1 / 2');
+    await wrapper.get('.slides-preview').trigger('wheel', { ctrlKey: true, deltaY: -100 });
+    expect(wrapper.find('.slide-navigation').text()).toContain('110%');
+    await wrapper.get('[aria-label="Zoom out"]').trigger('click');
+    expect(wrapper.find('.slide-navigation').text()).toContain('100%');
+    await wrapper.get('[aria-label="Theme"]').trigger('click');
+    await wrapper.findAll('.custom-select-option').find(option => option.text() === 'Dark')!.trigger('click');
+    expect(wrapper.find('.slide-content').classes()).toContain('slide-theme-dark');
+    await wrapper.get('.slides-preview').trigger('keydown', { key: 'ArrowRight' });
+    expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');
+    expect(wrapper.find('.slide-page-number').text()).toBe('2');
+    expect(wrapper.find('.slide-notes').exists()).toBe(false);
+    await wrapper.get('.slides-preview').trigger('keydown', { key: 'ArrowUp' });
+    expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
+    expect(wrapper.find('.markdown-outline').exists()).toBe(false);
+    await wrapper.get('[aria-label="Next slide"]').trigger('click');
+    expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');
+    expect(wrapper.find('.slide-content code').text()).toBe('---');
+    expect(wrapper.find('.slide-navigation').text()).toContain('2 / 2');
+    await wrapper.get('[aria-label="Previous slide"]').trigger('click');
+    expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
+
+    const slidesPreview = wrapper.get('.slides-preview').element as HTMLElement;
+    Object.defineProperty(slidesPreview, 'requestFullscreen', {
+      configurable: true,
+      value: vi.fn(async () => {
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: slidesPreview });
+        document.dispatchEvent(new Event('fullscreenchange'));
+      }),
+    });
+    const fullscreenButton = wrapper.get('[aria-label="Present fullscreen"]');
+    expect(fullscreenButton.attributes('data-tooltip')).toBe('Present fullscreen');
+    await fullscreenButton.trigger('click');
+    expect(wrapper.find('[aria-label="Exit fullscreen presentation"]').exists()).toBe(true);
+    expect(wrapper.get('[aria-label="Exit fullscreen presentation"]').attributes('data-tooltip')).toBe('Exit fullscreen presentation');
+    await wrapper.get('.slide-content').trigger('click');
+    expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+    document.dispatchEvent(new Event('fullscreenchange'));
+  });
+
   it('exports the rendered markdown preview as PDF', async () => {
     const markdown = '# Export me\n\nRendered content';
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
