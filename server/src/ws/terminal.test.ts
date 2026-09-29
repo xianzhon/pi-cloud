@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   terminal: {
     id: 'term-owned',
     shell: 'bash',
+    resumeToken: 'resume-secret',
     attachmentId: null as symbol | null,
     pty: {
       onData: vi.fn(() => ({ dispose: vi.fn() })),
@@ -17,9 +18,10 @@ const mocks = vi.hoisted(() => ({
   attach: vi.fn(),
   detach: vi.fn(),
   get: vi.fn(),
-  setOutputHandler: vi.fn(() => ''),
+  setOutputHandler: vi.fn((..._args: any[]) => ''),
   writeTo: vi.fn(),
   resize: vi.fn(),
+  acknowledge: vi.fn(),
   dispose: vi.fn(),
 }));
 
@@ -32,7 +34,9 @@ class FakeSocket {
   readonly sent: string[] = [];
   readonly close = vi.fn();
   readonly ping = vi.fn();
+  readonly terminate = vi.fn(() => { this.readyState = 3; });
   readyState = 1;
+  bufferedAmount = 0;
   private handlers = new Map<string, (...data: any[]) => void>();
 
   on(type: string, handler: (...data: any[]) => void) {
@@ -48,7 +52,7 @@ class FakeSocket {
   }
 }
 
-async function openSocket(cwd: string, terminalId?: string) {
+async function openSocket(cwd: string, terminalId?: string, resumeToken?: string) {
   const routes = new Map<string, Function>();
   const app = {
     authServices: {
@@ -65,6 +69,7 @@ async function openSocket(cwd: string, terminalId?: string) {
         setOutputHandler: mocks.setOutputHandler,
         writeTo: mocks.writeTo,
         resize: mocks.resize,
+        acknowledge: mocks.acknowledge,
         dispose: mocks.dispose,
       },
     },
@@ -74,7 +79,7 @@ async function openSocket(cwd: string, terminalId?: string) {
   await terminalWebSocket(app as any);
   const socket = new FakeSocket();
   await routes.get('/ws/terminal')!(socket, {
-    query: { clientId: 'client-1', cwd, terminalId },
+    query: { clientId: 'client-1', cwd, terminalId, resumeToken },
     headers: { host: 'localhost:3000' },
     log: { info: vi.fn(), warn: vi.fn() },
   });
@@ -92,7 +97,7 @@ describe('terminal websocket', () => {
       mocks.terminal.attachmentId = attachmentId;
       return mocks.terminal;
     });
-    mocks.attach.mockImplementation((_terminalId, _clientId, _owner, attachmentId) => {
+    mocks.attach.mockImplementation((_terminalId, _resumeToken, _clientId, _owner, attachmentId) => {
       mocks.terminal.attachmentId = attachmentId;
       return mocks.terminal;
     });
@@ -111,18 +116,45 @@ describe('terminal websocket', () => {
     socket.emit('message', Buffer.from(JSON.stringify({ type: 'input', terminalId: 'term-other', data: 'bad' })));
     socket.emit('message', Buffer.from(JSON.stringify({ type: 'input', terminalId: 'term-owned', data: 'ok' })));
 
+    socket.emit('message', Buffer.from(JSON.stringify({ type: 'ack', terminalId: 'term-owned', seq: 3 })));
+
     expect(mocks.writeTo).toHaveBeenCalledTimes(1);
     expect(mocks.writeTo).toHaveBeenCalledWith('term-owned', 'ok');
+    expect(mocks.acknowledge).toHaveBeenCalledWith('term-owned', expect.any(Symbol), 3);
   });
 
-  it('sends server-originated heartbeat pings', async () => {
+  it('terminates connections that do not answer heartbeat pings', async () => {
     vi.useFakeTimers();
     const socket = await openSocket(tempDir);
 
     vi.advanceTimersByTime(25_000);
-
     expect(socket.ping).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(25_000);
+    expect(socket.terminate).toHaveBeenCalledOnce();
+    socket.emit('close', 1006, Buffer.from('heartbeat timeout'));
+  });
+
+  it('keeps connections alive when heartbeat pongs are received', async () => {
+    vi.useFakeTimers();
+    const socket = await openSocket(tempDir);
+
+    vi.advanceTimersByTime(25_000);
+    socket.emit('pong');
+    vi.advanceTimersByTime(25_000);
+
+    expect(socket.ping).toHaveBeenCalledTimes(2);
+    expect(socket.terminate).not.toHaveBeenCalled();
     socket.emit('close', 1000, Buffer.from('done'));
+  });
+
+  it('terminates slow clients so retained output can be replayed', async () => {
+    const socket = await openSocket(tempDir);
+    socket.bufferedAmount = 1_000_001;
+    const outputHandler = mocks.setOutputHandler.mock.calls[0][3] as (chunk: { seq: number; data: string }) => void;
+
+    outputHandler({ seq: 1, data: 'output' });
+
+    expect(socket.terminate).toHaveBeenCalledOnce();
   });
 
   it('detaches on network loss and only disposes on an explicit close', async () => {
@@ -136,9 +168,9 @@ describe('terminal websocket', () => {
   });
 
   it('reattaches an existing terminal without creating a new PTY', async () => {
-    const socket = await openSocket(tempDir, 'term-owned');
+    const socket = await openSocket(tempDir, 'term-owned', 'resume-secret');
 
-    expect(mocks.attach).toHaveBeenCalledWith('term-owned', 'client-1', 'me', expect.any(Symbol));
+    expect(mocks.attach).toHaveBeenCalledWith('term-owned', 'resume-secret', 'client-1', 'me', expect.any(Symbol));
     expect(mocks.create).not.toHaveBeenCalled();
     expect(socket.sent.map(message => JSON.parse(message))).toContainEqual(expect.objectContaining({
       type: 'reattached',

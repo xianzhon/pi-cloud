@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyTerminalTheme, connectTerminal, createTerminalInstance, disconnectTerminal, disposeTerminal, fitTerminal, openTerminal } from './useTerminal';
+import { applyTerminalTheme, connectTerminal, createTerminalInstance, disconnectTerminal, disposeTerminal, fitTerminal, getResumableTerminals, openTerminal } from './useTerminal';
 
 const { MockTerminal } = vi.hoisted(() => {
   class MockTerminal {
@@ -16,7 +16,10 @@ const { MockTerminal } = vi.hoisted(() => {
     open = vi.fn();
     focus = vi.fn();
     dispose = vi.fn();
-    write = vi.fn((data: string) => this.writes.push(data));
+    write = vi.fn((data: string, callback?: () => void) => {
+      this.writes.push(data);
+      callback?.();
+    });
     onData = vi.fn(() => ({ dispose: vi.fn() }));
     onResize = vi.fn(() => ({ dispose: vi.fn() }));
   }
@@ -50,6 +53,7 @@ describe('useTerminal', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    sessionStorage.clear();
   });
 
   it('uses the bundled Nerd Font before system fallbacks', () => {
@@ -103,15 +107,15 @@ describe('useTerminal', () => {
     connectTerminal(instance, 'client id', '/a b', created, exited);
     const socket = instance.socket as unknown as MockWebSocket;
     socket.onopen?.();
-    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 't1', shell: '' }) });
-    socket.onmessage?.({ data: JSON.stringify({ type: 'output', data: 'hello' }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 't1', resumeToken: 'secret', shell: '' }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: 'output', seq: 1, data: 'hello' }) });
     socket.onmessage?.({ data: JSON.stringify({ type: 'exit', terminalId: 't1', exitCode: 2 }) });
     onData('ls');
     onResize({ cols: 100, rows: 40 });
     expect(socket.url).toContain('clientId=client+id&cwd=%2Fa+b');
     expect(created).toHaveBeenCalledWith('t1', 'bash');
     expect(exited).toHaveBeenCalledWith('t1', 2);
-    expect(socket.send).toHaveBeenCalledTimes(3);
+    expect(socket.send).toHaveBeenCalledTimes(4);
 
     connectTerminal(instance, 'other');
     expect(socket.close).toHaveBeenCalled();
@@ -135,14 +139,59 @@ describe('useTerminal', () => {
     const instance = createTerminalInstance();
     connectTerminal(instance, 'client-1', '/workspace');
     const socket = instance.socket as unknown as MockWebSocket;
-    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 'term-1', shell: 'bash' }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 'term-1', resumeToken: 'secret', shell: 'bash' }) });
 
     socket.onclose?.({ code: 1006, reason: '' });
     vi.runOnlyPendingTimers();
 
     expect((instance.socket as unknown as MockWebSocket).url).toContain('terminalId=term-1');
+    expect((instance.socket as unknown as MockWebSocket).url).toContain('resumeToken=secret');
     expect(instance.terminalId.value).toBe('term-1');
     vi.useRealTimers();
+  });
+
+  it('persists acknowledged output for refresh restoration and reports truncation', () => {
+    const instance = createTerminalInstance();
+    connectTerminal(instance, 'client-1', '/workspace');
+    const socket = instance.socket as unknown as MockWebSocket;
+
+    expect(instance.terminal.options.disableStdin).toBe(true);
+    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 'term-1', resumeToken: 'secret', shell: 'zsh' }) });
+    expect(instance.terminal.options.disableStdin).toBe(false);
+    socket.onmessage?.({ data: JSON.stringify({ type: 'output_truncated' }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: 'output', seq: 4, data: 'latest' }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: 'output', seq: 4, data: 'duplicate' }) });
+
+    expect((instance.terminal as unknown as InstanceType<typeof MockTerminal>).writes).toEqual([
+      '\r\n[Output while disconnected was truncated.]\r\n',
+      'latest',
+    ]);
+    expect(getResumableTerminals('client-1')).toEqual([{
+      terminalId: 'term-1',
+      resumeToken: 'secret',
+      lastSeq: 4,
+      cwd: '/workspace',
+      shell: 'zsh',
+    }]);
+    expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'ack', terminalId: 'term-1', seq: 4 }));
+  });
+
+  it('creates an instance from persisted resume metadata', () => {
+    const instance = createTerminalInstance({
+      terminalId: 'term-restored',
+      resumeToken: 'token',
+      lastSeq: 9,
+      cwd: '/workspace',
+      shell: 'fish',
+    });
+
+    connectTerminal(instance, 'client-1');
+
+    const url = (instance.socket as unknown as MockWebSocket).url;
+    expect(url).toContain('terminalId=term-restored');
+    expect(url).toContain('resumeToken=token');
+    // A refreshed xterm has no screen state and requests the full retained buffer.
+    expect(url).toContain('lastSeq=0');
   });
 
   it('does not notify expected websocket closes and explicitly disposes the PTY', () => {
@@ -151,7 +200,7 @@ describe('useTerminal', () => {
 
     connectTerminal(instance, 'client-1', '/workspace', undefined, undefined, onDisconnect);
     const socket = instance.socket as unknown as MockWebSocket;
-    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 'term-1', shell: 'bash' }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 'term-1', resumeToken: 'secret', shell: 'bash' }) });
     disconnectTerminal(instance, true);
 
     expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'dispose', terminalId: 'term-1' }));

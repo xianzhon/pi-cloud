@@ -69,11 +69,13 @@ const deletePreset = vi.fn(async () => {});
 const {
   editorOpenFile,
   terminalCreateInstance,
+  getResumableTerminals,
   submitExternalPrompt,
   heavyModuleLoads,
 } = vi.hoisted(() => ({
   editorOpenFile: vi.fn(),
   terminalCreateInstance: vi.fn(() => ({ terminal: { options: {} } })),
+  getResumableTerminals: vi.fn(() => []),
   submitExternalPrompt: vi.fn(async () => true),
   heavyModuleLoads: {
     editor: 0,
@@ -269,6 +271,7 @@ vi.mock('./composables/useTerminal', () => {
   heavyModuleLoads.terminalRuntime += 1;
   return {
     createTerminalInstance: terminalCreateInstance,
+    getResumableTerminals,
     openTerminal: vi.fn(),
     fitTerminal: vi.fn(),
     connectTerminal: vi.fn(),
@@ -309,6 +312,8 @@ describe('App routing', () => {
     deletePreset.mockClear();
     editorOpenFile.mockClear();
     terminalCreateInstance.mockClear();
+    getResumableTerminals.mockReset();
+    getResumableTerminals.mockReturnValue([]);
     memorySetContext.mockClear();
     memoryLoadCounts.mockClear();
     memoryExtractSession.mockClear();

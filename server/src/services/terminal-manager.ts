@@ -3,18 +3,33 @@ import { randomUUID } from 'node:crypto';
 import * as pty from '@lydell/node-pty';
 
 const DEFAULT_DISCONNECT_GRACE_MS = 10 * 60 * 1000;
-const MAX_DETACHED_OUTPUT_CHARS = 1_000_000;
+const MAX_OUTPUT_BUFFER_CHARS = 1_000_000;
+
+export interface TerminalOutputChunk {
+  seq: number;
+  data: string;
+}
+
+export interface TerminalReplay {
+  chunks: TerminalOutputChunk[];
+  truncated: boolean;
+}
 
 interface TerminalSession {
   id: string;
+  resumeToken: string;
   pty: pty.IPty;
   clientId: string;
   owner: string;
   shell: string;
   attachmentId: symbol | null;
   disconnectTimer: ReturnType<typeof setTimeout> | null;
-  outputHandler: ((data: string) => void) | null;
-  outputBuffer: string;
+  outputHandler: ((chunk: TerminalOutputChunk) => void) | null;
+  outputBuffer: TerminalOutputChunk[];
+  outputBufferChars: number;
+  nextOutputSeq: number;
+  acknowledgedSeq: number;
+  oldestChunkTruncated: boolean;
   dataDisposable: pty.IDisposable;
 }
 
@@ -41,6 +56,7 @@ export class TerminalManager {
 
     const session: TerminalSession = {
       id,
+      resumeToken: randomUUID(),
       pty: ptyProcess,
       clientId,
       owner,
@@ -48,16 +64,32 @@ export class TerminalManager {
       attachmentId,
       disconnectTimer: null,
       outputHandler: null,
-      outputBuffer: '',
+      outputBuffer: [],
+      outputBufferChars: 0,
+      nextOutputSeq: 1,
+      acknowledgedSeq: 0,
+      oldestChunkTruncated: false,
       dataDisposable: { dispose() {} },
     };
     session.dataDisposable = ptyProcess.onData((data) => {
-      if (session.outputHandler) {
-        session.outputHandler(data);
-      } else {
-        // Keep enough detached output to restore the screen without unbounded memory growth.
-        session.outputBuffer = (session.outputBuffer + data).slice(-MAX_DETACHED_OUTPUT_CHARS);
+      const chunk = { seq: session.nextOutputSeq++, data };
+      // Keep a separate object in the ring because an oversized buffered chunk may be sliced.
+      session.outputBuffer.push({ ...chunk });
+      session.outputBufferChars += data.length;
+
+      while (session.outputBuffer.length > 1 && session.outputBufferChars > MAX_OUTPUT_BUFFER_CHARS) {
+        const removed = session.outputBuffer.shift()!;
+        session.outputBufferChars -= removed.data.length;
+        session.oldestChunkTruncated = false;
       }
+      if (session.outputBufferChars > MAX_OUTPUT_BUFFER_CHARS) {
+        const excess = session.outputBufferChars - MAX_OUTPUT_BUFFER_CHARS;
+        session.outputBuffer[0].data = session.outputBuffer[0].data.slice(excess);
+        session.outputBufferChars = MAX_OUTPUT_BUFFER_CHARS;
+        session.oldestChunkTruncated = true;
+      }
+
+      session.outputHandler?.(chunk);
     });
     this.terminals.set(id, session);
     ptyProcess.onExit(() => {
@@ -78,9 +110,9 @@ export class TerminalManager {
       .filter(t => t.clientId === clientId);
   }
 
-  attach(id: string, clientId: string, owner: string, attachmentId: symbol): TerminalSession | undefined {
+  attach(id: string, resumeToken: string, clientId: string, owner: string, attachmentId: symbol): TerminalSession | undefined {
     const session = this.terminals.get(id);
-    if (!session || session.clientId !== clientId || session.owner !== owner) return undefined;
+    if (!session || session.resumeToken !== resumeToken || session.clientId !== clientId || session.owner !== owner) return undefined;
 
     if (session.disconnectTimer) {
       clearTimeout(session.disconnectTimer);
@@ -91,14 +123,27 @@ export class TerminalManager {
     return session;
   }
 
-  setOutputHandler(id: string, attachmentId: symbol, handler: (data: string) => void): string | undefined {
+  setOutputHandler(
+    id: string,
+    attachmentId: symbol,
+    afterSeq: number,
+    handler: (chunk: TerminalOutputChunk) => void,
+  ): TerminalReplay | undefined {
     const session = this.terminals.get(id);
     if (!session || session.attachmentId !== attachmentId) return undefined;
 
     session.outputHandler = handler;
-    const bufferedOutput = session.outputBuffer;
-    session.outputBuffer = '';
-    return bufferedOutput;
+    const firstChunk = session.outputBuffer[0];
+    return {
+      chunks: session.outputBuffer.filter(chunk => chunk.seq > afterSeq),
+      truncated: Boolean(firstChunk && (afterSeq < firstChunk.seq - 1 || (afterSeq < firstChunk.seq && session.oldestChunkTruncated))),
+    };
+  }
+
+  acknowledge(id: string, attachmentId: symbol, seq: number): void {
+    const session = this.terminals.get(id);
+    if (!session || session.attachmentId !== attachmentId || !Number.isSafeInteger(seq)) return;
+    session.acknowledgedSeq = Math.max(session.acknowledgedSeq, Math.min(seq, session.nextOutputSeq - 1));
   }
 
   detach(id: string, attachmentId: symbol): void {
@@ -113,16 +158,12 @@ export class TerminalManager {
 
   resize(id: string, cols: number, rows: number): void {
     const session = this.terminals.get(id);
-    if (session) {
-      session.pty.resize(cols, rows);
-    }
+    if (session) session.pty.resize(cols, rows);
   }
 
   writeTo(id: string, data: string): void {
     const session = this.terminals.get(id);
-    if (session) {
-      session.pty.write(data);
-    }
+    if (session) session.pty.write(data);
   }
 
   dispose(id: string): void {
@@ -136,13 +177,10 @@ export class TerminalManager {
   }
 
   disposeByClient(clientId: string): void {
-    const sessions = this.getByClient(clientId);
-    sessions.forEach(s => this.dispose(s.id));
+    this.getByClient(clientId).forEach(session => this.dispose(session.id));
   }
 
   disposeAll(): void {
-    for (const [id] of this.terminals) {
-      this.dispose(id);
-    }
+    for (const [id] of this.terminals) this.dispose(id);
   }
 }

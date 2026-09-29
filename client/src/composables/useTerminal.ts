@@ -8,8 +8,17 @@ import type { ITheme } from '@xterm/xterm'
 export type TerminalThemeName = 'dark' | 'light'
 export type TerminalConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 
+export interface TerminalResumeState {
+  terminalId: string
+  resumeToken: string
+  lastSeq: number
+  cwd?: string
+  shell?: string
+}
+
 const expectedSocketCloses = new WeakSet<WebSocket>()
 const reconnectDelays = [0, 1_000, 2_000, 5_000, 10_000, 30_000]
+const RESUME_STORAGE_PREFIX = 'pi-cloud-terminals:'
 
 const terminalFontFamily = [
   // Prefer Nerd Font variants for shell prompts that use Powerline/private-use glyphs,
@@ -31,23 +40,49 @@ const terminalFontFamily = [
 ].join(', ')
 
 const terminalThemes: Record<TerminalThemeName, ITheme> = {
-  dark: {
-    background: '#1e1e2e',
-    foreground: '#cdd6f4',
-    cursor: '#f5e0dc',
-    selectionBackground: '#45475a',
-  },
-  light: {
-    background: '#ffffff',
-    foreground: '#1a1a2e',
-    cursor: '#4a6cf7',
-    selectionBackground: '#d8defd',
-  },
+  dark: { background: '#1e1e2e', foreground: '#cdd6f4', cursor: '#f5e0dc', selectionBackground: '#45475a' },
+  light: { background: '#ffffff', foreground: '#1a1a2e', cursor: '#4a6cf7', selectionBackground: '#d8defd' },
 }
 
 function currentTerminalTheme(): TerminalThemeName {
   if (typeof document === 'undefined') return 'dark'
   return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+}
+
+function readResumeStates(clientId: string): TerminalResumeState[] {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(`${RESUME_STORAGE_PREFIX}${clientId}`) || '[]')
+    if (!Array.isArray(value)) return []
+    return value.filter((state): state is TerminalResumeState =>
+      typeof state?.terminalId === 'string' &&
+      typeof state?.resumeToken === 'string' &&
+      Number.isSafeInteger(state?.lastSeq) && state.lastSeq >= 0,
+    )
+  } catch {
+    return []
+  }
+}
+
+function writeResumeState(clientId: string, state: TerminalResumeState): void {
+  try {
+    const states = readResumeStates(clientId).filter(item => item.terminalId !== state.terminalId)
+    states.push(state)
+    sessionStorage.setItem(`${RESUME_STORAGE_PREFIX}${clientId}`, JSON.stringify(states))
+  } catch {
+    // Reconnection still works in memory when browser storage is unavailable.
+  }
+}
+
+function removeResumeState(clientId: string, terminalId: string): void {
+  try {
+    const states = readResumeStates(clientId).filter(item => item.terminalId !== terminalId)
+    if (states.length) sessionStorage.setItem(`${RESUME_STORAGE_PREFIX}${clientId}`, JSON.stringify(states))
+    else sessionStorage.removeItem(`${RESUME_STORAGE_PREFIX}${clientId}`)
+  } catch {}
+}
+
+export function getResumableTerminals(clientId: string): TerminalResumeState[] {
+  return readResumeStates(clientId)
 }
 
 export function applyTerminalTheme(instance: TerminalInstance, theme: TerminalThemeName) {
@@ -66,19 +101,26 @@ export interface TerminalInstance {
   reconnectAttempt: number
   reconnectNow: (() => void) | null
   disposalUrl: string | null
+  resumeToken: string | null
+  lastOutputSeq: number
+  receivedOutputSeq: number
+  clientId: string | null
+  cwd?: string
+  shell?: string
+  terminated: boolean
 }
 
-/** Create a single terminal instance bound to a container element. */
-export function createTerminalInstance(): TerminalInstance {
-  const terminalId = ref<string>()
+/** Create a terminal instance, optionally restoring a detached server PTY. */
+export function createTerminalInstance(resume?: TerminalResumeState): TerminalInstance {
+  const terminalId = ref<string | undefined>(resume?.terminalId)
   const terminal = new Terminal({
     theme: terminalThemes[currentTerminalTheme()],
     fontSize: 14,
     fontFamily: terminalFontFamily,
     fontWeight: 400,
     cursorBlink: true,
+    disableStdin: true,
   })
-
   const fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
 
@@ -94,6 +136,14 @@ export function createTerminalInstance(): TerminalInstance {
     reconnectAttempt: 0,
     reconnectNow: null,
     disposalUrl: null,
+    resumeToken: resume?.resumeToken ?? null,
+    // A refreshed page has a new xterm screen, so replay the retained buffer from its start.
+    lastOutputSeq: 0,
+    receivedOutputSeq: 0,
+    clientId: null,
+    cwd: resume?.cwd,
+    shell: resume?.shell,
+    terminated: false,
   }
 }
 
@@ -120,6 +170,9 @@ export function connectTerminal(
   onDisconnect?: () => void,
   onConnectionState?: (state: TerminalConnectionState) => void,
 ) {
+  instance.clientId = clientId
+  instance.cwd = instance.cwd ?? cwd
+  instance.terminated = false
   if (instance.socket) {
     expectedSocketCloses.add(instance.socket)
     instance.socket.close()
@@ -129,24 +182,38 @@ export function connectTerminal(
   instance.reconnectTimer = null
   instance.reconnectAttempt = 0
 
+  const persistResumeState = () => {
+    if (instance.terminated || !instance.terminalId.value || !instance.resumeToken) return
+    writeResumeState(clientId, {
+      terminalId: instance.terminalId.value,
+      resumeToken: instance.resumeToken,
+      lastSeq: instance.lastOutputSeq,
+      cwd: instance.cwd,
+      shell: instance.shell,
+    })
+  }
+
   const setConnectionState = (state: TerminalConnectionState) => {
     instance.connectionState.value = state
+    instance.terminal.options.disableStdin = state !== 'connected'
     onConnectionState?.(state)
   }
 
   const openSocket = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const params = new URLSearchParams({ clientId })
-    if (cwd) params.set('cwd', cwd)
-    if (instance.terminalId.value) params.set('terminalId', instance.terminalId.value)
+    if (instance.cwd) params.set('cwd', instance.cwd)
+    params.set('lastSeq', String(instance.lastOutputSeq))
+    if (instance.terminalId.value && instance.resumeToken) {
+      params.set('terminalId', instance.terminalId.value)
+      params.set('resumeToken', instance.resumeToken)
+    }
 
     setConnectionState(instance.terminalId.value ? 'reconnecting' : 'connecting')
     const socket = new WebSocket(`${protocol}://${window.location.host}/ws/terminal?${params}`)
     instance.socket = socket
 
-    socket.onopen = () => {
-      console.log('[Terminal] Connected')
-    }
+    socket.onopen = () => console.log('[Terminal] Connected')
 
     socket.onmessage = (event) => {
       let message: any
@@ -159,13 +226,22 @@ export function connectTerminal(
 
       switch (message.type) {
         case 'created':
-        case 'reattached':
+        case 'reattached': {
           instance.terminalId.value = message.terminalId
-          const disposalParams = new URLSearchParams({ clientId, terminalId: message.terminalId })
+          instance.resumeToken = message.resumeToken
+          const shell = message.shell || instance.shell || 'bash'
+          instance.shell = shell
+          const disposalParams = new URLSearchParams({
+            clientId,
+            terminalId: message.terminalId,
+            resumeToken: message.resumeToken,
+            lastSeq: String(instance.lastOutputSeq),
+          })
           instance.disposalUrl = `${protocol}://${window.location.host}/ws/terminal?${disposalParams}`
           instance.reconnectAttempt = 0
+          persistResumeState()
           setConnectionState('connected')
-          onCreated?.(message.terminalId, message.shell || 'bash')
+          onCreated?.(message.terminalId, shell)
           instance.fitAddon.fit()
           if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({
@@ -176,11 +252,27 @@ export function connectTerminal(
             }))
           }
           break
-        case 'output':
-          instance.terminal.write(message.data)
+        }
+        case 'output': {
+          const seq = Number(message.seq)
+          if (!Number.isSafeInteger(seq) || seq <= instance.receivedOutputSeq || typeof message.data !== 'string') break
+          instance.receivedOutputSeq = seq
+          instance.terminal.write(message.data, () => {
+            instance.lastOutputSeq = Math.max(instance.lastOutputSeq, seq)
+            persistResumeState()
+            if (socket.readyState === WebSocket.OPEN && instance.terminalId.value) {
+              socket.send(JSON.stringify({ type: 'ack', terminalId: instance.terminalId.value, seq: instance.lastOutputSeq }))
+            }
+          })
+          break
+        }
+        case 'output_truncated':
+          instance.terminal.write('\r\n[Output while disconnected was truncated.]\r\n')
           break
         case 'exit':
+          instance.terminated = true
           instance.terminal.write(`\r\nProcess exited with code ${message.exitCode}\r\n`)
+          if (instance.terminalId.value) removeResumeState(clientId, instance.terminalId.value)
           onExit?.(message.terminalId, message.exitCode)
           break
         case 'error':
@@ -189,9 +281,7 @@ export function connectTerminal(
       }
     }
 
-    socket.onerror = (error) => {
-      console.error('[Terminal] WebSocket error', error)
-    }
+    socket.onerror = (error) => console.error('[Terminal] WebSocket error', error)
 
     socket.onclose = (event) => {
       const expectedClose = expectedSocketCloses.has(socket)
@@ -201,12 +291,14 @@ export function connectTerminal(
 
       onDisconnect?.()
       if (event.code === 4404) {
+        if (instance.terminalId.value) removeResumeState(clientId, instance.terminalId.value)
         setConnectionState('disconnected')
         return
       }
 
       setConnectionState('reconnecting')
-      const delay = reconnectDelays[Math.min(instance.reconnectAttempt, reconnectDelays.length - 1)]
+      const baseDelay = reconnectDelays[Math.min(instance.reconnectAttempt, reconnectDelays.length - 1)]
+      const delay = baseDelay === 0 ? 0 : Math.round(baseDelay * (0.8 + Math.random() * 0.4))
       instance.reconnectAttempt += 1
       instance.reconnectTimer = setTimeout(() => {
         instance.reconnectTimer = null
@@ -228,11 +320,11 @@ export function connectTerminal(
   }
 
   // Handlers refer to instance.socket so they continue to work after reattachment.
-  instance.disposables.forEach(d => d.dispose())
+  instance.disposables.forEach(disposable => disposable.dispose())
   instance.disposables = [
     instance.terminal.onData((data) => {
       const socket = instance.socket
-      if (socket?.readyState === WebSocket.OPEN && instance.terminalId.value) {
+      if (instance.connectionState.value === 'connected' && socket?.readyState === WebSocket.OPEN && instance.terminalId.value) {
         socket.send(JSON.stringify({ type: 'input', terminalId: instance.terminalId.value, data }))
       }
     }),
@@ -283,15 +375,19 @@ export function disconnectTerminal(instance: TerminalInstance, terminate = false
     disposalSocket.onerror = () => disposalSocket.close()
   }
   instance.connectionState.value = 'disconnected'
+  instance.terminal.options.disableStdin = true
   if (terminate) {
+    instance.terminated = true
+    if (terminalId && instance.clientId) removeResumeState(instance.clientId, terminalId)
     instance.terminalId.value = undefined
+    instance.resumeToken = null
     instance.disposalUrl = null
   }
 }
 
 export function disposeTerminal(instance: TerminalInstance, terminate = true) {
   disconnectTerminal(instance, terminate)
-  instance.disposables.forEach(d => d.dispose())
+  instance.disposables.forEach(disposable => disposable.dispose())
   instance.disposables = []
   if (instance.isOpen) {
     instance.terminal.dispose()

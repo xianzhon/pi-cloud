@@ -1117,9 +1117,17 @@ watch(activeProjectPath, (projectPath, previousProjectPath) => {
 });
 
 // Wait for the sidebar to resolve the project before choosing the terminal cwd.
-watch([showTerminal, sidebarInitialized], ([visible, sidebarReady]) => {
-  if (visible && sidebarReady && terminalSessions.value.length === 0) {
-    void handleCreateTerminal();
+let terminalSessionsInitialized = false;
+watch([showTerminal, sidebarInitialized], async ([visible, sidebarReady]) => {
+  if (!visible || !sidebarReady || terminalSessions.value.length > 0 || terminalSessionsInitialized) return;
+
+  terminalSessionsInitialized = true;
+  const runtime = await loadTerminalRuntime();
+  const resumable = runtime.getResumableTerminals(clientId);
+  if (resumable.length) {
+    for (const state of resumable) await handleCreateTerminal(state);
+  } else {
+    await handleCreateTerminal();
   }
 });
 
@@ -2313,14 +2321,14 @@ watch(resolvedTheme, (theme) => {
   terminalInstanceMap.forEach((instance) => terminalRuntime?.applyTerminalTheme(instance, theme));
 });
 
-async function handleCreateTerminal() {
+async function handleCreateTerminal(resume?: Parameters<TerminalRuntime['createTerminalInstance']>[0]) {
   const runtime = await loadTerminalRuntime();
   if (!showTerminal.value) return;
-  const terminalId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const session = createTerminalSession(terminalId, 'shell', activeProjectPath.value);
+  const terminalId = resume?.terminalId || `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const session = createTerminalSession(terminalId, resume?.shell || 'shell', resume?.cwd || activeProjectPath.value);
 
-  // Create terminal instance
-  const instance = runtime.createTerminalInstance();
+  // Create terminal instance, restoring its server identity after a page refresh when available.
+  const instance = runtime.createTerminalInstance(resume);
   runtime.applyTerminalTheme(instance, resolvedTheme.value);
   terminalInstanceMap.set(terminalId, instance);
 

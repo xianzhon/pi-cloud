@@ -5,22 +5,40 @@ import { getRequestContext, getSessionFromRequest } from '../auth/request.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
 
 const HEARTBEAT_INTERVAL_MS = 25_000;
+const MAX_SOCKET_BUFFER_BYTES = 1_000_000;
 
 export async function terminalWebSocket(app: FastifyInstance) {
   const terminalManager = app.services.terminals;
   app.get('/ws/terminal', { websocket: true }, async (socket, req) => {
-    const { clientId, cwd, terminalId: requestedTerminalId } = req.query as {
+    const {
+      clientId,
+      cwd,
+      terminalId: requestedTerminalId,
+      resumeToken,
+      lastSeq: rawLastSeq,
+    } = req.query as {
       clientId?: string;
       cwd?: string;
       terminalId?: string;
+      resumeToken?: string;
+      lastSeq?: string;
     };
+    const lastSeq = Number.isSafeInteger(Number(rawLastSeq)) && Number(rawLastSeq) >= 0 ? Number(rawLastSeq) : 0;
 
-    const safeSend = (message: object) => {
-      if (socket.readyState !== 1) return;
+    const safeSend = (message: object): boolean => {
+      if (socket.readyState !== 1) return false;
+      if (socket.bufferedAmount > MAX_SOCKET_BUFFER_BYTES) {
+        req.log.warn({ bufferedAmount: socket.bufferedAmount }, 'Closing slow terminal WebSocket client');
+        socket.terminate();
+        return false;
+      }
       try {
         socket.send(JSON.stringify(message));
+        return true;
       } catch (error) {
         req.log.warn({ err: error }, 'Terminal WebSocket send failed');
+        socket.terminate();
+        return false;
       }
     };
 
@@ -52,7 +70,9 @@ export async function terminalWebSocket(app: FastifyInstance) {
     let resolvedCwd: string | undefined;
 
     if (requestedTerminalId) {
-      const existingTerminal = terminalManager.attach(requestedTerminalId, clientId, session.username, attachmentId);
+      const existingTerminal = resumeToken
+        ? terminalManager.attach(requestedTerminalId, resumeToken, clientId, session.username, attachmentId)
+        : undefined;
       if (!existingTerminal) {
         safeSend({ type: 'error', message: 'Terminal is no longer available' });
         socket.close(4404, 'Terminal not found');
@@ -80,30 +100,40 @@ export async function terminalWebSocket(app: FastifyInstance) {
       metadata: { terminalId, ...(resolvedCwd ? { cwd: resolvedCwd } : {}) },
     });
 
-    const bufferedOutput = terminalManager.setOutputHandler(terminalId, attachmentId, (data) => {
-      safeSend({ type: 'output', terminalId, data });
-    });
-    if (bufferedOutput) safeSend({ type: 'output', terminalId, data: bufferedOutput });
-
-    const exitDisposable = terminal.pty.onExit(({ exitCode }) => {
-      if (terminal.attachmentId === attachmentId) {
-        safeSend({ type: 'exit', terminalId, exitCode });
-      }
-    });
-
     safeSend({
       type: requestedTerminalId ? 'reattached' : 'created',
       terminalId,
+      resumeToken: terminal.resumeToken,
       shell: terminal.shell,
     });
 
+    const replay = terminalManager.setOutputHandler(terminalId, attachmentId, lastSeq, (chunk) => {
+      safeSend({ type: 'output', terminalId, ...chunk });
+    });
+    if (replay?.truncated) safeSend({ type: 'output_truncated', terminalId });
+    for (const chunk of replay?.chunks ?? []) safeSend({ type: 'output', terminalId, ...chunk });
+
+    const exitDisposable = terminal.pty.onExit(({ exitCode }) => {
+      if (terminal.attachmentId === attachmentId) safeSend({ type: 'exit', terminalId, exitCode });
+    });
+
+    let receivedPong = true;
+    socket.on('pong', () => {
+      receivedPong = true;
+    });
     const heartbeat = setInterval(() => {
-      if (socket.readyState === 1) {
-        try {
-          socket.ping();
-        } catch (error) {
-          req.log.warn({ err: error }, 'Terminal WebSocket ping failed');
-        }
+      if (socket.readyState !== 1) return;
+      if (!receivedPong) {
+        req.log.warn({ terminalId }, 'Terminating unresponsive terminal WebSocket');
+        socket.terminate();
+        return;
+      }
+      receivedPong = false;
+      try {
+        socket.ping();
+      } catch (error) {
+        req.log.warn({ err: error }, 'Terminal WebSocket ping failed');
+        socket.terminate();
       }
     }, HEARTBEAT_INTERVAL_MS);
     heartbeat.unref();
@@ -125,10 +155,13 @@ export async function terminalWebSocket(app: FastifyInstance) {
               terminalManager.resize(terminalId, message.cols, message.rows);
             }
             break;
-          case 'dispose':
-            if (message.terminalId === terminalId) {
-              terminalManager.dispose(terminalId);
+          case 'ack':
+            if (message.terminalId === terminalId && Number.isSafeInteger(message.seq)) {
+              terminalManager.acknowledge(terminalId, attachmentId, message.seq);
             }
+            break;
+          case 'dispose':
+            if (message.terminalId === terminalId) terminalManager.dispose(terminalId);
             break;
         }
       } catch (error) {

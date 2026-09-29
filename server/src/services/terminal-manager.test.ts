@@ -69,11 +69,18 @@ describe('TerminalManager', () => {
     manager.detach(terminal.id, firstAttachment);
     const onData = vi.mocked(terminal.pty.onData).mock.calls[0][0];
     onData('output while offline');
-    expect(manager.attach(terminal.id, 'client-1', 'other-user', Symbol('invalid'))).toBeUndefined();
+    expect(manager.attach(terminal.id, terminal.resumeToken, 'client-1', 'other-user', Symbol('invalid'))).toBeUndefined();
+    expect(manager.attach(terminal.id, 'wrong-token', 'client-1', 'me', Symbol('invalid'))).toBeUndefined();
 
     const secondAttachment = Symbol('second');
-    expect(manager.attach(terminal.id, 'client-1', 'me', secondAttachment)).toBe(terminal);
-    expect(manager.setOutputHandler(terminal.id, secondAttachment, vi.fn())).toBe('output while offline');
+    expect(manager.attach(terminal.id, terminal.resumeToken, 'client-1', 'me', secondAttachment)).toBe(terminal);
+    const outputHandler = vi.fn();
+    expect(manager.setOutputHandler(terminal.id, secondAttachment, 0, outputHandler)).toEqual({
+      chunks: [{ seq: 1, data: 'output while offline' }],
+      truncated: false,
+    });
+    onData('possibly unacknowledged output');
+    expect(outputHandler).toHaveBeenCalledWith({ seq: 2, data: 'possibly unacknowledged output' });
     vi.advanceTimersByTime(1_000);
     expect(terminal.pty.kill).not.toHaveBeenCalled();
 
@@ -83,6 +90,13 @@ describe('TerminalManager', () => {
     expect(terminal.pty.kill).not.toHaveBeenCalled();
 
     manager.detach(terminal.id, secondAttachment);
+    const thirdAttachment = Symbol('third');
+    expect(manager.attach(terminal.id, terminal.resumeToken, 'client-1', 'me', thirdAttachment)).toBe(terminal);
+    expect(manager.setOutputHandler(terminal.id, thirdAttachment, 1, vi.fn())).toEqual({
+      chunks: [{ seq: 2, data: 'possibly unacknowledged output' }],
+      truncated: false,
+    });
+    manager.detach(terminal.id, thirdAttachment);
     vi.advanceTimersByTime(1_000);
     expect(terminal.pty.kill).toHaveBeenCalledOnce();
     expect(manager.get(terminal.id)).toBeUndefined();
