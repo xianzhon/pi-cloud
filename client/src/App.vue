@@ -2315,6 +2315,14 @@ async function handleOpenFileInEditor(event: Event) {
 
 // Terminal management: maps terminal_id -> TerminalInstance for cleanup
 const terminalInstanceMap = new Map<string, TerminalInstance>();
+const terminalInitTimerMap = new Map<string, ReturnType<typeof setTimeout>>();
+let appUnmounted = false;
+
+function cancelTerminalInit(terminalId: string) {
+  const timer = terminalInitTimerMap.get(terminalId);
+  if (timer) clearTimeout(timer);
+  terminalInitTimerMap.delete(terminalId);
+}
 
 watch(resolvedTheme, (theme) => {
   if (!terminalRuntime) return;
@@ -2323,7 +2331,7 @@ watch(resolvedTheme, (theme) => {
 
 async function handleCreateTerminal(resume?: Parameters<TerminalRuntime['createTerminalInstance']>[0]) {
   const runtime = await loadTerminalRuntime();
-  if (!showTerminal.value) return;
+  if (appUnmounted || !showTerminal.value) return;
   const terminalId = resume?.terminalId || `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const session = createTerminalSession(terminalId, resume?.shell || 'shell', resume?.cwd || activeProjectPath.value);
 
@@ -2332,8 +2340,20 @@ async function handleCreateTerminal(resume?: Parameters<TerminalRuntime['createT
   runtime.applyTerminalTheme(instance, resolvedTheme.value);
   terminalInstanceMap.set(terminalId, instance);
 
-  // After DOM update, open terminal in host element and connect
+  const scheduleInit = (delay: number) => {
+    const timer = setTimeout(() => {
+      if (terminalInitTimerMap.get(terminalId) !== timer) return;
+      terminalInitTimerMap.delete(terminalId);
+      checkAndInit();
+    }, delay);
+    terminalInitTimerMap.set(terminalId, timer);
+  };
+
+  // After DOM update, open terminal in its host element and connect.
   const checkAndInit = () => {
+    // A close or app teardown invalidates this asynchronous initialization attempt.
+    if (appUnmounted || terminalInstanceMap.get(terminalId) !== instance) return;
+
     if (session.hostEl) {
       runtime.openTerminal(instance, session.hostEl);
       runtime.connectTerminal(instance, clientId, session.cwd, (_termId, shell) => {
@@ -2357,14 +2377,15 @@ async function handleCreateTerminal(resume?: Parameters<TerminalRuntime['createT
         session.resizeObserver = observer;
       }
     } else {
-      // Host element not ready yet, retry
-      setTimeout(checkAndInit, 50);
+      // Host element not ready yet, retry while this terminal remains open.
+      scheduleInit(50);
     }
   };
-  setTimeout(checkAndInit, 100);
+  scheduleInit(100);
 }
 
 function handleCloseTerminal(terminalId: string) {
+  cancelTerminalInit(terminalId);
   const instance = terminalInstanceMap.get(terminalId);
   if (instance) {
     terminalRuntime?.disposeTerminal(instance);
@@ -2455,6 +2476,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  appUnmounted = true;
+  terminalInitTimerMap.forEach(timer => clearTimeout(timer));
+  terminalInitTimerMap.clear();
   window.removeEventListener('keydown', handleEditorToggleKeydown, true);
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('refresh-sessions', handleSessionsRefresh);

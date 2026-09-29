@@ -69,13 +69,25 @@ const deletePreset = vi.fn(async () => {});
 const {
   editorOpenFile,
   terminalCreateInstance,
+  terminalOpen,
+  terminalConnect,
+  terminalDispose,
   getResumableTerminals,
   submitExternalPrompt,
   heavyModuleLoads,
 } = vi.hoisted(() => ({
   editorOpenFile: vi.fn(),
   terminalCreateInstance: vi.fn(() => ({ terminal: { options: {} } })),
-  getResumableTerminals: vi.fn(() => []),
+  terminalOpen: vi.fn(),
+  terminalConnect: vi.fn(),
+  terminalDispose: vi.fn(),
+  getResumableTerminals: vi.fn((): Array<{
+    terminalId: string;
+    resumeToken: string;
+    lastSeq: number;
+    cwd?: string;
+    shell?: string;
+  }> => []),
   submitExternalPrompt: vi.fn(async () => true),
   heavyModuleLoads: {
     editor: 0,
@@ -186,7 +198,19 @@ vi.mock('./components/ChatPanel.vue', () => ({
 }));
 vi.mock('./components/TerminalPanel.vue', () => {
   heavyModuleLoads.terminalPanel += 1;
-  return { __esModule: true, default: { props: ['visible', 'mode'], template: '<div class="terminal-panel-stub" :data-visible="String(visible)" :data-mode="mode" />' } };
+  return {
+    __esModule: true,
+    default: {
+      props: ['visible', 'mode', 'sessions'],
+      emits: ['setHostRef', 'closeTerminal'],
+      template: `
+        <div class="terminal-panel-stub" :data-visible="String(visible)" :data-mode="mode">
+          <button class="terminal-attach-host" @click="$emit('setHostRef', sessions?.[0]?.terminal_id, $event.currentTarget)" />
+          <button class="terminal-close" @click="$emit('closeTerminal', sessions?.[0]?.terminal_id)" />
+        </div>
+      `,
+    },
+  };
 });
 vi.mock('./components/EditorPanel.vue', () => ({
   __esModule: true,
@@ -272,11 +296,11 @@ vi.mock('./composables/useTerminal', () => {
   return {
     createTerminalInstance: terminalCreateInstance,
     getResumableTerminals,
-    openTerminal: vi.fn(),
+    openTerminal: terminalOpen,
     fitTerminal: vi.fn(),
-    connectTerminal: vi.fn(),
+    connectTerminal: terminalConnect,
     disconnectTerminal: vi.fn(),
-    disposeTerminal: vi.fn(),
+    disposeTerminal: terminalDispose,
     retryTerminal: vi.fn(),
     applyTerminalTheme: vi.fn(),
   };
@@ -312,6 +336,9 @@ describe('App routing', () => {
     deletePreset.mockClear();
     editorOpenFile.mockClear();
     terminalCreateInstance.mockClear();
+    terminalOpen.mockClear();
+    terminalConnect.mockClear();
+    terminalDispose.mockClear();
     getResumableTerminals.mockReset();
     getResumableTerminals.mockReturnValue([]);
     memorySetContext.mockClear();
@@ -458,6 +485,53 @@ describe('App routing', () => {
     await wrapper.get('.sidebar-initialize-terminal').trigger('click');
     await flushPromises();
     expect(terminalCreateInstance).toHaveBeenCalledOnce();
+  });
+
+  it('cancels terminal initialization when the tab closes before its host is initialized', async () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem('pi-cloud-workspace-state-v1', JSON.stringify({
+      showEditor: false,
+      showTaskInbox: false,
+      editorMaximized: false,
+      terminalVisible: true,
+      terminalMode: 'docked',
+      terminalPreviousMode: 'docked',
+    }));
+    getResumableTerminals.mockReturnValue([{
+      terminalId: 'term-resume',
+      resumeToken: 'resume-token',
+      lastSeq: 0,
+      cwd: '/workspace',
+      shell: 'bash',
+    }]);
+
+    const SessionSidebarStub = defineComponent({
+      emits: ['initialized', 'projectPathChanged'],
+      setup(_props, { emit }) {
+        return () => h('button', {
+          class: 'sidebar-initialize-terminal',
+          onClick: () => {
+            emit('projectPathChanged', '/workspace', { initial: true });
+            emit('initialized');
+          },
+        });
+      },
+    });
+    const wrapper = mount(App, {
+      global: { stubs: { SessionSidebar: SessionSidebarStub } },
+    });
+    await flushPromises();
+    await wrapper.get('.sidebar-initialize-terminal').trigger('click');
+    await flushPromises();
+    await wrapper.get('.terminal-attach-host').trigger('click');
+    await wrapper.get('.terminal-close').trigger('click');
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(terminalDispose).toHaveBeenCalledOnce();
+    expect(terminalOpen).not.toHaveBeenCalled();
+    expect(terminalConnect).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('restores the persisted workspace and active editor item', async () => {
