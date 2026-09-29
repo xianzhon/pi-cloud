@@ -36,14 +36,21 @@
             </nav>
           </aside>
 
-          <main class="settings-body">
+          <main class="settings-body" :class="{ 'settings-body--wide': activeSection === 'prompts' }">
             <header class="settings-body-header">
               <div>
                 <h3>{{ sectionHeading }}</h3>
               </div>
             </header>
 
-            <div ref="settingsContent" class="settings-content" :class="{ 'settings-content--preferences': activeSection === 'general' || activeSection === 'chat' }">
+            <div
+              ref="settingsContent"
+              class="settings-content"
+              :class="{
+                'settings-content--preferences': activeSection === 'general' || activeSection === 'chat',
+                'settings-content--prompts': activeSection === 'prompts',
+              }"
+            >
               <template v-if="activeSection === 'general'">
                 <section class="settings-card theme-settings" aria-labelledby="theme-settings-title">
                   <div class="settings-card-copy">
@@ -1847,6 +1854,10 @@ const emit = defineEmits<{
   letter-spacing: -0.025em;
 }
 
+.settings-body--wide .settings-body-header {
+  padding-inline: max(2rem, calc((100% - 72rem) / 2 + 2rem));
+}
+
 .settings-content {
   min-height: 0;
   flex: 1;
@@ -1858,6 +1869,11 @@ const emit = defineEmits<{
   margin-inline: auto;
   padding: 2rem;
   box-sizing: border-box;
+}
+
+.settings-content--prompts {
+  max-width: 72rem;
+  overflow-y: hidden;
 }
 
 .settings-card {
@@ -2591,6 +2607,12 @@ const emit = defineEmits<{
   border: 0;
 }
 
+@media (max-width: 1180px) {
+  .settings-content--prompts {
+    overflow-y: auto;
+  }
+}
+
 @media (max-width: 900px) {
   .settings-dialog {
     grid-template-columns: 1fr;
@@ -2673,7 +2695,8 @@ const emit = defineEmits<{
     display: none;
   }
 
-  .settings-body-header {
+  .settings-body-header,
+  .settings-body--wide .settings-body-header {
     padding: 1.25rem 1rem 1rem;
   }
 
