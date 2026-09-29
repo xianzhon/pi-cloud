@@ -23,7 +23,8 @@ export async function terminalWebSocket(app: FastifyInstance) {
       resumeToken?: string;
       lastSeq?: string;
     };
-    const lastSeq = Number.isSafeInteger(Number(rawLastSeq)) && Number(rawLastSeq) >= 0 ? Number(rawLastSeq) : 0;
+    const parsedLastSeq = Number(rawLastSeq);
+    const lastSeq = Number.isSafeInteger(parsedLastSeq) && parsedLastSeq >= 0 ? parsedLastSeq : 0;
 
     const safeSend = (message: object): boolean => {
       if (socket.readyState !== 1) return false;

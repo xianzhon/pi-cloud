@@ -83,7 +83,7 @@
           class="terminal-connection-status"
           role="status"
         >
-          <span>{{ session.connection_state === 'connecting' ? t('components.terminalPanel.connecting') : session.connection_state === 'reconnecting' ? t('components.terminalPanel.reconnecting') : t('components.terminalPanel.disconnected') }}</span>
+          <span>{{ connectionStatusLabel(session.connection_state) }}</span>
           <button
             v-if="session.connection_state !== 'connecting'"
             type="button"
@@ -143,6 +143,12 @@ const emit = defineEmits<{
   startMove: [event: MouseEvent]
   startResize: [event: MouseEvent, direction: string]
 }>()
+
+function connectionStatusLabel(state: TerminalSession['connection_state']): string {
+  if (state === 'connecting') return t('components.terminalPanel.connecting')
+  if (state === 'reconnecting') return t('components.terminalPanel.reconnecting')
+  return t('components.terminalPanel.disconnected')
+}
 
 // ── Panel classes & style ────────────────────────────────────────────────────
 

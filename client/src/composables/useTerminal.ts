@@ -49,6 +49,19 @@ function currentTerminalTheme(): TerminalThemeName {
   return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
 }
 
+function clearReconnectTimer(instance: TerminalInstance): void {
+  if (instance.reconnectTimer) clearTimeout(instance.reconnectTimer)
+  instance.reconnectTimer = null
+}
+
+function closeTerminalSocket(instance: TerminalInstance): void {
+  if (!instance.socket) return
+
+  expectedSocketCloses.add(instance.socket)
+  instance.socket.close()
+  instance.socket = null
+}
+
 function readResumeStates(clientId: string): TerminalResumeState[] {
   try {
     const value = JSON.parse(sessionStorage.getItem(`${RESUME_STORAGE_PREFIX}${clientId}`) || '[]')
@@ -173,13 +186,8 @@ export function connectTerminal(
   instance.clientId = clientId
   instance.cwd = instance.cwd ?? cwd
   instance.terminated = false
-  if (instance.socket) {
-    expectedSocketCloses.add(instance.socket)
-    instance.socket.close()
-    instance.socket = null
-  }
-  if (instance.reconnectTimer) clearTimeout(instance.reconnectTimer)
-  instance.reconnectTimer = null
+  closeTerminalSocket(instance)
+  clearReconnectTimer(instance)
   instance.reconnectAttempt = 0
 
   const persistResumeState = () => {
@@ -308,14 +316,9 @@ export function connectTerminal(
   }
 
   instance.reconnectNow = () => {
-    if (instance.reconnectTimer) clearTimeout(instance.reconnectTimer)
-    instance.reconnectTimer = null
+    clearReconnectTimer(instance)
     instance.reconnectAttempt = 0
-    if (instance.socket) {
-      expectedSocketCloses.add(instance.socket)
-      instance.socket.close()
-      instance.socket = null
-    }
+    closeTerminalSocket(instance)
     openSocket()
   }
 
@@ -345,19 +348,15 @@ export function retryTerminal(instance: TerminalInstance) {
 
 /** Disconnect the socket. Set terminate for an explicit user close. */
 export function disconnectTerminal(instance: TerminalInstance, terminate = false) {
-  if (instance.reconnectTimer) clearTimeout(instance.reconnectTimer)
-  instance.reconnectTimer = null
+  clearReconnectTimer(instance)
   instance.reconnectNow = null
 
   const terminalId = instance.terminalId.value
   if (instance.socket) {
-    const socket = instance.socket
-    expectedSocketCloses.add(socket)
-    if (terminate && socket.readyState === WebSocket.OPEN && terminalId) {
-      socket.send(JSON.stringify({ type: 'dispose', terminalId }))
+    if (terminate && instance.socket.readyState === WebSocket.OPEN && terminalId) {
+      instance.socket.send(JSON.stringify({ type: 'dispose', terminalId }))
     }
-    socket.close()
-    instance.socket = null
+    closeTerminalSocket(instance)
   } else if (terminate && terminalId && instance.disposalUrl) {
     // Reattach briefly so Close remains destructive even while the main socket is offline.
     const disposalSocket = new WebSocket(instance.disposalUrl)

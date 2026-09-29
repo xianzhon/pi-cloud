@@ -30,7 +30,7 @@ interface TerminalSession {
   nextOutputSeq: number;
   acknowledgedSeq: number;
   oldestChunkTruncated: boolean;
-  dataDisposable: pty.IDisposable;
+  dataDisposable: pty.IDisposable | null;
 }
 
 export class TerminalManager {
@@ -69,7 +69,7 @@ export class TerminalManager {
       nextOutputSeq: 1,
       acknowledgedSeq: 0,
       oldestChunkTruncated: false,
-      dataDisposable: { dispose() {} },
+      dataDisposable: null,
     };
     session.dataDisposable = ptyProcess.onData((data) => {
       const chunk = { seq: session.nextOutputSeq++, data };
@@ -94,7 +94,7 @@ export class TerminalManager {
     this.terminals.set(id, session);
     ptyProcess.onExit(() => {
       if (session.disconnectTimer) clearTimeout(session.disconnectTimer);
-      session.dataDisposable.dispose();
+      session.dataDisposable?.dispose();
       this.terminals.delete(id);
     });
 
@@ -168,12 +168,12 @@ export class TerminalManager {
 
   dispose(id: string): void {
     const session = this.terminals.get(id);
-    if (session) {
-      if (session.disconnectTimer) clearTimeout(session.disconnectTimer);
-      session.dataDisposable.dispose();
-      this.terminals.delete(id);
-      session.pty.kill();
-    }
+    if (!session) return;
+
+    if (session.disconnectTimer) clearTimeout(session.disconnectTimer);
+    session.dataDisposable?.dispose();
+    this.terminals.delete(id);
+    session.pty.kill();
   }
 
   disposeByClient(clientId: string): void {
