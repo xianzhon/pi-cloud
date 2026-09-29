@@ -2,7 +2,7 @@
 <template>
   <LoginView v-if="!loading && !isAuthenticated" />
   <div v-else-if="loading && !isAuthenticated" class="app-loading">{{ t('app.loading') }}</div>
-  <div v-else class="app">
+  <div v-else class="app" :class="{ 'settings-page': showSettings }">
     <!-- Mobile sidebar backdrop -->
     <div
       v-if="showMobileSidebar"
@@ -510,9 +510,8 @@
     />
     <ToastHost />
 
-    <LazySettingsDialog
-      v-if="settingsFeatureLoaded"
-      :visible="showSettings"
+    <LazySettingsPage
+      v-if="showSettings"
       :client-id="clientId"
       :project-path="activeProjectPath"
       :totp-enabled="user?.totpEnabled || false"
@@ -649,7 +648,7 @@ const loadEditorPanel = () => (editorPanelPromise ??= importEditorPanel());
 const LazyEditorPanel = defineAsyncComponent(loadEditorPanel);
 const LazyGitChangesView = defineAsyncComponent(() => import('./components/GitChangesView.vue').then((module) => module.default));
 const LazyGitHistoryView = defineAsyncComponent(() => import('./components/GitHistoryView.vue').then((module) => module.default));
-const LazySettingsDialog = defineAsyncComponent(() => import('./components/SettingsDialog.vue').then((module) => module.default));
+const LazySettingsPage = defineAsyncComponent(() => import('./components/SettingsPage.vue').then((module) => module.default));
 const LazyMemoryCenter = defineAsyncComponent(() => import('./components/MemoryCenter.vue').then((module) => module.default));
 const LazyTaskInboxPanel = defineAsyncComponent(() => import('./components/TaskInboxPanel.vue').then((module) => module.default));
 const LazyTerminalPanel = defineAsyncComponent(() => import('./components/TerminalPanel.vue').then((module) => module.default));
@@ -1059,7 +1058,6 @@ const handlePreloadError = createPreloadErrorHandler(() => {
 const showSearch = ref(false);
 const showCommandCenter = ref(false);
 const showSettings = ref(false);
-const settingsFeatureLoaded = ref(false);
 const gitSettingsSaving = ref(false);
 const gitSaveSuccessTick = ref(0);
 const gatewaySettingsSaving = ref(false);
@@ -1136,9 +1134,6 @@ watch(showEditor, (visible) => {
 }, { flush: 'sync' });
 watch(showMemoryCenter, (visible) => {
   if (visible) memoryFeatureLoaded.value = true;
-}, { flush: 'sync' });
-watch(showSettings, (visible) => {
-  if (visible) settingsFeatureLoaded.value = true;
 }, { flush: 'sync' });
 
 watch(tabTitle, (title) => {
@@ -1912,6 +1907,8 @@ function runCommandCenterAction(id: string): void {
 }
 
 async function openSettings() {
+  if (showSettings.value) return;
+  showCommandCenter.value = false;
   await Promise.all([loadSkills(clientId, selectedProjectPath.value), loadPresets()]);
   showSettings.value = true;
 }
@@ -2472,6 +2469,10 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   color: var(--text-secondary);
+}
+
+.app.settings-page > :not(.settings-page-content):not(.toast-host) {
+  display: none !important;
 }
 
 .app {

@@ -1241,8 +1241,12 @@ export default {
       empty: '还没有自定义提示词。',
       addPrompt: '添加提示词',
       editPrompt: '编辑提示词',
+      addDescription: '为可复用的提示词添加清晰的名称和指令。',
+      editDescription: '更新所选提示词，更改将应用到所有可用位置。',
       name: '提示词名称',
+      namePlaceholder: '例如：审查此更改',
       content: '提示词内容',
+      contentPlaceholder: '输入要插入聊天输入框的指令…',
       updated: '更新于 {date}',
       save: '保存',
       saveFailed: '保存提示词失败。',
@@ -1537,7 +1541,14 @@ export default {
   settings: {
     title: '设置',
     sectionsLabel: '设置分类',
-    close: '关闭设置',
+    chooseSection: '分类',
+    groups: {
+      workspace: '工作区',
+      tools: '工具',
+      connections: '连接',
+      account: '账户',
+    },
+    close: '返回工作区',
     sections: {
       general: '常规',
       security: '安全',

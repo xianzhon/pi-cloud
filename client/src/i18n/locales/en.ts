@@ -1241,8 +1241,12 @@ export default {
       empty: 'No user prompts yet.',
       addPrompt: 'Add prompt',
       editPrompt: 'Edit prompt',
+      addDescription: 'Give your reusable prompt a clear name and instruction.',
+      editDescription: 'Update the selected prompt. Changes apply everywhere it is available.',
       name: 'Prompt name',
+      namePlaceholder: 'For example, Review this change',
       content: 'Prompt content',
+      contentPlaceholder: 'Write the instruction to insert into the chat composer…',
       updated: 'Updated {date}',
       save: 'Save',
       saveFailed: 'Failed to save prompt.',
@@ -1537,7 +1541,14 @@ export default {
   settings: {
     title: 'Settings',
     sectionsLabel: 'Settings sections',
-    close: 'Close settings',
+    chooseSection: 'Section',
+    groups: {
+      workspace: 'Workspace',
+      tools: 'Tools',
+      connections: 'Connections',
+      account: 'Account',
+    },
+    close: 'Back to workspace',
     sections: {
       general: 'General',
       security: 'Security',

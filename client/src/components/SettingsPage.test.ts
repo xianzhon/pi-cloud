@@ -1,6 +1,6 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SettingsDialog from './SettingsDialog.vue';
+import SettingsPage from './SettingsPage.vue';
 import { setLocale } from '../i18n';
 
 enableAutoUnmount(afterEach);
@@ -54,9 +54,8 @@ const FolderPickerModalStub = {
 };
 
 function mountSettingsDialog(props = {}) {
-  return mount(SettingsDialog, {
+  return mount(SettingsPage, {
     props: {
-      visible: true,
       totpEnabled: false,
       showHintInfo: true,
       showCodeBlockLanguageHeaders: true,
@@ -68,7 +67,7 @@ function mountSettingsDialog(props = {}) {
   });
 }
 
-describe('SettingsDialog', () => {
+describe('SettingsPage', () => {
   beforeEach(() => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => {}));
   });
@@ -77,12 +76,6 @@ describe('SettingsDialog', () => {
     setLocale('en');
     vi.restoreAllMocks();
   });
-  it('does not render when hidden', () => {
-    const wrapper = mountSettingsDialog({ visible: false });
-
-    expect(wrapper.find('.settings-dialog').exists()).toBe(false);
-  });
-
   it('shows only user prompt customization for commit messages', async () => {
     const wrapper = mountSettingsDialog({ projectPath: '/workspace/pi-cloud' });
     const gitButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!;
@@ -94,7 +87,7 @@ describe('SettingsDialog', () => {
     expect(promptSettings.findAll('textarea')).toHaveLength(2);
   });
 
-  it('renders the security menu and embedded security body when visible', async () => {
+  it('renders the security menu and embedded security body', async () => {
     const wrapper = mountSettingsDialog({ totpEnabled: true });
 
     expect(wrapper.find('.settings-dialog').exists()).toBe(true);
@@ -107,13 +100,13 @@ describe('SettingsDialog', () => {
     expect(wrapper.find('.embedded-state').text()).toBe('embedded');
   });
 
-  it('emits close from close button but not backdrop click', async () => {
+  it('renders as a page and emits close from the back button', async () => {
     const wrapper = mountSettingsDialog();
 
-    await wrapper.find('.settings-backdrop').trigger('click');
-    expect(wrapper.emitted('close')).toBeUndefined();
-
-    await wrapper.find('.settings-close').trigger('click');
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(wrapper.find('.settings-page-content').exists()).toBe(true);
+    expect(wrapper.find('.settings-sidebar .settings-back').exists()).toBe(true);
+    await wrapper.find('.settings-back').trigger('click');
     expect(wrapper.emitted('close')).toHaveLength(1);
   });
 
@@ -181,9 +174,10 @@ describe('SettingsDialog', () => {
       project: { userPrompt: 'Project user' },
       effective: { userPrompt: 'Project user' },
     };
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({ ok: true, json: async () => promptConfiguration } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => promptConfiguration } as Response);
+    vi.mocked(fetch).mockImplementation((input) =>
+      String(input).startsWith('/api/git/commit-message-prompts')
+        ? Promise.resolve({ ok: true, json: async () => promptConfiguration } as Response)
+        : new Promise<Response>(() => {}));
     const wrapper = mountSettingsDialog({ projectPath: '/workspace/project-a' });
 
     const gitButton = wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!;
@@ -193,7 +187,7 @@ describe('SettingsDialog', () => {
     expect((wrapper.findAll('.commit-prompt-textarea')[1].element as HTMLTextAreaElement).value).toBe('Project user');
     await wrapper.findAll('.commit-prompt-textarea')[1].setValue('Project title only');
     await wrapper.findAll('.commit-prompt-scope')[1].find('button').trigger('click');
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith('/api/git/commit-message-prompts'))).toHaveLength(2));
 
     expect(fetch).toHaveBeenLastCalledWith('/api/git/commit-message-prompts', expect.objectContaining({
       method: 'PUT',
@@ -345,12 +339,12 @@ describe('SettingsDialog', () => {
 
     await wrapper.findAll('.settings-menu-item').find((button) => button.text().includes('Git'))!.trigger('click');
     await wrapper.find('.git-settings input').setValue('https://dirty.example.com');
-    await wrapper.find('.settings-close').trigger('click');
+    await wrapper.find('.settings-back').trigger('click');
 
     expect(wrapper.find('.confirm-modal').text()).toContain('unsaved Git');
     await wrapper.find('.confirm-modal .btn-cancel').trigger('click');
     expect(wrapper.emitted('close')).toBeUndefined();
-    await wrapper.find('.settings-close').trigger('click');
+    await wrapper.find('.settings-back').trigger('click');
     await wrapper.find('.confirm-modal .btn-confirm').trigger('click');
     expect(wrapper.emitted('close')).toHaveLength(1);
   });
