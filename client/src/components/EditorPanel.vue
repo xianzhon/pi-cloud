@@ -274,13 +274,14 @@
           @wheel.ctrl.prevent="handleSlideWheel"
           @wheel.meta.prevent="handleSlideWheel"
         >
-          <div class="slide-content" :class="`slide-theme-${slideTheme}`" :style="{ zoom: isSlideFullscreen ? 1 : slideZoom }">
+          <div class="slide-content" :class="`slide-theme-${slideTheme}`" :style="slideContentStyle">
             <div
               ref="markdownPreviewEl"
               class="markdown-preview slide-body"
               v-html="activeSlides[slideIndex]?.html"
               @click="handleMarkdownPreviewClick"
             ></div>
+            <span v-if="slidePaginate" class="slide-page-number">{{ slideIndex + 1 }}</span>
           </div>
           <div v-if="showSpeakerNotes && activeSlides[slideIndex]?.notes" class="slide-notes">
             <strong>{{ t('components.editorPanel.speakerNotes') }}</strong>
@@ -917,14 +918,17 @@ function setActivePreviewScale(scale: number): void {
   }
 }
 const activeIsMarkdown = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMarkdownFile(activeTab.value));
-const activeIsSlides = computed(() => {
+const activeSlideMetadata = computed(() => {
   void previewVersion.value;
-  return activeIsMarkdown.value && !!activeTab.value && /\.slides\.md$/i.test(activeTab.value)
-    && parseFrontmatter(models.get(activeTab.value)?.getValue() || '')?.metadata.some(({ key, value }) => key === 'marp' && value === 'true') === true;
+  const source = activeTab.value ? models.get(activeTab.value)?.getValue() || '' : '';
+  return Object.fromEntries((parseFrontmatter(source)?.metadata || [])
+    .map(({ key, value }) => [key.toLowerCase(), value.replace(/^(['"])(.*)\1$/, '$2')]));
 });
+const activeIsSlides = computed(() => activeIsMarkdown.value && !!activeTab.value && /\.slides\.md$/i.test(activeTab.value)
+  && activeSlideMetadata.value.marp?.toLowerCase() === 'true');
 const slideIndex = ref(0);
 const slideZoom = ref(1);
-const slideTheme = ref('default');
+const slideThemeOverride = ref<string>();
 const showSpeakerNotes = ref(false);
 const isSlideFullscreen = ref(false);
 const slideThemeOptions = computed<CustomSelectOption[]>(() => [
@@ -932,6 +936,27 @@ const slideThemeOptions = computed<CustomSelectOption[]>(() => [
   { value: 'dark', label: t('components.editorPanel.slideThemeDark') },
   { value: 'warm', label: t('components.editorPanel.slideThemeWarm') },
 ]);
+const slideTheme = computed({
+  get: () => {
+    if (slideThemeOverride.value) return slideThemeOverride.value;
+    const metadataTheme = activeSlideMetadata.value.theme?.toLowerCase();
+    return slideThemeOptions.value.some(option => option.value === metadataTheme) ? metadataTheme : 'default';
+  },
+  set: value => { slideThemeOverride.value = value; },
+});
+const slideSize = computed(() => {
+  const match = activeSlideMetadata.value.size?.match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
+  const width = Number(match?.[1] || 16);
+  const height = Number(match?.[2] || 9);
+  return width > 0 && height > 0 ? { width, height } : { width: 16, height: 9 };
+});
+const slidePaginate = computed(() => activeSlideMetadata.value.paginate?.toLowerCase() === 'true');
+const slideContentStyle = computed(() => ({
+  zoom: isSlideFullscreen.value ? 1 : slideZoom.value,
+  aspectRatio: `${slideSize.value.width} / ${slideSize.value.height}`,
+  '--slide-ratio': String(slideSize.value.width / slideSize.value.height),
+}));
+watch(activeTab, () => { slideThemeOverride.value = undefined; });
 watch([activeTab, previewVersion], () => { slideIndex.value = 0; });
 function changeSlideZoom(amount: number): void {
   slideZoom.value = Math.max(0.5, Math.min(2, Math.round((slideZoom.value + amount) * 10) / 10));
@@ -4069,8 +4094,8 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 }
 
 .slides-preview:fullscreen .slide-content {
-  width: min(100vw, calc(100vh * 16 / 9));
-  height: min(100vh, calc(100vw * 9 / 16));
+  width: min(100vw, calc(100vh * var(--slide-ratio)));
+  height: min(100vh, calc(100vw / var(--slide-ratio)));
   box-shadow: none;
 }
 
@@ -4080,6 +4105,7 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 }
 
 .slide-content {
+  position: relative;
   flex: none;
   width: min(960px, 100%);
   aspect-ratio: 16 / 9;
@@ -4110,6 +4136,14 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 .slide-notes { width: min(960px, 100%); max-height: 25%; overflow: auto; color: var(--text-primary); }
 .slide-notes strong { display: block; margin-bottom: 0.25rem; }
 .slide-notes :deep(p) { margin: 0.25rem 0; }
+
+.slide-page-number {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1rem;
+  font-size: 0.75em;
+  opacity: 0.65;
+}
 
 .slide-content :deep(h1:first-child) { margin-top: 0; }
 .slide-theme-default :deep(blockquote) { color: #555; }

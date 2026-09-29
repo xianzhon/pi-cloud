@@ -439,9 +439,9 @@ describe('EditorPanel', () => {
     expect(preview.find('p').text()).toContain('Safe text');
   });
 
-  it('previews Marp slides with notes, images, navigation, zoom and themes without splitting fenced rules', async () => {
+  it('previews Marp slides with metadata, notes, images, navigation and zoom without splitting fenced rules', async () => {
     const markdown = [
-      '---', 'marp: true', 'theme: default', '---',
+      '---', 'marp: true', 'theme: warm', 'size: 4:3', 'paginate: true', '---',
       '# First slide', '', '![Figure](./figure.png)', '', '<!-- Speaker notes -->', '', '---',
       '# Second slide', '', '```md', '---', '```',
     ].join('\n');
@@ -462,6 +462,9 @@ describe('EditorPanel', () => {
     await flushPromises();
 
     expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
+    expect(wrapper.find('.slide-content').classes()).toContain('slide-theme-warm');
+    expect((wrapper.find('.slide-content').element as HTMLElement).style.aspectRatio).toBe('4 / 3');
+    expect(wrapper.find('.slide-page-number').text()).toBe('1');
     expect(wrapper.find('.slide-content').html()).not.toContain('Speaker notes');
     expect(wrapper.find('.slide-notes').exists()).toBe(false);
     const notesToggle = wrapper.get('[aria-label="Show speaker notes"]');
@@ -480,6 +483,7 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.slide-content').classes()).toContain('slide-theme-dark');
     await wrapper.get('.slides-preview').trigger('keydown', { key: 'ArrowRight' });
     expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');
+    expect(wrapper.find('.slide-page-number').text()).toBe('2');
     expect(wrapper.find('.slide-notes').exists()).toBe(false);
     await wrapper.get('.slides-preview').trigger('keydown', { key: 'ArrowUp' });
     expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
