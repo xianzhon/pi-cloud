@@ -47,7 +47,7 @@ vi.mock('./composables/useSkillPresets', () => ({
 }));
 
 vi.mock('./components/LoginView.vue', () => ({ default: { template: '<div class="login-stub">login</div>' } }));
-vi.mock('./components/SettingsDialog.vue', () => ({
+vi.mock('./components/SettingsPage.vue', () => ({
   __esModule: true,
   default: {
     props: ['visible', 'totpEnabled'],
@@ -92,17 +92,16 @@ describe('App auth gate', () => {
     wrapper.unmount();
   });
 
-  it('shows settings dialog when authenticated user opens settings', async () => {
+  it('shows the settings page when an authenticated user opens settings', async () => {
     authenticated.value = true;
     loading.value = false;
     user.value = { username: 'me', totpEnabled: false };
 
     const wrapper = mount(App, { global: { stubs: { Teleport: true } } });
-    await wrapper.find('[aria-label="Settings"]').trigger('click');
+    await wrapper.find('[data-rail-action="settings"]').trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('.settings-stub').exists()).toBe(true);
-    expect(wrapper.find('.settings-stub').text()).toContain('disabled');
+    expect(wrapper.find('.app').classes()).toContain('settings-page');
     wrapper.unmount();
   });
 
