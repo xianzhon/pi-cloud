@@ -146,6 +146,24 @@ describe('git hosting helpers', () => {
     expect(client.createPullRequest).toHaveBeenCalledWith(expect.objectContaining({ title: 'Default title', body: 'Default body' }));
   });
 
+  it('uses the saved GitHub proxy when pushing a GitHub PR branch', async () => {
+    const githubProxyEnv = vi.fn(() => ({ HTTPS_PROXY: 'http://proxy.example' }));
+    const service = new GitHostingService(githubProxyEnv);
+    const preview = {
+      cwd: '/repo', provider: 'github' as const, owner: 'o', repo: 'r', remoteName: 'origin', targetBranch: 'main', currentBranch: 'feature',
+      sourceBranch: 'feature', generatedBranch: false, hasChanges: false, files: [],
+      commitMessage: '', title: 'Title', body: 'Body', stateToken: 'same',
+    };
+    vi.spyOn(service, 'previewPr').mockResolvedValue(preview);
+    const git = vi.spyOn(service as unknown as { git: (cwd: string, args: string[], env?: NodeJS.ProcessEnv) => Promise<string> }, 'git').mockResolvedValue('');
+    const client = { createPullRequest: vi.fn().mockResolvedValue({ number: 1, url: 'u' }) };
+
+    await service.createPr({ preview, title: '', body: '', commitMessage: '', serverUrl: 'https://git.example.com', client: client as any });
+
+    expect(githubProxyEnv).toHaveBeenCalledOnce();
+    expect(git).toHaveBeenCalledWith('/repo', ['push', '-u', 'origin', 'feature'], expect.objectContaining({ HTTPS_PROXY: 'http://proxy.example' }));
+  });
+
   it('rejects creation when repository state changed', async () => {
     const service = new GitHostingService();
     const preview = { cwd: '/repo', targetBranch: 'main', stateToken: 'old' } as any;

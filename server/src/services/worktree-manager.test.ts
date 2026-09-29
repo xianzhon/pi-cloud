@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-type ExecFile = (file: string, args: string[], options?: { cwd?: string }) => Promise<{ stdout: string; stderr: string }>;
+type ExecFile = (file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }) => Promise<{ stdout: string; stderr: string }>;
 const execFile = vi.fn<ExecFile>();
 
 function manager() {
@@ -103,12 +103,19 @@ describe('WorktreeManager', () => {
     expect(execFile).toHaveBeenCalledWith('git', ['worktree', 'remove', '--force', '/repo/.app-worktrees/feature-a'], { cwd: '/repo/app' });
   });
 
-  it('pulls the base repository with fast-forward only', async () => {
+  it('pulls the base repository with fast-forward only through the GitHub proxy', async () => {
     execFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
+    const worktrees = new WorktreeManager({
+      execFile,
+      githubProxyEnv: () => ({ HTTPS_PROXY: 'http://proxy.example' }),
+    });
 
-    await manager().pullFastForwardOnly('/repo/app');
+    await worktrees.pullFastForwardOnly('/repo/app');
 
-    expect(execFile).toHaveBeenCalledWith('git', ['pull', '--ff-only'], { cwd: '/repo/app' });
+    expect(execFile).toHaveBeenCalledWith('git', ['pull', '--ff-only'], {
+      cwd: '/repo/app',
+      env: expect.objectContaining({ HTTPS_PROXY: 'http://proxy.example' }),
+    });
   });
 
   it('returns no copy-file candidates when the path is not in a git project', async () => {

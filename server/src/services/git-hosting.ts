@@ -72,6 +72,8 @@ function stripGit(repo: string): string {
 }
 
 export class GitHostingService {
+  constructor(private readonly githubProxyEnv: () => Record<string, string> = () => ({})) {}
+
   async previewIssue(input: { cwd: string; serverUrl: string; githubServerUrl?: string; title: string; prompt: string; notes: string }): Promise<IssuePreview> {
     const root = await this.root(input.cwd);
     const remote = await this.resolveRemote(root, input.serverUrl, input.githubServerUrl);
@@ -132,7 +134,11 @@ export class GitHostingService {
       await this.git(preview.cwd, ['add', '-A']);
       await this.git(preview.cwd, ['commit', '-m', input.commitMessage || preview.commitMessage]);
     }
-    await this.git(preview.cwd, ['push', '-u', preview.remoteName, preview.sourceBranch]);
+    await this.git(
+      preview.cwd,
+      ['push', '-u', preview.remoteName, preview.sourceBranch],
+      preview.provider === 'github' ? { ...process.env, ...this.githubProxyEnv() } : undefined,
+    );
     return input.client.createPullRequest({
       owner: preview.owner,
       repo: preview.repo,
@@ -182,9 +188,9 @@ export class GitHostingService {
     ].join('\n');
   }
 
-  private async git(cwd: string, args: string[]): Promise<string> {
+  private async git(cwd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
     try {
-      const { stdout } = await execFileAsync('git', args, { cwd, maxBuffer });
+      const { stdout } = await execFileAsync('git', args, { cwd, maxBuffer, env });
       return stdout.trim();
     } catch (error) {
       if ((error as { code?: string })?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'

@@ -288,8 +288,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     }),
     gitCloneParentPath: () => getApplicationSetting(db, 'ui.gitCloneParentPath') || path.join(os.homedir(), 'git', 'github'),
   });
-  const gitHosting = new GitHostingService();
-  const worktreeManager = new WorktreeManager();
+  const gitHosting = new GitHostingService(() => githubSettings.proxyEnv());
+  const worktreeManager = new WorktreeManager({ githubProxyEnv: () => githubSettings.proxyEnv() });
   const terminalManager = new TerminalManager();
   const projectTaskStarter = new ProjectTaskStarter({
     store: projectTaskStore,
@@ -408,6 +408,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     activityStore: sessionActivityStore,
     commitMessagePrompts: new CommitMessagePromptStore(db),
     changeReasonPrompts: new ChangeReasonPromptStore(db),
+    githubProxyEnv: () => githubSettings.proxyEnv(),
   });
   await app.register(slashCommandRoutes, { prefix: '/api/slash-commands' });
   await app.register(changelogRoutes, { prefix: '/api/changelog' });

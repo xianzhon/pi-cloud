@@ -7,7 +7,8 @@ import type { CreateSessionWorktreeOptions, ResolvedWorktreeSession } from '../t
 const defaultExecFile = promisify(execFileCallback);
 
 interface WorktreeManagerOptions {
-  execFile?: (file: string, args: string[], options?: { cwd?: string }) => Promise<{ stdout: string; stderr: string }>;
+  execFile?: (file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }) => Promise<{ stdout: string; stderr: string }>;
+  githubProxyEnv?: () => Record<string, string>;
 }
 
 interface GitWorktreeEntry {
@@ -22,7 +23,7 @@ export type GitStatus =
 export class WorktreeManager {
   private readonly execFile: NonNullable<WorktreeManagerOptions['execFile']>;
 
-  constructor(options: WorktreeManagerOptions = {}) {
+  constructor(private readonly options: WorktreeManagerOptions = {}) {
     this.execFile = options.execFile || defaultExecFile;
   }
 
@@ -102,7 +103,10 @@ export class WorktreeManager {
   }
 
   async pullFastForwardOnly(baseRepoPath: string): Promise<void> {
-    await this.execFile('git', ['pull', '--ff-only'], { cwd: baseRepoPath });
+    await this.execFile('git', ['pull', '--ff-only'], {
+      cwd: baseRepoPath,
+      env: { ...process.env, ...this.options.githubProxyEnv?.() },
+    });
   }
 
   private async getRepoRoot(projectPath: string): Promise<string> {

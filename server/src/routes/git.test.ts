@@ -714,6 +714,43 @@ describe('gitRoutes status and diff', () => {
   });
 });
 
+describe('gitRoutes network proxy', () => {
+  it.each(['push', 'pull'])('uses the saved GitHub proxy for git %s', async (command) => {
+    const cwd = await createRepo();
+    const githubProxyEnv = vi.fn(() => ({ HTTPS_PROXY: 'http://proxy.example' }));
+    const app = await buildApp({ githubProxyEnv });
+    try {
+      await app.inject({ method: 'POST', url: `/api/git/${command}`, payload: { cwd } });
+      expect(githubProxyEnv).toHaveBeenCalledOnce();
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the saved GitHub proxy for switch-branch pull --ff-only', async () => {
+    const cwd = await createRepo();
+    const githubProxyEnv = vi.fn(() => ({ HTTPS_PROXY: 'http://proxy.example' }));
+    const app = await buildApp({ githubProxyEnv });
+    try {
+      const originalBranch = await git(cwd, 'branch', '--show-current');
+      await git(cwd, 'checkout', '-b', 'target');
+      await git(cwd, 'checkout', originalBranch);
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/git/switch-branch',
+        payload: { cwd, name: 'target', pull: true },
+      });
+
+      expect(githubProxyEnv).toHaveBeenCalledOnce();
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('gitRoutes branch', () => {
   beforeEach(() => {
     vi.clearAllMocks();

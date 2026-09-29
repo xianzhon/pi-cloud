@@ -122,11 +122,12 @@ async function isGitRepository(cwd: string) {
   }
 }
 
-async function runGitWithOutput(cwd: string, args: string[]) {
+async function runGitWithOutput(cwd: string, args: string[], env?: NodeJS.ProcessEnv) {
   try {
     const { stdout, stderr } = await execFileAsync('git', args, {
       cwd,
       maxBuffer: MAX_GIT_OUTPUT_BYTES,
+      env,
     });
     return joinGitOutput(stdout, stderr);
   } catch (error) {
@@ -714,6 +715,7 @@ export interface GitRouteOptions {
   activityStore?: Pick<SessionActivityStore, 'recordCommit' | 'recordBranchDeleted'>;
   commitMessagePrompts?: Pick<CommitMessagePromptStore, 'get' | 'save'>;
   changeReasonPrompts?: Pick<ChangeReasonPromptStore, 'get' | 'save'>;
+  githubProxyEnv?: () => Record<string, string>;
 }
 
 function recordCommitActivity(options: GitRouteOptions, input: Parameters<SessionActivityStore['recordCommit']>[0]) {
@@ -1028,7 +1030,9 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
       const originalBranch = (await runGit(resolvedCwd, ['branch', '--show-current'])).trim();
       const originalCommit = originalBranch ? (await runGit(resolvedCwd, ['rev-parse', originalBranch])).trim() : '';
       const checkoutOutput = await runGit(resolvedCwd, ['checkout', name]);
-      const pullOutput = body.pull ? await runGit(resolvedCwd, ['pull', '--ff-only']) : '';
+      const pullOutput = body.pull
+        ? await runGitWithOutput(resolvedCwd, ['pull', '--ff-only'], { ...process.env, ...options.githubProxyEnv?.() })
+        : '';
       const shouldDeleteOriginal = body.deleteOriginal !== false && Boolean(originalBranch) && originalBranch !== name;
       const deleteOutput = shouldDeleteOriginal ? await runGit(resolvedCwd, ['branch', '-D', '--', originalBranch]) : '';
 
@@ -1060,7 +1064,7 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
       const resolvedCwd = await resolveGitCwd(body.cwd);
 
       try {
-        const output = await runGitWithOutput(resolvedCwd, [command]);
+        const output = await runGitWithOutput(resolvedCwd, [command], { ...process.env, ...options.githubProxyEnv?.() });
         return { cwd: resolvedCwd, output };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : `Failed to run git ${command}`;
