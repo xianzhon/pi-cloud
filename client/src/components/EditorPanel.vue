@@ -265,14 +265,16 @@
       >
         <div
           v-if="activeIsSlides"
+          ref="slidesPreviewEl"
           class="slides-preview"
           tabindex="0"
           :aria-label="t('components.editorPanel.slidePreview')"
+          @click="handleSlidePreviewClick"
           @keydown="handleSlideKeydown"
           @wheel.ctrl.prevent="handleSlideWheel"
           @wheel.meta.prevent="handleSlideWheel"
         >
-          <div class="slide-content" :class="`slide-theme-${slideTheme}`" :style="{ zoom: slideZoom }">
+          <div class="slide-content" :class="`slide-theme-${slideTheme}`" :style="{ zoom: isSlideFullscreen ? 1 : slideZoom }">
             <div
               ref="markdownPreviewEl"
               class="markdown-preview slide-body"
@@ -280,7 +282,7 @@
               @click="handleMarkdownPreviewClick"
             ></div>
           </div>
-          <div v-if="activeSlides[slideIndex]?.notes" class="slide-notes">
+          <div v-if="showSpeakerNotes && activeSlides[slideIndex]?.notes" class="slide-notes">
             <strong>{{ t('components.editorPanel.speakerNotes') }}</strong>
             <div v-html="activeSlides[slideIndex].notes"></div>
           </div>
@@ -291,13 +293,31 @@
             <button type="button" :aria-label="t('components.editorPanel.zoomOut')" :disabled="slideZoom <= 0.5" @click="changeSlideZoom(-0.1)">−</button>
             <span>{{ Math.round(slideZoom * 100) }}%</span>
             <button type="button" :aria-label="t('components.editorPanel.zoomIn')" :disabled="slideZoom >= 2" @click="changeSlideZoom(0.1)">+</button>
-            <label>{{ t('components.editorPanel.slideTheme') }}
-              <select v-model="slideTheme">
-                <option value="default">{{ t('components.editorPanel.slideThemeDefault') }}</option>
-                <option value="dark">{{ t('components.editorPanel.slideThemeDark') }}</option>
-                <option value="warm">{{ t('components.editorPanel.slideThemeWarm') }}</option>
-              </select>
-            </label>
+            <CustomSelect
+              class="slide-theme-select"
+              :model-value="slideTheme"
+              :options="slideThemeOptions"
+              :aria-label="t('components.editorPanel.slideTheme')"
+              @update:model-value="slideTheme = $event"
+            />
+            <button
+              type="button"
+              :class="{ active: showSpeakerNotes }"
+              :aria-label="t(showSpeakerNotes ? 'components.editorPanel.hideSpeakerNotes' : 'components.editorPanel.showSpeakerNotes')"
+              :aria-pressed="showSpeakerNotes"
+              @click="showSpeakerNotes = !showSpeakerNotes"
+            >
+              <PhEyeSlash v-if="showSpeakerNotes" :size="16" />
+              <PhEye v-else :size="16" />
+            </button>
+            <button
+              type="button"
+              :aria-label="t(isSlideFullscreen ? 'components.editorPanel.exitSlideFullscreen' : 'components.editorPanel.enterSlideFullscreen')"
+              @click="toggleSlideFullscreen"
+            >
+              <PhCornersIn v-if="isSlideFullscreen" :size="16" />
+              <PhCornersOut v-else :size="16" />
+            </button>
           </div>
         </div>
         <div
@@ -536,7 +556,7 @@ import { i18n } from '../i18n';
 import { computed, ref, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from 'vue';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/basic-languages/monaco.contribution';
-import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple, PhGraph, PhImage } from '@phosphor-icons/vue';
+import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple, PhGraph, PhImage, PhCornersIn, PhCornersOut } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import { useTheme } from '../composables/useTheme';
@@ -738,6 +758,7 @@ const editorContainer = ref<HTMLElement>();
 const splitDiffContainer = ref<HTMLElement>();
 const markdownPreviewEl = ref<HTMLElement>();
 const markdownPreviewLayoutEl = ref<HTMLElement>();
+const slidesPreviewEl = ref<HTMLElement>();
 const fileTreeEl = ref<HTMLElement>();
 const defaultEditorWidth = '50vw';
 const editorWidthPx = ref<number>();
@@ -900,6 +921,13 @@ const activeIsSlides = computed(() => {
 const slideIndex = ref(0);
 const slideZoom = ref(1);
 const slideTheme = ref('default');
+const showSpeakerNotes = ref(false);
+const isSlideFullscreen = ref(false);
+const slideThemeOptions = computed<CustomSelectOption[]>(() => [
+  { value: 'default', label: t('components.editorPanel.slideThemeDefault') },
+  { value: 'dark', label: t('components.editorPanel.slideThemeDark') },
+  { value: 'warm', label: t('components.editorPanel.slideThemeWarm') },
+]);
 watch([activeTab, previewVersion], () => { slideIndex.value = 0; });
 function changeSlideZoom(amount: number): void {
   slideZoom.value = Math.max(0.5, Math.min(2, Math.round((slideZoom.value + amount) * 10) / 10));
@@ -913,6 +941,17 @@ function handleSlideKeydown(event: KeyboardEvent): void {
   else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') slideIndex.value = Math.min(activeSlides.value.length - 1, slideIndex.value + 1);
   else return;
   event.preventDefault();
+}
+function handleSlidePreviewClick(event: MouseEvent): void {
+  if (!isSlideFullscreen.value || (event.target as HTMLElement).closest('a, button, input, textarea, [role="listbox"]')) return;
+  slideIndex.value = Math.min(activeSlides.value.length - 1, slideIndex.value + 1);
+}
+async function toggleSlideFullscreen(): Promise<void> {
+  if (document.fullscreenElement === slidesPreviewEl.value) await document.exitFullscreen();
+  else await slidesPreviewEl.value?.requestFullscreen();
+}
+function updateSlideFullscreenState(): void {
+  isSlideFullscreen.value = document.fullscreenElement === slidesPreviewEl.value;
 }
 const activeIsDiagram = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isDiagramFile(activeTab.value));
 const activeIsMhtml = computed(() => !!activeTab.value && activeTabInfo.value?.kind === 'text' && isMhtmlFile(activeTab.value));
@@ -3401,6 +3440,7 @@ onMounted(() => {
   window.addEventListener('click', closeContextMenus);
   window.addEventListener('pointerdown', hideTabTooltip);
   window.addEventListener('blur', hideTabTooltip);
+  document.addEventListener('fullscreenchange', updateSlideFullscreenState);
 });
 
 function handleOpenFile(event: Event) {
@@ -3442,6 +3482,7 @@ onUnmounted(() => {
   window.removeEventListener('click', closeContextMenus);
   window.removeEventListener('pointerdown', hideTabTooltip);
   window.removeEventListener('blur', hideTabTooltip);
+  document.removeEventListener('fullscreenchange', updateSlideFullscreenState);
 });
 
 defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
@@ -4015,6 +4056,25 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   outline-offset: -3px;
 }
 
+.slides-preview:fullscreen {
+  justify-content: center;
+  overflow: hidden;
+  padding: 0;
+  background: #000;
+  cursor: pointer;
+}
+
+.slides-preview:fullscreen .slide-content {
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  box-shadow: none;
+}
+
+.slides-preview:fullscreen .slide-notes,
+.slides-preview:fullscreen .slide-navigation {
+  display: none;
+}
+
 .slide-content {
   flex: none;
   width: min(960px, 100%);
@@ -4058,6 +4118,10 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
   align-items: center;
   gap: 1rem;
   color: var(--text-primary);
+}
+
+.slide-theme-select {
+  width: 8rem;
 }
 
 .slide-navigation button {

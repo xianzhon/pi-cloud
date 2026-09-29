@@ -463,6 +463,8 @@ describe('EditorPanel', () => {
 
     expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
     expect(wrapper.find('.slide-content').html()).not.toContain('Speaker notes');
+    expect(wrapper.find('.slide-notes').exists()).toBe(false);
+    await wrapper.get('[aria-label="Show speaker notes"]').trigger('click');
     expect(wrapper.find('.slide-notes').text()).toContain('Speaker notes');
     expect(wrapper.find('.slide-content img').attributes('src')).toBe('/api/files/raw?path=%2Fproject%2Ffigure.png');
     expect(wrapper.find('.slide-navigation').text()).toContain('1 / 2');
@@ -470,7 +472,8 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.slide-navigation').text()).toContain('110%');
     await wrapper.get('[aria-label="Zoom out"]').trigger('click');
     expect(wrapper.find('.slide-navigation').text()).toContain('100%');
-    await wrapper.get('.slide-navigation select').setValue('dark');
+    await wrapper.get('[aria-label="Theme"]').trigger('click');
+    await wrapper.findAll('.custom-select-option').find(option => option.text() === 'Dark')!.trigger('click');
     expect(wrapper.find('.slide-content').classes()).toContain('slide-theme-dark');
     await wrapper.get('.slides-preview').trigger('keydown', { key: 'ArrowRight' });
     expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');
@@ -484,6 +487,21 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.slide-navigation').text()).toContain('2 / 2');
     await wrapper.get('[aria-label="Previous slide"]').trigger('click');
     expect(wrapper.find('.slide-content h1').text()).toBe('First slide');
+
+    const slidesPreview = wrapper.get('.slides-preview').element as HTMLElement;
+    Object.defineProperty(slidesPreview, 'requestFullscreen', {
+      configurable: true,
+      value: vi.fn(async () => {
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: slidesPreview });
+        document.dispatchEvent(new Event('fullscreenchange'));
+      }),
+    });
+    await wrapper.get('[aria-label="Present fullscreen"]').trigger('click');
+    expect(wrapper.find('[aria-label="Exit fullscreen presentation"]').exists()).toBe(true);
+    await wrapper.get('.slide-content').trigger('click');
+    expect(wrapper.find('.slide-content h1').text()).toBe('Second slide');
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+    document.dispatchEvent(new Event('fullscreenchange'));
   });
 
   it('exports the rendered markdown preview as PDF', async () => {
