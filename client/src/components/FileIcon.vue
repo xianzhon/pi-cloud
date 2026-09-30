@@ -23,6 +23,7 @@ import {
   PhFileJsx,
   PhFileMd,
   PhFilePdf,
+  PhFilePpt,
   PhFilePy,
   PhFileRs,
   PhFileSql,
@@ -32,6 +33,7 @@ import {
   PhFileTsx,
   PhFileVideo,
   PhFileVue,
+  PhGraph,
   PhPackage,
 } from '@phosphor-icons/vue';
 
@@ -72,6 +74,7 @@ const fileIcons: Record<string, IconDefinition> = {
   jsonc: { component: PhFileCode, color: 'data' },
   md: { component: PhFileMd, color: 'docs' },
   mdx: { component: PhFileMd, color: 'docs' },
+  mmd: { component: PhGraph, color: 'data' },
   pdf: { component: PhFilePdf, color: 'warning' },
   py: { component: PhFilePy, color: 'javascript' },
   rs: { component: PhFileRs, color: 'archive' },
@@ -93,6 +96,7 @@ const packageFiles = new Set(['package.json', 'package-lock.json', 'pnpm-lock.ya
 function resolveFileIcon(name: string): IconDefinition {
   const lowerName = name.toLowerCase();
   if (packageFiles.has(lowerName)) return { component: PhPackage, color: 'archive', weight: 'fill' };
+  if (lowerName.endsWith('.slides.md')) return { component: PhFilePpt, color: 'warning' };
   if (lowerName === 'dockerfile' || lowerName === 'makefile') return { component: PhFileCode, color: 'web' };
   if (lowerName.startsWith('.git') || lowerName.startsWith('tsconfig')) return { component: PhFileIni, color: 'config' };
 

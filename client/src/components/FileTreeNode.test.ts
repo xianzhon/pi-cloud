@@ -1,7 +1,17 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import FileTreeNode, { type TreeNodeData } from './FileTreeNode.vue';
-import { PhFolder, PhFolderOpen, PhFileTs, PhFileVue, PhPackage, PhCaretRight, PhCaretDown } from '@phosphor-icons/vue';
+import {
+  PhCaretDown,
+  PhCaretRight,
+  PhFilePpt,
+  PhFileTs,
+  PhFileVue,
+  PhFolder,
+  PhFolderOpen,
+  PhGraph,
+  PhPackage,
+} from '@phosphor-icons/vue';
 
 const tree: TreeNodeData = {
   name: 'src',
@@ -70,6 +80,8 @@ describe('FileTreeNode', () => {
     ['main.ts', PhFileTs, 'icon-typescript'],
     ['App.vue', PhFileVue, 'icon-vue'],
     ['package.json', PhPackage, 'icon-archive'],
+    ['diagram.mmd', PhGraph, 'icon-data'],
+    ['deck.slides.md', PhFilePpt, 'icon-warning'],
   ])('renders a file-type icon for %s', (name, icon, colorClass) => {
     const file: TreeNodeData = { name, path: `/project/${name}`, type: 'file' };
     const wrapper = mount(FileTreeNode, {
