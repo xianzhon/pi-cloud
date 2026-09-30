@@ -142,8 +142,13 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 }
 ```
+
+Pi Cloud sends WebSocket ping frames every 25 seconds and closes connections that stop answering. Keep reverse-proxy, CDN, and load-balancer WebSocket idle timeouts comfortably above that interval.
+
+Terminal processes remain available for reconnection for 10 minutes after a network interruption or page refresh. They still run inside the Pi Cloud server process and do not survive a server restart; use `tmux` or `screen` for commands that must survive deployments or crashes.
 
 Set `PI_CLOUD_TRUST_PROXY=true` and `PI_CLOUD_COOKIE_SECURE=true` in `.env` when behind HTTPS.

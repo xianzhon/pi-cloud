@@ -357,6 +357,7 @@
         @close="showTerminal = false"
         @switch="switchTerminalSession"
         @closeTerminal="handleCloseTerminal"
+        @retryTerminal="handleRetryTerminal"
         @setHostRef="setTerminalHostRef"
         @updateHeight="updateTerminalHeight"
         @startMove="startTerminalMove"
@@ -1116,9 +1117,17 @@ watch(activeProjectPath, (projectPath, previousProjectPath) => {
 });
 
 // Wait for the sidebar to resolve the project before choosing the terminal cwd.
-watch([showTerminal, sidebarInitialized], ([visible, sidebarReady]) => {
-  if (visible && sidebarReady && terminalSessions.value.length === 0) {
-    void handleCreateTerminal();
+let terminalSessionsInitialized = false;
+watch([showTerminal, sidebarInitialized], async ([visible, sidebarReady]) => {
+  if (!visible || !sidebarReady || terminalSessions.value.length > 0 || terminalSessionsInitialized) return;
+
+  terminalSessionsInitialized = true;
+  const runtime = await loadTerminalRuntime();
+  const resumable = runtime.getResumableTerminals(clientId);
+  if (resumable.length) {
+    for (const state of resumable) await handleCreateTerminal(state);
+  } else {
+    await handleCreateTerminal();
   }
 });
 
@@ -2306,38 +2315,57 @@ async function handleOpenFileInEditor(event: Event) {
 
 // Terminal management: maps terminal_id -> TerminalInstance for cleanup
 const terminalInstanceMap = new Map<string, TerminalInstance>();
+const terminalInitTimerMap = new Map<string, ReturnType<typeof setTimeout>>();
+let appUnmounted = false;
+
+function cancelTerminalInit(terminalId: string) {
+  const timer = terminalInitTimerMap.get(terminalId);
+  if (timer) clearTimeout(timer);
+  terminalInitTimerMap.delete(terminalId);
+}
 
 watch(resolvedTheme, (theme) => {
   if (!terminalRuntime) return;
   terminalInstanceMap.forEach((instance) => terminalRuntime?.applyTerminalTheme(instance, theme));
 });
 
-async function handleCreateTerminal() {
+async function handleCreateTerminal(resume?: Parameters<TerminalRuntime['createTerminalInstance']>[0]) {
   const runtime = await loadTerminalRuntime();
-  if (!showTerminal.value) return;
-  const terminalId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const session = createTerminalSession(terminalId, 'shell', activeProjectPath.value);
+  if (appUnmounted || !showTerminal.value) return;
+  const terminalId = resume?.terminalId || `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const session = createTerminalSession(terminalId, resume?.shell || 'shell', resume?.cwd || activeProjectPath.value);
 
-  // Create terminal instance
-  const instance = runtime.createTerminalInstance();
+  // Create terminal instance, restoring its server identity after a page refresh when available.
+  const instance = runtime.createTerminalInstance(resume, clientId);
   runtime.applyTerminalTheme(instance, resolvedTheme.value);
   terminalInstanceMap.set(terminalId, instance);
 
-  // After DOM update, open terminal in host element and connect
+  const scheduleInit = (delay: number) => {
+    const timer = setTimeout(() => {
+      if (terminalInitTimerMap.get(terminalId) !== timer) return;
+      terminalInitTimerMap.delete(terminalId);
+      checkAndInit();
+    }, delay);
+    terminalInitTimerMap.set(terminalId, timer);
+  };
+
+  // After DOM update, open terminal in its host element and connect.
   const checkAndInit = () => {
+    // A close or app teardown invalidates this asynchronous initialization attempt.
+    if (appUnmounted || terminalInstanceMap.get(terminalId) !== instance) return;
+
     if (session.hostEl) {
       runtime.openTerminal(instance, session.hostEl);
       runtime.connectTerminal(instance, clientId, session.cwd, (_termId, shell) => {
-        // Update the session label with the actual shell name from the server
+        // Update the session label with the actual shell name from the server.
         const s = terminalSessions.value.find(t => t.terminal_id === terminalId);
         if (s) s.label = shell;
       }, (_termId, _exitCode) => {
-        // Auto-close the tab after a short delay so the user can see the exit message
+        // Auto-close the tab after a short delay so the user can see the exit message.
         setTimeout(() => handleCloseTerminal(terminalId), 1500);
-      }, () => {
-        // The server disposes the PTY when the WebSocket closes. Remove the stale tab
-        // so the user can immediately create a fresh terminal after an idle timeout.
-        setTimeout(() => handleCloseTerminal(terminalId), 1500);
+      }, undefined, (state) => {
+        const s = terminalSessions.value.find(t => t.terminal_id === terminalId);
+        if (s) s.connection_state = state;
       });
 
       // Set up resize observer
@@ -2349,20 +2377,26 @@ async function handleCreateTerminal() {
         session.resizeObserver = observer;
       }
     } else {
-      // Host element not ready yet, retry
-      setTimeout(checkAndInit, 50);
+      // Host element not ready yet, retry while this terminal remains open.
+      scheduleInit(50);
     }
   };
-  setTimeout(checkAndInit, 100);
+  scheduleInit(100);
 }
 
 function handleCloseTerminal(terminalId: string) {
+  cancelTerminalInit(terminalId);
   const instance = terminalInstanceMap.get(terminalId);
   if (instance) {
     terminalRuntime?.disposeTerminal(instance);
     terminalInstanceMap.delete(terminalId);
   }
   removeTerminalSession(terminalId);
+}
+
+function handleRetryTerminal(terminalId: string) {
+  const instance = terminalInstanceMap.get(terminalId);
+  if (instance) terminalRuntime?.retryTerminal(instance);
 }
 
 function handleSessionsRefresh() {
@@ -2442,6 +2476,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  appUnmounted = true;
+  terminalInitTimerMap.forEach(timer => clearTimeout(timer));
+  terminalInitTimerMap.clear();
   window.removeEventListener('keydown', handleEditorToggleKeydown, true);
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('refresh-sessions', handleSessionsRefresh);
@@ -2458,7 +2495,8 @@ onUnmounted(() => {
   if (streamingTitleTimer) clearInterval(streamingTitleTimer);
   streamingTitleTimer = undefined;
   disposeAllTerminals();
-  terminalInstanceMap.forEach(instance => terminalRuntime?.disposeTerminal(instance));
+  // App teardown is a detach, not an explicit terminal close, so the PTY can be resumed.
+  terminalInstanceMap.forEach(instance => terminalRuntime?.disposeTerminal(instance, false));
   terminalInstanceMap.clear();
 });
 </script>
