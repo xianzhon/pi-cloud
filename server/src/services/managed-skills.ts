@@ -127,11 +127,11 @@ export class ManagedSkills {
     const temporary = await fs.mkdtemp(join(tmpdir(), 'pi-cloud-skill-'));
     let created = false;
     try {
-      const args = ['-c', 'core.hooksPath=/dev/null', 'clone', '--depth', '1', '--filter=blob:none', '--single-branch'];
-      if (subpath.length) args.push('--branch', parts[3]);
+      const args = ['-c', 'core.hooksPath=/dev/null', 'clone'];
+      if (subpath.length) args.push('--depth', '1', '--filter=blob:none', '--single-branch', '--branch', parts[3]);
       args.push(`https://github.com/${parts[0]}/${repo}.git`, join(temporary, 'repo'));
       try {
-        await execFileAsync('git', args, { timeout: 60_000, env: { ...process.env, ...this.githubProxyEnv(), GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' } });
+        await execFileAsync('git', args, { timeout: subpath.length ? 60_000 : undefined, env: { ...process.env, ...this.githubProxyEnv(), GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' } });
       } catch (error) {
         throw new SkillInputError(`GitHub clone failed: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -158,7 +158,11 @@ export class ManagedSkills {
       await fs.mkdir(this.root, { recursive: true });
       await fs.mkdir(destination);
       created = true;
-      await fs.cp(source, destination, { recursive: true, force: false, filter: (path) => !path.split(sep).includes('.git') });
+      await fs.cp(source, destination, {
+        recursive: true,
+        force: false,
+        filter: subpath.length ? (path) => !path.split(sep).includes('.git') : undefined,
+      });
       return name;
     } catch (error) {
       // Do not leave a partially copied skill behind.

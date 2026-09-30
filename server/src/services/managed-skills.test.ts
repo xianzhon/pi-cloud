@@ -88,7 +88,7 @@ describe('managed skills', () => {
     }
   });
 
-  it('clones a repository containing nested skills for Pi to discover recursively', async () => {
+  it('fully clones a repository containing nested skills for Pi to discover recursively', async () => {
     const { root, service } = await setup();
     const bin = join(root, 'bin');
     const fixture = join(root, 'fixture');
@@ -98,12 +98,14 @@ describe('managed skills', () => {
     await fs.writeFile(join(fixture, 'collection', 'example', 'SKILL.md'), markdown('example'));
     await fs.mkdir(join(fixture, 'collection', 'other'));
     await fs.writeFile(join(fixture, 'collection', 'other', 'SKILL.md'), markdown('Other Skill'));
-    await fs.writeFile(join(bin, 'git'), '#!/bin/sh\nfor dest; do :; done\ncp -R "$SKILL_TEST_FIXTURE" "$dest"\n', { mode: 0o755 });
+    await fs.writeFile(join(bin, 'git'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$SKILL_TEST_ARGS_FILE"\nfor dest; do :; done\ncp -R "$SKILL_TEST_FIXTURE" "$dest"\n', { mode: 0o755 });
     const originalPath = process.env.PATH;
     process.env.PATH = `${bin}:${originalPath}`;
     process.env.SKILL_TEST_FIXTURE = fixture;
+    process.env.SKILL_TEST_ARGS_FILE = join(root, 'git-args');
     try {
       expect(await service.clone('https://github.com/owner/repo')).toBe('repo');
+      expect(await fs.readFile(process.env.SKILL_TEST_ARGS_FILE, 'utf8')).not.toContain('--depth');
       expect(await service.list()).toEqual([
         { name: 'repo/collection/example', content: markdown('example') },
         { name: 'repo/collection/other', content: markdown('Other Skill') },
@@ -112,10 +114,11 @@ describe('managed skills', () => {
       expect(await fs.readFile(join(root, 'skills', 'repo', 'collection', 'example', 'SKILL.md'), 'utf8')).toBe(markdown('example') + 'Updated');
       await service.delete('repo/collection/example');
       expect(await service.list()).toEqual([{ name: 'repo/collection/other', content: markdown('Other Skill') }]);
-      await expect(fs.lstat(join(root, 'skills', 'repo', '.git'))).rejects.toThrow();
+      expect((await fs.lstat(join(root, 'skills', 'repo', '.git'))).isDirectory()).toBe(true);
     } finally {
       process.env.PATH = originalPath;
       delete process.env.SKILL_TEST_FIXTURE;
+      delete process.env.SKILL_TEST_ARGS_FILE;
     }
   });
 
