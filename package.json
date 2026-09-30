@@ -71,7 +71,7 @@
     "qrcode": "^1.5.4",
     "tar-stream": "^3.2.1",
     "typebox": "1.1.38",
-    "undici": "^8.10.0"
+    "undici": "^8.10.2"
   },
   "devDependencies": {
     "oxlint": "^1.80.0",
