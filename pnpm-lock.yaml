@@ -72,10 +72,10 @@ importers:
     dependencies:
       '@earendil-works/pi-ai':
         specifier: 0.84.2
-        version: 0.84.2(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)
+        version: 0.84.2(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)
       '@earendil-works/pi-coding-agent':
         specifier: 0.84.2
-        version: 0.84.2(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)
+        version: 0.84.2(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)
       '@fastify/cookie':
         specifier: ^11.0.2
         version: 11.0.2
@@ -209,10 +209,10 @@ importers:
     dependencies:
       '@earendil-works/pi-ai':
         specifier: 'catalog:'
-        version: 0.84.2(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)
+        version: 0.84.2(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)
       '@earendil-works/pi-coding-agent':
         specifier: 'catalog:'
-        version: 0.84.2(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)
+        version: 0.84.2(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)
       '@fastify/cookie':
         specifier: 'catalog:'
         version: 11.0.2
@@ -294,7 +294,7 @@ importers:
         version: 5.0.0(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@5.0.0)(happy-dom@20.9.0)(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       ws:
         specifier: ^8.21.3
-        version: 8.21.3
+        version: 8.22.0
 
 packages:
 
@@ -1513,6 +1513,11 @@ packages:
 
   '@volar/typescript@2.4.28':
     resolution: {integrity: sha512-Ja6yvWrbis2QtN4ClAKreeUZPVYMARDYZl9LMEv1iQ1QdepB6wn0jTRxA9MftYmYa4DQ4k/DaSZpFPUfxl8giw==}
+    peerDependencies:
+      typescript: '*'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   '@vue-macros/common@3.1.4':
     resolution: {integrity: sha512-/5Fv+6DgIcM9ajY05ZmKBv+LMX1M9A0X+IUwDRVdt67ciw8OV9bvG2r34p3RiEadlsQybjhKPRKNXDC8Bp23cw==}
@@ -3196,8 +3201,8 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  ws@8.21.3:
-    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+  ws@8.22.0:
+    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -3510,9 +3515,9 @@ snapshots:
 
   '@chevrotain/types@11.1.2': {}
 
-  '@earendil-works/pi-agent-core@0.84.3(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)':
+  '@earendil-works/pi-agent-core@0.84.3(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)':
     dependencies:
-      '@earendil-works/pi-ai': 0.84.3(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)
+      '@earendil-works/pi-ai': 0.84.3(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)
       '@earendil-works/pi-telemetry': 0.84.3
       diff: 8.0.4
       ignore: 7.0.5
@@ -3526,7 +3531,7 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.84.2(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)':
+  '@earendil-works/pi-ai@0.84.2(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@4.4.3)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
@@ -3536,7 +3541,7 @@ snapshots:
       '@smithy/node-http-handler': 4.7.3
       http-proxy-agent: 7.0.2(supports-color@7.2.0)
       https-proxy-agent: 7.0.6(supports-color@7.2.0)
-      openai: 6.40.0(ws@8.21.3)(zod@4.4.3)
+      openai: 6.40.0(ws@8.22.0)(zod@4.4.3)
       partial-json: 0.1.7
       typebox: 1.3.7
     transitivePeerDependencies:
@@ -3547,7 +3552,7 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.84.3(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)':
+  '@earendil-works/pi-ai@0.84.3(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@4.4.3)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
@@ -3556,7 +3561,7 @@ snapshots:
       '@smithy/node-http-handler': 4.7.3
       http-proxy-agent: 7.0.2(supports-color@7.2.0)
       https-proxy-agent: 7.0.6(supports-color@7.2.0)
-      openai: 6.40.0(ws@8.21.3)(zod@4.4.3)
+      openai: 6.40.0(ws@8.22.0)(zod@4.4.3)
       partial-json: 0.1.7
       typebox: 1.3.7
     transitivePeerDependencies:
@@ -3571,10 +3576,10 @@ snapshots:
     dependencies:
       '@earendil-works/pi-protocol': 0.84.3
 
-  '@earendil-works/pi-coding-agent@0.84.2(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)':
+  '@earendil-works/pi-coding-agent@0.84.2(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)':
     dependencies:
-      '@earendil-works/pi-agent-core': 0.84.3(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)
-      '@earendil-works/pi-ai': 0.84.2(supports-color@7.2.0)(ws@8.21.3)(zod@4.4.3)
+      '@earendil-works/pi-agent-core': 0.84.3(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)
+      '@earendil-works/pi-ai': 0.84.2(supports-color@7.2.0)(ws@8.22.0)(zod@4.4.3)
       '@earendil-works/pi-client': 0.84.3
       '@earendil-works/pi-protocol': 0.84.3
       '@earendil-works/pi-tui': 0.84.3
@@ -3756,7 +3761,7 @@ snapshots:
     dependencies:
       duplexify: 4.1.3
       fastify-plugin: 5.1.0
-      ws: 8.21.3
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -3766,7 +3771,7 @@ snapshots:
       google-auth-library: 10.9.0(supports-color@7.2.0)
       p-retry: 4.6.2
       protobufjs: 7.6.5
-      ws: 8.21.3
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -4429,11 +4434,13 @@ snapshots:
 
   '@volar/source-map@2.4.28': {}
 
-  '@volar/typescript@2.4.28':
+  '@volar/typescript@2.4.28(typescript@5.9.3)':
     dependencies:
       '@volar/language-core': 2.4.28
       path-browserify: 1.0.1
       vscode-uri: 3.1.0
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@vue-macros/common@3.1.4(vue@3.5.35(typescript@5.9.3))':
     dependencies:
@@ -5255,7 +5262,7 @@ snapshots:
       '@types/ws': 8.18.1
       entities: 7.0.1
       whatwg-mimetype: 3.0.0
-      ws: 8.21.3
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -5424,7 +5431,7 @@ snapshots:
 
   magic-string@0.30.21:
     dependencies:
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   magic-string@1.3.1:
     dependencies:
@@ -5531,9 +5538,9 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openai@6.40.0(ws@8.21.3)(zod@4.4.3):
+  openai@6.40.0(ws@8.22.0)(zod@4.4.3):
     optionalDependencies:
-      ws: 8.21.3
+      ws: 8.22.0
       zod: 4.4.3
 
   otplib@13.4.1:
@@ -6102,7 +6109,7 @@ snapshots:
 
   vue-tsc@2.0.29(typescript@5.9.3):
     dependencies:
-      '@volar/typescript': 2.4.28
+      '@volar/typescript': 2.4.28(typescript@5.9.3)
       '@vue/language-core': 2.0.29(typescript@5.9.3)
       semver: 7.8.1
       typescript: 5.9.3
@@ -6154,7 +6161,7 @@ snapshots:
 
   wrappy@1.0.2: {}
 
-  ws@8.21.3: {}
+  ws@8.22.0: {}
 
   y18n@4.0.3: {}
 
