@@ -12,6 +12,8 @@ import { projectHistoryFavoritesMigration } from './010-project-history-favorite
 import { projectTaskImagesMigration } from './011-project-task-images.js';
 import type { DatabaseMigration } from './migration.js';
 
+import { routinesMigration } from './012-routines.js';
+
 const migrations: DatabaseMigration[] = [
   applicationSchemaMigration,
   gatewaySchemaMigration,
@@ -24,6 +26,7 @@ const migrations: DatabaseMigration[] = [
   pinnedFilesSchemaMigration,
   projectHistoryFavoritesMigration,
   projectTaskImagesMigration,
+  routinesMigration,
 ];
 
 export function runDatabaseMigrations(db: PiCloudDatabase): void {

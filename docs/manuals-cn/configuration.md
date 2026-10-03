@@ -121,3 +121,7 @@ PI_CLOUD_TTS_FORMAT=wav
 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等提供商 API 密钥是可选的，因为服务器默认使用 Pi 智能体自身的身份验证。
 
 有关提供商特定的变量，请参阅 `.env.example`；有关消息配置，请参阅专门的[飞书](feishu-gateway.md)、[企业微信](wecom-gateway.md)和[微信](weixin-gateway.md)网关手册。
+
+## 定时例程
+
+在**设置 > 定时例程**中配置无人值守工作，无需新增环境变量，沿用现有智能体配置、凭据和允许根目录。执行权限、计划、恢复及企微通知详见[定时例程手册](routines.md)。

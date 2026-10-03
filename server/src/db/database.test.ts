@@ -48,6 +48,9 @@ describe('openPiCloudDatabase', () => {
       'project_history',
       'project_tasks',
       'review_sources',
+      'routine_deliveries',
+      'routine_runs',
+      'routines',
       'schema_migrations',
       'session_builtin_events',
       'session_pin_groups',
@@ -336,10 +339,11 @@ describe('openPiCloudDatabase', () => {
       { version: 9, name: 'pinned-files-schema' },
       { version: 10, name: 'project-history-favorites' },
       { version: 11, name: 'project-task-images' },
+      { version: 12, name: 'routines' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 11 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 12 });
     db.close();
   });
 

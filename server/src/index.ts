@@ -1,3 +1,7 @@
+import { RoutineStore } from './routines/store.js';
+import { RoutineScheduler } from './routines/scheduler.js';
+import { createRoutineExecutor } from './routines/executor.js';
+import { routineRoutes } from './routes/routines.js';
 // server/src/index.ts
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -268,6 +272,15 @@ export async function buildApp(): Promise<FastifyInstance> {
     log: app.log,
   });
   modelWindowKickoffScheduler.start();
+  const routineStore = new RoutineStore(db);
+  const routineScheduler = new RoutineScheduler({
+    store: routineStore,
+    busy: (cwd) => piSessionService.isCwdStreaming(cwd),
+    execute: createRoutineExecutor(piSessionService, routineStore),
+    send: (id, message) => notificationChannels.send(id, message),
+    log: (error) => app.log.error(error, 'Routine scheduler failed'),
+  });
+  routineScheduler.start();
   const sessionActivityStore = new SessionActivityStore(db);
   const sessionPinStore = new SessionPinStore(db);
   projectTaskStore.restoreAllStarting();
@@ -311,6 +324,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     worktreeMetadata: worktreeMetadataStore,
   });
   app.addHook('onClose', async () => {
+    await routineScheduler.stop();
     await modelWindowKickoffScheduler.stop();
     await weixinGateway.stop();
     terminalManager.disposeAll();
@@ -420,6 +434,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     notifications: notificationChannels,
     sessions: piSessionService,
   });
+  await app.register(routineRoutes, { prefix: '/api/routines', store: routineStore, scheduler: routineScheduler, sessions: piSessionService, notifications: notificationChannels });
   await app.register(chatWebSocket);
   await app.register(terminalWebSocket);
 

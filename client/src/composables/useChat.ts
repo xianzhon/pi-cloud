@@ -1,4 +1,6 @@
 // client/src/composables/useChat.ts
+import type { ChatImage } from '../types/chatImage';
+export type { ChatImage } from '../types/chatImage';
 import { computed, onUnmounted, ref } from 'vue';
 import { useWebSocket } from './useWebSocket';
 import { usePreferences } from './usePreferences';
@@ -66,14 +68,6 @@ interface MemoryRecallEventPayload extends MessageMemoryRecall {
   sessionId?: string;
 }
 
-export interface ChatImage {
-  type: 'image';
-  data: string;
-  mimeType: string;
-  name?: string;
-  size?: number;
-  path?: string;
-}
 
 interface Message {
   id: string;

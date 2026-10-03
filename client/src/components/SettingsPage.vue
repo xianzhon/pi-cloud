@@ -749,6 +749,7 @@
                 @update-prompt="forwardUpdateUserPrompt"
                 @delete-prompt="emit('deleteUserPrompt', $event)"
               />
+              <RoutinesPanel v-if="activeSection === 'routines'" :client-id="clientId" />
               <ModelWindowKickoffPanel v-if="activeSection === 'modelWindowKickoff'" :client-id="clientId" />
               <SecurityPanel v-if="activeSection === 'security'" :totp-enabled="totpEnabled" embedded @updated="emit('updated')" />
               <SkillPresetsPanel
@@ -805,6 +806,7 @@ import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
 import SkillPresetsPanel from './SkillPresetsPanel.vue';
 import ManagedSkillsPanel from './ManagedSkillsPanel.vue';
+import RoutinesPanel from './RoutinesPanel.vue';
 import ModelWindowKickoffPanel from './ModelWindowKickoffPanel.vue';
 import UserPromptsPanel from './UserPromptsPanel.vue';
 import FolderPickerModal from './FolderPickerModal.vue';
@@ -924,7 +926,7 @@ const fullscreenShortcutOptions: CustomSelectOption[] = [
   { value: 'ctrlShiftF', label: 'Ctrl+Shift+F' },
 ];
 
-type SettingsSection = 'general' | 'security' | 'chat' | 'prompts' | 'keyboard' | 'skills' | 'sharedSkills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff';
+type SettingsSection = 'general' | 'security' | 'chat' | 'prompts' | 'keyboard' | 'skills' | 'sharedSkills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff' | 'routines';
 const sectionGroups = [
   { label: 'workspace', sections: [
     { id: 'general', icon: PhSliders }, { id: 'chat', icon: PhChatCircle },
@@ -935,7 +937,7 @@ const sectionGroups = [
     { id: 'git', icon: PhGitPullRequest }, { id: 'reviewSources', icon: PhMagnifyingGlass },
   ] },
   { label: 'connections', sections: [
-    { id: 'gateway', icon: PhPaperPlaneTilt }, { id: 'modelWindowKickoff', icon: PhTimer },
+    { id: 'routines', icon: PhTimer }, { id: 'gateway', icon: PhPaperPlaneTilt }, { id: 'modelWindowKickoff', icon: PhTimer },
   ] },
   { label: 'account', sections: [{ id: 'security', icon: PhLock }] },
 ] satisfies { label: string; sections: { id: SettingsSection; icon: typeof PhSliders }[] }[];
@@ -950,6 +952,7 @@ const sectionHeadingKeys: Record<SettingsSection, string> = {
   git: 'gitHeading',
   gateway: 'gateway',
   reviewSources: 'reviewSources',
+  routines: 'routines',
   modelWindowKickoff: 'modelWindowKickoff',
 };
 const activeSection = ref<SettingsSection>('general');

@@ -1582,6 +1582,11 @@ export class PiSessionService {
     this.currentClientSession.delete(clientId);
   }
 
+  releaseClient(clientId: string): void {
+    this.disposeSession(clientId);
+    this.clientProfiles.delete(clientId);
+  }
+
   disposeAll(): void {
     for (const clientId of Array.from(this.clientSessions.keys())) {
       this.disposeSession(clientId);

@@ -10,6 +10,7 @@
         "server-db",
         "server-memory",
         "server-routes",
+        "server-routines",
         "server-services",
         "server-ws"
       ],
@@ -60,6 +61,7 @@
         "server-db",
         "server-memory",
         "server-services",
+        "server-routines",
         "server-utils"
       ],
       "owner": "REST transport"
@@ -147,6 +149,16 @@
       "roots": ["client/src/utils"],
       "requires": ["client-types"],
       "owner": "shared client utilities"
+    },
+    {
+      "id": "server-routines",
+      "roots": ["server/src/routines"],
+      "requires": [
+        "server-db",
+        "server-services",
+        "server-utils"
+      ],
+      "owner": "routine definitions, executions and delivery state"
     }
   ],
   "global": {

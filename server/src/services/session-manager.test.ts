@@ -667,6 +667,14 @@ describe('PiSessionService', () => {
     expect(saved.providers['pi-cloud-local']).toBeUndefined();
   });
 
+  it('releases the selected profile of a completed background client', async () => {
+    readdir.mockResolvedValue([{ name: 'work', isDirectory: () => true }]);
+    const service = new PiSessionService({ db });
+    await service.setClientAgentProfile('routine-run:1', 'work');
+    service.releaseClient('routine-run:1');
+    await expect(service.getClientAgentProfile('routine-run:1')).resolves.toMatchObject({ id: 'default' });
+  });
+
   it('stores selected profile per client and falls back to default', async () => {
     readdir.mockResolvedValue([
       { name: 'work', isDirectory: () => true },

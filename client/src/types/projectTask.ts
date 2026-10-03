@@ -1,5 +1,5 @@
 import type { WorktreePayload } from './sessionLaunch';
-import type { ChatImage } from '../composables/useChat';
+import type { ChatImage } from './chatImage';
 
 export type ProjectTaskStatus = 'waiting' | 'starting' | 'started' | 'completed';
 export type ProjectTaskVisibleStatus = Exclude<ProjectTaskStatus, 'starting'>;

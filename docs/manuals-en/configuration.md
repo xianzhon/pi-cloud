@@ -121,3 +121,7 @@ A local MLX Audio service can be installed with Python 3.12 and `uv pip install 
 Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are optional because the server uses the Pi agent's own authentication by default.
 
 See `.env.example` for provider-specific variables and the dedicated [Feishu](feishu-gateway.md), [WeCom](wecom-gateway.md), and [WeChat](weixin-gateway.md) gateway manuals for messaging configuration.
+
+## Scheduled routines
+
+Configure unattended work in **Settings > Routines**. No additional environment variables are needed; existing agent profiles, credentials and allowed roots apply. See the [Routines Manual](routines.md) for execution permissions, schedules, recovery and WeCom notifications.
