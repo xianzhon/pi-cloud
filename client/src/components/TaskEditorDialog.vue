@@ -630,15 +630,23 @@ defineExpose({
   border: 1px solid var(--border-color);
   border-radius: 7px;
   background: var(--bg-secondary);
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
 }
+.task-editor-grid input:focus,
+.task-editor-grid textarea:focus,
 .task-prompt-composer:focus-within {
-  outline: auto;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
-.task-prompt-composer textarea {
+.task-prompt-composer textarea,
+.task-prompt-composer textarea:focus {
   display: block;
   border: 0;
   border-radius: 0;
   outline: none;
+  box-shadow: none;
 }
 .task-images {
   display: flex;
