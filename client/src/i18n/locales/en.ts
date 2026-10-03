@@ -933,6 +933,8 @@ export default {
       memoryTokens: '{count} memory tokens',
       noMemoriesMatched: '{tokens}; no memories matched this turn',
       tokens: '{count} tokens',
+      agentTime: 'Agent time: {time}',
+      messageTime: 'Message time',
       inputTokens: 'Input: {count}',
       outputTokens: 'Output: {count}',
       cacheReadTokens: 'Cache read: {count}',

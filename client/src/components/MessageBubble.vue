@@ -147,8 +147,9 @@
       </div>
     </div>
 
-    <div v-if="usageSummary" class="token-usage" :title="usageTitle">
-      {{ usageSummary }}
+    <div v-if="messageTime || usageSummary" class="token-usage" :title="usageTitle || undefined">
+      <span v-if="messageTime" :title="t('components.messageBubble.messageTime')">{{ messageTime }}</span>
+      <span v-if="messageTime && usageSummary"> | </span>{{ usageSummary }}
     </div>
   </div>
 
@@ -230,6 +231,7 @@ const props = withDefaults(defineProps<{
     provider?: string;
     model?: string;
     timestamp?: number;
+    durationMs?: number;
     images?: ChatImage[];
     memory?: MessageMemoryRecall;
     usage?: {
@@ -462,20 +464,34 @@ const modelLabel = computed(() => {
   return model || provider || '';
 });
 
+const messageTime = computed(() => {
+  if (props.showHintInfo === false) return '';
+  const timestamp = props.message.timestamp;
+  return typeof timestamp === 'number' && timestamp > 0 && Number.isFinite(new Date(timestamp).getTime()) && !isEventRow.value
+    ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp)
+    : '';
+});
+
 const usageSummary = computed(() => {
-  if (props.showHintInfo === false || props.message.role !== 'assistant' || isEventRow.value || !props.message.usage || tokenTotal.value <= 0) return '';
+  if (props.showHintInfo === false || props.message.role !== 'assistant' || isEventRow.value) return '';
 
   const parts = [];
   if (modelLabel.value) parts.push(modelLabel.value);
-  parts.push(t('components.messageBubble.tokens', { count: tokenFormatter.format(tokenTotal.value).toLowerCase() }));
-  const totalCost = props.message.usage.cost?.total;
+  if (tokenTotal.value > 0) parts.push(t('components.messageBubble.tokens', { count: tokenFormatter.format(tokenTotal.value).toLowerCase() }));
+  const totalCost = props.message.usage?.cost?.total;
   if (typeof totalCost === 'number' && totalCost > 0) parts.push(`$${totalCost.toFixed(4)}`);
+  const duration = props.message.durationMs;
+  if (typeof duration === 'number' && Number.isFinite(duration) && duration >= 0) {
+    const seconds = Math.round(duration / 1000);
+    const formatted = seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
+    parts.push(t('components.messageBubble.agentTime', { time: formatted }));
+  }
   return parts.join(' | ');
 });
 
 const usageTitle = computed(() => {
   const usage = props.message.usage;
-  if (!usageSummary.value || !usage) return '';
+  if (props.showHintInfo === false || !usage || tokenTotal.value <= 0) return '';
   const parts = [
     t('components.messageBubble.inputTokens', { count: integerFormatter.format(usage.input || 0) }),
     t('components.messageBubble.outputTokens', { count: integerFormatter.format(usage.output || 0) }),
@@ -2202,5 +2218,16 @@ async function copyContent() {
   color: var(--text-tertiary);
   font-size: 0.75rem;
   line-height: 1.4;
+}
+
+.message-bubble.user .token-usage {
+  width: fit-content;
+  margin: 0.5rem 0 0 auto;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.18);
+  color: #fff;
+  font-weight: 500;
 }
 </style>

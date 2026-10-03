@@ -80,7 +80,8 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   thinking?: string; // Thinking/reasoning content
-  timestamp: number;
+  timestamp?: number;
+  durationMs?: number;
   hasTextContent?: boolean; // Track if message has actual text content
   kind?: MessageKind;
   status?: MessageStatus;
@@ -244,6 +245,11 @@ function isToolResultType(type?: string): boolean {
   ].includes(normalizeType(type));
 }
 
+function historyTimestamp(value: unknown): number | undefined {
+  const timestamp = typeof value === 'string' ? Date.parse(value) : value;
+  return typeof timestamp === 'number' && timestamp > 0 && Number.isFinite(new Date(timestamp).getTime()) ? timestamp : undefined;
+}
+
 function toolResultMessageFromHistory(msg: any): Message | null {
   const toolOutput = Array.isArray(msg.content) ? textFromContentArray(msg.content) : stringifyValue(msg.content);
   if (!toolOutput.trim()) return null;
@@ -252,7 +258,7 @@ function toolResultMessageFromHistory(msg: any): Message | null {
     id: msg.toolCallId || msg.id || createClientId(),
     role: 'assistant',
     content: toolOutput,
-    timestamp: msg.timestamp || Date.now(),
+    timestamp: historyTimestamp(msg.timestamp),
     kind: 'tool_result',
     status: failed ? 'failure' : 'success',
     title: failed ? `Tool ${getToolName(msg)} failed` : `Tool ${getToolName(msg)} completed`,
@@ -262,7 +268,7 @@ function toolResultMessageFromHistory(msg: any): Message | null {
   };
 }
 
-function messageFromContentItem(item: any, role: 'user' | 'assistant', timestamp: number): Message | null {
+function messageFromContentItem(item: any, role: 'user' | 'assistant', timestamp?: number): Message | null {
   const type = normalizeType(item?.type);
   if (type === 'text') {
     const content = stringifyValue(item?.text || item?.content || '');
@@ -784,6 +790,9 @@ export function useChat() {
         if (!state.receivedModelOutcome) {
           showModelFailure('The model completed without returning a response.', targetSessionId);
         }
+        const startedAt = state.streamingStartedAt;
+        const finalResponse = [...state.messages].reverse().find((message) => message.role === 'assistant' && (!message.kind || message.kind === 'text') && message.content.trim());
+        if (finalResponse && startedAt && Date.now() >= startedAt) finalResponse.durationMs = Date.now() - startedAt;
         finishStreaming(targetSessionId, true);
         emitSummaryGenerated(targetSessionId);
         emitAssistantResponseCompleted(targetSessionId);
@@ -1057,7 +1066,7 @@ export function useChat() {
           }
 
           const role = msg.role === 'user' ? 'user' : 'assistant';
-          const timestamp = msg.timestamp || Date.now();
+          const timestamp = historyTimestamp(msg.timestamp);
 
           if (Array.isArray(msg.content)) {
             if (role === 'user') {
@@ -1126,6 +1135,24 @@ export function useChat() {
             usage: role === 'assistant' ? msg.usage : undefined,
           });
         });
+
+        let userTimestamp: number | undefined;
+        let finalResponse: Message | undefined;
+        const setTurnDuration = () => {
+          if (finalResponse?.timestamp && userTimestamp && finalResponse.timestamp >= userTimestamp) {
+            finalResponse.durationMs = finalResponse.timestamp - userTimestamp;
+          }
+        };
+        for (const message of normalizedMessages) {
+          if (message.role === 'user') {
+            setTurnDuration();
+            userTimestamp = message.timestamp;
+            finalResponse = undefined;
+          } else if (message.kind === 'text' && message.content.trim()) {
+            finalResponse = message;
+          }
+        }
+        setTurnDuration();
 
         const activity = Array.isArray(data.activity) ? activityMessage(data.activity) : null;
         if (activity) normalizedMessages.push(activity);

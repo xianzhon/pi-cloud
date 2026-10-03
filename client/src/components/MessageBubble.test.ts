@@ -339,6 +339,43 @@ describe('MessageBubble', () => {
     expect(usage.attributes('title')).toContain('Output: 345');
   });
 
+  it('shows local message time and agent duration without token usage', () => {
+    const timestamp = Date.UTC(2025, 0, 2, 12, 30);
+    const wrapper = mount(MessageBubble, {
+      props: { message: { id: 'timed', role: 'assistant', content: 'Done', timestamp, durationMs: 65_000 } },
+    });
+    expect(wrapper.find('.token-usage').text()).toContain(new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp));
+    expect(wrapper.find('.token-usage').text()).toContain('Agent time: 1m 5s');
+  });
+
+  it('hides assistant timestamps when hint info is disabled', async () => {
+    const wrapper = mount(MessageBubble, {
+      props: { showHintInfo: false, message: { id: 'timed', role: 'assistant', content: 'Done', timestamp: Date.UTC(2025, 0, 2, 12, 30), durationMs: 5000 } },
+    });
+    expect(wrapper.find('.token-usage').exists()).toBe(false);
+    await wrapper.setProps({ showHintInfo: true });
+    expect(wrapper.find('.token-usage').exists()).toBe(true);
+  });
+
+  it('toggles user timestamps with assistant hint info', async () => {
+    const timestamp = Date.UTC(2025, 0, 2, 12, 30);
+    const wrapper = mount(MessageBubble, {
+      props: { showHintInfo: false, message: { id: 'timed', role: 'user', content: 'Hello', timestamp } },
+    });
+    expect(wrapper.find('.token-usage').exists()).toBe(false);
+    await wrapper.setProps({ showHintInfo: true });
+    expect(wrapper.find('.token-usage').text()).toContain(new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp));
+    await wrapper.setProps({ showHintInfo: false });
+    expect(wrapper.find('.token-usage').exists()).toBe(false);
+  });
+
+  it('does not invent a timestamp when it is missing or show agent time when hints are disabled', () => {
+    const wrapper = mount(MessageBubble, {
+      props: { showHintInfo: false, message: { id: 'timed', role: 'assistant', content: 'Done', durationMs: 5000 } },
+    });
+    expect(wrapper.find('.token-usage').exists()).toBe(false);
+  });
+
   it('hides assistant response token usage when hint info is disabled', () => {
     const wrapper = mount(MessageBubble, {
       props: {

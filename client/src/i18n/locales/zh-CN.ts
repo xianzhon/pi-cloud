@@ -933,6 +933,8 @@ export default {
       memoryTokens: '{count} 个记忆 token',
       noMemoriesMatched: '{tokens}；本轮没有匹配的记忆',
       tokens: '{count} 个 token',
+      agentTime: '智能体用时：{time}',
+      messageTime: '消息时间',
       inputTokens: '输入：{count}',
       outputTokens: '输出：{count}',
       cacheReadTokens: '缓存读取：{count}',

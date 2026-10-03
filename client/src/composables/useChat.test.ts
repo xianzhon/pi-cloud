@@ -126,6 +126,26 @@ describe('useChat', () => {
     })]);
   });
 
+  it('derives historical agent time only when the turn has timestamps', async () => {
+    const { chat } = mountChat();
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      json: async () => ({ messages: [
+        { role: 'user', content: 'First', timestamp: 1000 },
+        { role: 'assistant', content: [{ type: 'text', text: 'Working' }], timestamp: 3000 },
+        { role: 'assistant', content: [{ type: 'text', text: 'Done' }], timestamp: 4500 },
+        { role: 'user', content: 'Again' },
+        { role: 'assistant', content: 'No time', timestamp: 8000 },
+      ] }),
+    })));
+
+    await chat.loadSessionHistory('session-1');
+
+    expect(chat.messages.value[1].durationMs).toBeUndefined();
+    expect(chat.messages.value[2].durationMs).toBe(3500);
+    expect(chat.messages.value[3].timestamp).toBeUndefined();
+    expect(chat.messages.value[4].durationMs).toBeUndefined();
+  });
+
   it('restores the server streaming start time and subscribes for cross-device updates', async () => {
     const { chat } = mountChat();
     vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -188,6 +208,7 @@ describe('useChat', () => {
     expect(speechHandler).not.toHaveBeenCalled();
     handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_settled' } });
 
+    expect(chat.messages.value.find((message) => message.id === 'assistant-1')?.durationMs).toBeGreaterThanOrEqual(0);
     expect(summaryHandler).toHaveBeenCalledWith(expect.objectContaining({
       type: 'summary-generated',
       detail: { sessionId: 'session-1', content: 'Session summary' },
