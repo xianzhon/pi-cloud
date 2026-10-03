@@ -36,7 +36,17 @@
                     <span>{{ polishingTask ? t('components.taskEditorDialog.polishing') : t('components.taskEditorDialog.aiPolish') }}</span>
                   </button>
                 </div>
-                <textarea id="task-prompt" v-model="prompt" rows="12" />
+                <div class="task-prompt-composer">
+                  <div v-if="attachments.length" class="task-images" :aria-label="t('components.chatPanel.attachedImages')">
+                    <span v-for="image in attachments" :key="image.id">
+                      <img :src="image.previewUrl" :alt="image.name" />
+                      <button type="button" :aria-label="t('components.chatPanel.removeAttachment', { name: image.name })" @click="removeAttachment(image.id)">×</button>
+                    </span>
+                  </div>
+                  <textarea id="task-prompt" v-model="prompt" rows="12" @paste="handleImagePaste" />
+                </div>
+                <p v-if="attachmentError" class="task-editor-error" role="alert">{{ attachmentError }}</p>
+                <p v-if="imagesBlocked" class="task-editor-error" role="alert">{{ t('components.chatPanel.thisModelCanTReadImagesSwitch') }}</p>
 
                 <label for="task-notes">{{ t('components.taskEditorDialog.privateNotesNotSent') }}</label>
                 <textarea id="task-notes" v-model="notes" rows="4" />
@@ -95,6 +105,7 @@ import type { AvailableSkill } from '../composables/useAvailableSkills';
 import type { SkillPreset } from '../composables/useSkillPresets';
 import { cachedLaunchResource, launchCacheKey } from '../composables/useLaunchResourceCache';
 import type { ProjectTask, ProjectTaskDraft } from '../types/projectTask';
+import { useChatAttachments } from '../composables/useChatAttachments';
 import {
   defaultSessionLaunchValue,
   toTaskLaunchSnapshot,
@@ -136,6 +147,7 @@ const emit = defineEmits<{
 const titleInput = ref<HTMLInputElement | null>(null);
 const title = ref('');
 const prompt = ref('');
+const { attachments, attachmentError, handleImagePaste, removeAttachment } = useChatAttachments((key, params) => t(key, params || {}));
 const notes = ref('');
 const selectedProjectPath = ref('');
 const selectedProfileId = ref('');
@@ -169,7 +181,8 @@ let preloaded = false;
 
 const projectOptions = computed<CustomSelectOption[]>(() => projectPaths.value.map((path) => ({ value: path, label: path })));
 const profileOptions = computed<CustomSelectOption[]>(() => profiles.value.map((profile) => ({ value: profile.id, label: profile.label })));
-const submitDisabled = computed(() => props.saving || loadingResources.value || !title.value.trim() || !prompt.value.trim() || !selectedProjectPath.value || !selectedProfileId.value || !launchValid.value);
+const imagesBlocked = computed(() => attachments.value.length > 0 && !models.value.find((model) => model.provider === launchValue.value.modelProvider && model.id === launchValue.value.modelId)?.input?.includes('image'));
+const submitDisabled = computed(() => props.saving || loadingResources.value || imagesBlocked.value || !title.value.trim() || !prompt.value.trim() || !selectedProjectPath.value || !selectedProfileId.value || !launchValid.value);
 
 watch(() => props.visible, (visible) => {
   if (!visible) return;
@@ -203,6 +216,14 @@ async function prepareForOpen() {
   error.value = '';
   title.value = props.task?.title || '';
   prompt.value = props.task?.prompt || '';
+  attachments.value = (props.task?.images || []).map((image, index) => ({
+    ...image,
+    id: String(index),
+    name: image.name || `image-${index + 1}`,
+    size: image.size || Math.floor(image.data.length * 3 / 4),
+    previewUrl: `data:${image.mimeType};base64,${image.data}`,
+  }));
+  attachmentError.value = '';
   notes.value = props.task?.notes || '';
   selectedProjectPath.value = props.task?.projectPath || props.currentProjectPath;
   launchValue.value = props.task ? launchFromTask(props.task) : defaultSessionLaunchValue();
@@ -452,6 +473,7 @@ function submit() {
     projectPath: selectedProjectPath.value,
     title: title.value.trim(),
     prompt: prompt.value.trim(),
+    images: attachments.value.map(({ type, data, mimeType, name }) => ({ type, data, mimeType, name })),
     notes: notes.value,
     agentProfileId: selectedProfileId.value,
     ...toTaskLaunchSnapshot(launchValue.value),
@@ -598,6 +620,42 @@ defineExpose({
 .task-ai-polish:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+.task-prompt-composer {
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+}
+.task-prompt-composer:focus-within {
+  outline: auto;
+}
+.task-prompt-composer textarea {
+  display: block;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+}
+.task-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 10px 0;
+}
+.task-images span {
+  position: relative;
+}
+.task-images img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.task-images button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  cursor: pointer;
 }
 .task-editor-actions {
   display: flex;

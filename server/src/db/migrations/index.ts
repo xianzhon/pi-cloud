@@ -9,6 +9,7 @@ import { userPromptsSchemaMigration } from './007-user-prompts-schema.js';
 import { applicationSettingsTableMigration } from './008-application-settings-table.js';
 import { pinnedFilesSchemaMigration } from './009-pinned-files-schema.js';
 import { projectHistoryFavoritesMigration } from './010-project-history-favorites.js';
+import { projectTaskImagesMigration } from './011-project-task-images.js';
 import type { DatabaseMigration } from './migration.js';
 
 const migrations: DatabaseMigration[] = [
@@ -22,6 +23,7 @@ const migrations: DatabaseMigration[] = [
   applicationSettingsTableMigration,
   pinnedFilesSchemaMigration,
   projectHistoryFavoritesMigration,
+  projectTaskImagesMigration,
 ];
 
 export function runDatabaseMigrations(db: PiCloudDatabase): void {

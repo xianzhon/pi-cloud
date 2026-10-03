@@ -37,7 +37,9 @@ const draft = {
 
 function createMockApp() {
   const handlers: Record<string, Function> = {};
-  const register = (method: string) => vi.fn((path: string, handler: Function) => { handlers[`${method} ${path}`] = handler; });
+  const register = (method: string) => vi.fn((path: string, optionsOrHandler: Function | object, handler?: Function) => {
+    handlers[`${method} ${path}`] = handler || optionsOrHandler as Function;
+  });
   return {
     app: { get: register('GET'), post: register('POST'), put: register('PUT'), delete: register('DELETE') },
     handlers,
@@ -84,10 +86,24 @@ describe('task routes', () => {
     const handlers = await setup();
 
     expect(await handlers['POST /']({ body: draft }, createReply())).toEqual({ task });
-    expect(store.create).toHaveBeenCalledWith(draft);
+    expect(store.create).toHaveBeenCalledWith({ ...draft, images: [] });
 
     expect(await handlers['PUT /:id']({ params: { id: 'task-1' }, body: draft }, createReply())).toEqual({ task });
-    expect(store.update).toHaveBeenCalledWith('task-1', draft);
+    expect(store.update).toHaveBeenCalledWith('task-1', { ...draft, images: [] });
+  });
+
+  it('validates image attachments before saving tasks', async () => {
+    const handlers = await setup();
+    const image = { type: 'image', mimeType: 'image/png', data: 'aGVsbG8=' };
+    // The payload is valid base64 but not a PNG.
+    const reply = createReply();
+    await handlers['POST /']({ body: { ...draft, images: [image] } }, reply);
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(store.create).not.toHaveBeenCalled();
+
+    const png = { ...image, data: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64') };
+    await handlers['POST /']({ body: { ...draft, images: [png] } }, createReply());
+    expect(store.create).toHaveBeenCalledWith({ ...draft, images: [png] });
   });
 
   it('starts, completes, and deletes tasks', async () => {

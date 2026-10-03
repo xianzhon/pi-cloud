@@ -1,4 +1,5 @@
 import type { WorktreePayload } from './sessionLaunch';
+import type { ChatImage } from '../composables/useChat';
 
 export type ProjectTaskStatus = 'waiting' | 'starting' | 'started' | 'completed';
 export type ProjectTaskVisibleStatus = Exclude<ProjectTaskStatus, 'starting'>;
@@ -8,6 +9,7 @@ export interface ProjectTaskDraft {
   projectPath: string;
   title: string;
   prompt: string;
+  images?: ChatImage[];
   notes: string;
   agentProfileId: string;
   modelProvider: string;
@@ -60,5 +62,6 @@ export interface ProjectTaskStartResult {
   task: ProjectTask;
   sessionId: string;
   prompt: string;
+  images?: ChatImage[];
   worktree?: StartedTaskWorktree;
 }

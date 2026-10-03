@@ -36,6 +36,7 @@ export interface ProjectTaskStartResult {
   task: ProjectTaskRecord;
   sessionId: string;
   prompt: string;
+  images: ProjectTaskRecord['images'];
   model: CreateSessionResult['session']['model'];
   thinkingLevel: CreateSessionResult['session']['thinkingLevel'];
   worktree?: SessionWorktreeInfo;
@@ -67,6 +68,7 @@ export class ProjectTaskStarter {
         task: started,
         sessionId: created.session.sessionId,
         prompt: task.prompt,
+        images: task.images || [],
         model: created.session.model,
         thinkingLevel: created.session.thinkingLevel,
         worktree,

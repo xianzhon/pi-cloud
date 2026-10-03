@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { PiCloudDatabase } from '../db/database';
 import type { CreateSessionWorktreeOptions } from '../types';
+import type { ImageContent } from '@earendil-works/pi-ai';
 
 export type ProjectTaskStatus = 'waiting' | 'starting' | 'started' | 'completed';
 export type ProjectTaskSkillMode = 'all' | 'enabled' | 'disabled';
@@ -9,6 +10,7 @@ export interface ProjectTaskDraft {
   projectPath: string;
   title: string;
   prompt: string;
+  images?: ImageContent[];
   notes: string;
   agentProfileId: string;
   modelProvider: string;
@@ -56,6 +58,7 @@ interface ProjectTaskRow {
   project_path: string;
   title: string;
   prompt: string;
+  images_json: string;
   notes: string;
   status: ProjectTaskStatus;
   agent_profile_id: string;
@@ -101,11 +104,11 @@ export class ProjectTaskStore {
     const timestamp = this.now();
     this.db.prepare(`
       INSERT INTO project_tasks (
-        id, project_path, title, prompt, notes, status, agent_profile_id,
+        id, project_path, title, prompt, images_json, notes, status, agent_profile_id,
         model_provider, model_id, skill_mode, skills_json, preset_id, worktree_json,
         session_id, created_at, updated_at, started_at, completed_at
       ) VALUES (
-        @id, @projectPath, @title, @prompt, @notes, 'waiting', @agentProfileId,
+        @id, @projectPath, @title, @prompt, @imagesJson, @notes, 'waiting', @agentProfileId,
         @modelProvider, @modelId, @skillMode, @skillsJson, @presetId, @worktreeJson,
         NULL, @createdAt, @updatedAt, NULL, NULL
       )
@@ -115,6 +118,7 @@ export class ProjectTaskStore {
       skillsJson: JSON.stringify(draft.skills),
       presetId: draft.presetId ?? null,
       worktreeJson: JSON.stringify(draft.worktree),
+      imagesJson: JSON.stringify(draft.images || []),
       createdAt: timestamp,
       updatedAt: timestamp,
     });
@@ -154,6 +158,7 @@ export class ProjectTaskStore {
         project_path = @projectPath,
         title = @title,
         prompt = @prompt,
+        images_json = @imagesJson,
         notes = @notes,
         agent_profile_id = @agentProfileId,
         model_provider = @modelProvider,
@@ -170,6 +175,7 @@ export class ProjectTaskStore {
       skillsJson: JSON.stringify(draft.skills),
       presetId: draft.presetId ?? null,
       worktreeJson: JSON.stringify(draft.worktree),
+      imagesJson: JSON.stringify(draft.images || []),
       updatedAt: this.now(),
     });
     this.assertChanged(id, Number(result.changes), 'Only waiting tasks can be edited');
@@ -302,6 +308,7 @@ function normalizeDraft(input: ProjectTaskDraft): ProjectTaskDraft {
     projectPath: requiredString(input.projectPath, 'projectPath'),
     title: requiredString(input.title, 'title'),
     prompt: requiredString(input.prompt, 'prompt'),
+    images: input.images || [],
     notes: typeof input.notes === 'string' ? input.notes : '',
     agentProfileId: requiredString(input.agentProfileId, 'agentProfileId'),
     modelProvider: requiredString(input.modelProvider, 'modelProvider'),
@@ -328,6 +335,7 @@ function mapRow(row: ProjectTaskRow): ProjectTaskRecord {
     projectPath: row.project_path,
     title: row.title,
     prompt: row.prompt,
+    images: JSON.parse(row.images_json) as ImageContent[],
     notes: row.notes,
     status: row.status,
     agentProfileId: row.agent_profile_id,

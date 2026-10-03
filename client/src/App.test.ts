@@ -608,7 +608,8 @@ describe('App routing', () => {
     reload.mockRestore();
   });
 
-  it('waits for the socket and sidebar before submitting a new-tab queued task', async () => {
+  it.each([false, true])('waits for the socket and sidebar before submitting a new-tab queued task (images: %s)', async (withImages) => {
+    const images = [{ type: 'image' as const, mimeType: 'image/png', data: 'aGVsbG8=' }];
     const SessionSidebarStub = defineComponent({
       emits: ['initialized'],
       setup(_props, { emit, expose }) {
@@ -627,6 +628,7 @@ describe('App routing', () => {
             task: { id: 'task-1', projectPath: '/workspace' },
             sessionId: 'task-session',
             prompt: 'Implement the queued task',
+            ...(withImages ? { images } : {}),
           }),
         } as Response;
       }
@@ -662,7 +664,8 @@ describe('App routing', () => {
     await wrapper.get('.sidebar-initialize').trigger('click');
     await flushPromises();
 
-    expect(submitExternalPrompt).toHaveBeenCalledWith('Implement the queued task');
+    if (withImages) expect(submitExternalPrompt).toHaveBeenCalledWith('Implement the queued task', { images });
+    else expect(submitExternalPrompt).toHaveBeenCalledWith('Implement the queued task');
   });
 
   it('deletes a session immediately when delete confirmation is disabled', async () => {

@@ -1776,7 +1776,9 @@ async function handleTaskStarted(result: ProjectTaskStartResult): Promise<void> 
   else await sessionSidebarRef.value?.loadSessions();
   await waitForSessionContextReady();
   await nextTick();
-  const sent = await chatPanelRef.value?.submitExternalPrompt?.(result.prompt);
+  const sent = result.images?.length
+    ? await chatPanelRef.value?.submitExternalPrompt?.(result.prompt, { images: result.images })
+    : await chatPanelRef.value?.submitExternalPrompt?.(result.prompt);
   if (sent === false) {
     showToast(t('app.promptNotSent'), 'error');
   }

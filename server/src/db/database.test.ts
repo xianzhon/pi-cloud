@@ -80,7 +80,7 @@ describe('openPiCloudDatabase', () => {
       'skills_json', 'preset_id', 'worktree_json', 'session_id', 'created_at',
       'updated_at', 'started_at', 'completed_at', 'gitea_issue_owner',
       'gitea_issue_repo', 'gitea_issue_number', 'gitea_issue_url',
-      'gitea_issue_created_at',
+      'gitea_issue_created_at', 'images_json',
     ]);
     expect(columns.find((column) => column.name === 'prompt')?.notnull).toBe(1);
 
@@ -335,10 +335,11 @@ describe('openPiCloudDatabase', () => {
       { version: 8, name: 'application-settings-table' },
       { version: 9, name: 'pinned-files-schema' },
       { version: 10, name: 'project-history-favorites' },
+      { version: 11, name: 'project-task-images' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 10 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 11 });
     db.close();
   });
 

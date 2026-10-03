@@ -85,6 +85,12 @@ describe('ProjectTaskStarter', () => {
     await expect(starter.start('task-1', 'client-1')).rejects.toBeInstanceOf(ProjectTaskConflictError);
   });
 
+  it('returns saved images with the prompt when starting', async () => {
+    const images = [{ type: 'image' as const, mimeType: 'image/png', data: 'aGVsbG8=' }];
+    store.create(draft({ images }));
+    expect((await starter.start('task-1', 'client-1')).images).toEqual(images);
+  });
+
   it('resolves the current preset when starting', async () => {
     store.create(draft({ presetId: 'preset-1', skills: ['old-skill'] }));
     presetStore.getById.mockReturnValue({ id: 'preset-1', mode: 'disabled', skills: ['brainstorming'] });

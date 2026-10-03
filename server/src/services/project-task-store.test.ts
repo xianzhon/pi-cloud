@@ -54,6 +54,7 @@ describe('ProjectTaskStore', () => {
       ...baseDraft,
       title: 'Fix queue',
       prompt: 'Implement it',
+      images: [],
       status: 'waiting',
       presetId: null,
       sessionId: null,
@@ -64,6 +65,13 @@ describe('ProjectTaskStore', () => {
       completedAt: null,
     });
     expect(store.get(task.id)).toEqual(task);
+  });
+
+  it('persists images when creating and editing a waiting task', () => {
+    const image = { type: 'image' as const, mimeType: 'image/png', data: 'aGVsbG8=' };
+    const task = store.create({ ...baseDraft, images: [image] });
+    expect(store.get(task.id)?.images).toEqual([image]);
+    expect(store.update(task.id, { ...baseDraft, images: [] }).images).toEqual([]);
   });
 
   it('lists oldest tasks first and filters by project and status', () => {

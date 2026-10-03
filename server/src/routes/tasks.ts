@@ -16,6 +16,7 @@ import {
   type ProjectTaskStore,
 } from '../services/project-task-store';
 import type { PiSessionService } from '../services/session-manager.js';
+import { validateImages } from '../services/image-input.js';
 import type { SessionActivityRecord, SessionActivityStore } from '../services/session-activity-store.js';
 
 export interface TaskRouteOptions {
@@ -60,7 +61,7 @@ export async function taskRoutes(app: FastifyInstance, options: TaskRouteOptions
     };
   });
 
-  app.post('/', async (req, reply) => {
+  app.post('/', { bodyLimit: 56 * 1024 * 1024 }, async (req, reply) => {
     try {
       return { task: options.store.create(parseTaskDraft(req.body)) };
     } catch (error) {
@@ -84,7 +85,7 @@ export async function taskRoutes(app: FastifyInstance, options: TaskRouteOptions
     return task ? { task } : reply.status(404).send({ error: 'Task not found' });
   });
 
-  app.put('/:id', async (req, reply) => {
+  app.put('/:id', { bodyLimit: 56 * 1024 * 1024 }, async (req, reply) => {
     try {
       return { task: options.store.update((req.params as { id: string }).id, parseTaskDraft(req.body)) };
     } catch (error) {
@@ -208,10 +209,13 @@ function parseTaskDraft(value: unknown): ProjectTaskDraft {
     throw new ProjectTaskValidationError('Skills must be an array of names');
   }
   if (!isProjectTaskSkillMode(body.skillMode)) throw new ProjectTaskValidationError('Invalid skill mode');
+  const images = validateImages(body.images, { input: ['image'] });
+  if (!images.ok) throw new ProjectTaskValidationError(images.message);
   return {
     projectPath: requiredString(body.projectPath, 'projectPath'),
     title: requiredString(body.title, 'title'),
     prompt: requiredString(body.prompt, 'prompt'),
+    images: images.images.map((image, index) => ({ ...image, ...(images.names[index] ? { name: images.names[index] } : {}) })),
     notes: typeof body.notes === 'string' ? body.notes : '',
     agentProfileId: requiredString(body.agentProfileId, 'agentProfileId'),
     modelProvider: requiredString(body.modelProvider, 'modelProvider'),

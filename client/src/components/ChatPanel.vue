@@ -2021,7 +2021,15 @@ async function insertUserPrompt(content: string): Promise<void> {
   inputRef.value?.setSelectionRange(start + content.length, start + content.length);
 }
 
-async function submitExternalPrompt(text: string, options?: { hideCommandMessage?: boolean }): Promise<boolean> {
+async function submitExternalPrompt(text: string, options?: { hideCommandMessage?: boolean; images?: ChatImage[] }): Promise<boolean> {
+  if (options?.images?.length) {
+    if (isReviewMode.value || !props.sessionId || isPreparingSession.value) return false;
+    return (await sendMessage(text, props.sessionId, {
+      images: options.images,
+      awaitAcceptance: true,
+      onRejected: (message) => { attachmentError.value = message; },
+    })) === true;
+  }
   if (options?.hideCommandMessage) {
     const draft = inputText.value;
     inputText.value = text;

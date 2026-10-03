@@ -24,7 +24,7 @@ function stubResources() {
     if (url.includes('/models')) {
       return ok({ models: url.includes('/claude/')
         ? [{ provider: 'anthropic', id: 'sonnet', current: true }]
-        : [{ provider: 'openai', id: 'gpt-5.4', current: true }] });
+        : [{ provider: 'openai', id: 'gpt-5.4', current: true, input: ['text', 'image'] }] });
     }
     if (url.includes('/skills?')) return ok({ skills: [{ name: 'brainstorming', description: 'Design first' }] });
     if (url.startsWith('/api/sessions/worktree-branches')) return ok({ branches: ['main', 'develop'] });
@@ -82,6 +82,49 @@ describe('TaskEditorDialog', () => {
       agentProfileId: 'codex', modelProvider: 'openai', modelId: 'gpt-5.4',
       skillMode: 'all', skills: [], worktree: { mode: 'none' },
     });
+  });
+
+  it('shows saved images inside the prompt composer without a file picker', async () => {
+    const wrapper = mountEditor({ task: {
+      ...existingTask,
+      images: [{ type: 'image', mimeType: 'image/png', name: 'example.png', data: 'aW1hZ2U=' }],
+    } });
+    await vi.waitFor(() => expect(wrapper.find('.task-prompt-composer .task-images img').exists()).toBe(true));
+    await vi.waitFor(() => expect(wrapper.text()).toContain('sonnet'));
+    expect(wrapper.find('.task-prompt-composer #task-prompt').exists()).toBe(true);
+    expect(wrapper.find('input[type="file"]').exists()).toBe(false);
+    expect(wrapper.find('label[for="task-images"]').exists()).toBe(false);
+  });
+
+  it('pastes images into the task prompt and removes them before saving', async () => {
+    const wrapper = mountEditor();
+    await vi.waitFor(() => expect(wrapper.text()).toContain('gpt-5.4'));
+    const file = new File(['image bytes'], 'pasted.png', { type: 'image/png' });
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { files: [file] } });
+    wrapper.get('#task-prompt').element.dispatchEvent(paste);
+
+    expect(paste.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(wrapper.get('.task-prompt-composer .task-images img').attributes('alt')).toBe('pasted.png'));
+    await wrapper.get('#task-title').setValue('Image task');
+    await wrapper.get('#task-prompt').setValue('Inspect this image');
+    await wrapper.get('form').trigger('submit');
+    expect(wrapper.emitted('save')?.[0]?.[0]).toMatchObject({ images: [{ name: 'pasted.png', data: expect.any(String) }] });
+
+    await wrapper.get('button[aria-label="Remove pasted.png"]').trigger('click');
+    expect(wrapper.find('.task-images').exists()).toBe(false);
+    await wrapper.get('form').trigger('submit');
+    expect(wrapper.emitted('save')?.[1]?.[0]).toMatchObject({ prompt: 'Inspect this image', images: [] });
+  });
+
+  it('leaves ordinary text paste alone', async () => {
+    const wrapper = mountEditor();
+    await vi.waitFor(() => expect(wrapper.text()).toContain('gpt-5.4'));
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { files: [] } });
+    wrapper.get('#task-prompt').element.dispatchEvent(paste);
+    expect(paste.defaultPrevented).toBe(false);
+    expect(wrapper.find('.task-images').exists()).toBe(false);
   });
 
   it('uses the cached skillset selection for a new task', async () => {
