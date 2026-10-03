@@ -62,6 +62,28 @@ describe('ProjectTaskStarter', () => {
     db.close();
   });
 
+  it('cancels discovery promptly and never creates a session after cancellation', async () => {
+    store.create(draft());
+    let release!: (profiles: unknown[]) => void;
+    sessionService.listAgentProfiles.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+    const controller = new AbortController();
+    const starting = starter.start('task-1', 'client-1', controller.signal);
+    await vi.waitFor(() => expect(release).toBeDefined());
+    controller.abort(new Error('Server shutdown'));
+    await expect(starting).rejects.toThrow('Server shutdown');
+    expect(store.get('task-1')?.status).toBe('waiting');
+    release([{ id: 'codex' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sessionService.createSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects a changed project before creating a session and restores waiting', async () => {
+    store.create(draft({ projectPath: '/repo/other' }));
+    await expect(starter.start('task-1', 'client-1', undefined, '/repo/app')).rejects.toThrow('project changed');
+    expect(store.get('task-1')?.status).toBe('waiting');
+    expect(sessionService.createSession).not.toHaveBeenCalled();
+  });
+
   it('validates configuration and starts one linked session', async () => {
     store.create(draft());
 

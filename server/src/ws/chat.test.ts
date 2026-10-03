@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
   };
   const saveUploadedImages = vi.fn(async () => ['/project/tmp/upload_images/chart.png']);
   const sessionService = {
+    onSessionExecutionMessage: vi.fn((_listener: (message: any) => void) => () => {}),
     getSession: vi.fn(() => session),
     listSessions: vi.fn(async () => []),
     resumeSession: vi.fn(),
@@ -72,6 +73,7 @@ async function createSocketServer() {
       sessions: {},
       audit: { record: vi.fn() },
     },
+    addHook: vi.fn(),
     services: { sessions: mocks.sessionService },
     get: vi.fn((path: string, _options: unknown, handler: Function) => routes.set(path, handler)),
   };
@@ -89,6 +91,26 @@ async function openSocket() {
 }
 
 describe('chat websocket', () => {
+  it('forwards background execution messages only to matching watchers', async () => {
+    let publish!: (message: any) => void;
+    mocks.sessionService.onSessionExecutionMessage.mockImplementationOnce((listener) => {
+      publish = listener;
+      return () => {};
+    });
+    const open = await createSocketServer();
+    const watcher = open('watcher');
+    const other = open('other');
+    watcher.emit('message', Buffer.from(JSON.stringify({ type: 'watch', payload: { sessionId: 'background' } })));
+    watcher.sent.length = 0;
+    const messages = [
+      { type: 'event', sessionId: 'background', event: { type: 'message_start' } },
+      { type: 'status', sessionId: 'background', status: 'idle' },
+    ];
+    messages.forEach(publish);
+    expect(watcher.sent.map((item) => JSON.parse(item))).toEqual(messages);
+    expect(other.sent).toEqual([]);
+  });
+
   it('keeps a streaming session running when the client disconnects', async () => {
     const session = mocks.session as typeof mocks.session & { isStreaming?: boolean };
     session.isStreaming = true;

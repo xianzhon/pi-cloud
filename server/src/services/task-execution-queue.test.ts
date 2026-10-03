@@ -16,7 +16,7 @@ describe('TaskExecutionQueue', () => {
   let cwd: string;
   let queue: TaskExecutionQueue;
   let messages: any[];
-  let prompt: ReturnType<typeof vi.fn>;
+  let prompt: ReturnType<typeof vi.fn<(text: string) => Promise<void>>>;
   let starter: { start: ReturnType<typeof vi.fn<ProjectTaskStarter['start']>> };
   let sessions: any;
 
@@ -49,7 +49,7 @@ describe('TaskExecutionQueue', () => {
     await git('commit', '--allow-empty', '-m', 'Initial');
     messages = [];
     prompt = vi.fn(async (text: string) => { success(text); });
-    sessions = { getSession: () => ({ messages, prompt }), runForegroundWithClientProfileProxy: async (_id: string, fn: () => Promise<void>) => fn() };
+    sessions = { getSession: () => ({ messages, prompt }), runForegroundWithClientProfileProxy: async (_id: string, fn: () => Promise<void>) => fn(), runSessionExecution: vi.fn(async (_session: unknown, fn: () => Promise<void>) => fn()), scheduleCleanup: vi.fn() };
     starter = { start: vi.fn<ProjectTaskStarter['start']>(async (id: string) => {
       tasks.claimStart(id);
       const task = tasks.markStarted(id, `session:${id}`);
@@ -74,6 +74,8 @@ describe('TaskExecutionQueue', () => {
     expect(tasks.get(second.id)?.status).toBe('completed');
     expect(await git('status', '--porcelain')).toBe('');
     expect(queue.get().taskIds).toEqual([]);
+    expect(sessions.scheduleCleanup.mock.calls).toEqual([[`task-execution:${second.id}`], [`task-execution:${first.id}`]]);
+    expect(sessions.runSessionExecution).toHaveBeenCalledTimes(2);
   });
 
   it('completes successful tasks with no changes without creating a commit', async () => {
@@ -92,6 +94,7 @@ describe('TaskExecutionQueue', () => {
     queue.configure([first.id, second.id], true);
     await finished();
     expect(queue.get().error).toContain('did not confirm');
+    expect(sessions.scheduleCleanup).toHaveBeenCalledWith(`task-execution:${first.id}`);
     expect(tasks.get(first.id)?.status).toBe('started');
     expect(tasks.get(second.id)?.status).toBe('waiting');
     expect(starter.start).toHaveBeenCalledTimes(1);
@@ -177,6 +180,119 @@ describe('TaskExecutionQueue', () => {
     expect(recovered.enabled).toBe(false);
     expect(recovered.activeTaskId).toBeNull();
     expect(recovered.error).toContain('Server restarted');
+  });
+
+  it('bounds concurrency across repositories and reports all active tasks', async () => {
+    const first = create('First');
+    const second = tasks.create({ ...first, projectPath: '/other', title: 'Other' });
+    const third = tasks.create({ ...first, projectPath: '/third', title: 'Third' });
+    const fourth = tasks.create({ ...first, projectPath: '/fourth', title: 'Fourth' });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    prompt.mockImplementation(async (text: string) => { await gate; success(text); });
+    const taskSessions = new Map<string, any>();
+    sessions.getSession = (clientId: string) => {
+      if (!taskSessions.has(clientId)) {
+        const ownMessages: any[] = [];
+        taskSessions.set(clientId, { messages: ownMessages, prompt: async (text: string) => {
+          await prompt(text);
+          ownMessages.push({ role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: text.split('last line of your final response: ')[1] }] });
+        } });
+      }
+      return taskSessions.get(clientId);
+    };
+    queue = makeQueue(async (path, args) => {
+      if (args.includes('--git-common-dir')) return path + '/.git';
+      if (path !== cwd) {
+        if (args[0] === 'status') return '';
+        if (args.includes('--show-toplevel')) return path;
+        return 'main';
+      }
+      return git(...args);
+    });
+    queue.configure([first.id, second.id, third.id, fourth.id], true);
+    try {
+      await vi.waitFor(() => expect(prompt).toHaveBeenCalledTimes(3));
+      expect(queue.get().activeTaskIds).toEqual([first.id, second.id, third.id]);
+      expect(tasks.get(fourth.id)?.status).toBe('waiting');
+    } finally { release(); }
+    await finished();
+    expect(tasks.get(second.id)?.status).toBe('completed');
+    expect(tasks.get(fourth.id)?.status).toBe('completed');
+  });
+
+  it('serializes subdirectories sharing the same repository', async () => {
+    const first = create('First');
+    const second = tasks.create({ ...first, projectPath: cwd + '/subdirectory', title: 'Second' });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    prompt.mockImplementation(async (text: string) => { await gate; success(text); });
+    queue = makeQueue(async (_path, args) => git(...args));
+    queue.configure([first.id, second.id], true);
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(queue.get().activeTaskIds).toEqual([first.id]);
+    expect(tasks.get(second.id)?.status).toBe('waiting');
+    release();
+    await finished();
+    expect(tasks.get(second.id)?.status).toBe('completed');
+  });
+
+  it('does not launch a task after pausing during repository lookup', async () => {
+    const task = create('First');
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let lookingUp = false;
+    queue = makeQueue(async (_path, args) => {
+      if (args.includes('--git-common-dir')) { lookingUp = true; await gate; }
+      return git(...args);
+    });
+    queue.configure([task.id], true);
+    await vi.waitFor(() => expect(lookingUp).toBe(true));
+    queue.configure([task.id], false);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await finished();
+    expect(tasks.get(task.id)?.status).toBe('waiting');
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it('pauses when a task changes project during repository lookup', async () => {
+    const task = create('Moved');
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let lookingUp = false;
+    queue = makeQueue(async (_path, args) => {
+      if (args.includes('--git-common-dir')) { lookingUp = true; await gate; }
+      return git(...args);
+    });
+    queue.configure([task.id], true);
+    await vi.waitFor(() => expect(lookingUp).toBe(true));
+    tasks.update(task.id, { ...task, projectPath: '/other' });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(queue.get().enabled).toBe(false);
+    expect(queue.get().error).toContain('project changed');
+    expect(tasks.get(task.id)?.status).toBe('waiting');
+  });
+
+  it('shutdown cancels a stuck task without completing it', async () => {
+    const task = create('Stuck');
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let aborted = false;
+    sessions.getSession = () => ({ messages, prompt, abort: async () => { aborted = true; } });
+    prompt.mockImplementation(async (text: string) => { await gate; success(text); });
+    queue.configure([task.id], true);
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalled());
+    let stopped = false;
+    const stopping = queue.stop().then(() => { stopped = true; });
+    try {
+      await vi.waitFor(() => expect(stopped).toBe(true), { timeout: 1500 });
+      expect(aborted).toBe(true);
+      expect(tasks.get(task.id)?.status).toBe('started');
+      expect(queue.get().error).toContain('shutdown');
+    } finally { release(); await stopping; }
   });
 
   it('validates duplicate, missing, and non-waiting task IDs', () => {

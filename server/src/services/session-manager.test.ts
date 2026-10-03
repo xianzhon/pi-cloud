@@ -248,6 +248,35 @@ describe('PiSessionService', () => {
     }
   });
 
+  it('does not read profile database settings after cancelled discovery', async () => {
+    const service = new PiSessionService({ db });
+    const settings = vi.spyOn(service as any, 'getProfileSettings');
+    let release!: (value: string) => void;
+    readFile.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const controller = new AbortController();
+    const listing = service.listAgentProfiles(controller.signal);
+    await vi.waitFor(() => expect(release).toBeDefined());
+    controller.abort(new Error('shutdown'));
+    release('');
+    await expect(listing).rejects.toThrow('shutdown');
+    expect(settings).not.toHaveBeenCalled();
+  });
+
+  it('disposes a session created after startup cancellation without registering it', async () => {
+    const service = new PiSessionService({ skillPolicyStore: new SkillPolicyStore(db), db });
+    const controller = new AbortController();
+    let release!: (value: any) => void;
+    createAgentSession.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const creating = service.createSession('cancelled', { cwd: '/workspace' }, controller.signal);
+    await vi.waitFor(() => expect(release).toBeDefined());
+    controller.abort(new Error('shutdown'));
+    const session = { sessionId: 'cancelled-session', dispose: vi.fn() };
+    release({ session });
+    await expect(creating).rejects.toThrow('shutdown');
+    expect(service.getSession('cancelled')).toBeUndefined();
+    expect(session.dispose).toHaveBeenCalled();
+  });
+
   it('defers disconnected-client cleanup while a session is streaming', () => {
     vi.useFakeTimers();
     try {
@@ -1341,5 +1370,48 @@ describe('PiSessionService', () => {
     expect(service.getSession('client-1', 'session-1')).toBe(first.session);
     expect(service.getSession('client-1', 'session-2')).toBe(second.session);
     expect(service.getSession('client-1')).toBe(second.session);
+  });
+});
+
+
+describe('background session execution events', () => {
+  it.each([false, true])('forwards events and finishes streaming when failure=%s', async (fail) => {
+    const service = new PiSessionService();
+    const received: any[] = [];
+    const unsubscribe = vi.fn();
+    let publish!: (event: any) => void;
+    const session = { sessionId: 'background', subscribe: (listener: any) => { publish = listener; return unsubscribe; } };
+    const off = service.onSessionExecutionMessage((message) => received.push(message));
+    const execution = service.runSessionExecution(session as any, async () => {
+      publish({ type: 'message_start' });
+      if (fail) throw new Error('prompt failed');
+    });
+    if (fail) await expect(execution).rejects.toThrow('prompt failed');
+    else await execution;
+    expect(received).toEqual([
+      expect.objectContaining({ type: 'streaming_state', sessionId: 'background', isStreaming: true }),
+      expect.objectContaining({ type: 'event', sessionId: 'background', event: { type: 'message_start' } }),
+      { type: 'status', sessionId: 'background', status: 'idle' },
+    ]);
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(service.getSessionStreamingStartedAt('background')).toBeUndefined();
+    off();
+  });
+});
+
+
+describe('shared session cleanup', () => {
+  it('keeps a session loaded until its last client is released', () => {
+    const service = new PiSessionService();
+    const session = { sessionId: 'shared', dispose: vi.fn() };
+    (service as any).registerClientSession('task-execution:task', session);
+    (service as any).registerClientSession('browser', session);
+    service.disposeSession('task-execution:task');
+    expect(service.getSession('browser')).toBe(session);
+    expect(session.dispose).not.toHaveBeenCalled();
+    expect(service.getClientSessionId('task-execution:task')).toBeUndefined();
+    service.disposeSession('browser');
+    expect(service.getSessionBySessionId('shared')).toBeUndefined();
+    expect(session.dispose).toHaveBeenCalledOnce();
   });
 });

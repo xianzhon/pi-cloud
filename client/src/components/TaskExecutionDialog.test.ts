@@ -36,7 +36,8 @@ describe('TaskExecutionDialog', () => {
     expect(wrapper.find('.available').text()).toContain('Current task');
     expect(wrapper.find('.available').text()).not.toContain('Other task');
     await wrapper.get('.available input').setValue(true);
-    await wrapper.get('select').setValue('all');
+    await wrapper.get('.custom-select-trigger').trigger('click');
+    await wrapper.findAll('.custom-select-option')[1]!.trigger('click');
     expect(wrapper.find('.available').text()).not.toContain('Completed task');
     await wrapper.findAll('.available input')[1]!.setValue(true);
     await wrapper.findAll('.execution-list li')[1]!.get('button[aria-label="Move up"]').trigger('click');
@@ -56,6 +57,13 @@ describe('TaskExecutionDialog', () => {
     await flushPromises();
     expect(state.enabled).toBe(false);
     expect(state.taskIds).toEqual(['one', 'two']);
+  });
+
+  it('shows every concurrently running task', async () => {
+    state = { enabled: true, taskIds: ['one', 'two'], activeTaskId: 'one', error: '', activeTaskIds: ['one', 'two'] } as typeof state;
+    await open();
+    expect(wrapper.text()).toContain('Running: Current task');
+    expect(wrapper.text()).toContain('Running: Other task');
   });
 
   it('displays a paused queue error and lets users remove failed tasks', async () => {

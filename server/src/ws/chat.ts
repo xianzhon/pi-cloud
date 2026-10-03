@@ -102,6 +102,13 @@ export async function chatWebSocket(app: FastifyInstance) {
   const sessionService = app.services.sessions;
   const clients = new Set<{ socket: Parameters<typeof sendJson>[0]; watchedSessionId?: string }>();
 
+  const unsubscribeExecution = sessionService.onSessionExecutionMessage((message) => {
+    for (const client of clients) {
+      if (client.watchedSessionId === message.sessionId) sendJson(client.socket, message);
+    }
+  });
+  app.addHook('onClose', async () => { unsubscribeExecution(); });
+
   app.get('/ws/chat', { websocket: true }, (socket, req) => {
     const auth = app.authServices;
     if (!isAllowedRequestOrigin(req)) {

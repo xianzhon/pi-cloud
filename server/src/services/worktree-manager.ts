@@ -7,7 +7,7 @@ import type { CreateSessionWorktreeOptions, ResolvedWorktreeSession } from '../t
 const defaultExecFile = promisify(execFileCallback);
 
 interface WorktreeManagerOptions {
-  execFile?: (file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }) => Promise<{ stdout: string; stderr: string }>;
+  execFile?: (file: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv; signal?: AbortSignal }) => Promise<{ stdout: string; stderr: string }>;
   githubProxyEnv?: () => Record<string, string>;
 }
 
@@ -61,27 +61,31 @@ export class WorktreeManager {
     return files.sort((a, b) => a.localeCompare(b));
   }
 
-  async resolveSessionCwd(projectPath: string, worktree?: CreateSessionWorktreeOptions): Promise<ResolvedWorktreeSession> {
+  async resolveSessionCwd(projectPath: string, worktree?: CreateSessionWorktreeOptions, signal?: AbortSignal): Promise<ResolvedWorktreeSession> {
+    signal?.throwIfAborted();
     if (!worktree || worktree.mode === 'none') return { cwd: projectPath };
 
     this.assertSafeBranchName(worktree.branchName);
     if (worktree.branchMode === 'new') this.assertSafeBranchName(worktree.baseBranch);
 
-    const baseRepoPath = await this.getRepoRoot(projectPath);
-    const existing = await this.findWorktreeForBranch(baseRepoPath, worktree.branchName);
+    const baseRepoPath = await this.getRepoRoot(projectPath, signal);
+    const existing = await this.findWorktreeForBranch(baseRepoPath, worktree.branchName, signal);
+    signal?.throwIfAborted();
     const worktreePath = existing || this.getManagedWorktreePath(baseRepoPath, worktree.branchName);
 
     if (!existing) {
       await mkdir(dirname(worktreePath), { recursive: true });
+      signal?.throwIfAborted();
       if (worktree.branchMode === 'new') {
-        await this.execFile('git', ['worktree', 'add', '-b', worktree.branchName, worktreePath, worktree.baseBranch], { cwd: baseRepoPath });
+        await this.execFile('git', ['worktree', 'add', '-b', worktree.branchName, worktreePath, worktree.baseBranch], { cwd: baseRepoPath, ...(signal ? { signal } : {}) });
       } else {
-        await this.execFile('git', ['worktree', 'add', worktreePath, worktree.branchName], { cwd: baseRepoPath });
+        await this.execFile('git', ['worktree', 'add', worktreePath, worktree.branchName], { cwd: baseRepoPath, ...(signal ? { signal } : {}) });
       }
     }
 
+    signal?.throwIfAborted();
     if (worktree.copyFile?.trim()) {
-      await this.copyRootIgnoredFile(baseRepoPath, worktreePath, worktree.copyFile.trim());
+      await this.copyRootIgnoredFile(baseRepoPath, worktreePath, worktree.copyFile.trim(), signal);
     }
 
     return {
@@ -109,8 +113,8 @@ export class WorktreeManager {
     });
   }
 
-  private async getRepoRoot(projectPath: string): Promise<string> {
-    const { stdout } = await this.execFile('git', ['rev-parse', '--show-toplevel'], { cwd: projectPath });
+  private async getRepoRoot(projectPath: string, signal?: AbortSignal): Promise<string> {
+    const { stdout } = await this.execFile('git', ['rev-parse', '--show-toplevel'], { cwd: projectPath, ...(signal ? { signal } : {}) });
     return stdout.trim();
   }
 
@@ -119,15 +123,16 @@ export class WorktreeManager {
     return join(dirname(baseRepoPath), `.${repoName}-worktrees`, this.safeBranchDir(branchName));
   }
 
-  private async findWorktreeForBranch(baseRepoPath: string, branchName: string): Promise<string | undefined> {
-    const { stdout } = await this.execFile('git', ['worktree', 'list', '--porcelain'], { cwd: baseRepoPath });
+  private async findWorktreeForBranch(baseRepoPath: string, branchName: string, signal?: AbortSignal): Promise<string | undefined> {
+    const { stdout } = await this.execFile('git', ['worktree', 'list', '--porcelain'], { cwd: baseRepoPath, ...(signal ? { signal } : {}) });
     return this.parseWorktrees(stdout).find((entry) => entry.branch === branchName)?.path;
   }
 
-  private async copyRootIgnoredFile(baseRepoPath: string, worktreePath: string, fileName: string): Promise<void> {
+  private async copyRootIgnoredFile(baseRepoPath: string, worktreePath: string, fileName: string, signal?: AbortSignal): Promise<void> {
     if (!this.isRootFileName(fileName)) throw new Error('Invalid worktree copy file');
     const candidates = await this.listRootIgnoredFiles(baseRepoPath);
     if (!candidates.includes(fileName)) throw new Error('Worktree copy file must be an ignored root-level file');
+    signal?.throwIfAborted();
     await copyFile(join(baseRepoPath, fileName), join(worktreePath, fileName));
   }
 

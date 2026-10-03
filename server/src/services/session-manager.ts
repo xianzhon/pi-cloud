@@ -16,6 +16,15 @@ import { runWithAgentDirAndProxyEnv } from './profile-proxy.js';
 import { SkillPolicyStore, type SkillPolicyRecord } from './skill-policy-store.js';
 import type { WorktreeMetadataStore } from './worktree-metadata-store.js';
 
+export interface SessionExecutionMessage {
+  type: 'streaming_state' | 'event' | 'status';
+  sessionId: string;
+  isStreaming?: boolean;
+  streamingStartedAt?: number;
+  event?: unknown;
+  status?: 'idle';
+}
+
 interface PiSessionServiceOptions {
   skillPolicyStore?: SkillPolicyStore;
   username?: string;
@@ -158,6 +167,7 @@ export class PiSessionService {
   private memoryRuntime?: MemoryRuntime;
   private db?: PiCloudDatabase;
   private worktreeMetadataStore?: Pick<WorktreeMetadataStore, 'getMany'>;
+  private sessionExecutionListeners = new Set<(message: SessionExecutionMessage) => void>();
   private sessions: Map<string, AgentSession> = new Map();
   private clientSessions: Map<string, Set<string>> = new Map();
   private currentClientSession: Map<string, string> = new Map();
@@ -175,7 +185,8 @@ export class PiSessionService {
     this.worktreeMetadataStore = options.worktreeMetadataStore;
   }
 
-  async listAgentProfiles(): Promise<AgentProfile[]> {
+  async listAgentProfiles(signal?: AbortSignal): Promise<AgentProfile[]> {
+    signal?.throwIfAborted();
     const baseDir = join(os.homedir(), '.pi');
     const entries = await fs.readdir(baseDir, { withFileTypes: true }).catch(() => []);
     const profileEntries: Dirent<string>[] = [];
@@ -189,6 +200,7 @@ export class PiSessionService {
     const profiles = await Promise.all(profileEntries.map(async (entry) => {
       const path = join(baseDir, entry.name);
       const settings = await this.readAgentSettings(path);
+      signal?.throwIfAborted();
       const profileSettings = this.getProfileSettings(entry.name);
       return {
         id: entry.name,
@@ -204,6 +216,7 @@ export class PiSessionService {
 
     const defaultPath = join(baseDir, 'agent');
     const defaultSettings = await this.readAgentSettings(defaultPath);
+    signal?.throwIfAborted();
     const defaultProfileSettings = this.getProfileSettings('default');
 
     return [
@@ -221,19 +234,20 @@ export class PiSessionService {
     ];
   }
 
-  async getClientAgentProfile(clientId: string): Promise<AgentProfile> {
-    const profiles = await this.listAgentProfiles();
+  async getClientAgentProfile(clientId: string, signal?: AbortSignal): Promise<AgentProfile> {
+    const profiles = await this.listAgentProfiles(signal);
     const selectedProfileId = this.clientProfiles.get(clientId) || 'default';
     return profiles.find((profile) => profile.id === selectedProfileId) || profiles[0];
   }
 
-  async setClientAgentProfile(clientId: string, profileId: string): Promise<AgentProfile> {
-    const profiles = await this.listAgentProfiles();
+  async setClientAgentProfile(clientId: string, profileId: string, signal?: AbortSignal): Promise<AgentProfile> {
+    const profiles = await this.listAgentProfiles(signal);
     const profile = profiles.find((item) => item.id === profileId);
     if (!profile) {
       throw new Error(`Unknown agent profile: ${profileId}`);
     }
 
+    signal?.throwIfAborted();
     this.clientProfiles.set(clientId, profile.id);
     return profile;
   }
@@ -364,8 +378,8 @@ export class PiSessionService {
     return this.listAgentProfileApiKeyProviders(profileId);
   }
 
-  async listAgentProfileModels(profileId: string) {
-    const profile = await this.requireAgentProfile(profileId);
+  async listAgentProfileModels(profileId: string, signal?: AbortSignal) {
+    const profile = await this.requireAgentProfile(profileId, signal);
     const modelRuntime = await this.createProfileModelRuntime(profile.path);
     return (await modelRuntime.getAvailable()).map((model) => ({
       provider: model.provider,
@@ -794,8 +808,8 @@ export class PiSessionService {
     return parsed.toString().replace(/\/+$/, '');
   }
 
-  private async requireAgentProfile(profileId: string): Promise<AgentProfile> {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
+  private async requireAgentProfile(profileId: string, signal?: AbortSignal): Promise<AgentProfile> {
+    const profile = (await this.listAgentProfiles(signal)).find((item) => item.id === profileId);
     if (!profile) throw new Error('Unknown agent profile');
     return profile;
   }
@@ -1115,15 +1129,18 @@ export class PiSessionService {
     return counts;
   }
 
-  async createSession(clientId: string, options: SessionOptions = {}): Promise<CreateSessionResult> {
+  async createSession(clientId: string, options: SessionOptions = {}, signal?: AbortSignal): Promise<CreateSessionResult> {
+    signal?.throwIfAborted();
     this.cancelCleanup(clientId);
 
     const cwd = expandHomePath(options.cwd || process.cwd());
-    const { profile, agentDir } = await this.getClientProfileProxyEnv(clientId, options.agentProfileId);
+    const { profile, agentDir } = await this.getClientProfileProxyEnv(clientId, options.agentProfileId, signal);
+    signal?.throwIfAborted();
     const sessionManager = options.noSession
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd, this.getProjectSessionDir(cwd, agentDir));
     const availableSkills = await this.loadSkills(cwd, agentDir);
+    signal?.throwIfAborted();
     const skillPolicy = this.resolveAppliedSkillPolicy(availableSkills, options);
     const memoryEnabled = Boolean(this.memoryRuntime) && options.memoryEnabled !== false && !options.noSession;
     const autoRenameConfig = this.getProfileSettings(profile.id);
@@ -1135,6 +1152,7 @@ export class PiSessionService {
       autoRenameConfig,
     });
     const resourceLoader = await this.createResourceLoader(cwd, agentDir, skillPolicy, extensionFactories);
+    signal?.throwIfAborted();
     const modeOptions = { tools: [...AGENT_SESSION_TOOLS, ...(memoryEnabled ? ['memory'] : [])] };
 
     const { session } = await createAgentSession({
@@ -1144,8 +1162,15 @@ export class PiSessionService {
       ...modeOptions,
     });
 
-    if (options.modelProvider && options.modelId) {
-      await this.setModelForSession(session, options.modelProvider, options.modelId);
+    try {
+      signal?.throwIfAborted();
+      if (options.modelProvider && options.modelId) {
+        await this.setModelForSession(session, options.modelProvider, options.modelId);
+      }
+      signal?.throwIfAborted();
+    } catch (error) {
+      session.dispose();
+      throw error;
     }
     this.registerClientSession(clientId, session);
     if (!options.noSession) {
@@ -1371,8 +1396,8 @@ export class PiSessionService {
     return skills.map(toAvailableSkillInfo);
   }
 
-  async listAgentProfileSkills(profileId: string, cwd: string): Promise<AvailableSkillInfo[]> {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
+  async listAgentProfileSkills(profileId: string, cwd: string, signal?: AbortSignal): Promise<AvailableSkillInfo[]> {
+    const profile = (await this.listAgentProfiles(signal)).find((item) => item.id === profileId);
     if (!profile) throw new Error(`Unknown agent profile: ${profileId}`);
     const skills = await this.loadSkills(expandHomePath(cwd), profile.path);
     return skills.map(toAvailableSkillInfo);
@@ -1488,10 +1513,35 @@ export class PiSessionService {
     return this.runWithResolvedProfileProxy(clientId, agentDir, proxyEnv, fn);
   }
 
-  async runForegroundWithClientProfileProxy<T>(clientId: string, fn: () => Promise<T>): Promise<T> {
-    const { profile, agentDir, proxyEnv } = await this.getClientProfileProxyEnv(clientId);
+  async runForegroundWithClientProfileProxy<T>(clientId: string, fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const { profile, agentDir, proxyEnv } = await this.getClientProfileProxyEnv(clientId, undefined, signal);
+    signal?.throwIfAborted();
     const work = () => this.runWithResolvedProfileProxy(clientId, agentDir, proxyEnv, fn);
     return this.memoryRuntime ? this.memoryRuntime.withForeground(profile.id, work) : work();
+  }
+
+  onSessionExecutionMessage(listener: (message: SessionExecutionMessage) => void): () => void {
+    this.sessionExecutionListeners.add(listener);
+    return () => { this.sessionExecutionListeners.delete(listener); };
+  }
+
+  async runSessionExecution<T>(session: AgentSession, work: () => Promise<T>): Promise<T> {
+    const sessionId = session.sessionId;
+    const streamingStartedAt = this.markSessionStreamingStarted(sessionId);
+    const publish = (message: SessionExecutionMessage) => {
+      for (const listener of this.sessionExecutionListeners) listener(message);
+    };
+    const unsubscribe = session.subscribe((event) => {
+      publish({ type: 'event', sessionId, event, streamingStartedAt });
+    });
+    try {
+      publish({ type: 'streaming_state', sessionId, isStreaming: true, streamingStartedAt });
+      return await work();
+    } finally {
+      unsubscribe();
+      this.markSessionStreamingFinished(sessionId);
+      publish({ type: 'status', sessionId, status: 'idle' });
+    }
   }
 
   getSession(clientId: string, sessionId?: string): AgentSession | undefined {
@@ -1571,15 +1621,16 @@ export class PiSessionService {
   disposeSession(clientId: string): void {
     this.cancelCleanup(clientId);
     const sessionIds = this.clientSessions.get(clientId) || new Set();
+    this.clientSessions.delete(clientId);
+    this.currentClientSession.delete(clientId);
     for (const sessionId of sessionIds) {
+      if (Array.from(this.clientSessions.values()).some((ids) => ids.has(sessionId))) continue;
       const session = this.sessions.get(sessionId);
       if (!session) continue;
       session.dispose();
       this.sessions.delete(sessionId);
       this.streamingStartedAt.delete(sessionId);
     }
-    this.clientSessions.delete(clientId);
-    this.currentClientSession.delete(clientId);
   }
 
   disposeAll(): void {
@@ -1820,16 +1871,17 @@ export class PiSessionService {
     return (await this.getClientAgentProfile(clientId)).path;
   }
 
-  private async getClientProfileProxyEnv(clientId: string, profileId?: string): Promise<{
+  private async getClientProfileProxyEnv(clientId: string, profileId?: string, signal?: AbortSignal): Promise<{
     profile: AgentProfile;
     agentDir: string;
     proxyEnv: Record<string, string>;
   }> {
     const profile = profileId
-      ? (await this.listAgentProfiles()).find((item) => item.id === profileId)
-      : await this.getClientAgentProfile(clientId);
+      ? (await this.listAgentProfiles(signal)).find((item) => item.id === profileId)
+      : await this.getClientAgentProfile(clientId, signal);
     if (!profile) throw new Error(`Unknown agent profile: ${profileId}`);
     const agentDir = profile.path;
+    signal?.throwIfAborted();
     const proxyEnv = this.getProfileSettings(profile.id).proxy;
     return { profile, agentDir, proxyEnv };
   }
