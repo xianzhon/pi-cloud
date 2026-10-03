@@ -1,7 +1,7 @@
 import type { ImageContent } from '@earendil-works/pi-ai';
 
 export const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-export const MAX_IMAGE_COUNT = 4;
+export const MAX_IMAGE_COUNT = 20;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 export type ImageValidationResult =
@@ -24,7 +24,7 @@ export function validateImages(value: unknown, model: { input?: readonly string[
   if (value === undefined) return { ok: true, images: [], names: [] };
   if (!Array.isArray(value)) return invalidImage('Images must be sent as an array.');
   if (value.length > MAX_IMAGE_COUNT) {
-    return { ok: false, code: 'image_limit_exceeded', message: 'You can attach up to 4 images.' };
+    return { ok: false, code: 'image_limit_exceeded', message: `You can attach up to ${MAX_IMAGE_COUNT} images.` };
   }
   if (value.length && !model?.input?.includes('image')) {
     return { ok: false, code: 'model_image_unsupported', message: 'This model can’t read images. Switch to an image-capable model or remove the images.' };

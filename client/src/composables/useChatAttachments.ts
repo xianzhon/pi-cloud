@@ -1,7 +1,7 @@
 import { ref, watch } from 'vue';
 import type { ChatImage } from './useChat';
 
-const MAX_IMAGE_COUNT = 4;
+const MAX_IMAGE_COUNT = 20;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
@@ -48,7 +48,7 @@ export function useChatAttachments(t: Translate) {
         continue;
       }
       if (attachments.value.length >= MAX_IMAGE_COUNT) {
-        errors.push(t('components.chatPanel.youCanAttachUpTo4Images'));
+        errors.push(t('components.chatPanel.imageCountLimit', { count: MAX_IMAGE_COUNT }));
         continue;
       }
 

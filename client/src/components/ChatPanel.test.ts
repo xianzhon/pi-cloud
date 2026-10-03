@@ -412,19 +412,19 @@ describe('ChatPanel', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it('uses the attachment validation path for paste and drop and enforces the four-image limit', async () => {
+  it('uses the attachment validation path for paste and drop and enforces the twenty-image limit', async () => {
     const wrapper = mount(ChatPanel);
     const textarea = wrapper.find('textarea');
     const png = (name: string) => new File([new Uint8Array([1])], name, { type: 'image/png' });
 
     await textarea.trigger('paste', { clipboardData: { files: [png('pasted.png')] } });
     await vi.waitFor(() => expect(wrapper.findAll('.attachment-item')).toHaveLength(1));
-    await wrapper.find('.composer-shell').trigger('drop', { dataTransfer: { files: [png('one.png'), png('two.png'), png('three.png'), png('extra.png')] } });
-    await vi.waitFor(() => expect(wrapper.findAll('.attachment-item')).toHaveLength(4));
+    await wrapper.find('.composer-shell').trigger('drop', { dataTransfer: { files: Array.from({ length: 20 }, (_, index) => png(`${index}.png`)) } });
+    await vi.waitFor(() => expect(wrapper.findAll('.attachment-item')).toHaveLength(20));
 
-    expect(wrapper.text()).toContain('You can attach up to 4 images.');
+    expect(wrapper.text()).toContain('You can attach up to 20 images.');
     await wrapper.findAll('.attachment-remove')[0].trigger('click');
-    expect(wrapper.findAll('.attachment-item')).toHaveLength(3);
+    expect(wrapper.findAll('.attachment-item')).toHaveLength(19);
     expect(wrapper.find('.attachment-error').exists()).toBe(false);
   });
 

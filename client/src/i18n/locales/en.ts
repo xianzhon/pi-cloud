@@ -261,7 +261,7 @@ export default {
       createBranch: 'Create branch',
       failedToLoadSessionStatus: 'Failed to load session status',
       failedToLoadSessionStatus2: 'Failed to load session status:',
-      youCanAttachUpTo4Images: 'You can attach up to 4 images.',
+      imageCountLimit: 'You can attach up to {count} images.',
       theImageCouldNotBeReadTry: 'The image could not be read. Try selecting it again.',
       chatPrompt: 'Chat prompt',
       failedToPolishPrompt: 'Failed to polish prompt',

@@ -195,7 +195,7 @@ describe('chat websocket', () => {
     ['unknown model capability', [{ type: 'image', data: 'cG5n', mimeType: 'image/png' }], undefined, 'model_image_unsupported'],
     ['unsupported MIME type', [{ type: 'image', data: 'c3Zn', mimeType: 'image/svg+xml' }], ['text', 'image'], 'image_type_unsupported'],
     ['malformed base64', [{ type: 'image', data: 'not base64!', mimeType: 'image/png' }], ['text', 'image'], 'image_malformed'],
-    ['more than four images', Array.from({ length: 5 }, () => ({ type: 'image', data: 'eA==', mimeType: 'image/png' })), ['text', 'image'], 'image_limit_exceeded'],
+    ['more than twenty images', Array.from({ length: 21 }, () => ({ type: 'image', data: 'eA==', mimeType: 'image/png' })), ['text', 'image'], 'image_limit_exceeded'],
     ['an oversized image', [{ type: 'image', data: Buffer.alloc(10 * 1024 * 1024 + 1).toString('base64'), mimeType: 'image/png' }], ['text', 'image'], 'image_too_large'],
   ])('rejects %s before calling Pi', async (_label, images, input, code) => {
     mocks.session.model = { provider: 'test', id: 'vision', ...(input ? { input } : {}) } as any;

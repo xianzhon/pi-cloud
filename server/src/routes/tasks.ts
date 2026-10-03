@@ -61,7 +61,7 @@ export async function taskRoutes(app: FastifyInstance, options: TaskRouteOptions
     };
   });
 
-  app.post('/', { bodyLimit: 56 * 1024 * 1024 }, async (req, reply) => {
+  app.post('/', { bodyLimit: 280 * 1024 * 1024 }, async (req, reply) => {
     try {
       return { task: options.store.create(parseTaskDraft(req.body)) };
     } catch (error) {
@@ -85,7 +85,7 @@ export async function taskRoutes(app: FastifyInstance, options: TaskRouteOptions
     return task ? { task } : reply.status(404).send({ error: 'Task not found' });
   });
 
-  app.put('/:id', { bodyLimit: 56 * 1024 * 1024 }, async (req, reply) => {
+  app.put('/:id', { bodyLimit: 280 * 1024 * 1024 }, async (req, reply) => {
     try {
       return { task: options.store.update((req.params as { id: string }).id, parseTaskDraft(req.body)) };
     } catch (error) {

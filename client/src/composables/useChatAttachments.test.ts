@@ -21,14 +21,14 @@ describe('useChatAttachments', () => {
     expect(controller.attachmentError.value).toContain('unsupportedImage:notes.txt');
   });
 
-  it('rejects oversized images and enforces the four-image limit', async () => {
+  it('rejects oversized images and enforces the twenty-image limit', async () => {
     const controller = useChatAttachments(translate);
     await controller.addImageFiles([new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.png', { type: 'image/png' })]);
     expect(controller.attachmentError.value).toContain('imageTooLarge:large.png');
-    const images = Array.from({ length: 5 }, (_, index) => new File(['x'], `${index}.png`, { type: 'image/png' }));
+    const images = Array.from({ length: 21 }, (_, index) => new File(['x'], `${index}.png`, { type: 'image/png' }));
     await controller.addImageFiles(images);
-    expect(controller.attachments.value).toHaveLength(4);
-    expect(controller.attachmentError.value).toContain('youCanAttachUpTo4Images');
+    expect(controller.attachments.value).toHaveLength(20);
+    expect(controller.attachmentError.value).toContain('imageCountLimit');
   });
 
   it('handles input, paste, drag, leave, and drop events', async () => {

@@ -261,7 +261,7 @@ export default {
       createBranch: '创建分支',
       failedToLoadSessionStatus: '无法加载会话状态',
       failedToLoadSessionStatus2: '无法加载会话状态：',
-      youCanAttachUpTo4Images: '您最多可以附加 4 张图像。',
+      imageCountLimit: '您最多可以附加 {count} 张图像。',
       theImageCouldNotBeReadTry: '无法读取图像。尝试再次选择它。',
       chatPrompt: '聊天提示词',
       failedToPolishPrompt: '润色提示词失败',

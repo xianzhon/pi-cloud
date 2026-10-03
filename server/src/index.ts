@@ -345,7 +345,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     prefix: '/',
   });
 
-  await app.register(websocket);
+  await app.register(websocket, { options: { maxPayload: 280 * 1024 * 1024 } });
 
   app.addHook('onRequest', async (req, reply) => {
     if (isMutatingRequest(req) && !isAllowedRequestOrigin(req)) {
