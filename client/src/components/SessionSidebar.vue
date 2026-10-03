@@ -455,6 +455,7 @@
 <script setup lang="ts">
 import { i18n } from '../i18n';
 import { formatHomePath } from '../utils/paths';
+import { orderProjectPaths, matchesProjectPath } from '../utils/projectOptions';
 import { computed, ref, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { PhBrain, PhCheck, PhFolder, PhX, PhPencilSimple, PhTrash, PhSignOut, PhPlus, PhArrowSquareOut, PhGitMerge, PhGitPullRequest, PhGitBranch, PhMagnifyingGlass, PhCaretRight, PhPushPin } from '@phosphor-icons/vue';
 import FileIcon from './FileIcon.vue';
@@ -632,12 +633,8 @@ const agentProfileStorageKey = 'pi-cloud-agent-profile';
 const version = import.meta.env.VITE_APP_VERSION || 'dev';
 const projectPathDisplay = computed(() => formatProjectPath(projectPath.value));
 const filteredProjectPathOptions = computed(() => {
-  const paths = Array.from(new Set([...favoriteProjectPaths.value, ...projectPathOptions.value]));
-  const query = projectPathQuery.value.trim().toLowerCase();
-  if (!query) return paths;
-  return paths.filter((path) => (
-    path.toLowerCase().includes(query) || formatHomePath(path).toLowerCase().includes(query)
-  ));
+  return orderProjectPaths(projectPathOptions.value, favoriteProjectPaths.value)
+    .filter((path) => matchesProjectPath(path, projectPathQuery.value));
 });
 const selectedAgentProfileLabel = computed(() => {
   if (selectedReviewSourceId.value) {

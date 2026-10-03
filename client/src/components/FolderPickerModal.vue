@@ -170,10 +170,14 @@
         />
 
         <div v-else class="project-history-list">
+          <label class="search-field">
+            <PhMagnifyingGlass :size="15" class="search-icon" />
+            <input v-model="historyQuery" class="search-input" :aria-label="t('components.sessionSidebar.searchProjects')" :placeholder="t('components.sessionSidebar.searchProjects')" @keyup.escape="historyQuery = ''" />
+          </label>
           <div v-if="historyError" class="error-message">{{ historyError }}</div>
           <div v-if="historyLoading" class="empty-state">{{ t('components.folderPickerModal.loading') }}</div>
-          <div v-else-if="projectHistory.length === 0" class="empty-state">
-            {{ t('components.folderPickerModal.noProjectHistory') }}
+          <div v-else-if="sortedProjectHistory.length === 0" class="empty-state">
+            {{ historyQuery.trim() ? t('components.customSelect.noMatchingOptions') : t('components.folderPickerModal.noProjectHistory') }}
           </div>
           <div v-for="entry in sortedProjectHistory" v-else :key="entry.path" class="project-history-row">
             <button class="project-history-project" type="button" @click="selectHistoryProject(entry.path)">
@@ -245,6 +249,7 @@
 
 <script setup lang="ts">
 import { i18n } from '../i18n';
+import { orderProjectPaths, matchesProjectPath } from '../utils/projectOptions';
 import { computed, ref, watch } from 'vue';
 import { PhArrowLeft, PhClockCounterClockwise, PhEye, PhEyeSlash, PhFolder, PhFolderPlus, PhMagnifyingGlass, PhStar, PhTextAa, PhTrash } from '@phosphor-icons/vue';
 import CloneRepositoryModal from './CloneRepositoryModal.vue';
@@ -308,10 +313,16 @@ const removingHistoryPath = ref('');
 const updatingFavoritePath = ref('');
 const historyPathToRemove = ref('');
 
-const sortedProjectHistory = computed(() => [
-  ...projectHistory.value.filter((entry) => entry.isFavorite),
-  ...projectHistory.value.filter((entry) => !entry.isFavorite),
-]);
+const historyQuery = ref('');
+const projectPaths = ref<string[]>([]);
+const sortedProjectHistory = computed(() => {
+  const entries = new Map(projectHistory.value.map((entry) => [entry.path, entry]));
+  return orderProjectPaths(
+    [...projectPaths.value, ...entries.keys()],
+    projectHistory.value.filter((entry) => entry.isFavorite).map((entry) => entry.path),
+  ).filter((path) => entries.has(path) && matchesProjectPath(path, historyQuery.value))
+    .map((path) => entries.get(path)!);
+});
 const currentProjectName = computed(() => basenamePath(props.currentProjectPath || ''));
 const isCurrentProjectPath = computed(() => Boolean(props.currentProjectPath) && currentPath.value === props.currentProjectPath);
 const showRenameOption = computed(() => isCurrentProjectPath.value);
@@ -347,6 +358,8 @@ watch(
       newFolderDialogVisible.value = false;
       historyPathToRemove.value = '';
       projectHistory.value = [];
+      projectPaths.value = [];
+      historyQuery.value = '';
       browse(props.initialPath || '~');
       if (props.showClone && props.clientId) void openHistory();
     }
@@ -425,6 +438,15 @@ async function openHistory() {
     if (!response.ok) throw new Error(t('components.folderPickerModal.failedToLoadHistory'));
     const data = await response.json() as { projects?: ProjectHistoryEntry[] };
     projectHistory.value = Array.isArray(data.projects) ? data.projects : [];
+    try {
+      const pathsResponse = await fetch(`/api/sessions/project-paths?clientId=${encodeURIComponent(props.clientId)}`);
+      if (pathsResponse.ok) {
+        const pathsData = await pathsResponse.json();
+        projectPaths.value = Array.isArray(pathsData.projectPaths) ? pathsData.projectPaths : [];
+      }
+    } catch {
+      // Keep history usable when session project paths are unavailable.
+    }
   } catch (err) {
     historyError.value = err instanceof Error ? err.message : t('components.folderPickerModal.failedToLoadHistory');
   } finally {

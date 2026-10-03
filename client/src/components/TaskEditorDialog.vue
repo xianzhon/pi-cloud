@@ -16,7 +16,7 @@
               <section class="task-content-fields">
                 <label for="task-project">{{ t('components.taskEditorDialog.project') }}</label>
                 <div class="project-control">
-                  <CustomSelect id="task-project" v-model="selectedProjectPath" :options="projectOptions" :aria-label="t('components.taskEditorDialog.taskProject')" />
+                  <CustomSelect id="task-project" v-model="selectedProjectPath" :options="projectOptions" searchable :search-placeholder="t('components.sessionSidebar.searchProjects')" :aria-label="t('components.taskEditorDialog.taskProject')" />
                   <button type="button" class="dialog-action browse-project" @click="showFolderPicker = true">{{ t('components.taskEditorDialog.browse') }}</button>
                 </div>
 
@@ -99,6 +99,8 @@
 
 <script setup lang="ts">
 import { i18n } from '../i18n';
+import { formatHomePath } from '../utils/paths';
+import { orderProjectPaths } from '../utils/projectOptions';
 import { computed, nextTick, ref, watch } from 'vue';
 import { PhRobot } from '@phosphor-icons/vue';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
@@ -179,7 +181,7 @@ let loadingGeneration = 0;
 let initializing = false;
 let preloaded = false;
 
-const projectOptions = computed<CustomSelectOption[]>(() => projectPaths.value.map((path) => ({ value: path, label: path })));
+const projectOptions = computed<CustomSelectOption[]>(() => projectPaths.value.map((path) => ({ value: path, label: formatHomePath(path) })));
 const profileOptions = computed<CustomSelectOption[]>(() => profiles.value.map((profile) => ({ value: profile.id, label: profile.label })));
 const imagesBlocked = computed(() => attachments.value.length > 0 && !models.value.find((model) => model.provider === launchValue.value.modelProvider && model.id === launchValue.value.modelId)?.input?.includes('image'));
 const submitDisabled = computed(() => props.saving || loadingResources.value || imagesBlocked.value || !title.value.trim() || !prompt.value.trim() || !selectedProjectPath.value || !selectedProfileId.value || !launchValid.value);
@@ -233,10 +235,7 @@ async function prepareForOpen() {
       loadProjectPaths(),
       loadAgentProfiles(),
     ]);
-    projectPaths.value = Array.from(new Set([
-      selectedProjectPath.value,
-      ...loadedProjectPaths,
-    ].filter(Boolean)));
+    projectPaths.value = orderProjectPaths([...loadedProjectPaths, selectedProjectPath.value]);
     profiles.value = loadedProfiles;
     selectedProfileId.value = initialProfileId();
     await nextTick();
@@ -249,15 +248,20 @@ async function prepareForOpen() {
 }
 
 async function loadProjectPaths(): Promise<string[]> {
-  return cachedLaunchResource(
-    launchCacheKey(['project-paths', props.clientId]),
-    async () => {
-      const response = await fetch(`/api/sessions/project-paths?clientId=${encodeURIComponent(props.clientId)}`);
-      if (response.ok === false) throw new Error(t('components.taskEditorDialog.failedToLoadProjectPaths'));
-      const data = await response.json();
-      return Array.isArray(data.projectPaths) ? data.projectPaths : [];
-    },
-  );
+  const response = await fetch(`/api/sessions/project-paths?clientId=${encodeURIComponent(props.clientId)}`);
+  if (response.ok === false) throw new Error(t('components.taskEditorDialog.failedToLoadProjectPaths'));
+  const data = await response.json();
+  let favorites: string[] = [];
+  try {
+    const historyResponse = await fetch(`/api/sessions/project-history?clientId=${encodeURIComponent(props.clientId)}`);
+    if (historyResponse.ok) {
+      const history = await historyResponse.json() as { projects?: Array<{ path: string; isFavorite?: boolean }> };
+      favorites = (history.projects || []).filter((entry) => entry.isFavorite).map((entry) => entry.path);
+    }
+  } catch {
+    // Project selection remains available if history cannot be loaded.
+  }
+  return orderProjectPaths(Array.isArray(data.projectPaths) ? data.projectPaths : [], favorites);
 }
 
 async function loadAgentProfiles(): Promise<AgentProfile[]> {
