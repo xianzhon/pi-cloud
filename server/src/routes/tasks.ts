@@ -19,9 +19,12 @@ import type { PiSessionService } from '../services/session-manager.js';
 import { validateImages } from '../services/image-input.js';
 import type { SessionActivityRecord, SessionActivityStore } from '../services/session-activity-store.js';
 
+import type { TaskExecutionQueue } from '../services/task-execution-queue.js';
+
 export interface TaskRouteOptions {
   store: ProjectTaskStore;
   starter: ProjectTaskStarter;
+  executionQueue?: TaskExecutionQueue;
   activityStore?: Pick<SessionActivityStore, 'listLatestPrForSessions'>;
 }
 
@@ -77,6 +80,20 @@ export async function taskRoutes(app: FastifyInstance, options: TaskRouteOptions
       return { content: await polishTaskContentWithAi(app.services.sessions, body.clientId, body.title || '', body.prompt) };
     } catch (error) {
       return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to polish task content with AI' });
+    }
+  });
+
+  app.get('/execution-queue', async (_req, reply) => {
+    return options.executionQueue ? options.executionQueue.get() : reply.status(503).send({ error: 'Task execution queue unavailable' });
+  });
+
+  app.put('/execution-queue', async (req, reply) => {
+    if (!options.executionQueue) return reply.status(503).send({ error: 'Task execution queue unavailable' });
+    try {
+      const body = req.body as { taskIds?: unknown; enabled?: unknown } | undefined;
+      return options.executionQueue.configure(body?.taskIds, body?.enabled);
+    } catch (error) {
+      return sendTaskError(reply, error, 400);
     }
   });
 

@@ -34,7 +34,7 @@ Open the top action menu (the three-dot button) and select **Task inbox**. While
 - **Waiting**: Ready to edit, start, or delete.
 - **Starting**: A temporary state while a task starts; it is not normally shown as a separate list.
 - **Started**: A Pi session has been created and linked. You can open the session, mark the task complete, or delete the task record.
-- **Completed**: Manually marked as complete. You can still open the linked session or delete the task record.
+- **Completed**: Manually marked as complete or successfully finished by auto-execution. You can still open the linked session or delete the task record.
 
 > Deleting a task record does not delete a Pi session that has already been created.
 
@@ -69,6 +69,18 @@ Click **Start** beside a task in the **Waiting** list. To launch it without repl
 7. Returns to chat, opens the new session, and sends the task prompt to Pi.
 
 If the prompt cannot be sent, the session remains available and the prompt stays in the input box so you can retry manually.
+
+## Automatic Execution
+
+Click **Arrange tasks** beside **+ New task**. Choose **Current project** or **All projects**, select waiting tasks, and use the up/down buttons to set their execution order. The scope filters available tasks; selected tasks remain in the queue even when you change scope. Turn on **Auto-execution** and click **Save queue**.
+
+There is one shared, persisted server-side queue. It runs one task at a time in a new session using that task's configured profile, model, skills, and worktree. Closing the dialog or browser does not stop it. Open the dialog to monitor progress. To pause, turn off the switch and save: the current task finishes, but the next does not start. Rearranging is disabled until execution is off and the current task has finished.
+
+Each task moves to **Started** when its session is created. The agent is asked to verify the work and explicitly confirm successful completion; an ended response alone is not treated as success. The server then commits changes locally with `feat: <task title>` and verifies the commit and clean working tree before marking **Completed**. Successful tasks with no changes are also completed. Nothing is pushed or merged, and managed-worktree changes stay on their configured branches.
+
+Projects must be Git repositories with an existing commit and a checked-out branch. Both the project and resolved worktree must be clean before execution; worktree file-copy settings that introduce untracked changes will pause execution. Avoid concurrent edits or manual actions on queued tasks: automatic commits include all changes in the task repository. Agent instructions are not a sandbox or a guarantee that its implementation is correct.
+
+Errors, interruptions, requests for input, unexpected branch/HEAD changes, and commit failures pause the queue without completing the task. Review the linked session and repository, finish/recover the task manually, and remove any non-waiting task from the queue before re-enabling it. After a server restart, the saved queue is paused for review rather than replaying potentially partially executed work.
 
 ## Issues and Pull Requests
 

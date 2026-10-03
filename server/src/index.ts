@@ -59,6 +59,7 @@ import { SkillPresetStore } from './services/skill-preset-store.js';
 import { CommitMessagePromptStore } from './services/commit-message-prompt-store.js';
 import { ChangeReasonPromptStore } from './services/change-reason-prompt-store.js';
 import { ProjectTaskStarter } from './services/project-task-starter.js';
+import { TaskExecutionQueue } from './services/task-execution-queue.js';
 import { RepositoryCloner } from './services/repository-cloner.js';
 import { FeishuGatewayService } from './services/feishu-gateway.js';
 import { WeixinGatewayService } from './services/weixin-gateway.js';
@@ -298,6 +299,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     worktreeMetadataStore,
     presetStore: skillPresetStore,
   });
+  const taskExecutionQueue = new TaskExecutionQueue({ db, tasks: projectTaskStore, starter: projectTaskStarter, sessions: piSessionService });
   const audit = new AuditLog(db);
   const sessions = new SessionStore(db, authConfig.cookieName);
   const totp = new TotpService(db, 'Pi Cloud', authConfig.username);
@@ -311,6 +313,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     worktreeMetadata: worktreeMetadataStore,
   });
   app.addHook('onClose', async () => {
+    await taskExecutionQueue.stop();
     await modelWindowKickoffScheduler.stop();
     await weixinGateway.stop();
     terminalManager.disposeAll();
@@ -386,7 +389,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     managedSkillProxyEnv: () => githubSettings.proxyEnv(),
   });
   await app.register(memoryRoutes, { prefix: '/api/memories' });
-  await app.register(taskRoutes, { prefix: '/api/tasks', store: projectTaskStore, starter: projectTaskStarter, activityStore: sessionActivityStore });
+  await app.register(taskRoutes, { prefix: '/api/tasks', store: projectTaskStore, starter: projectTaskStarter, activityStore: sessionActivityStore, executionQueue: taskExecutionQueue });
   await app.register(gatewayRoutes, { prefix: '/api/gateways', settings: gatewaySettings, weixin: weixinGateway });
   await app.register(feishuGatewayRoutes, { prefix: '/api/gateways/feishu', service: feishuGateway });
   await app.register(wecomGatewayRoutes, { prefix: '/api/gateways/wecom', service: wecomGateway });

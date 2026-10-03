@@ -13,6 +13,7 @@
         <p>{{ t('components.taskInboxPanel.captureWorkNowAndStartInNew') }}</p>
       </div>
       <div class="task-inbox-actions">
+        <button class="arrange-tasks" type="button" @click="executionVisible = true">{{ t('components.taskExecution.title') }}</button>
         <button class="new-task" type="button" @click="openNewTask">{{ t('components.taskInboxPanel.newTask') }}</button>
         <button class="close-task-inbox" type="button" :aria-label="t('components.taskInboxPanel.closeTaskInbox')" @click="emit('close')">×</button>
       </div>
@@ -117,6 +118,8 @@
       </article>
     </div>
 
+    <TaskExecutionDialog :visible="executionVisible" :current-project-path="currentProjectPath" @close="executionVisible = false" @changed="load(currentProjectPath)" />
+
     <TaskEditorDialog
       ref="taskEditorRef"
       :visible="editorVisible"
@@ -172,6 +175,7 @@ import { useGitHosting, type GitHostingIssuePreview } from '../composables/useGi
 import type { ProjectTask, ProjectTaskDraft, ProjectTaskStartResult, ProjectTaskVisibleStatus } from '../types/projectTask';
 import ConfirmModal from './ConfirmModal.vue';
 import TaskEditorDialog from './TaskEditorDialog.vue';
+import TaskExecutionDialog from './TaskExecutionDialog.vue';
 
 const t = i18n.global.t;
 
@@ -193,6 +197,7 @@ const emit = defineEmits<{
 const { tasks, scope, status, loading, error, startingTaskId, load, create, update, remove, start, complete } = useProjectTasks(props.clientId);
 const gitHosting = useGitHosting();
 const editorVisible = ref(false);
+const executionVisible = ref(false);
 const editingTask = ref<ProjectTask | null>(null);
 const taskEditorRef = ref<InstanceType<typeof TaskEditorDialog> | null>(null);
 const deletingTask = ref<ProjectTask | null>(null);
@@ -226,6 +231,9 @@ const statusOptions: Array<{ value: ProjectTaskVisibleStatus; label: string }> =
 ];
 
 watch([() => props.currentProjectPath, scope, status], () => void load(props.currentProjectPath), { immediate: true });
+const taskRefreshTimer = window.setInterval(() => {
+  if (props.visible !== false && !loading.value && !executionVisible.value) void load(props.currentProjectPath, true);
+}, 5_000);
 
 function openNewTask() {
   void openTaskEditor(null);
@@ -462,6 +470,7 @@ function startPanelResize(event: MouseEvent) {
 onUnmounted(() => {
   stopPanelResize();
   window.clearTimeout(toastTimer);
+  window.clearInterval(taskRefreshTimer);
 });
 
 defineExpose({ openNewTask });
@@ -520,6 +529,7 @@ defineExpose({ openNewTask });
 }
 .task-inbox-header {
   position: relative;
+  flex-wrap: wrap;
   padding: 18px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent),
@@ -550,6 +560,7 @@ defineExpose({ openNewTask });
   font-size: 12px;
 }
 .task-inbox-actions {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -571,6 +582,15 @@ defineExpose({ openNewTask });
     background 120ms ease,
     border-color 120ms ease,
     transform 120ms ease;
+}
+.arrange-tasks {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
 }
 .close-task-inbox {
   width: 32px;

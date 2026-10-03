@@ -17,10 +17,10 @@ export function useProjectTasks(clientId: string) {
   let lastProjectPath = '';
   let loadRequestId = 0;
 
-  async function load(projectPath = lastProjectPath): Promise<void> {
+  async function load(projectPath = lastProjectPath, quiet = false): Promise<void> {
     const requestId = ++loadRequestId;
     lastProjectPath = projectPath;
-    loading.value = true;
+    if (!quiet) loading.value = true;
     error.value = '';
     try {
       const params = new URLSearchParams({ scope: scope.value, status: status.value });
