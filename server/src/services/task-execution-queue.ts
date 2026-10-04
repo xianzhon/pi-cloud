@@ -1,11 +1,11 @@
-import { abortable } from '../utils/abortable.js';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { PiCloudDatabase } from '../db/database.js';
+import { abortable } from '../utils/abortable.js';
 import { resolveAllowedExistingPath } from '../utils/path-security.js';
 import type { ProjectTaskStarter } from './project-task-starter.js';
-import { ProjectTaskValidationError, ProjectTaskConflictError, type ProjectTaskStore, type ProjectTaskRecord } from './project-task-store.js';
+import { ProjectTaskConflictError, ProjectTaskValidationError, type ProjectTaskRecord, type ProjectTaskStore } from './project-task-store.js';
 import type { PiSessionService } from './session-manager.js';
 
 export interface TaskExecutionQueueState {
@@ -26,27 +26,31 @@ interface Dependencies {
 }
 
 const execFileAsync = promisify(execFile);
+const MAX_CONCURRENT_TASKS = 3;
+const SHUTDOWN_ERROR_MESSAGE = 'Server shutdown interrupted task execution. Review started tasks before continuing.';
 
 export class TaskExecutionQueue {
   private state: TaskExecutionQueueState;
   private running?: Promise<void>;
   private closing = false;
   private readonly shutdown = new AbortController();
-  private activeSessions = new Map<string, { abort(): Promise<void> }>();
+  private readonly activeSessions = new Map<string, { abort(): Promise<void> }>();
   private wakeRunner?: () => void;
   private readonly git: NonNullable<Dependencies['git']>;
   private readonly resolvePath: NonNullable<Dependencies['resolvePath']>;
 
   constructor(private readonly dependencies: Dependencies) {
+    const git = dependencies.git;
     this.git = async (cwd, args) => {
       this.checkOpen();
-      const result = dependencies.git
-        ? await abortable(() => dependencies.git!(cwd, args), this.shutdown.signal)
+      const result = git
+        ? await abortable(() => git(cwd, args), this.shutdown.signal)
         : (await execFileAsync('git', args, { cwd, maxBuffer: 1024 * 1024, timeout: 120_000, signal: this.shutdown.signal })).stdout.trim();
       this.checkOpen();
       return result;
     };
-    this.resolvePath = (path) => abortable(() => (dependencies.resolvePath || resolveAllowedExistingPath)(path), this.shutdown.signal);
+    const resolvePath = dependencies.resolvePath ?? resolveAllowedExistingPath;
+    this.resolvePath = (path) => abortable(() => resolvePath(path), this.shutdown.signal);
     const row = dependencies.db.prepare('SELECT state_json FROM task_execution_queue WHERE id = 1').get() as { state_json: string } | undefined;
     this.state = row ? JSON.parse(row.state_json) : { enabled: false, taskIds: [], activeTaskId: null, activeTaskIds: [], error: '' };
     this.state.activeTaskIds ||= this.state.activeTaskId ? [this.state.activeTaskId] : [];
@@ -104,7 +108,7 @@ export class TaskExecutionQueue {
     this.closing = true;
     this.state.enabled = false;
     this.save();
-    this.shutdown.abort(new Error('Server shutdown interrupted task execution. Review started tasks before continuing.'));
+    this.shutdown.abort(new Error(SHUTDOWN_ERROR_MESSAGE));
     const aborts = [...this.activeSessions.values()].map(async (session) => {
       try { await session.abort(); } catch { /* interrupted sessions remain started for review */ }
     });
@@ -128,7 +132,7 @@ export class TaskExecutionQueue {
   }
 
   private checkOpen(): void {
-    if (this.closing) throw new Error('Server shutdown interrupted task execution. Review started tasks before continuing.');
+    if (this.closing) throw new Error(SHUTDOWN_ERROR_MESSAGE);
   }
 
   private async run(): Promise<void> {
@@ -147,16 +151,16 @@ export class TaskExecutionQueue {
     while ((this.state.enabled && !this.closing && this.state.taskIds.length) || active.size) {
       if (this.state.enabled && !this.closing) {
         for (const id of this.state.taskIds) {
-          if (active.size >= 3 || !this.state.enabled || this.closing) break;
+          if (active.size >= MAX_CONCURRENT_TASKS || !this.state.enabled || this.closing) break;
           if (active.has(id)) continue;
           try {
             const task = this.dependencies.tasks.get(id);
             if (!task || task.status !== 'waiting') throw new Error('Queued task is no longer waiting');
             let repository = repositories.get(task.projectPath);
             if (!repository) {
-              const path = await abortable(() => this.resolvePath(task.projectPath), this.shutdown.signal);
+              const path = await this.resolvePath(task.projectPath);
               const commonDir = await this.git(path, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-              repository = await abortable(() => this.resolvePath(commonDir), this.shutdown.signal);
+              repository = await this.resolvePath(commonDir);
               repositories.set(task.projectPath, repository);
             }
             if ([...active.values()].some((run) => run.repository === repository)) continue;

@@ -78,7 +78,14 @@ import type { ProjectTask } from '../types/projectTask';
 import ConfirmModal from './ConfirmModal.vue';
 import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 
-interface QueueState { enabled: boolean; taskIds: string[]; activeTaskId: string | null; activeTaskIds?: string[]; error: string }
+interface QueueState {
+  enabled: boolean;
+  taskIds: string[];
+  activeTaskId: string | null;
+  activeTaskIds?: string[];
+  error: string;
+}
+
 const props = defineProps<{ visible: boolean; currentProjectPath: string }>();
 const emit = defineEmits<{ close: []; changed: [] }>();
 const t = i18n.global.t;
@@ -90,7 +97,7 @@ const scope = ref<'project' | 'all'>('project');
 const error = ref('');
 const loading = ref(false);
 const saving = ref(false);
-const activeTaskIds = computed(() => queue.value.activeTaskIds || (queue.value.activeTaskId ? [queue.value.activeTaskId] : []));
+const activeTaskIds = computed(() => getActiveTaskIds(queue.value));
 const executionActive = computed(() => queue.value.enabled || activeTaskIds.value.length > 0);
 const scopeOptions = computed<CustomSelectOption[]>(() => [
   { value: 'project', label: t('components.taskInboxPanel.currentProject') },
@@ -100,19 +107,35 @@ const available = computed(() => tasks.value.filter((task) => task.status === 'w
 let timer: ReturnType<typeof setTimeout> | undefined;
 let generation = 0;
 
-function taskTitle(id: string): string { return tasks.value.find((task) => task.id === id)?.title || id; }
-function isPersisted(id: string): boolean { return executionActive.value && queue.value.taskIds.includes(id); }
+function getActiveTaskIds(state: QueueState): string[] {
+  if (state.activeTaskIds) return state.activeTaskIds;
+  return state.activeTaskId ? [state.activeTaskId] : [];
+}
+
+function taskTitle(id: string): string {
+  return tasks.value.find((task) => task.id === id)?.title || id;
+}
+
+function isPersisted(id: string): boolean {
+  return executionActive.value && queue.value.taskIds.includes(id);
+}
+
 function toggle(id: string): void {
   if (isPersisted(id)) return;
   const index = selected.value.indexOf(id);
-  if (index === -1) selected.value.push(id);
-  else selected.value.splice(index, 1);
+  if (index === -1) {
+    selected.value.push(id);
+  } else {
+    selected.value.splice(index, 1);
+  }
 }
+
 function canMove(index: number, direction: number): boolean {
   const target = index + direction;
-  return target >= 0 && target < selected.value.length
-    && !isPersisted(selected.value[index]!) && !isPersisted(selected.value[target]!);
+  if (target < 0 || target >= selected.value.length) return false;
+  return !isPersisted(selected.value[index]!) && !isPersisted(selected.value[target]!);
 }
+
 function move(index: number, direction: number): void {
   if (!canMove(index, direction)) return;
   const ids = [...selected.value];
@@ -128,7 +151,7 @@ async function load(initial: boolean, requestGeneration: number): Promise<void> 
       apiRequest<{ tasks: ProjectTask[] }>('/api/tasks?scope=all'),
     ]);
     if (requestGeneration !== generation) return;
-    const changed = JSON.stringify(queue.value) !== JSON.stringify(state);
+    const changed = hasQueueChanged(queue.value, state);
     if (initial) {
       selected.value = [...state.taskIds];
       enabled.value = state.enabled;
@@ -157,7 +180,8 @@ async function save(): Promise<void> {
   error.value = '';
   try {
     queue.value = await apiRequest<QueueState, { taskIds: string[]; enabled: boolean }>('/api/tasks/execution-queue', {
-      method: 'PUT', body: { taskIds: selected.value, enabled: enabled.value },
+      method: 'PUT',
+      body: { taskIds: selected.value, enabled: enabled.value },
     });
     emit('changed');
     emit('close');
@@ -168,6 +192,18 @@ async function save(): Promise<void> {
   }
 }
 
+function hasQueueChanged(current: QueueState, next: QueueState): boolean {
+  return current.enabled !== next.enabled
+    || current.activeTaskId !== next.activeTaskId
+    || current.error !== next.error
+    || !haveSameIds(current.taskIds, next.taskIds)
+    || !haveSameIds(getActiveTaskIds(current), getActiveTaskIds(next));
+}
+
+function haveSameIds(current: string[], next: string[]): boolean {
+  return current.length === next.length && current.every((id, index) => id === next[index]);
+}
+
 watch(() => props.visible, (visible) => {
   clearTimeout(timer);
   const requestGeneration = ++generation;
@@ -176,7 +212,10 @@ watch(() => props.visible, (visible) => {
     void load(true, requestGeneration);
   }
 }, { immediate: true });
-onUnmounted(() => { ++generation; clearTimeout(timer); });
+onUnmounted(() => {
+  ++generation;
+  clearTimeout(timer);
+});
 </script>
 
 <style scoped>

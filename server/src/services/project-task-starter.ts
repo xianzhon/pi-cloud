@@ -1,6 +1,6 @@
-import { abortable } from '../utils/abortable.js';
 import { stat as fsStat } from 'fs/promises';
 import type { AgentProfile, AvailableSkillInfo, CreateSessionResult, ResolvedWorktreeSession, SessionOptions, SessionWorktreeInfo } from '../types';
+import { abortable } from '../utils/abortable.js';
 import type { ProjectTaskRecord, ProjectTaskStore } from './project-task-store';
 import { ProjectTaskConflictError, ProjectTaskValidationError } from './project-task-store';
 
@@ -52,6 +52,7 @@ export class ProjectTaskStarter {
 
   async start(taskId: string, clientId: string, signal?: AbortSignal, expectedProjectPath?: string): Promise<ProjectTaskStartResult> {
     signal?.throwIfAborted();
+    const signalArgs: [] | [AbortSignal] = signal ? [signal] : [];
     const task = this.options.store.claimStart(taskId);
     let sessionCreated = false;
     try {
@@ -61,9 +62,9 @@ export class ProjectTaskStarter {
       const launchTask = this.resolveSkillPolicy(task);
       await abortable(() => this.validateProject(task.projectPath), signal);
       await this.validateProfileModelAndSkills(launchTask, signal);
-      await abortable(() => this.options.sessionService.setClientAgentProfile(clientId, task.agentProfileId, ...(signal ? [signal] : [])), signal);
-      const resolved = await abortable(() => this.options.worktreeManager.resolveSessionCwd(task.projectPath, task.worktree, ...(signal ? [signal] : [])), signal);
-      const created = await abortable(() => this.options.sessionService.createSession(clientId, toSessionOptions(launchTask, resolved.cwd), ...(signal ? [signal] : [])), signal);
+      await abortable(() => this.options.sessionService.setClientAgentProfile(clientId, task.agentProfileId, ...signalArgs), signal);
+      const resolved = await abortable(() => this.options.worktreeManager.resolveSessionCwd(task.projectPath, task.worktree, ...signalArgs), signal);
+      const created = await abortable(() => this.options.sessionService.createSession(clientId, toSessionOptions(launchTask, resolved.cwd), ...signalArgs), signal);
       sessionCreated = true;
       const worktree = resolved.metadata
         ? this.options.worktreeMetadataStore.save({ sessionId: created.session.sessionId, ...resolved.metadata })
@@ -101,17 +102,18 @@ export class ProjectTaskStarter {
   }
 
   private async validateProfileModelAndSkills(task: ProjectTaskRecord, signal?: AbortSignal): Promise<void> {
-    const profiles = await abortable(() => this.options.sessionService.listAgentProfiles(...(signal ? [signal] : [])), signal);
+    const signalArgs: [] | [AbortSignal] = signal ? [signal] : [];
+    const profiles = await abortable(() => this.options.sessionService.listAgentProfiles(...signalArgs), signal);
     if (!profiles.some((profile) => profile.id === task.agentProfileId)) {
       throw new ProjectTaskValidationError(`Agent profile is unavailable: ${task.agentProfileId}`);
     }
 
-    const models = await abortable(() => this.options.sessionService.listAgentProfileModels(task.agentProfileId, ...(signal ? [signal] : [])), signal);
+    const models = await abortable(() => this.options.sessionService.listAgentProfileModels(task.agentProfileId, ...signalArgs), signal);
     if (!models.some((model) => model.provider === task.modelProvider && model.id === task.modelId)) {
       throw new ProjectTaskValidationError(`Model is unavailable: ${task.modelProvider}/${task.modelId}`);
     }
 
-    const skills = await abortable(() => this.options.sessionService.listAgentProfileSkills(task.agentProfileId, task.projectPath, ...(signal ? [signal] : [])), signal);
+    const skills = await abortable(() => this.options.sessionService.listAgentProfileSkills(task.agentProfileId, task.projectPath, ...signalArgs), signal);
     const availableNames = new Set(skills.map((skill) => skill.name));
     const unavailable = task.skills.filter((skill) => !availableNames.has(skill));
     if (unavailable.length) {
