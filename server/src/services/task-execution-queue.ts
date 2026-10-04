@@ -49,17 +49,21 @@ export class TaskExecutionQueue {
     const row = dependencies.db.prepare('SELECT state_json FROM task_execution_queue WHERE id = 1').get() as { state_json: string } | undefined;
     this.state = row ? JSON.parse(row.state_json) : { enabled: false, taskIds: [], activeTaskId: null, activeTaskIds: [], error: '' };
     this.state.activeTaskIds ||= this.state.activeTaskId ? [this.state.activeTaskId] : [];
+    let changed = false;
     // Never replay a partially executed task after a server restart.
     if (this.state.enabled || this.state.activeTaskIds.length) {
       this.state.enabled = false;
       this.state.activeTaskId = null;
       this.state.activeTaskIds = [];
       this.state.error = 'Server restarted. Review any started task and arrange the remaining queue before enabling it.';
-      this.save();
+      changed = true;
     }
+    if (this.pruneUnavailableTaskIds().size) changed = true;
+    if (changed) this.save();
   }
 
   get(): TaskExecutionQueueState {
+    if (this.pruneUnavailableTaskIds().size) this.save();
     return { ...this.state, taskIds: [...this.state.taskIds], activeTaskIds: [...this.state.activeTaskIds] };
   }
 
@@ -67,17 +71,20 @@ export class TaskExecutionQueue {
     if (!Array.isArray(taskIds) || taskIds.some((id) => typeof id !== 'string') || new Set(taskIds).size !== taskIds.length || typeof enabled !== 'boolean') {
       throw new ProjectTaskValidationError('Provide unique task IDs and an enabled boolean');
     }
-    if (this.running && JSON.stringify(taskIds) !== JSON.stringify(this.state.taskIds)) {
+    const unavailableTaskIds = this.pruneUnavailableTaskIds();
+    if (unavailableTaskIds.size) this.save();
+    const availableTaskIds = taskIds.filter((id) => !unavailableTaskIds.has(id));
+    if (this.running && JSON.stringify(availableTaskIds) !== JSON.stringify(this.state.taskIds)) {
       throw new ProjectTaskConflictError('Cannot rearrange the queue while a task is running');
     }
-    for (const id of taskIds) {
+    for (const id of availableTaskIds) {
       if (this.state.activeTaskIds.includes(id)) continue;
       if (enabled && this.dependencies.tasks.get(id)?.status !== 'waiting') {
         throw new ProjectTaskValidationError('Only waiting tasks can be queued. Remove any failed or manually started task first.');
       }
     }
-    if (enabled && !taskIds.length) throw new ProjectTaskValidationError('Select at least one task');
-    this.state.taskIds = [...taskIds];
+    if (enabled && !availableTaskIds.length) throw new ProjectTaskValidationError('Select at least one task');
+    this.state.taskIds = [...availableTaskIds];
     this.state.enabled = enabled;
     this.state.error = '';
     this.save();
@@ -106,6 +113,13 @@ export class TaskExecutionQueue {
   private save(): void {
     this.dependencies.db.prepare('INSERT INTO task_execution_queue (id, state_json) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET state_json = excluded.state_json')
       .run(JSON.stringify(this.state));
+  }
+
+  private pruneUnavailableTaskIds(): Set<string> {
+    if (this.state.enabled || this.state.activeTaskIds.length) return new Set();
+    const unavailable = new Set(this.state.taskIds.filter((id) => this.dependencies.tasks.get(id)?.status !== 'waiting'));
+    if (unavailable.size) this.state.taskIds = this.state.taskIds.filter((id) => !unavailable.has(id));
+    return unavailable;
   }
 
   private checkOpen(): void {
