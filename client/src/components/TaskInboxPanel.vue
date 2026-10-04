@@ -86,7 +86,7 @@
         <div class="task-row-actions task-actions">
           <div class="task-primary-actions">
             <button v-if="task.status === 'waiting'" class="task-start primary" type="button" :disabled="startingTaskId === task.id" @click="startTask(task)">{{ startingTaskId === task.id ? t('components.taskInboxPanel.starting') : t('components.taskInboxPanel.start') }}</button>
-            <button v-if="task.status !== 'waiting' && task.sessionId" class="task-open-session primary" type="button" @click="emit('openSession', task.sessionId)">{{ t('components.taskInboxPanel.openSession') }}</button>
+            <button v-if="task.status !== 'waiting' && task.sessionId" class="task-open-session primary" type="button" @click="emit('openSession', task.sessionId, task.agentProfileId)">{{ t('components.taskInboxPanel.openSession') }}</button>
           </div>
           <div class="task-secondary-actions">
             <button v-if="task.status === 'waiting'" class="task-start-new-tab" type="button" :disabled="startingTaskId === task.id" @click="startTaskInNewTab(task)">{{ t('components.taskInboxPanel.startInNewTab') }}</button>
@@ -191,7 +191,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   started: [result: ProjectTaskStartResult];
-  openSession: [sessionId: string];
+  openSession: [sessionId: string, agentProfileId: string];
 }>();
 
 const { tasks, scope, status, loading, error, startingTaskId, load, create, update, remove, start, complete } = useProjectTasks(props.clientId);

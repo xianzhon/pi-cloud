@@ -243,8 +243,19 @@ export class TaskExecutionQueue {
       if (await this.git(cwd, ['status', '--porcelain', '--untracked-files=all'])) {
         await this.git(cwd, ['add', '--all']);
         await this.git(cwd, ['commit', '-m', `feat: ${task.title.replace(/[\r\n]+/g, ' ')}`]);
-        if (await this.git(cwd, ['rev-parse', 'HEAD']) === head) throw new Error('Task commit could not be verified');
+        const committedHead = await this.git(cwd, ['rev-parse', 'HEAD']);
+        if (committedHead === head) throw new Error('Task commit could not be verified');
+        // The pre-staging check cannot exclude manual Git operations or commit hooks.
+        // Verify the actual parent and branch; leave raced commits for manual review.
+        if (await this.git(cwd, ['rev-parse', `${committedHead}^`]) !== head
+          || await this.git(cwd, ['symbolic-ref', 'HEAD']) !== branch) {
+          throw new Error('Repository HEAD or branch changed while committing. Review the task commit before continuing.');
+        }
         if (await this.git(cwd, ['status', '--porcelain', '--untracked-files=all'])) throw new Error('Repository still has uncommitted changes after committing');
+        if (await this.git(cwd, ['rev-parse', 'HEAD']) !== committedHead
+          || await this.git(cwd, ['symbolic-ref', 'HEAD']) !== branch) {
+          throw new Error('Repository HEAD or branch changed while committing. Review the task commit before continuing.');
+        }
       }
     } finally {
       this.activeSessions.delete(task.id);

@@ -7,7 +7,7 @@
 
         <div class="execution-settings">
           <label class="execution-switch">
-            <input v-model="enabled" type="checkbox" role="switch" :disabled="loading || saving" />
+            <input v-model="enabled" type="checkbox" role="switch" @change="enabledDirty = true" :disabled="loading || saving" />
             <span>
               <strong>{{ t('components.taskExecution.enabled') }}</strong>
               <small>{{ t('components.taskExecution.pauseHint') }}</small>
@@ -93,6 +93,7 @@ const queue = ref<QueueState>({ enabled: false, taskIds: [], activeTaskId: null,
 const tasks = ref<ProjectTask[]>([]);
 const selected = ref<string[]>([]);
 const enabled = ref(false);
+const enabledDirty = ref(false);
 const scope = ref<'project' | 'all'>('project');
 const error = ref('');
 const loading = ref(false);
@@ -155,11 +156,12 @@ async function load(initial: boolean, requestGeneration: number): Promise<void> 
     if (initial) {
       selected.value = [...state.taskIds];
       enabled.value = state.enabled;
+      enabledDirty.value = false;
     } else if (changed) {
       const waitingIds = new Set(data.tasks.filter((task) => task.status === 'waiting').map((task) => task.id));
       const pending = selected.value.filter((id) => !queue.value.taskIds.includes(id) && waitingIds.has(id));
       selected.value = [...state.taskIds, ...pending.filter((id) => !state.taskIds.includes(id))];
-      enabled.value = state.enabled;
+      if (!enabledDirty.value) enabled.value = state.enabled;
     }
     queue.value = state;
     tasks.value = data.tasks;

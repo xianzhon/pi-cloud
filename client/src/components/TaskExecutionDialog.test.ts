@@ -59,6 +59,33 @@ describe('TaskExecutionDialog', () => {
     expect(state.taskIds).toEqual(['one', 'two']);
   });
 
+  it('preserves an unsaved pause when polling observes task completion', async () => {
+    vi.useFakeTimers();
+    try {
+      state = { enabled: true, taskIds: ['one', 'two'], activeTaskId: 'one', error: '' };
+      await open();
+      await wrapper.get('input[role="switch"]').setValue(false);
+      state = { enabled: true, taskIds: ['two'], activeTaskId: 'two', error: '' };
+      await vi.advanceTimersByTimeAsync(2000);
+      await flushPromises();
+      expect((wrapper.get('input[role="switch"]').element as HTMLInputElement).checked).toBe(false);
+      expect(wrapper.text()).toContain('Running: Other task');
+      await wrapper.get('.btn-confirm').trigger('click');
+      await flushPromises();
+      expect(request).toHaveBeenCalledWith('/api/tasks/execution-queue', {
+        method: 'PUT', body: { taskIds: ['two'], enabled: false },
+      });
+      await wrapper.setProps({ visible: false });
+      state = { ...state, enabled: true };
+      await wrapper.setProps({ visible: true });
+      await flushPromises();
+      expect((wrapper.get('input[role="switch"]').element as HTMLInputElement).checked).toBe(true);
+    } finally {
+      wrapper?.unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it('shows every concurrently running task', async () => {
     state = { enabled: true, taskIds: ['one', 'two'], activeTaskId: 'one', error: '', activeTaskIds: ['one', 'two'] } as typeof state;
     await open();

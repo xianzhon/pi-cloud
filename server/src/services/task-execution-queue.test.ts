@@ -118,6 +118,37 @@ describe('TaskExecutionQueue', () => {
     expect(queue.get().error).toContain('HEAD or branch changed');
   });
 
+  it.each(['checkout', 'commit'])('pauses when a concurrent %s races with staging', async (operation) => {
+    const first = create('Raced commit');
+    const second = create('Next');
+    const originalHead = await git('rev-parse', 'HEAD');
+    const originalBranch = await git('symbolic-ref', 'HEAD');
+    queue = makeQueue(async (_path, args) => {
+      const result = await git(...args);
+      if (args[0] === 'add') {
+        if (operation === 'checkout') await git('checkout', '-b', 'unexpected');
+        else await git('commit', '--allow-empty', '--only', '-m', 'Concurrent commit');
+      }
+      return result;
+    });
+    prompt.mockImplementation(async (text: string) => {
+      await writeFile(join(cwd, 'change.txt'), 'done');
+      success(text);
+    });
+    queue.configure([first.id, second.id], true);
+    await finished();
+    expect(await git('log', '-1', '--format=%s')).toBe('feat: Raced commit');
+    if (operation === 'checkout') {
+      expect(await git('symbolic-ref', 'HEAD')).not.toBe(originalBranch);
+    } else {
+      expect(await git('rev-parse', 'HEAD^')).not.toBe(originalHead);
+    }
+    expect(queue.get().error).toContain('changed while committing');
+    expect(tasks.get(first.id)?.status).toBe('started');
+    expect(tasks.get(second.id)?.status).toBe('waiting');
+    expect(starter.start).toHaveBeenCalledTimes(1);
+  });
+
   it('checks allowed paths before creating a session or running the agent', async () => {
     const task = create('Forbidden');
     queue = new TaskExecutionQueue({ db, tasks, starter, sessions, resolvePath: async () => { throw new Error('Path outside allowed roots'); } });
@@ -270,8 +301,7 @@ describe('TaskExecutionQueue', () => {
     await vi.waitFor(() => expect(lookingUp).toBe(true));
     tasks.update(task.id, { ...task, projectPath: '/other' });
     release();
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(queue.get().enabled).toBe(false);
+    await finished();
     expect(queue.get().error).toContain('project changed');
     expect(tasks.get(task.id)?.status).toBe('waiting');
   });

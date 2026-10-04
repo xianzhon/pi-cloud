@@ -226,7 +226,7 @@ vi.mock('./components/EditorPanel.vue', () => ({
 }));
 vi.mock('./components/TaskInboxPanel.vue', () => {
   heavyModuleLoads.tasks += 1;
-  return { __esModule: true, default: { props: ['visible'], template: '<div class="task-inbox-panel" :class="{ visible }" />' } };
+  return { __esModule: true, default: { name: 'TaskInboxPanel', props: ['visible'], template: '<div class="task-inbox-panel" :class="{ visible }" />' } };
 });
 vi.mock('./components/NewSessionDialog.vue', () => ({
   default: {
@@ -973,6 +973,34 @@ describe('App routing', () => {
     await flushPromises();
 
     expect(wrapper.find('.new-session-dialog-stub').exists()).toBe(true);
+  });
+
+  it.each(['codex', 'default'])('opens a linked task session with its %s profile instead of the current profile', async (profileId) => {
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {});
+    vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => {
+      if (String(url).startsWith('/api/sessions/agent-profile?')) {
+        return { json: async () => ({ profile: { id: 'work', label: 'Work' } }) } as Response;
+      }
+      return { json: async () => ({ sessions: [] }) } as Response;
+    });
+    const wrapper = mount(App, {
+      global: { stubs: { ChatPanel: true, TerminalPanel: true, EditorPanel: true, FolderPickerModal: true, Teleport: true } },
+    });
+    try {
+      await flushPromises();
+      wrapper.findComponent({ name: 'SessionSidebar' }).vm.$emit('agentProfileChanged', 'work');
+      await flushPromises();
+      await wrapper.get('[data-header-action="tasks"]').trigger('click');
+      await flushPromises();
+      push.mockClear();
+      wrapper.findComponent({ name: 'TaskInboxPanel' }).vm.$emit('openSession', 'persisted-task-session', profileId);
+      await flushPromises();
+      expect(assign).toHaveBeenCalledWith(`/sessions/persisted-task-session?profile=${profileId}`);
+      expect(push).not.toHaveBeenCalled();
+    } finally {
+      wrapper.unmount();
+      assign.mockRestore();
+    }
   });
 
   it('does not handle plain chat focus shortcuts typed inside the Monaco editor', async () => {

@@ -97,7 +97,7 @@ describe('TaskInboxPanel', () => {
     expect(wrapper.find('.task-edit').exists()).toBe(false);
     await wrapper.get('.task-open-session').trigger('click');
     await wrapper.get('.task-complete').trigger('click');
-    expect(wrapper.emitted('openSession')).toEqual([['session-1']]);
+    expect(wrapper.emitted('openSession')).toEqual([['session-1', 'codex']]);
     expect(complete).toHaveBeenCalledWith('task-1');
 
     tasks.value = [{ ...waitingTask, status: 'completed', sessionId: 'session-1' }];

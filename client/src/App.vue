@@ -1784,8 +1784,14 @@ async function handleTaskStarted(result: ProjectTaskStartResult): Promise<void> 
   }
 }
 
-async function openTaskSession(sessionId: string): Promise<void> {
+async function openTaskSession(sessionId: string, agentProfileId: string): Promise<void> {
   setTaskInboxVisible(false);
+  if (agentProfileId !== selectedAgentProfileId.value || isReviewMode.value) {
+    // Profile selection is initialized by the sidebar on page load. Include even
+    // 'default' so a saved browser profile cannot override the task's profile.
+    window.location.assign(`/sessions/${encodeURIComponent(sessionId)}?profile=${encodeURIComponent(agentProfileId)}`);
+    return;
+  }
   await router.push(sessionRouteLocation(sessionId));
 }
 
