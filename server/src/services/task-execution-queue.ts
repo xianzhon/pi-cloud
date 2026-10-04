@@ -33,6 +33,7 @@ export class TaskExecutionQueue {
   private closing = false;
   private readonly shutdown = new AbortController();
   private activeSessions = new Map<string, { abort(): Promise<void> }>();
+  private wakeRunner?: () => void;
   private readonly git: NonNullable<Dependencies['git']>;
   private readonly resolvePath: NonNullable<Dependencies['resolvePath']>;
 
@@ -73,9 +74,11 @@ export class TaskExecutionQueue {
     }
     const unavailableTaskIds = this.pruneUnavailableTaskIds();
     if (unavailableTaskIds.size) this.save();
-    const availableTaskIds = taskIds.filter((id) => !unavailableTaskIds.has(id));
-    if (this.running && JSON.stringify(availableTaskIds) !== JSON.stringify(this.state.taskIds)) {
-      throw new ProjectTaskConflictError('Cannot rearrange the queue while a task is running');
+    const availableTaskIds = taskIds.filter((id) => !unavailableTaskIds.has(id) && (
+      !this.running || this.state.taskIds.includes(id) || this.dependencies.tasks.get(id)?.status !== 'completed'
+    ));
+    if (this.running && this.state.taskIds.some((id, index) => availableTaskIds[index] !== id)) {
+      throw new ProjectTaskConflictError('Cannot rearrange the queue while a task is running; only new tasks can be appended');
     }
     for (const id of availableTaskIds) {
       if (this.state.activeTaskIds.includes(id)) continue;
@@ -91,6 +94,8 @@ export class TaskExecutionQueue {
     const result = this.get();
     if (enabled && !this.running && !this.closing) {
       this.running = this.run().finally(() => { this.running = undefined; });
+    } else if (this.running) {
+      this.wakeRunner?.();
     }
     return result;
   }
@@ -174,8 +179,16 @@ export class TaskExecutionQueue {
           } catch (error) { fail(error); break; }
         }
       }
-      if (active.size) await Promise.race([...active.values()].map((run) => run.done));
-      else break;
+      if (active.size) {
+        let wake!: () => void;
+        const queueChanged = new Promise<void>((resolve) => { wake = resolve; });
+        this.wakeRunner = wake;
+        try {
+          await Promise.race([...active.values()].map((run) => run.done).concat(queueChanged));
+        } finally {
+          if (this.wakeRunner === wake) this.wakeRunner = undefined;
+        }
+      } else break;
     }
     publish();
   }

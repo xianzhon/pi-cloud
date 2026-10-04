@@ -15,7 +15,7 @@
           </label>
           <label class="scope-field">
             <span>{{ t('components.taskInboxPanel.scope') }}</span>
-            <CustomSelect v-model="scope" :options="scopeOptions" :disabled="locked" :aria-label="t('components.taskInboxPanel.scope')" />
+            <CustomSelect v-model="scope" :options="scopeOptions" :disabled="loading || saving" :aria-label="t('components.taskInboxPanel.scope')" />
           </label>
         </div>
 
@@ -33,13 +33,13 @@
                 <span class="queue-position">{{ index + 1 }}</span>
                 <span class="task-title">{{ taskTitle(id) }}</span>
                 <span class="queue-actions">
-                  <button type="button" :disabled="locked || index === 0" :aria-label="t('components.taskExecution.moveUp')" @click="move(index, -1)">
+                  <button type="button" :disabled="loading || saving || !canMove(index, -1)" :aria-label="t('components.taskExecution.moveUp')" @click="move(index, -1)">
                     <PhArrowUp :size="16" weight="bold" aria-hidden="true" />
                   </button>
-                  <button type="button" :disabled="locked || index === selected.length - 1" :aria-label="t('components.taskExecution.moveDown')" @click="move(index, 1)">
+                  <button type="button" :disabled="loading || saving || !canMove(index, 1)" :aria-label="t('components.taskExecution.moveDown')" @click="move(index, 1)">
                     <PhArrowDown :size="16" weight="bold" aria-hidden="true" />
                   </button>
-                  <button class="remove-task" type="button" :disabled="locked" :aria-label="t('components.taskExecution.remove')" @click="selected.splice(index, 1)">
+                  <button class="remove-task" type="button" :disabled="loading || saving || isPersisted(id)" :aria-label="t('components.taskExecution.remove')" @click="selected.splice(index, 1)">
                     <PhX :size="16" weight="bold" aria-hidden="true" />
                   </button>
                 </span>
@@ -55,7 +55,7 @@
             </header>
             <div class="execution-list available">
               <label v-for="task in available" :key="task.id" :class="{ selected: selected.includes(task.id) }">
-                <input type="checkbox" :checked="selected.includes(task.id)" :disabled="locked" @change="toggle(task.id)" />
+                <input type="checkbox" :checked="selected.includes(task.id)" :disabled="loading || saving || isPersisted(task.id)" @change="toggle(task.id)" />
                 <span class="task-copy">
                   <strong>{{ task.title }}</strong>
                   <small>{{ task.projectPath }}</small>
@@ -91,7 +91,7 @@ const error = ref('');
 const loading = ref(false);
 const saving = ref(false);
 const activeTaskIds = computed(() => queue.value.activeTaskIds || (queue.value.activeTaskId ? [queue.value.activeTaskId] : []));
-const locked = computed(() => loading.value || saving.value || queue.value.enabled || activeTaskIds.value.length > 0);
+const executionActive = computed(() => queue.value.enabled || activeTaskIds.value.length > 0);
 const scopeOptions = computed<CustomSelectOption[]>(() => [
   { value: 'project', label: t('components.taskInboxPanel.currentProject') },
   { value: 'all', label: t('components.taskInboxPanel.allProjects') },
@@ -101,12 +101,20 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let generation = 0;
 
 function taskTitle(id: string): string { return tasks.value.find((task) => task.id === id)?.title || id; }
+function isPersisted(id: string): boolean { return executionActive.value && queue.value.taskIds.includes(id); }
 function toggle(id: string): void {
+  if (isPersisted(id)) return;
   const index = selected.value.indexOf(id);
   if (index === -1) selected.value.push(id);
   else selected.value.splice(index, 1);
 }
+function canMove(index: number, direction: number): boolean {
+  const target = index + direction;
+  return target >= 0 && target < selected.value.length
+    && !isPersisted(selected.value[index]!) && !isPersisted(selected.value[target]!);
+}
 function move(index: number, direction: number): void {
+  if (!canMove(index, direction)) return;
   const ids = [...selected.value];
   [ids[index], ids[index + direction]] = [ids[index + direction]!, ids[index]!];
   selected.value = ids;
@@ -121,8 +129,13 @@ async function load(initial: boolean, requestGeneration: number): Promise<void> 
     ]);
     if (requestGeneration !== generation) return;
     const changed = JSON.stringify(queue.value) !== JSON.stringify(state);
-    if (initial || changed) {
+    if (initial) {
       selected.value = [...state.taskIds];
+      enabled.value = state.enabled;
+    } else if (changed) {
+      const waitingIds = new Set(data.tasks.filter((task) => task.status === 'waiting').map((task) => task.id));
+      const pending = selected.value.filter((id) => !queue.value.taskIds.includes(id) && waitingIds.has(id));
+      selected.value = [...state.taskIds, ...pending.filter((id) => !state.taskIds.includes(id))];
       enabled.value = state.enabled;
     }
     queue.value = state;
@@ -147,6 +160,7 @@ async function save(): Promise<void> {
       method: 'PUT', body: { taskIds: selected.value, enabled: enabled.value },
     });
     emit('changed');
+    emit('close');
   } catch (cause) {
     error.value = getApiErrorMessage(cause, t('components.taskInboxPanel.taskActionFailed'));
   } finally {
