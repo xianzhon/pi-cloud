@@ -49,6 +49,36 @@ describe('useChatAttachments', () => {
     await vi.waitFor(() => expect(controller.attachments.value.length).toBeGreaterThan(1));
   });
 
+  it('pastes all embedded images and inserts accompanying text at the selection', async () => {
+    const controller = useChatAttachments(translate);
+    const target = document.createElement('textarea');
+    target.value = 'Before replace after';
+    target.setSelectionRange(7, 14);
+    const onInput = vi.fn();
+    target.addEventListener('input', onInput);
+    const preventDefault = vi.fn();
+    controller.handleImagePaste({
+      target,
+      preventDefault,
+      clipboardData: {
+        files: [new File(['duplicate'], 'native.png', { type: 'image/png' })],
+        getData: (type: string) => type === 'text/plain' ? 'prompt' : '<img src="data:image/png;base64,cG5n" alt="one.png"><img src="data:image/jpeg;base64,anBlZw==" alt="two.jpg">',
+      },
+    } as any);
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(target.value).toBe('Before prompt after');
+    expect(onInput).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(controller.attachments.value).toHaveLength(2));
+    expect(controller.attachments.value.map((image) => image.name)).toEqual(['one.png', 'two.jpg']);
+  });
+
+  it('leaves ordinary text pasting to the browser', () => {
+    const controller = useChatAttachments(translate);
+    const preventDefault = vi.fn();
+    controller.handleImagePaste({ clipboardData: { files: [], getData: () => 'text' }, preventDefault } as any);
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
+
   it('formats byte, kilobyte, and megabyte sizes', () => {
     expect(formatFileSize(12)).toBe('12 B');
     expect(formatFileSize(1025)).toBe('2 KB');

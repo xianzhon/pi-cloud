@@ -6,7 +6,7 @@
     :class="[`event-${message.kind}`, `status-${message.status || 'info'}`]"
   >
     <button
-      v-if="copyableText"
+      v-if="copyableText || renderedImages.length"
       class="copy-btn event-copy-btn"
       :class="{ copied }"
       @click="copyContent"
@@ -49,7 +49,7 @@
   >
     <div class="message-actions">
       <button
-        v-if="copyableText"
+        v-if="copyableText || renderedImages.length"
         class="copy-btn"
         :class="{ copied }"
         @click="copyContent"
@@ -197,6 +197,7 @@ import hljs from 'highlight.js';
 import DOMPurify from 'dompurify';
 import type { ChatImage, MessageMemoryRecall } from '../composables/useChat';
 import { ansiToHtml, normalizeTerminalOutput } from '../utils/ansi';
+import { copyMessage } from '../utils/messageClipboard';
 import {
   PhCopy,
   PhCheck,
@@ -1107,9 +1108,7 @@ function toggleEventExpanded() {
 }
 
 async function copyContent() {
-  const textToCopy = copyableText.value;
-  if (!textToCopy) return;
-  await navigator.clipboard.writeText(textToCopy);
+  if (!await copyMessage(copyableText.value, renderedImages.value)) return;
   copied.value = true;
   setTimeout(() => {
     copied.value = false;

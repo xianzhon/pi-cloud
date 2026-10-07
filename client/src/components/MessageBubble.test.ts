@@ -65,6 +65,28 @@ describe('MessageBubble', () => {
     expect(wrapper.find('.message-image-annotate').exists()).toBe(false);
   });
 
+  it.each(['prompt text', ''])('copies a user prompt with images and text %j', async (content) => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { write } });
+    vi.stubGlobal('ClipboardItem', class {
+      constructor(public data: Record<string, Blob>) {}
+    });
+    const wrapper = mount(MessageBubble, {
+      props: { message: { id: 'copy-images', role: 'user', content, images: [
+        { type: 'image', data: 'cG5n', mimeType: 'image/png', name: 'chart.png' },
+      ] } },
+    });
+    try {
+      await wrapper.find('.copy-btn').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('.copy-btn').classes()).toContain('copied'));
+      expect(await write.mock.calls[0][0][0].data['text/plain'].text()).toBe(content);
+      expect(await write.mock.calls[0][0][0].data['text/html'].text()).toContain('data:image/png;base64,cG5n');
+    } finally {
+      wrapper.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('emits the stored image when Annotate is selected', async () => {
     const image = {
       type: 'image' as const,

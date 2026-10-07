@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue';
 import type { ChatImage } from './useChat';
+import { pastedImageFiles } from '../utils/messageClipboard';
 
 const MAX_IMAGE_COUNT = 20;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -77,9 +78,17 @@ export function useChatAttachments(t: Translate) {
   }
 
   function handleImagePaste(event: ClipboardEvent): void {
-    const files = Array.from(event.clipboardData?.files || []);
+    const embedded = pastedImageFiles(event.clipboardData?.getData?.('text/html') || '');
+    // Prefer HTML images to avoid duplicating the native PNG representation.
+    const files = embedded.length ? embedded : Array.from(event.clipboardData?.files || []);
     if (!files.length) return;
     event.preventDefault();
+    const text = event.clipboardData?.getData?.('text/plain') || '';
+    if (text && event.target instanceof HTMLTextAreaElement) {
+      const input = event.target;
+      input.setRangeText(text, input.selectionStart, input.selectionEnd, 'end');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     void addImageFiles(files);
   }
 
