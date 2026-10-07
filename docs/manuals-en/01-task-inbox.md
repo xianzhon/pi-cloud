@@ -56,6 +56,12 @@ Open the top action menu (the three-dot button) and select **Task inbox**. While
 
 The task appears in the **Waiting** list.
 
+### Creating a Task from Chat
+
+Discuss a requirement with Pi in your current session, then ask it to save the agreed work to the Task Inbox. For example: “Let's clarify the search feature first, then create a task with the scope and acceptance criteria we agree on.” Pi can use the `create_task` tool to save a self-contained title and prompt without interrupting or replacing the current session.
+
+Chat-created tasks use the session's current project and agent profile, that profile's default model (or its first available model if the default is unavailable), and the default skill policy: all skills enabled, with no preset. They do not inherit session model overrides, custom skill selections, or browser-local launch choices. They use the current workspace with no managed worktree and remain **Waiting**; nothing starts automatically. Review or edit the task's launch settings in the inbox before starting it.
+
 ## Starting a Task
 
 Click **Start** beside a task in the **Waiting** list. To launch it without replacing the current tab, click **Start in new tab** instead. Pi Cloud then:

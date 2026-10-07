@@ -11,6 +11,8 @@ import type { PiCloudDatabase } from '../db/database.js';
 import type { MemoryRuntime } from '../memory/runtime.js';
 import type { AgentProfile, AppliedSkillPolicy, AvailableSkillInfo, CreateSessionResult, SessionCommandInfo, SessionInfo, SessionOptions, SessionRuntimeStatus } from '../types.js';
 import { createPiCloudAutoRenameExtension } from '../extensions/auto-rename.js';
+import { createTaskInboxExtension } from '../extensions/task-inbox.js';
+import type { ProjectTaskStore } from './project-task-store.js';
 import { expandHomePath } from '../utils/paths.js';
 import { runWithAgentDirAndProxyEnv } from './profile-proxy.js';
 import { SkillPolicyStore, type SkillPolicyRecord } from './skill-policy-store.js';
@@ -30,6 +32,7 @@ interface PiSessionServiceOptions {
   username?: string;
   db?: PiCloudDatabase;
   memoryRuntime?: MemoryRuntime;
+  projectTaskStore?: Pick<ProjectTaskStore, 'create'>;
   worktreeMetadataStore?: Pick<WorktreeMetadataStore, 'getMany'>;
 }
 
@@ -165,6 +168,7 @@ export class PiSessionService {
   private skillPolicyStore?: SkillPolicyStore;
   private username: string;
   private memoryRuntime?: MemoryRuntime;
+  private projectTaskStore?: Pick<ProjectTaskStore, 'create'>;
   private db?: PiCloudDatabase;
   private worktreeMetadataStore?: Pick<WorktreeMetadataStore, 'getMany'>;
   private sessionExecutionListeners = new Set<(message: SessionExecutionMessage) => void>();
@@ -182,6 +186,7 @@ export class PiSessionService {
     this.username = options.username || 'me';
     this.db = options.db;
     this.memoryRuntime = options.memoryRuntime;
+    this.projectTaskStore = options.projectTaskStore;
     this.worktreeMetadataStore = options.worktreeMetadataStore;
   }
 
@@ -1149,11 +1154,15 @@ export class PiSessionService {
       cwd,
       memoryEnabled,
       autoRenameEnabled: !options.noSession,
+      taskInboxEnabled: !options.noSession,
       autoRenameConfig,
     });
     const resourceLoader = await this.createResourceLoader(cwd, agentDir, skillPolicy, extensionFactories);
     signal?.throwIfAborted();
-    const modeOptions = { tools: [...AGENT_SESSION_TOOLS, ...(memoryEnabled ? ['memory'] : [])] };
+    const modeOptions = {
+      tools: [...AGENT_SESSION_TOOLS, ...(memoryEnabled ? ['memory'] : []),
+        ...(this.projectTaskStore && !options.noSession ? ['create_task'] : [])],
+    };
 
     const { session } = await createAgentSession({
       sessionManager,
@@ -1210,7 +1219,7 @@ export class PiSessionService {
       sessionManager,
       agentDir,
       resourceLoader,
-      tools: AGENT_SESSION_TOOLS,
+      tools: [...AGENT_SESSION_TOOLS, ...(this.projectTaskStore ? ['create_task'] : [])],
     });
 
     const existing = this.getSessionBySessionId(session.sessionId);
@@ -1700,9 +1709,17 @@ export class PiSessionService {
     cwd: string;
     memoryEnabled: boolean;
     autoRenameEnabled: boolean;
+    taskInboxEnabled?: boolean;
     autoRenameConfig: Pick<ProfileSettings, 'automationProvider' | 'automationModelId' | 'autoRenameLanguage'>;
   }): InlineExtension[] {
     return [
+      ...(this.projectTaskStore && options.taskInboxEnabled !== false
+        ? [createTaskInboxExtension({
+          profileId: options.profileId,
+          store: this.projectTaskStore,
+          listModels: () => this.listAgentProfileModels(options.profileId),
+        })]
+        : []),
       ...(options.autoRenameEnabled ? [createPiCloudAutoRenameExtension({
         model: {
           provider: options.autoRenameConfig.automationProvider,
@@ -1740,7 +1757,7 @@ export class PiSessionService {
       sessionManager,
       agentDir,
       resourceLoader,
-      tools: AGENT_SESSION_TOOLS,
+      tools: [...AGENT_SESSION_TOOLS, ...(this.projectTaskStore ? ['create_task'] : [])],
     });
     if (model) await this.setModelForSession(session, model.provider, model.id);
     this.registerClientSession(clientId, session);

@@ -246,15 +246,16 @@ export async function buildApp(): Promise<FastifyInstance> {
       try { return row?.proxy_json ? JSON.parse(row.proxy_json) as Record<string, string> : {}; } catch { return {}; }
     },
   });
+  const projectTaskStore = new ProjectTaskStore(db);
   piSessionService = new PiSessionService({
     skillPolicyStore: new SkillPolicyStore(db),
     username: authConfig.username,
     db,
     memoryRuntime,
+    projectTaskStore,
     worktreeMetadataStore,
   });
   memoryRuntime.start();
-  const projectTaskStore = new ProjectTaskStore(db);
   const projectHistoryStore = new ProjectHistoryStore(db);
   const skillPresetStore = new SkillPresetStore(db);
   const reviewSourceStore = new ReviewSourceStore(db);

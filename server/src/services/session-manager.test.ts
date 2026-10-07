@@ -791,6 +791,29 @@ describe('PiSessionService', () => {
     });
   });
 
+  it('enables task creation for new, resumed, and skill-reconfigured sessions only', async () => {
+    const service = new PiSessionService({
+      projectTaskStore: { create: vi.fn() },
+      skillPolicyStore: new SkillPolicyStore(db),
+    });
+    const expectTaskTool = () => {
+      expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories)
+        .toContainEqual(expect.objectContaining({ name: 'pi-cloud-task-inbox' }));
+      expect(createAgentSession.mock.calls.at(-1)?.[0].tools).toContain('create_task');
+    };
+
+    await service.createSession('client-1', { cwd: '/workspace', memoryEnabled: false });
+    expectTaskTool();
+    await service.resumeSession('client-1', '/Users/test/.pi/agent/sessions/project/session-1.jsonl');
+    expectTaskTool();
+    await service.updateSessionSkillPolicy('client-1', 'session-1', 'enabled', ['frontend-design']);
+    expectTaskTool();
+
+    await service.createSession('internal-task', { cwd: '/workspace', noSession: true });
+    expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories).toEqual([]);
+    expect(createAgentSession.mock.calls.at(-1)?.[0].tools).not.toContain('create_task');
+  });
+
   it('injects memory into new and resumed persisted sessions', async () => {
     const memoryRuntime = createMemoryRuntimeMock();
     const service = new PiSessionService({ memoryRuntime: memoryRuntime as any });
