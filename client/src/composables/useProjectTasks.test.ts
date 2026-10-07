@@ -88,6 +88,15 @@ describe('useProjectTasks', () => {
     expect(state.tasks.value[0].status).toBe('completed');
   });
 
+  it('refreshes status quietly without hiding the task list behind a loading state', async () => {
+    vi.mocked(fetch).mockResolvedValue(response({ tasks: [{ ...task, status: 'completed' }] }) as Response);
+    const state = useProjectTasks('client-1');
+    const refresh = state.load('/repo/app', true);
+    expect(state.loading.value).toBe(false);
+    await refresh;
+    expect(state.tasks.value[0].status).toBe('completed');
+  });
+
   it('starts a task, refreshes the list, and notifies count consumers', async () => {
     const startResult = { task: { ...task, status: 'started', sessionId: 'session-1' }, sessionId: 'session-1', prompt: task.prompt };
     vi.mocked(fetch)

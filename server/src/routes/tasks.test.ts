@@ -74,6 +74,20 @@ describe('task routes', () => {
     return handlers;
   }
 
+  it('reads and updates the automatic execution queue', async () => {
+    const { app, handlers } = createMockApp();
+    const state = { enabled: false, taskIds: ['task-1'], activeTaskId: null, error: '' };
+    const executionQueue = { get: vi.fn(() => state), configure: vi.fn(() => ({ ...state, enabled: true })) };
+    await taskRoutes(app as any, { store, starter, executionQueue: executionQueue as any });
+    expect(await handlers['GET /execution-queue']({}, createReply())).toEqual(state);
+    expect(await handlers['PUT /execution-queue']({ body: { taskIds: ['task-1'], enabled: true } }, createReply())).toEqual({ ...state, enabled: true });
+    expect(executionQueue.configure).toHaveBeenCalledWith(['task-1'], true);
+    executionQueue.configure.mockImplementation(() => { throw new ProjectTaskValidationError('Invalid queue'); });
+    const reply = createReply();
+    await handlers['PUT /execution-queue']({ body: {} }, reply);
+    expect(reply.status).toHaveBeenCalledWith(400);
+  });
+
   it('lists tasks by project and status', async () => {
     const handlers = await setup();
     const result = await handlers['GET /']({ query: { scope: 'project', projectPath: '/repo/app', status: 'waiting' } }, createReply());

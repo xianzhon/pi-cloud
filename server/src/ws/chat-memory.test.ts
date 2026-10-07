@@ -4,6 +4,7 @@ const sendJson = vi.hoisted(() => vi.fn());
 const getSessionFromRequest = vi.hoisted(() => vi.fn(() => ({ username: 'me' })));
 const getRequestContext = vi.hoisted(() => vi.fn(() => ({})));
 const sessionService = vi.hoisted(() => ({
+  onSessionExecutionMessage: vi.fn(() => () => {}),
   getSession: vi.fn(),
   listSessions: vi.fn(async () => []),
   resumeSession: vi.fn(),
@@ -65,6 +66,7 @@ async function setup() {
       audit: { record: vi.fn() },
     },
     memoryRuntime: runtime,
+    addHook: vi.fn(),
     services: { sessions: sessionService },
     get: vi.fn((path: string, _options: unknown, handler: Function) => routes.set(path, handler)),
   };

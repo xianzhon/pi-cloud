@@ -56,6 +56,7 @@ describe('openPiCloudDatabase', () => {
       'session_worktrees',
       'sessions',
       'skill_presets',
+      'task_execution_queue',
       'user_prompts',
       'wecom_gateway_configs',
       'wecom_gateway_credentials',
@@ -336,10 +337,11 @@ describe('openPiCloudDatabase', () => {
       { version: 9, name: 'pinned-files-schema' },
       { version: 10, name: 'project-history-favorites' },
       { version: 11, name: 'project-task-images' },
+      { version: 12, name: 'task-execution-queue' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 11 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 12 });
     db.close();
   });
 
