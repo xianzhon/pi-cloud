@@ -79,6 +79,12 @@ const runWithAgentDirAndProxyEnv = vi.fn(async (agentDir: string, _proxyEnv: Rec
   }
 });
 
+const readSessionHeader = vi.fn(async (path: string) => {
+  try { return JSON.parse((await readFile(path, 'utf8')).split('\n')[0]); } catch { return undefined; }
+});
+const readPersistedSessionInfo = vi.fn<(path: string) => Promise<any>>(async () => undefined);
+vi.mock('./session-discovery.js', () => ({ readSessionHeader, readPersistedSessionInfo }));
+
 const sessionManagerSetSessionFile = vi.fn();
 type MockSessionManager = {
   getCwd: () => string;
@@ -186,6 +192,8 @@ describe('PiSessionService', () => {
     sessionManagerOpen.mockClear();
     sessionManagerList.mockClear();
     sessionManagerListAll.mockClear();
+    readSessionHeader.mockReset();
+    readPersistedSessionInfo.mockReset();
     modelRuntimeLogin.mockReset();
     modelRuntimeLogin.mockResolvedValue({});
     modelRuntimeLogout.mockReset();
@@ -1357,6 +1365,45 @@ describe('PiSessionService', () => {
     expect(sessionManagerList).toHaveBeenNthCalledWith(1, '/workspace/a', '/Users/test/.pi/work/sessions/project-a');
     expect(sessionManagerList).toHaveBeenNthCalledWith(2, '/workspace/b', '/Users/test/.pi/work/sessions/project-b');
     expect(sessions.map((session) => session.id)).toEqual(['session-b', 'session-a']);
+  });
+
+  it('finds a session by filename without listing or reading unrelated transcripts', async () => {
+    const service = new PiSessionService();
+    vi.spyOn(service as any, 'getClientAgentDir').mockResolvedValue('/Users/test/.pi/work');
+    readdir.mockImplementation(async (path: string) => {
+      if (path.endsWith('/sessions')) return [{ name: 'project-a', isDirectory: () => true }];
+      return ['2026_target.jsonl', '2026_other.jsonl'];
+    });
+    readPersistedSessionInfo.mockResolvedValue({ id: 'target', cwd: '/workspace/a' });
+    expect(await service.findPersistedSession('client-1', 'target')).toMatchObject({ id: 'target' });
+    expect(readPersistedSessionInfo).toHaveBeenCalledExactlyOnceWith('/Users/test/.pi/work/sessions/project-a/2026_target.jsonl');
+    expect(readSessionHeader).not.toHaveBeenCalled();
+    expect(sessionManagerList).not.toHaveBeenCalled();
+    expect(sessionManagerListAll).not.toHaveBeenCalled();
+  });
+
+  it('uses bounded header discovery for renamed session files and verifies candidate IDs', async () => {
+    const service = new PiSessionService();
+    vi.spyOn(service as any, 'getClientAgentDir').mockResolvedValue('/Users/test/.pi/work');
+    readdir.mockImplementation(async (path: string) => {
+      if (path.endsWith('/sessions')) return [{ name: 'project-a', isDirectory: () => true }];
+      return ['target.jsonl', 'renamed.jsonl', 'other.jsonl'];
+    });
+    readPersistedSessionInfo.mockResolvedValueOnce({ id: 'wrong' }).mockResolvedValueOnce({ id: 'target' });
+    readSessionHeader.mockResolvedValueOnce({ id: 'target', cwd: '/workspace/a' });
+    expect(await service.findPersistedSession('client-1', 'target')).toMatchObject({ id: 'target' });
+    expect(readSessionHeader).toHaveBeenCalledExactlyOnceWith('/Users/test/.pi/work/sessions/project-a/renamed.jsonl');
+    expect(readPersistedSessionInfo).toHaveBeenLastCalledWith('/Users/test/.pi/work/sessions/project-a/renamed.jsonl');
+    expect(sessionManagerList).not.toHaveBeenCalled();
+  });
+
+  it('does not find sessions outside the selected profile or use IDs as paths', async () => {
+    const service = new PiSessionService();
+    vi.spyOn(service as any, 'getClientAgentDir').mockResolvedValue('/Users/test/.pi/work');
+    readdir.mockResolvedValue([]);
+    expect(await service.findPersistedSession('client-1', '../target')).toBeUndefined();
+    expect(readdir).toHaveBeenCalledExactlyOnceWith('/Users/test/.pi/work/sessions', { withFileTypes: true });
+    expect(readPersistedSessionInfo).not.toHaveBeenCalled();
   });
 
   it('exposes project session dir for a cwd and agent dir', () => {

@@ -630,6 +630,22 @@ describe('session routes', () => {
     ] });
   });
 
+  it('loads history metadata without scanning sessions when counts are not requested', async () => {
+    projectHistoryStore.list.mockReturnValue([
+      { path: '/repo/project', lastAccessed: '2026-08-30T02:00:00.000Z', isFavorite: true },
+    ]);
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any, { projectHistoryStore });
+    expect(await handlers['GET /project-history']({
+      query: { clientId: 'client-1', includeSessionCounts: 'false' },
+    }, { status: vi.fn().mockReturnThis(), send: vi.fn() })).toEqual({ projects: [
+      { path: '/repo/project', lastAccessed: Date.parse('2026-08-30T02:00:00.000Z'), isFavorite: true },
+    ] });
+    expect(projectHistoryStore.list).toHaveBeenCalledWith('default');
+    expect(sessionService.listSessions).not.toHaveBeenCalled();
+  });
+
   it('records project access for the active agent profile', async () => {
     const { sessionRoutes } = await import('./sessions.js');
     const { app, handlers } = createMockApp();

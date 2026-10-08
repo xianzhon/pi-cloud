@@ -499,6 +499,7 @@ describe('SessionSidebar', () => {
     let favorite = true;
     vi.stubGlobal('fetch', vi.fn(async (...args: Parameters<typeof fetch>) => {
       if (String(args[0]).startsWith('/api/sessions/project-history?')) {
+        expect(new URL(String(args[0]), 'http://localhost').searchParams.get('includeSessionCounts')).toBe('false');
         return { ok: true, json: async () => ({ projects: [
           { path: '/workspace/favorite', isFavorite: favorite },
           { path: '/workspace/no-sessions', isFavorite: favorite },

@@ -756,7 +756,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
   });
 
   app.get('/project-history', async (req, reply) => {
-    const { clientId } = req.query as { clientId?: string };
+    const { clientId, includeSessionCounts } = req.query as { clientId?: string; includeSessionCounts?: string };
     if (!clientId) return reply.status(400).send({ error: 'clientId is required' });
     if (!options.projectHistoryStore) return reply.status(503).send({ error: 'Project history is not configured' });
 
@@ -766,7 +766,9 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       path: entry.path,
       lastAccessed: Date.parse(entry.lastAccessed),
       isFavorite: entry.isFavorite,
-      sessionCount: (await listSessionsForRoute(sessionService, worktreeMetadata, clientId, 'project', expandHomePath(entry.path))).length,
+      ...(includeSessionCounts === 'false' ? {} : {
+        sessionCount: (await listSessionsForRoute(sessionService, worktreeMetadata, clientId, 'project', expandHomePath(entry.path))).length,
+      }),
     })));
     return { projects };
   });

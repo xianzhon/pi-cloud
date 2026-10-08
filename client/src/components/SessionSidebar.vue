@@ -772,7 +772,7 @@ async function refreshProjectPath(options: { preferSaved: boolean; initial?: boo
 
 async function loadFavoriteProjectPaths() {
   try {
-    const response = await fetch(`/api/sessions/project-history?clientId=${encodeURIComponent(props.clientId)}`);
+    const response = await fetch(`/api/sessions/project-history?clientId=${encodeURIComponent(props.clientId)}&includeSessionCounts=false`);
     if (!response.ok) return;
     const data = await response.json() as { projects?: Array<{ path: string; isFavorite?: boolean }> };
     if (isReviewMode.value) return;

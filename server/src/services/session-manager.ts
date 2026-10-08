@@ -14,6 +14,7 @@ import { createPiCloudAutoRenameExtension } from '../extensions/auto-rename.js';
 import { createTaskInboxExtension } from '../extensions/task-inbox.js';
 import type { ProjectTaskStore } from './project-task-store.js';
 import { expandHomePath } from '../utils/paths.js';
+import { readPersistedSessionInfo, readSessionHeader } from './session-discovery.js';
 import { runWithAgentDirAndProxyEnv } from './profile-proxy.js';
 import { SkillPolicyStore, type SkillPolicyRecord } from './skill-policy-store.js';
 import type { WorktreeMetadataStore } from './worktree-metadata-store.js';
@@ -1499,8 +1500,28 @@ export class PiSessionService {
   }
 
   async findPersistedSession(clientId: string, sessionId: string): Promise<SessionInfo | undefined> {
-    const sessions = await this.listSessions(clientId);
-    return sessions.find((session) => session.id === sessionId);
+    const agentDir = await this.getClientAgentDir(clientId);
+    const sessionsRoot = join(agentDir, 'sessions');
+    const directories = await fs.readdir(sessionsRoot, { withFileTypes: true }).catch(() => []);
+    const files = (await Promise.all(directories.filter((entry) => entry.isDirectory()).map(async (entry) => {
+      const directory = join(sessionsRoot, entry.name);
+      const names = await fs.readdir(directory).catch(() => []);
+      return names.filter((name) => name.endsWith('.jsonl')).map((name) => join(directory, name));
+    }))).flat();
+
+    // Pi filenames contain the session ID. Enumerate names, not every transcript.
+    const candidates = files.filter((path) => basename(path) === `${sessionId}.jsonl` || basename(path).endsWith(`_${sessionId}.jsonl`));
+    for (const path of candidates) {
+      const session = await readPersistedSessionInfo(path);
+      if (session?.id === sessionId) return session;
+    }
+    // Imported/renamed files may not follow Pi's naming convention. Probe only
+    // their bounded headers before reading the matching transcript.
+    for (const path of files) {
+      if (candidates.includes(path)) continue;
+      if ((await readSessionHeader(path))?.id === sessionId) return readPersistedSessionInfo(path);
+    }
+    return undefined;
   }
 
   async withActiveSession<T>(clientId: string, sessionId: string, fn: (session: AgentSession) => T | Promise<T>): Promise<T> {
@@ -1983,18 +2004,10 @@ export class PiSessionService {
     const sessionFile = entries.find((entry) => entry.endsWith('.jsonl'));
     if (!sessionFile) return undefined;
 
-    const content = await fs.readFile(join(sessionDir, sessionFile), 'utf8').catch(() => '');
-    const firstLine = content.split('\n').find((line) => line.trim());
-    if (!firstLine) return undefined;
-
-    try {
-      const header = JSON.parse(firstLine);
-      if (header?.type !== 'session' || typeof header.cwd !== 'string') return undefined;
-      const fileSessionId = basename(sessionFile, '.jsonl').split('_').pop() || '';
-      return { id: typeof header.id === 'string' ? header.id : fileSessionId, cwd: header.cwd };
-    } catch {
-      return undefined;
-    }
+    const header = await readSessionHeader(join(sessionDir, sessionFile));
+    if (!header || typeof header.cwd !== 'string') return undefined;
+    const fileSessionId = basename(sessionFile, '.jsonl').split('_').pop() || '';
+    return { id: typeof header.id === 'string' ? header.id : fileSessionId, cwd: header.cwd };
   }
 
   private registerClientSession(clientId: string, session: AgentSession): void {
