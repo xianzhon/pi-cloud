@@ -2,6 +2,33 @@
 
 All notable changes to Pi Cloud are documented here.
 
+## [2.0.5] - 2026-10-09
+
+### Added
+
+- Added a keyboard-accessible Command Center for finding sessions, workspace files, and common actions.
+- Added interactive Marp slide previews with keyboard navigation, zoom, themes, fullscreen presentation, speaker notes, and pagination, plus Mermaid diagram rendering in chat.
+- Added mind-map search across folded branches with live match counts and a read-only mode toggle.
+- Added AI explanations of selected MHTML text in the current or a new chat session.
+- Added image attachments to task prompts and a chat tool for saving waiting tasks to the Task Inbox without changing the current session.
+- Added a persistent automatic task-execution queue with ordering, pause controls, progress monitoring, and up to three concurrent tasks across independent repositories using the same agent profile. Successful tasks are committed locally before completion; nothing is pushed or merged, and the queue pauses after server restarts for review.
+- Added terminal reconnection and page-refresh recovery with buffered output, connection status, and retry controls; detached terminals remain resumable for 10 minutes but do not survive server restarts.
+- Added chat message timestamps and agent response durations, plus image-aware message copying and pasting in supported browsers.
+
+### Changed
+
+- Settings now opens as a grouped full-page workspace with a mobile section picker and a saved-prompt library with preview and editing views.
+- Project selectors now prioritize favorites and support searching project history and task project choices; editor file listings now use numeric-aware name sorting.
+- Increased the image attachment limit from 4 to 20 for chat messages and task prompts.
+- Git fetch, pull, and push actions, including GitHub pull-request pushes, now use the saved GitHub proxy settings.
+- Reduced session-list loading work by discovering session headers without reading full transcripts and skipping session counts in the sidebar's project-history request.
+- Updated the Pi coding-agent dependency from 0.84.2 to 0.87.1.
+
+### Fixed
+
+- Fixed MHTML preview font persistence and text highlights so they remain aligned when fonts or layout change.
+- Full-repository skill imports now preserve Git history and the `.git` directory; subpath imports remain shallow copies without Git metadata.
+
 ## [2.0.4] - 2026-09-27
 
 ### Added
