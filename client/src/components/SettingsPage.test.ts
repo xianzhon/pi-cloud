@@ -281,7 +281,7 @@ describe('SettingsPage', () => {
 
     expect(wrapper.find('#settings-title').text()).toBe('设置');
     expect(wrapper.find('#language-settings-title').text()).toBe('语言');
-    expect(wrapper.find('.language-settings').text()).toContain('选择界面显示语言');
+    expect(wrapper.find('.language-settings').text()).toContain('选择界面语言');
   });
 
   it('renders chat floating button settings and emits changes', async () => {
