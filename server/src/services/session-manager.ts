@@ -1158,19 +1158,9 @@ export class PiSessionService {
       taskInboxEnabled: !options.noSession,
       autoRenameConfig,
     });
-    const resourceLoader = await this.createResourceLoader(cwd, agentDir, skillPolicy, extensionFactories);
-    signal?.throwIfAborted();
-    const modeOptions = {
-      tools: [...AGENT_SESSION_TOOLS, ...(memoryEnabled ? ['memory'] : []),
-        ...(this.projectTaskStore && !options.noSession ? ['create_task'] : [])],
-    };
-
-    const { session } = await createAgentSession({
-      sessionManager,
-      agentDir,
-      resourceLoader,
-      ...modeOptions,
-    });
+    const session = await this.createProfileSession(
+      sessionManager, cwd, profile, skillPolicy, extensionFactories,
+    );
 
     try {
       signal?.throwIfAborted();
@@ -1199,7 +1189,7 @@ export class PiSessionService {
   async resumeSession(clientId: string, sessionPath: string): Promise<AgentSession> {
     this.cancelCleanup(clientId);
 
-    const { profile, agentDir } = await this.getClientProfileProxyEnv(clientId);
+    const { profile } = await this.getClientProfileProxyEnv(clientId);
     const sessionManager = SessionManager.open(sessionPath, dirname(sessionPath));
     const cwd = this.getSessionManagerCwd(sessionManager, sessionPath);
     const extensionFactories = this.createInlineExtensions({
@@ -1209,19 +1199,9 @@ export class PiSessionService {
       autoRenameEnabled: true,
       autoRenameConfig: this.getProfileSettings(profile.id),
     });
-    const resourceLoader = await this.createResourceLoader(
-      cwd,
-      agentDir,
-      this.policyFromStoredRecord(sessionPath),
-      extensionFactories,
+    const session = await this.createProfileSession(
+      sessionManager, cwd, profile, this.policyFromStoredRecord(sessionPath), extensionFactories,
     );
-
-    const { session } = await createAgentSession({
-      sessionManager,
-      agentDir,
-      resourceLoader,
-      tools: [...AGENT_SESSION_TOOLS, ...(this.projectTaskStore ? ['create_task'] : [])],
-    });
 
     const existing = this.getSessionBySessionId(session.sessionId);
     if (existing) {
@@ -1720,7 +1700,7 @@ export class PiSessionService {
   }
 
   private async loadSkills(cwd: string, agentDir: string): Promise<Skill[]> {
-    const resourceLoader = new DefaultResourceLoader({ cwd, agentDir });
+    const resourceLoader = new DefaultResourceLoader({ cwd, agentDir, noExtensions: true });
     await resourceLoader.reload();
     return resourceLoader.getSkills().skills;
   }
@@ -1771,17 +1751,37 @@ export class PiSessionService {
       autoRenameEnabled: true,
       autoRenameConfig: this.getProfileSettings(profileId),
     });
-    const resourceLoader = await this.createResourceLoader(cwd, agentDir, policy, extensionFactories);
-
     this.forceDisposeBySessionId(activeSession.sessionId);
-    const { session } = await createAgentSession({
-      sessionManager,
-      agentDir,
-      resourceLoader,
-      tools: [...AGENT_SESSION_TOOLS, ...(this.projectTaskStore ? ['create_task'] : [])],
-    });
+    const session = await this.createProfileSession(
+      sessionManager, cwd, { id: profileId, path: agentDir }, policy, extensionFactories,
+    );
     if (model) await this.setModelForSession(session, model.provider, model.id);
     this.registerClientSession(clientId, session);
+  }
+
+  private async createProfileSession(
+    sessionManager: SessionManager,
+    cwd: string,
+    profile: Pick<AgentProfile, 'id' | 'path'>,
+    policy: ResolvedSkillPolicy,
+    extensionFactories: InlineExtension[],
+  ): Promise<AgentSession> {
+    // Extensions such as the MCP adapter read their config from process.env,
+    // not the SDK's agentDir option. Keep loading and startup in profile context.
+    return runWithAgentDirAndProxyEnv(profile.path, this.getProfileSettings(profile.id).proxy, async () => {
+      const resourceLoader = await this.createResourceLoader(cwd, profile.path, policy, extensionFactories);
+      // `tools` is an allowlist in the SDK and would hide profile extension tools.
+      const { session } = await createAgentSession({ sessionManager, cwd, agentDir: profile.path, resourceLoader });
+      try {
+        session.setActiveToolsByName([...new Set([...AGENT_SESSION_TOOLS, ...session.getActiveToolNames()])]);
+        // SDK construction alone does not emit session_start (MCP initialization).
+        await session.bindExtensions({ mode: 'print' });
+        return session;
+      } catch (error) {
+        session.dispose();
+        throw error;
+      }
+    });
   }
 
   private async createResourceLoader(
