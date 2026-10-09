@@ -69,6 +69,12 @@ PI_CLOUD_MEMORY_POLICY=legacy
 
 Restart the server after changing this setting.
 
+## Profile Extension Packages
+
+Open **Agent profiles → Extensions** to enable or disable the extensions supplied by each package in the profile's `settings.json`. For example, uncheck `npm:pi-subagents` to disable delegation while leaving `npm:pi-mcp-adapter` enabled. Changes save immediately and apply to new or reopened sessions, including CLI Pi using the same profile; already-running sessions are unchanged.
+
+This uses Pi's native package filter: a disabled entry becomes `{ "source": "npm:pi-subagents", "extensions": [] }`. Packages stay installed, and their skills, prompts, and themes retain their existing settings. Existing extension filters are saved in the entry's `piCloudExtensionFilters` field and restored when re-enabled. These toggles cover profile package declarations, not standalone extension files or project-level package overrides.
+
 ## Agent Proxy Configuration
 
 Configure the proxy for each agent profile from the WebUI profile settings. The settings are stored in the Pi Cloud SQLite database and apply only to agent and model requests; the embedded terminal is not affected. Changes take effect on the next agent action without a restart.

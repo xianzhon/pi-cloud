@@ -15,6 +15,13 @@ describe('ProfileManagerDialog', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/extensions')) {
+        const enabled = options?.method === 'PUT' ? JSON.parse(String(options.body)).enabled : true;
+        return ok({ extensions: [
+          { source: 'npm:pi-subagents', enabled },
+          { source: 'npm:pi-mcp-adapter', enabled: true },
+        ] });
+      }
       if (url.endsWith('/proxy/check')) return ok({ ok: true, country: 'US' });
       if (url.endsWith('/proxy')) return ok({ proxy: {} });
       if (url.endsWith('/api-key-providers')) {
@@ -108,6 +115,45 @@ describe('ProfileManagerDialog', () => {
 
     await sections[0].find('summary').trigger('click');
     expect((sections[0].element as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it('saves extension toggles immediately for the selected profile', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+    await vi.waitFor(() => expect(wrapper.findAll('.profile-extension-list input')).toHaveLength(2));
+    const checkbox = wrapper.find('.profile-extension-list input');
+    await checkbox.setValue(false);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/extensions',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ source: 'npm:pi-subagents', enabled: false }) }),
+    ));
+    await vi.waitFor(() => expect((checkbox.element as HTMLInputElement).checked).toBe(false));
+    expect((wrapper.findAll('.profile-extension-list input')[1].element as HTMLInputElement).checked).toBe(true);
+    await checkbox.setValue(true);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/agent-profiles/work/extensions',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ source: 'npm:pi-subagents', enabled: true }) }),
+    ));
+    wrapper.unmount();
+  });
+
+  it('keeps the saved extension state when a toggle fails', async () => {
+    const wrapper = mount(ProfileManagerDialog, {
+      props: { visible: false, profiles, selectedId: 'work' },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper.setProps({ visible: true });
+    await vi.waitFor(() => expect(wrapper.findAll('.profile-extension-list input')).toHaveLength(2));
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: 'Write failed' }), { status: 400 }));
+    const checkbox = wrapper.find('.profile-extension-list input');
+    await checkbox.setValue(false);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Write failed'));
+    expect((checkbox.element as HTMLInputElement).checked).toBe(true);
+    expect((checkbox.element as HTMLInputElement).disabled).toBe(false);
+    wrapper.unmount();
   });
 
   it('selects a configured provider by default', async () => {
@@ -264,7 +310,7 @@ describe('ProfileManagerDialog', () => {
       global: { stubs: { Teleport: true } },
     });
     await wrapper.setProps({ visible: true });
-    await vi.waitFor(() => expect(wrapper.find('[aria-label="Provider type"]').exists()).toBe(true));
+    await vi.waitFor(() => expect(wrapper.find('[aria-label="Automation model"]').text()).toContain('GPT-5'));
 
     await wrapper.find('[aria-label="Provider type"]').trigger('click');
     await wrapper.findAll('.custom-select-option').find((option) => option.text() === 'Cloudflare Workers AI')!.trigger('click');

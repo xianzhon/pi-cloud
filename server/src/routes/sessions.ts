@@ -259,6 +259,25 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     }
   });
 
+  app.get('/agent-profiles/:profileId/extensions', async (req, reply) => {
+    try {
+      const { profileId } = req.params as { profileId: string };
+      return { extensions: await sessionService.listAgentProfileExtensions(profileId) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to load extensions' });
+    }
+  });
+
+  app.put('/agent-profiles/:profileId/extensions', async (req, reply) => {
+    try {
+      const { profileId } = req.params as { profileId: string };
+      const { source, enabled } = (req.body || {}) as { source: string; enabled: boolean };
+      return { extensions: await sessionService.setAgentProfileExtension(profileId, source, enabled) };
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to save extensions' });
+    }
+  });
+
   app.get('/agent-profiles/:profileId/models', async (req, reply) => {
     try {
       const { profileId } = req.params as { profileId: string };

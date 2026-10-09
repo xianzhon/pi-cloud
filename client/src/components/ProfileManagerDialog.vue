@@ -211,6 +211,16 @@
                 :options="autoRenameLanguageOptions"
                 :aria-label="t('components.profileManagerDialog.autoRenameLanguage')"
               />
+              <h3>{{ t('components.profileManagerDialog.extensions') }}</h3>
+              <p class="profile-help">{{ t('components.profileManagerDialog.extensionsHelp') }}</p>
+              <fieldset v-if="extensions.length" class="local-model-list profile-extension-list">
+                <legend>{{ t('components.profileManagerDialog.extensionPackages') }}</legend>
+                <label v-for="extension in extensions" :key="extension.source">
+                  <input type="checkbox" :checked="extension.enabled" :disabled="savingExtension" @change="toggleExtension(extension.source, $event)" />
+                  <span>{{ extension.source }}</span>
+                </label>
+              </fieldset>
+              <p v-else class="profile-help">{{ t('components.profileManagerDialog.noExtensionPackages') }}</p>
               <h3>{{ t('components.profileManagerDialog.networkProxy') }}</h3>
               <input v-model="proxy.ALL_PROXY" placeholder="ALL_PROXY" /><input v-model="proxy.NO_PROXY" placeholder="NO_PROXY" />
               <div class="profile-actions">
@@ -324,6 +334,8 @@ const proxyCheckStatus = computed(() => {
   return `✓ ${proxyCountry.value}`;
 });
 const models = ref<ModelOption[]>([]);
+const extensions = ref<Array<{ source: string; enabled: boolean }>>([]);
+const savingExtension = ref(false);
 const apiKeyProviders = ref<ApiKeyProvider[]>([]);
 const apiKeyProvider = ref('');
 const apiKey = ref('');
@@ -442,6 +454,8 @@ function resetProxy(): void {
 
 function resetSaveState(): void {
   defaultModel.value = '';
+  extensions.value = [];
+  savingExtension.value = false;
   automationModel.value = '';
   autoRenameLanguage.value = 'english';
   savingSettings.value = false;
@@ -516,7 +530,7 @@ async function select(id: string): Promise<void> {
   resetSaveState();
   models.value = [];
 
-  const [proxyResponse, modelsResponse, automationResponse, autoRenameResponse, apiKeyProvidersResponse, localLlmResponse, customProvidersResponse] = await Promise.all([
+  const [proxyResponse, modelsResponse, automationResponse, autoRenameResponse, apiKeyProvidersResponse, localLlmResponse, customProvidersResponse, extensionsResponse] = await Promise.all([
     fetch(profileUrl(id, '/proxy')),
     fetch(profileUrl(id, '/models')),
     fetch(profileUrl(id, '/automation-model')),
@@ -524,7 +538,14 @@ async function select(id: string): Promise<void> {
     fetch(profileUrl(id, '/api-key-providers')),
     fetch(profileUrl(id, '/local-llm')),
     fetch(profileUrl(id, '/custom-providers')),
+    fetch(profileUrl(id, '/extensions')),
   ]);
+  if (extensionsResponse.ok && managedProfileId.value === id) {
+    const data = await extensionsResponse.json() as { extensions?: Array<{ source: string; enabled: boolean }> };
+    extensions.value = data.extensions || [];
+  } else if (!extensionsResponse.ok && managedProfileId.value === id) {
+    error.value = await readErrorMessage(extensionsResponse, t('components.profileManagerDialog.failedToLoadExtensions'));
+  }
   if (proxyResponse.ok) {
     const data = await proxyResponse.json() as { proxy?: Record<string, string> };
     applyProxy(data.proxy || {});
@@ -565,6 +586,36 @@ async function select(id: string): Promise<void> {
     const data = await customProvidersResponse.json() as { providers?: CustomProvider[] };
     customProviders.value = data.providers || [];
     if (customProviders.value.length) selectCustomProvider(customProviders.value[0].id);
+  }
+}
+
+async function toggleExtension(source: string, event: Event): Promise<void> {
+  const checkbox = event.target as HTMLInputElement;
+  const enabled = checkbox.checked;
+  const extension = extensions.value.find(item => item.source === source)!;
+  const previousEnabled = extension.enabled;
+  extension.enabled = enabled;
+  const profileId = managedProfileId.value;
+  savingExtension.value = true;
+  error.value = '';
+  try {
+    const response = await fetch(profileUrl(profileId, '/extensions'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, enabled }),
+    });
+    if (!response.ok) throw new Error(await readErrorMessage(response, t('components.profileManagerDialog.failedToSaveExtensions')));
+    const data = await response.json() as { extensions: Array<{ source: string; enabled: boolean }> };
+    if (managedProfileId.value === profileId) extensions.value = data.extensions;
+    emit('updated');
+  } catch (exception) {
+    if (managedProfileId.value === profileId) {
+      extension.enabled = previousEnabled;
+      checkbox.checked = previousEnabled;
+      error.value = exception instanceof Error ? exception.message : t('components.profileManagerDialog.failedToSaveExtensions');
+    }
+  } finally {
+    if (managedProfileId.value === profileId) savingExtension.value = false;
   }
 }
 

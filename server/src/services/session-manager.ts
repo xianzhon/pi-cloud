@@ -18,6 +18,7 @@ import { readPersistedSessionInfo, readSessionHeader } from './session-discovery
 import { runWithAgentDirAndProxyEnv } from './profile-proxy.js';
 import { SkillPolicyStore, type SkillPolicyRecord } from './skill-policy-store.js';
 import { McpManagement, type McpToolChange } from './mcp-management.js';
+import { listProfileExtensions, setProfileExtension } from './profile-extensions.js';
 import { resolveAllowedExistingPath, resolveAllowedPath } from '../utils/path-security.js';
 import type { WorktreeMetadataStore } from './worktree-metadata-store.js';
 
@@ -821,6 +822,14 @@ export class PiSessionService {
     const profile = (await this.listAgentProfiles(signal)).find((item) => item.id === profileId);
     if (!profile) throw new Error('Unknown agent profile');
     return profile;
+  }
+
+  async listAgentProfileExtensions(profileId: string) {
+    return listProfileExtensions((await this.requireAgentProfile(profileId)).path);
+  }
+
+  async setAgentProfileExtension(profileId: string, source: string, enabled: boolean) {
+    return setProfileExtension((await this.requireAgentProfile(profileId)).path, source, enabled);
   }
 
   async saveAgentProfileDefaultModel(profileId: string, provider: string, modelId: string): Promise<AgentProfile> {
