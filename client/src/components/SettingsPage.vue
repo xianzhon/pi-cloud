@@ -760,6 +760,7 @@
                 @delete-preset="emit('deleteSkillPreset', $event)"
               />
               <ManagedSkillsPanel v-if="activeSection === 'sharedSkills'" @changed="emit('managedSkillsChanged')" />
+              <McpPanel v-if="activeSection === 'mcp'" :client-id="clientId" :project-path="projectPath" />
             </div>
           </main>
   </section>
@@ -805,6 +806,7 @@ import { i18n } from '../i18n';
 import SecurityPanel from './SecurityPanel.vue';
 import SkillPresetsPanel from './SkillPresetsPanel.vue';
 import ManagedSkillsPanel from './ManagedSkillsPanel.vue';
+import McpPanel from './McpPanel.vue';
 import ModelWindowKickoffPanel from './ModelWindowKickoffPanel.vue';
 import UserPromptsPanel from './UserPromptsPanel.vue';
 import FolderPickerModal from './FolderPickerModal.vue';
@@ -924,14 +926,14 @@ const fullscreenShortcutOptions: CustomSelectOption[] = [
   { value: 'ctrlShiftF', label: 'Ctrl+Shift+F' },
 ];
 
-type SettingsSection = 'general' | 'security' | 'chat' | 'prompts' | 'keyboard' | 'skills' | 'sharedSkills' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff';
+type SettingsSection = 'general' | 'security' | 'chat' | 'prompts' | 'keyboard' | 'skills' | 'sharedSkills' | 'mcp' | 'git' | 'gateway' | 'reviewSources' | 'modelWindowKickoff';
 const sectionGroups = [
   { label: 'workspace', sections: [
     { id: 'general', icon: PhSliders }, { id: 'chat', icon: PhChatCircle },
     { id: 'prompts', icon: PhTextT }, { id: 'keyboard', icon: PhKeyboard },
   ] },
   { label: 'tools', sections: [
-    { id: 'skills', icon: PhSparkle }, { id: 'sharedSkills', icon: PhFolder },
+    { id: 'skills', icon: PhSparkle }, { id: 'sharedSkills', icon: PhFolder }, { id: 'mcp', icon: PhSliders },
     { id: 'git', icon: PhGitPullRequest }, { id: 'reviewSources', icon: PhMagnifyingGlass },
   ] },
   { label: 'connections', sections: [
@@ -947,6 +949,7 @@ const sectionHeadingKeys: Record<SettingsSection, string> = {
   keyboard: 'keyboardHeading',
   skills: 'skillsHeading',
   sharedSkills: 'sharedSkills',
+  mcp: 'mcp',
   git: 'gitHeading',
   gateway: 'gateway',
   reviewSources: 'reviewSources',

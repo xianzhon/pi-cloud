@@ -558,6 +558,17 @@
       </template>
     </ConfirmModal>
     <Teleport to="body">
+      <div v-if="mcpSelectorOpen" class="model-selector-backdrop">
+        <div class="model-selector-modal skill-selector-modal" role="dialog" aria-modal="true" :aria-label="t('mcp.sessionTitle')">
+          <header class="model-selector-header">
+            <h3>{{ t('mcp.sessionTitle') }}</h3>
+            <DialogCloseButton :label="t('mcp.close')" @click="mcpSelectorOpen = false" />
+          </header>
+          <McpPanel :session-id="sessionId" :client-id="clientId" :project-path="projectPath" />
+        </div>
+      </div>
+    </Teleport>
+    <Teleport to="body">
       <div v-if="skillSelectorOpen" class="model-selector-backdrop">
         <div class="model-selector-modal skill-selector-modal" role="dialog" aria-modal="true" :aria-label="t('components.chatPanel.configureSessionSkills')">
           <header class="model-selector-header">
@@ -781,6 +792,7 @@ import ConfirmModal from './ConfirmModal.vue';
 import DialogCloseButton from './DialogCloseButton.vue';
 import SessionTreeModal from './SessionTreeModal.vue';
 import SkillPicker from './SkillPicker.vue';
+import McpPanel from './McpPanel.vue';
 import CustomSelect from './CustomSelect.vue';
 import type { AvailableSkill } from '../composables/useAvailableSkills';
 import { exportSessionPdf, hasExportableMessages } from '../utils/sessionPdfExport';
@@ -1015,6 +1027,7 @@ const isExportingPdf = ref(false);
 const exportPdfError = ref('');
 const isPreparingSession = ref(false);
 const skillSelectorOpen = ref(false);
+const mcpSelectorOpen = ref(false);
 const treeModalOpen = ref(false);
 const skillSelectorLoading = ref(false);
 const skillSelectorSaving = ref(false);
@@ -1685,6 +1698,7 @@ watch(commitPreview, async (preview) => {
 
 // Watch for session changes and load history
 watch(() => props.sessionId, async (newSessionId) => {
+  mcpSelectorOpen.value = false;
   clearSpeechAudio();
   if (newSessionId) {
     await loadSessionHistory(newSessionId);
@@ -2162,6 +2176,15 @@ async function handleSend(options?: { hideCommandMessage?: boolean }): Promise<b
 
   if (isModelCommand(text)) {
     await handleModelCommand(text);
+    return true;
+  }
+
+  if (/^\/mcp(?:\s|$)/i.test(text.trim())) {
+    slashCommands.close();
+    inputText.value = '';
+    resizeInputAfterDomUpdate();
+    if (props.sessionId && props.clientId) mcpSelectorOpen.value = true;
+    else showToast(t('mcp.sessionHelp'), 'info');
     return true;
   }
 

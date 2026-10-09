@@ -17,6 +17,8 @@ import { expandHomePath } from '../utils/paths.js';
 import { readPersistedSessionInfo, readSessionHeader } from './session-discovery.js';
 import { runWithAgentDirAndProxyEnv } from './profile-proxy.js';
 import { SkillPolicyStore, type SkillPolicyRecord } from './skill-policy-store.js';
+import { McpManagement, type McpToolChange } from './mcp-management.js';
+import { resolveAllowedExistingPath, resolveAllowedPath } from '../utils/path-security.js';
 import type { WorktreeMetadataStore } from './worktree-metadata-store.js';
 
 export interface SessionExecutionMessage {
@@ -179,6 +181,7 @@ export class PiSessionService {
   private cleanupTimers: Map<string, NodeJS.Timeout> = new Map();
   private streamingStartedAt: Map<string, number> = new Map();
   private clientProfiles: Map<string, string> = new Map();
+  private mcpContexts = new WeakMap<AgentSession, { profileId: string; manager: McpManagement }>();
   private sessionListCache: Map<string, SessionListCacheEntry> = new Map();
   private userMessageCountCache: Map<string, UserMessageCountCacheEntry> = new Map();
 
@@ -1380,6 +1383,96 @@ export class PiSessionService {
     }
   }
 
+  private async profileMcp(profileId: string, projectPath?: string) {
+    const profile = (await this.listAgentProfiles()).find(item => item.id === profileId);
+    if (!profile) throw new Error('Unknown agent profile');
+    const cwd = projectPath ? await resolveAllowedExistingPath(projectPath) : process.cwd();
+    return { profile, cwd, manager: new McpManagement(profile.path, cwd) };
+  }
+
+  async getProfileMcp(profileId: string, projectPath?: string) {
+    return (await this.profileMcp(profileId, projectPath)).manager.list();
+  }
+
+  private assertMcpProfileIdle(profileId: string) {
+    for (const session of this.sessions.values()) {
+      if (this.mcpContexts.get(session)?.profileId === profileId && session.isStreaming) throw new Error('Cannot change MCP configuration while a profile session is streaming');
+    }
+  }
+
+  async updateProfileMcp(profileId: string, changes: McpToolChange[], projectPath?: string) {
+    const { manager } = await this.profileMcp(profileId, projectPath);
+    this.assertMcpProfileIdle(profileId);
+    const result = await manager.setProfileTools(changes);
+    for (const session of this.sessions.values()) {
+      const context = this.mcpContexts.get(session);
+      if (context?.profileId === profileId) context.manager.refreshActiveTools(session);
+    }
+    return result;
+  }
+
+  async saveMcpServer(profileId: string, name: string, config: unknown, projectPath?: string) {
+    const context = await this.profileMcp(profileId, projectPath);
+    this.assertMcpProfileIdle(profileId);
+    if (config && typeof config === 'object' && 'cwd' in config && typeof config.cwd === 'string') {
+      const cwd = config.cwd.replace(/\$\{(\w+)\}/g, (_, name) => process.env[name] ?? '').replace(/\$env:(\w+)/g, (_, name) => process.env[name] ?? '');
+      await resolveAllowedPath(cwd);
+    }
+    return context.manager.saveServer(name, config);
+  }
+
+  async removeMcpServer(profileId: string, name: string, projectPath?: string) {
+    const { manager } = await this.profileMcp(profileId, projectPath);
+    this.assertMcpProfileIdle(profileId);
+    return manager.removeServer(name);
+  }
+
+  private async sessionMcp(clientId: string, sessionId: string) {
+    const session = this.getSession(clientId, sessionId);
+    const persisted = session ? undefined : await this.findPersistedSession(clientId, sessionId);
+    if (!session && !persisted) throw new Error('Session not found');
+    const profile = await this.getClientAgentProfile(clientId);
+    const runtime = session ? this.mcpContexts.get(session) : undefined;
+    if (runtime && runtime.profileId !== profile.id) throw new Error('Session not found in selected agent profile');
+    const cwd = session ? this.getActiveSessionCwd(session) : persisted!.cwd || process.cwd();
+    return { session, manager: runtime?.manager || new McpManagement(profile.path, cwd) };
+  }
+
+  async getSessionMcp(clientId: string, sessionId: string) {
+    const { session, manager } = await this.sessionMcp(clientId, sessionId);
+    const inventory = manager.list(sessionId);
+    const gateway = session?.extensionRunner?.getToolDefinition('mcp');
+    if (!gateway || !session) return inventory;
+    const result = await gateway.execute('pi-cloud-status', {}, new AbortController().signal, undefined, session.extensionRunner.createContext());
+    const statuses = (result.details as { servers?: { name: string; status: string }[] })?.servers || [];
+    return { servers: inventory.servers.map(server => ({ ...server, status: statuses.find(item => item.name === server.name)?.status })) };
+  }
+
+  async updateSessionMcp(clientId: string, sessionId: string, changes: McpToolChange[]) {
+    const { session, manager } = await this.sessionMcp(clientId, sessionId);
+    if (session?.isStreaming) throw new Error('Cannot change MCP tools while session is streaming');
+    const result = await manager.setSessionTools(sessionId, changes);
+    if (session) this.mcpContexts.get(session)?.manager.refreshActiveTools(session);
+    return result;
+  }
+
+  async discoverMcp(profileId: string, server: string, projectPath?: string) {
+    const { profile, cwd, manager } = await this.profileMcp(profileId, projectPath);
+    this.assertMcpProfileIdle(profileId);
+    if (!manager.list().servers.some(item => item.name === server)) throw new Error('Unknown MCP server');
+    const session = await this.createProfileSession(SessionManager.inMemory(cwd), cwd, profile, { mode: 'all', appliedSkills: [], ignoredSkills: [], presetId: null }, []);
+    try {
+      const gateway = session.extensionRunner.getToolDefinition('mcp');
+      if (!gateway) throw new Error('MCP discovery requires pi-mcp-adapter with its proxy tool enabled');
+      const result = await gateway.execute('pi-cloud-discovery', { connect: server }, new AbortController().signal, undefined, session.extensionRunner.createContext());
+      if ((result.details as { error?: string })?.error) throw new Error('MCP discovery failed. Check the server configuration and authentication.');
+      return manager.list();
+    } finally {
+      try { await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' }); }
+      finally { session.dispose(); }
+    }
+  }
+
   async listAvailableSkills(clientId: string, projectPath?: string): Promise<AvailableSkillInfo[]> {
     const { agentDir } = await this.getClientProfileProxyEnv(clientId);
     const skills = await this.loadSkills(projectPath ? expandHomePath(projectPath) : process.cwd(), agentDir);
@@ -1769,13 +1862,21 @@ export class PiSessionService {
     // Extensions such as the MCP adapter read their config from process.env,
     // not the SDK's agentDir option. Keep loading and startup in profile context.
     return runWithAgentDirAndProxyEnv(profile.path, this.getProfileSettings(profile.id).proxy, async () => {
-      const resourceLoader = await this.createResourceLoader(cwd, profile.path, policy, extensionFactories);
+      const manager = new McpManagement(profile.path, cwd);
+      const resourceLoader = await this.createResourceLoader(cwd, profile.path, policy, extensionFactories,
+        base => manager.wrapExtensions(base, sessionManager.getSessionId(), work => runWithAgentDirAndProxyEnv(profile.path, this.getProfileSettings(profile.id).proxy, work)));
       // `tools` is an allowlist in the SDK and would hide profile extension tools.
       const { session } = await createAgentSession({ sessionManager, cwd, agentDir: profile.path, resourceLoader });
       try {
         session.setActiveToolsByName([...new Set([...AGENT_SESSION_TOOLS, ...session.getActiveToolNames()])]);
         // SDK construction alone does not emit session_start (MCP initialization).
         await session.bindExtensions({ mode: 'print' });
+        // The adapter starts initialization in the background; its command awaits it.
+        // Keep profile env alive until caches and eager servers are initialized.
+        const mcpCommand = session.extensionRunner?.getCommand('mcp');
+        if (mcpCommand) await mcpCommand.handler('status', session.extensionRunner.createCommandContext());
+        manager.refreshActiveTools(session);
+        this.mcpContexts.set(session, { profileId: profile.id, manager });
         return session;
       } catch (error) {
         session.dispose();
@@ -1789,11 +1890,13 @@ export class PiSessionService {
     agentDir: string,
     policy: ResolvedSkillPolicy,
     extensionFactories: InlineExtension[] = [],
+    extensionsOverride?: NonNullable<ConstructorParameters<typeof DefaultResourceLoader>[0]>['extensionsOverride'],
   ): Promise<DefaultResourceLoader> {
     const resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir,
       extensionFactories,
+      extensionsOverride,
       skillsOverride: (base) => ({
         skills: filterSkills(base.skills, policy),
         diagnostics: base.diagnostics,

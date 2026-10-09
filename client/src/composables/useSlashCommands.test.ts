@@ -139,7 +139,7 @@ describe('useSlashCommands', () => {
     });
     await globalLoad;
 
-    expect(slash.commands.value.map((command) => command.id)).toEqual(['skill-frontend-design', 'help', 'copy', 'summary', 'changelog']);
+    expect(slash.commands.value.map((command) => command.id)).toEqual(['skill-frontend-design', 'help', 'mcp', 'copy', 'summary', 'changelog']);
   });
 
   it('does not include the removed help command in fallback commands', async () => {

@@ -4,6 +4,7 @@ import * as os from 'os';
 import { dirname, isAbsolute } from 'path';
 import { projectMover } from '../services/project-mover.js';
 import { ManagedSkills, SkillInputError } from '../services/managed-skills.js';
+import { mcpRoutes } from './mcp.js';
 import { sessionFileRelocator } from '../services/session-file-relocator.js';
 import type { PiSessionService } from '../services/session-manager.js';
 import type { WorktreeMetadataStore } from '../services/worktree-metadata-store.js';
@@ -225,6 +226,7 @@ function pullRequestFromActivity(activity?: { data: Record<string, unknown> }): 
 }
 
 export async function sessionRoutes(app: FastifyInstance, options: SessionRouteOptions = {}) {
+  await mcpRoutes(app);
   const sessionService = app.services.sessions;
   const worktreeManager = app.services.worktrees;
   const worktreeMetadata = app.services.worktreeMetadata;
