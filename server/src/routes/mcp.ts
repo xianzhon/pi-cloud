@@ -14,6 +14,7 @@ export async function mcpRoutes(app: FastifyInstance) {
     }
   }
   app.get('/agent-profiles/:profileId/mcp', (req, reply) => handle(reply, () => service.getProfileMcp(profile(req.params), query(req.query).projectPath)));
+  app.put('/agent-profiles/:profileId/mcp/servers', (req, reply) => handle(reply, () => service.updateProfileMcp(profile(req.params), body(req.body).changes, body(req.body).projectPath)));
   app.put('/agent-profiles/:profileId/mcp/tools', (req, reply) => handle(reply, () => service.updateProfileMcp(profile(req.params), body(req.body).changes, body(req.body).projectPath)));
   app.put('/agent-profiles/:profileId/mcp/servers/:server', (req, reply) => handle(reply, () => service.saveMcpServer(profile(req.params), (req.params as { server: string }).server, body(req.body).config, body(req.body).projectPath)));
   app.delete('/agent-profiles/:profileId/mcp/servers/:server', (req, reply) => handle(reply, () => service.removeMcpServer(profile(req.params), (req.params as { server: string }).server, query(req.query).projectPath)));

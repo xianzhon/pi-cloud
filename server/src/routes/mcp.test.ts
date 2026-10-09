@@ -49,6 +49,24 @@ it('protects MCP filesystem boundaries, validates transports and never returns s
   } finally { await app.close(); }
 });
 
+it('persists server-level profile settings through the server endpoint', async () => {
+  const { app, profile, service, root } = await fixture();
+  vi.stubEnv('PI_CLOUD_ALLOWED_ROOTS', `${root},${process.cwd()}`);
+  const base = '/api/sessions/agent-profiles/test/mcp';
+  try {
+    const response = await app.inject({ method: 'PUT', url: `${base}/servers`, payload: { changes: [{ server: 'docs', enabled: false }] } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().servers.find((s: { name: string }) => s.name === 'docs').enabled).toBe(false);
+    const policy = JSON.parse(readFileSync(join(profile, 'pi-cloud-mcp.json'), 'utf8'));
+    expect(policy.disabledServers).toEqual(['docs']);
+    expect(policy.disabledTools).toEqual([]);
+    expect((await app.inject({ method: 'PUT', url: `${base}/servers`, payload: { changes: [{ server: 'unknown', enabled: false }] } })).statusCode).toBe(400);
+    const { session } = await service.createSession('client-1', { cwd: root, agentProfileId: 'test', noSession: true, memoryEnabled: false });
+    vi.spyOn(session, 'isStreaming', 'get').mockReturnValue(true);
+    expect((await app.inject({ method: 'PUT', url: `${base}/servers`, payload: { changes: [{ server: 'docs', enabled: true }] } })).statusCode).toBe(409);
+  } finally { service.disposeAll(); await app.close(); }
+});
+
 it('requires session context and rejects busy-session writes without changing durable permissions', async () => {
   const { app, service, root, profile } = await fixture();
   const { session } = await service.createSession('client-1', { cwd: root, agentProfileId: 'test', noSession: true, memoryEnabled: false });
@@ -56,13 +74,13 @@ it('requires session context and rejects busy-session writes without changing du
     const url = `/api/sessions/${session.sessionId}/mcp`;
     expect((await app.inject({ url })).statusCode).toBe(400);
     expect((await app.inject({ url: '/api/sessions/missing/mcp?clientId=client-1' })).statusCode).toBe(404);
-    const payload = { clientId: 'client-1', changes: [{ server: 'docs', tool: 'read_doc', enabled: false }] };
+    const payload = { clientId: 'client-1', changes: [{ server: 'docs', enabled: false }] };
     const streaming = vi.spyOn(session, 'isStreaming', 'get').mockReturnValue(true);
     expect((await app.inject({ method: 'PUT', url, payload })).statusCode).toBe(409);
     streaming.mockReturnValue(false);
     expect((await app.inject({ url: `${url}?clientId=client-1` })).json().servers.find((server: { name: string }) => server.name === 'docs').tools[0].enabled).toBe(true);
     expect((await app.inject({ method: 'PUT', url, payload })).statusCode).toBe(200);
-    expect(JSON.parse(readFileSync(join(profile, 'pi-cloud-mcp.json'), 'utf8')).sessions[session.sessionId]).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(profile, 'pi-cloud-mcp.json'), 'utf8')).sessionServers[session.sessionId]).toEqual(['docs']);
     expect((await app.inject({ url: `/api/sessions/agent-profiles/test/mcp` })).json().servers.find((server: { name: string }) => server.name === 'docs').tools[0].enabled).toBe(true);
   } finally { service.disposeAll(); await app.close(); }
 });

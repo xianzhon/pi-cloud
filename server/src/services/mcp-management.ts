@@ -6,8 +6,8 @@ import type { AgentSession, LoadExtensionsResult, ToolDefinition } from '@earend
 
 interface ServerEntry { command?: string; args?: string[]; url?: string; cwd?: string; directTools?: boolean | string[]; excludeTools?: string[]; [key: string]: unknown }
 interface Config { mcpServers?: Record<string, ServerEntry>; settings?: { toolPrefix?: string; directTools?: boolean }; imports?: string[]; [key: string]: unknown }
-interface Policy { disabledTools: string[]; sessions: Record<string, string[]> }
-export interface McpToolChange { server: string; tool: string; enabled: boolean }
+interface Policy { disabledTools: string[]; sessions: Record<string, string[]>; disabledServers: string[]; sessionServers: Record<string, string[]> }
+export interface McpToolChange { server: string; tool?: string; enabled: boolean }
 interface CachedTool { name: string; description?: string }
 const normalize = (name: string) => name.replace(/-/g, '_');
 const key = (server: string, tool: string) => JSON.stringify([server, tool]);
@@ -83,7 +83,7 @@ export class McpManagement {
   }
   private policy(): Policy {
     const policy = read<Partial<Policy>>(this.policyPath, {});
-    return { disabledTools: policy.disabledTools || [], sessions: policy.sessions || {} };
+    return { disabledTools: policy.disabledTools || [], sessions: policy.sessions || {}, disabledServers: policy.disabledServers || [], sessionServers: policy.sessionServers || {} };
   }
   list(sessionId?: string) {
     const { servers, settings } = this.configuration();
@@ -92,21 +92,24 @@ export class McpManagement {
     return { servers: [...servers].map(([name, { entry, source }]) => {
       const cached = cache.version === 1 ? cache.servers[name] : undefined;
       const cacheValid = Boolean(cached?.cachedAt && cached.configHash === mcpServerHash(entry) && Date.now() - cached.cachedAt < 7 * 24 * 60 * 60 * 1000);
+      const profileEnabled = !policy.disabledServers.includes(name);
+      const sessionEnabled = !sessionId || !(policy.sessionServers[sessionId] || []).includes(name);
       const names = [...(cached?.tools || []), ...(entry.exposeResources === false ? [] : (cached?.resources || []).map(resource => ({ name: resourceToolName(resource.name), description: 'MCP resource' })))];
       return {
         name, source, editable: source === join(this.profilePath, 'mcp.json'),
         canOverride: ![join(this.cwd, '.mcp.json'), join(this.cwd, '.pi/mcp.json')].includes(source),
         transport: entry.url ? 'http' : 'stdio',
-        config: { command: entry.command, args: entry.args, url: entry.url, cwd: entry.cwd },
+        profileEnabled, sessionEnabled, enabled: profileEnabled && sessionEnabled,
+        config: Object.fromEntries(['command', 'args', 'url', 'cwd', 'directTools', 'excludeTools', 'lifecycle', 'idleTimeout', 'debug', 'exposeResources', 'auth', 'bearerTokenEnv'].filter(field => entry[field] !== undefined).map(field => [field, entry[field]])),
         secretFields: ['env', 'headers', 'bearerToken', 'oauth'].filter(field => entry[field] !== undefined),
         cachedAt: cached?.cachedAt ?? null, cacheValid,
         tools: names.map(tool => {
           const prefixedName = this.toolName(name, tool.name, settings?.toolPrefix);
           const excluded = (entry.excludeTools || []).some(exclusion => normalize(exclusion) === normalize(tool.name) || normalize(exclusion) === normalize(prefixedName));
-          const profileEnabled = !excluded && !policy.disabledTools.includes(key(name, tool.name));
-          const sessionEnabled = !sessionId || !(policy.sessions[sessionId] || []).includes(key(name, tool.name));
+          const toolProfileEnabled = profileEnabled && !excluded && !policy.disabledTools.includes(key(name, tool.name));
+          const toolSessionEnabled = sessionEnabled && (!sessionId || !(policy.sessions[sessionId] || []).includes(key(name, tool.name)));
           const direct = entry.directTools ?? settings?.directTools ?? false;
-          return { name: tool.name, prefixedName, description: tool.description || '', profileEnabled, sessionEnabled, enabled: profileEnabled && sessionEnabled, excluded, exposure: direct === true || (Array.isArray(direct) && direct.includes(tool.name)) ? 'direct' : 'proxy' };
+          return { name: tool.name, prefixedName, description: tool.description || '', profileEnabled: toolProfileEnabled, sessionEnabled: toolSessionEnabled, enabled: toolProfileEnabled && toolSessionEnabled, excluded, exposure: direct === true || (Array.isArray(direct) && direct.includes(tool.name)) ? 'direct' : 'proxy' };
         }),
       };
     }) };
@@ -135,12 +138,21 @@ export class McpManagement {
       const inventory = this.list(sessionId);
       const policy = this.policy();
       const disabled = new Set(sessionId ? policy.sessions[sessionId] || [] : policy.disabledTools);
+      const disabledServers = new Set(sessionId ? policy.sessionServers[sessionId] || [] : policy.disabledServers);
       for (const change of changes) {
-        if (!change || typeof change.enabled !== 'boolean' || !inventory.servers.find(s => s.name === change.server)?.tools.some(t => t.name === change.tool)) throw new Error('Unknown MCP tool');
-        const id = key(change.server, change.tool);
-        if (change.enabled) disabled.delete(id); else disabled.add(id);
+        const server = change && inventory.servers.find(s => s.name === change.server);
+        if (!server || typeof change.enabled !== 'boolean') throw new Error('Unknown MCP server or invalid enabled state');
+        if (change.tool === undefined) {
+          if (sessionId && change.enabled && !server.profileEnabled) throw new Error('MCP server is disabled by profile settings');
+          if (change.enabled) disabledServers.delete(change.server); else disabledServers.add(change.server);
+        } else {
+          if (!server.tools.some(t => t.name === change.tool)) throw new Error('Unknown MCP tool');
+          const id = key(change.server, change.tool);
+          if (change.enabled) disabled.delete(id); else disabled.add(id);
+        }
       }
-      if (sessionId) policy.sessions[sessionId] = [...disabled]; else policy.disabledTools = [...disabled];
+      if (sessionId) { policy.sessions[sessionId] = [...disabled]; policy.sessionServers[sessionId] = [...disabledServers]; }
+      else { policy.disabledTools = [...disabled]; policy.disabledServers = [...disabledServers]; }
       mkdirSync(this.profilePath, { recursive: true }); atomicWrite(this.policyPath, policy);
       return this.list(sessionId);
     });
@@ -177,6 +189,9 @@ export class McpManagement {
       const owned = (config.mcpServers || config['mcp-servers'] || {}) as Record<string, ServerEntry>;
       const previous = owned[name] || effective?.entry || {};
       const next = { ...previous, ...entry };
+      for (const field of ['env', 'headers']) {
+        if (entry[field]) next[field] = { ...(previous[field] as Record<string, string> || {}), ...(entry[field] as Record<string, string>) };
+      }
       if (entry.url) { delete next.command; delete next.args; } else delete next.url;
       config.mcpServers = { ...owned, [name]: next };
       delete config['mcp-servers'];
@@ -228,7 +243,12 @@ export class McpManagement {
               assertCurrent(resolved.server);
               args[1] = { ...params, describe: resolved.prefixedName };
             } else if (!params.action && (params.connect !== undefined || params.search !== undefined || params.server !== undefined)) {
-              if (typeof params.connect === 'string') assertCurrent(params.connect);
+              const target = params.connect ?? params.server;
+              if (typeof target === 'string') {
+                const server = this.list(sessionId).servers.find(server => server.name === target);
+                if (!server?.enabled) throw new Error('MCP server is disabled or unknown');
+                assertCurrent(target);
+              }
               const result = await run(() => execute(...args));
               const details = result.details as { mode?: string; error?: string; server?: string; tools?: string[]; matches?: { server: string; tool: string }[] };
               if (details?.error) return result;
