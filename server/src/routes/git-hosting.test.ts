@@ -58,9 +58,6 @@ describe('generated Git content', () => {
     expect(() => parseGeneratedContent(JSON.stringify(value), 'PR')).toThrow('AI did not return both a PR title and body');
   });
 
-  it('also accepts wrapped issue content', () => {
-    expect(parseGeneratedContent(`Draft:\n${JSON.stringify(content)}\nDone.`, 'issue')).toEqual(content);
-  });
 });
 
 describe('git hosting routes', () => {

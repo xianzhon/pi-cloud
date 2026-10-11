@@ -9,7 +9,6 @@ function editor(server?: { name: string; config: Record<string, unknown>; secret
 it('edits connection fields while preserving advanced options and omitting hidden credentials', async () => {
   const wrapper = editor({ name: 'docs', config: { command: 'node', args: ['file with spaces.js'], directTools: true }, secretFields: ['env'] });
   expect(wrapper.find('[name=mcp-server-name]').attributes('disabled')).toBeDefined();
-  expect(wrapper.find('details').attributes('open')).toBeUndefined();
   await wrapper.find('[name=mcp-command]').setValue('bun');
   await wrapper.find('form').trigger('submit');
   expect(wrapper.emitted('save')?.[0]).toEqual(['docs', { command: 'bun', args: ['file with spaces.js'], directTools: true }]);

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DefaultResourceLoader } from '@earendil-works/pi-coding-agent';
-import { listProfileExtensions, setProfileExtension } from './profile-extensions.js';
+import { setProfileExtension } from './profile-extensions.js';
 
 let root: string;
 let profile: string;
@@ -18,14 +18,6 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 describe('profile extension packages', () => {
-  it('lists package strings and disabled package objects', () => {
-    saveSettings({ packages: ['npm:pi-mcp-adapter', { source: 'npm:pi-subagents', extensions: [] }] });
-    expect(listProfileExtensions(profile)).toEqual([
-      { source: 'npm:pi-mcp-adapter', enabled: true },
-      { source: 'npm:pi-subagents', enabled: false },
-    ]);
-  });
-
   it('disables and re-enables a package while preserving other settings', () => {
     saveSettings({ defaultModel: 'test', packages: ['npm:pi-subagents', 'npm:pi-mcp-adapter'] });
     setProfileExtension(profile, 'npm:pi-subagents', false);

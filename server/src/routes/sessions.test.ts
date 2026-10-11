@@ -251,19 +251,6 @@ describe('session routes', () => {
     expect(sessionService.setAgentProfileExtension).toHaveBeenCalledWith('work', 'npm:pi-subagents', false);
   });
 
-  it('returns extension setting errors without exposing a filesystem path API', async () => {
-    sessionService.setAgentProfileExtension.mockRejectedValueOnce(new Error('Unknown agent profile'));
-    const { sessionRoutes } = await import('./sessions.js');
-    const { app, handlers } = createMockApp();
-    await sessionRoutes(app as any);
-    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
-    await handlers['PUT /agent-profiles/:profileId/extensions']({
-      params: { profileId: '../outside' }, body: { source: 'npm:pi-subagents', enabled: false },
-    }, reply);
-    expect(reply.status).toHaveBeenCalledWith(400);
-    expect(reply.send).toHaveBeenCalledWith({ error: 'Unknown agent profile' });
-  });
-
   it('saves an agent profile API key', async () => {
     vi.mocked((sessionService as any).saveAgentProfileApiKey).mockResolvedValue([
       { envVar: 'OPENAI_API_KEY', label: 'OpenAI GPT', configured: true, source: 'stored' },

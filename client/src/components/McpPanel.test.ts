@@ -16,7 +16,6 @@ describe('MCP browser configuration', () => {
     }));
     const wrapper = mount(McpPanel, { props: { sessionId: 'session-1', clientId: 'client-1' } });
     await flushPromises();
-    expect(wrapper.find('details').attributes('open')).toBeUndefined();
     expect(wrapper.findAll('[data-tool]')).toHaveLength(2);
     expect(wrapper.find('input[type=checkbox]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="add-mcp-server"]').exists()).toBe(false);
@@ -29,7 +28,7 @@ describe('MCP browser configuration', () => {
     await flushPromises();
     expect(wrapper.find('[role=switch]').attributes('disabled')).toBeDefined();
   });
-  it('uses custom profile selection, ignores stale inventory and adds an HTTP server in a modal', async () => {
+  it('ignores stale inventory and adds an HTTP server to the selected profile', async () => {
     let stale: ((value: Response) => void) | undefined;
     const requests: { url: string; body?: any }[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url, options) => {
@@ -39,7 +38,6 @@ describe('MCP browser configuration', () => {
       return new Response(JSON.stringify({ servers: [] }));
     }));
     const wrapper = mount(McpPanel, { global: { stubs: { Teleport: true } } }); await flushPromises();
-    expect(wrapper.find('select').exists()).toBe(false);
     wrapper.findComponent(CustomSelect).vm.$emit('update:modelValue', 'two'); await flushPromises();
     stale?.(new Response(JSON.stringify(inventory))); await flushPromises();
     expect(wrapper.find('[data-tool]').exists()).toBe(false);

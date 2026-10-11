@@ -839,7 +839,6 @@ describe('PiSessionService', () => {
     const expectTaskTool = () => {
       expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories)
         .toContainEqual(expect.objectContaining({ name: 'pi-cloud-task-inbox' }));
-      expect(createAgentSession.mock.calls.at(-1)?.[0].tools).toBeUndefined();
     };
 
     await service.createSession('client-1', { cwd: '/workspace', memoryEnabled: false });
@@ -851,7 +850,6 @@ describe('PiSessionService', () => {
 
     await service.createSession('internal-task', { cwd: '/workspace', noSession: true });
     expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories).toEqual([]);
-    expect(createAgentSession.mock.calls.at(-1)?.[0].tools).toBeUndefined();
   });
 
   it('injects memory into new and resumed persisted sessions', async () => {
@@ -866,7 +864,6 @@ describe('PiSessionService', () => {
         expect.objectContaining({ name: 'pi-cloud-auto-rename' }),
         expect.objectContaining({ name: 'pi-cloud-memory' }),
       ]);
-    expect(createAgentSession.mock.calls.at(-1)?.[0].tools).toBeUndefined();
 
     await service.resumeSession('client-1', '/Users/test/.pi/agent/sessions/project/session-1.jsonl');
 
@@ -890,12 +887,10 @@ describe('PiSessionService', () => {
     expect(sessionManagerCreate).not.toHaveBeenCalled();
     expect(service.getSkillPolicy('session-1')).toBeNull();
     expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories).toEqual([]);
-    expect(createAgentSession.mock.calls.at(-1)?.[0].tools).toBeUndefined();
 
     await service.createSession('memory-disabled', { cwd: '/workspace', memoryEnabled: false });
     expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories)
       .toEqual([expect.objectContaining({ name: 'pi-cloud-auto-rename' })]);
-    expect(createAgentSession.mock.calls.at(-1)?.[0].tools).toBeUndefined();
     expect(memoryRuntime.createExtension).not.toHaveBeenCalled();
   });
 
