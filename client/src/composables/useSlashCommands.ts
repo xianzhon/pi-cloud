@@ -2,6 +2,7 @@ import { computed, ref } from 'vue';
 import type { SlashCommandItem, SlashToken } from '../types/slashCommands';
 
 const clientOnlyCommands: SlashCommandItem[] = [
+  { id: 'mcp', label: '/mcp', insertText: '/mcp ', description: 'Configure MCP tool permissions for this session.', category: 'built-in', aliases: ['MCP tools', 'MCP status'] },
   {
     id: 'copy',
     label: '/copy',

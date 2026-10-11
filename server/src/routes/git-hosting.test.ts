@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { gitHostingRoutes } from './git-hosting';
+import { gitHostingRoutes, parseGeneratedContent } from './git-hosting';
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn((_file: string, _args: string[], _options: unknown, callback: Function) => callback(null, '', '')),
@@ -35,6 +35,29 @@ const execFileMock = vi.mocked(execFile);
 beforeEach(() => {
   execFileMock.mockReset();
   execFileMock.mockImplementation(((_file: string, _args: string[], _options: unknown, callback: Function) => callback(null, '', '')) as any);
+});
+
+describe('generated Git content', () => {
+  const content = { title: 'Fix PR generation', body: '## Summary\nHandle {braces}, "quotes", and \\paths.\n\n```ts\nconst value = {};\n```' };
+
+  it.each([
+    ['plain JSON', JSON.stringify(content)],
+    ['fenced JSON', `\n\`\`\`json\n${JSON.stringify(content)}\n\`\`\`\n`],
+    ['trailing commentary', `${JSON.stringify(content, null, 2)}\nGenerated from the current branch.`],
+    ['surrounding commentary', `Here is the PR:\n\`\`\`json\n${JSON.stringify(content)}\n\`\`\`\nReview before submitting.`],
+    ['multiple objects', `${JSON.stringify(content)}\n{"note":"Additional context"}`],
+  ])('parses %s without losing Markdown or escaped characters', (_label, text) => {
+    expect(parseGeneratedContent(text, 'PR')).toEqual(content);
+  });
+
+  it.each(['No JSON returned', '{"title":"Title","body":', '{"title":"Title", "body": invalid}'])('rejects malformed output: %s', (text) => {
+    expect(() => parseGeneratedContent(text, 'PR')).toThrow('AI did not return valid JSON for PR content');
+  });
+
+  it.each([{ title: 'Title' }, { title: ' ', body: 'Body' }, { title: 123, body: 'Body' }, { title: 'Title', body: '' }])('requires a nonempty title and body', (value) => {
+    expect(() => parseGeneratedContent(JSON.stringify(value), 'PR')).toThrow('AI did not return both a PR title and body');
+  });
+
 });
 
 describe('git hosting routes', () => {

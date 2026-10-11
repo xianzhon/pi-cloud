@@ -118,9 +118,40 @@ Diff:
 ${diff || '(not available)'}`;
 }
 
-function parseGeneratedContent(text: string, type: 'issue' | 'PR') {
-  const jsonText = text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
-  const parsed = JSON.parse(jsonText) as { title?: unknown; body?: unknown };
+export function parseGeneratedContent(text: string, type: 'issue' | 'PR') {
+  const start = text.indexOf('{');
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let end = -1;
+
+  // Models may wrap JSON in prose or fences. Count only braces outside strings
+  // so Markdown code blocks and escaped quotes in the body remain intact.
+  for (let index = start; start >= 0 && index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+    } else if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        end = index + 1;
+        break;
+      }
+    }
+  }
+
+  let parsed: { title?: unknown; body?: unknown };
+  try {
+    parsed = JSON.parse(text.slice(start, end));
+  } catch {
+    throw new Error(`AI did not return valid JSON for ${type} content`);
+  }
   const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
   const body = typeof parsed.body === 'string' ? parsed.body.trim() : '';
   if (!title || !body) throw new Error(`AI did not return both a ${type} title and body`);

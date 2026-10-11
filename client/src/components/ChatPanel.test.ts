@@ -119,6 +119,18 @@ describe('ChatPanel', () => {
     vi.useRealTimers();
   });
 
+  it('handles /mcp locally and opens the current-session permissions UI instead of prompting the agent', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ servers: [{ name: 'docs', source: 'mcp.json', tools: [{ name: 'read-doc', description: 'Read docs', profileEnabled: true, enabled: true, exposure: 'proxy' }] }] }))));
+    const wrapper = mount(ChatPanel, { props: { sessionId: 's-mcp', clientId: 'c-mcp' }, global: { stubs: { Teleport: true } } });
+    await wrapper.find('#chat-input').setValue('/mcp');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Session MCP configuration');
+    expect(wrapper.text()).toContain('read-doc');
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/s-mcp/mcp?clientId=c-mcp'))).toBe(true);
+  });
+
   it('inserts a saved user prompt at the caret without discarding the draft', async () => {
     const wrapper = mount(ChatPanel, {
       props: { userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.', createdAt: '2026-09-10T10:00:00.000Z', updatedAt: '2026-09-11T10:00:00.000Z' }] },

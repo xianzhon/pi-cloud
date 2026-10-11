@@ -70,6 +70,8 @@ const sessionService = {
     createAgentProfile: vi.fn(),
     deleteAgentProfile: vi.fn(),
     listAgentProfileModels: vi.fn(),
+    listAgentProfileExtensions: vi.fn(),
+    setAgentProfileExtension: vi.fn(),
     listAgentProfileApiKeyProviders: vi.fn(),
     saveAgentProfileApiKey: vi.fn(),
     removeAgentProfileApiKey: vi.fn(),
@@ -231,6 +233,22 @@ describe('session routes', () => {
         { id: 'work', label: 'work', path: '/Users/test/.pi/work', isDefault: false },
       ],
     });
+  });
+
+  it('lists and toggles extension packages for the requested profile', async () => {
+    const extensions = [{ source: 'npm:pi-subagents', enabled: false }];
+    sessionService.listAgentProfileExtensions.mockResolvedValue(extensions);
+    sessionService.setAgentProfileExtension.mockResolvedValue(extensions);
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+    expect(await handlers['GET /agent-profiles/:profileId/extensions']({ params: { profileId: 'work' } }, reply)).toEqual({ extensions });
+    expect(await handlers['PUT /agent-profiles/:profileId/extensions']({
+      params: { profileId: 'work' }, body: { source: 'npm:pi-subagents', enabled: false },
+    }, reply)).toEqual({ extensions });
+    expect(sessionService.listAgentProfileExtensions).toHaveBeenCalledWith('work');
+    expect(sessionService.setAgentProfileExtension).toHaveBeenCalledWith('work', 'npm:pi-subagents', false);
   });
 
   it('saves an agent profile API key', async () => {

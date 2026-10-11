@@ -39,6 +39,9 @@ const createAgentSession = vi.fn<(options: any) => Promise<any>>(async (options)
     model: undefined,
     isStreaming: false,
     dispose: vi.fn(),
+    getActiveToolNames: vi.fn(() => ['read', 'bash', 'edit', 'write', 'mcp', 'codegraph_search']),
+    setActiveToolsByName: vi.fn(),
+    bindExtensions: vi.fn(async () => {}),
     modelRuntime: {
       refresh: vi.fn(async () => {}),
       getModel: vi.fn(() => undefined),
@@ -184,7 +187,8 @@ describe('PiSessionService', () => {
       { name: 'frontend-design', description: 'Design work', filePath: '/skills/frontend-design/SKILL.md' },
       { name: 'systematic-debugging', description: 'Bug fixing', filePath: '/skills/systematic-debugging/SKILL.md' },
     ];
-    resourceLoaderReload.mockClear();
+    resourceLoaderReload.mockReset();
+    resourceLoaderReload.mockResolvedValue(undefined);
     defaultResourceLoaderCtor.mockClear();
     createAgentSession.mockClear();
     sessionManagerCreate.mockClear();
@@ -278,7 +282,8 @@ describe('PiSessionService', () => {
     const creating = service.createSession('cancelled', { cwd: '/workspace' }, controller.signal);
     await vi.waitFor(() => expect(release).toBeDefined());
     controller.abort(new Error('shutdown'));
-    const session = { sessionId: 'cancelled-session', dispose: vi.fn() };
+    const session = { sessionId: 'cancelled-session', dispose: vi.fn(),
+      getActiveToolNames: () => [], setActiveToolsByName: vi.fn(), bindExtensions: vi.fn() };
     release({ session });
     await expect(creating).rejects.toThrow('shutdown');
     expect(service.getSession('cancelled')).toBeUndefined();
@@ -799,6 +804,33 @@ describe('PiSessionService', () => {
     });
   });
 
+  it('initializes profile extensions and preserves MCP tools on creation, resume, and skill changes', async () => {
+    const service = new PiSessionService({ skillPolicyStore: new SkillPolicyStore(db) });
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    const startupProfiles: Array<string | undefined> = [];
+    resourceLoaderReload.mockImplementation(async () => {
+      startupProfiles.push(process.env.PI_CODING_AGENT_DIR);
+    });
+    const assertExtensions = async () => {
+      const { session } = await createAgentSession.mock.results.at(-1)!.value;
+      expect(createAgentSession.mock.calls.at(-1)![0].tools).toBeUndefined();
+      expect(session.setActiveToolsByName).toHaveBeenCalledWith([
+        'read', 'bash', 'edit', 'write', 'grep', 'find', 'ls', 'mcp', 'codegraph_search',
+      ]);
+      expect(session.bindExtensions).toHaveBeenCalledWith({ mode: 'print' });
+    };
+
+    await service.createSession('client-1', { cwd: '/workspace' });
+    await assertExtensions();
+    await service.resumeSession('client-1', '/Users/test/.pi/agent/sessions/project/session-1.jsonl');
+    await assertExtensions();
+    await service.updateSessionSkillPolicy('client-1', 'session-1', 'enabled', ['frontend-design']);
+    await assertExtensions();
+    expect(startupProfiles.filter((path) => path === '/Users/test/.pi/agent')).toHaveLength(3);
+    expect(process.env.PI_CODING_AGENT_DIR).toBe(previousAgentDir);
+    resourceLoaderReload.mockImplementation(async () => {});
+  });
+
   it('enables task creation for new, resumed, and skill-reconfigured sessions only', async () => {
     const service = new PiSessionService({
       projectTaskStore: { create: vi.fn() },
@@ -807,7 +839,6 @@ describe('PiSessionService', () => {
     const expectTaskTool = () => {
       expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories)
         .toContainEqual(expect.objectContaining({ name: 'pi-cloud-task-inbox' }));
-      expect(createAgentSession.mock.calls.at(-1)?.[0].tools).toContain('create_task');
     };
 
     await service.createSession('client-1', { cwd: '/workspace', memoryEnabled: false });
@@ -819,7 +850,6 @@ describe('PiSessionService', () => {
 
     await service.createSession('internal-task', { cwd: '/workspace', noSession: true });
     expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories).toEqual([]);
-    expect(createAgentSession.mock.calls.at(-1)?.[0].tools).not.toContain('create_task');
   });
 
   it('injects memory into new and resumed persisted sessions', async () => {
@@ -834,7 +864,6 @@ describe('PiSessionService', () => {
         expect.objectContaining({ name: 'pi-cloud-auto-rename' }),
         expect.objectContaining({ name: 'pi-cloud-memory' }),
       ]);
-    expect(createAgentSession.mock.calls.at(-1)?.[0].tools).toContain('memory');
 
     await service.resumeSession('client-1', '/Users/test/.pi/agent/sessions/project/session-1.jsonl');
 
@@ -858,12 +887,10 @@ describe('PiSessionService', () => {
     expect(sessionManagerCreate).not.toHaveBeenCalled();
     expect(service.getSkillPolicy('session-1')).toBeNull();
     expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories).toEqual([]);
-    expect(createAgentSession.mock.calls.at(-1)?.[0].tools).not.toContain('memory');
 
     await service.createSession('memory-disabled', { cwd: '/workspace', memoryEnabled: false });
     expect(defaultResourceLoaderCtor.mock.calls.at(-1)?.[0].extensionFactories)
       .toEqual([expect.objectContaining({ name: 'pi-cloud-auto-rename' })]);
-    expect(createAgentSession.mock.calls.at(-1)?.[0].tools).not.toContain('memory');
     expect(memoryRuntime.createExtension).not.toHaveBeenCalled();
   });
 
@@ -1183,10 +1210,12 @@ describe('PiSessionService', () => {
 
     await service.createSession('client-1', { cwd: '/workspace' });
 
-    expect(runWithAgentDirAndProxyEnv).not.toHaveBeenCalled();
+    expect(runWithAgentDirAndProxyEnv).toHaveBeenCalledWith(
+      '/Users/test/.pi/work', { ALL_PROXY: 'http://localhost:7890' }, expect.any(Function),
+    );
   });
 
-  it('passes the selected profile to resource loaders without mutating PI_CODING_AGENT_DIR', async () => {
+  it('loads extensions in the selected profile context and restores PI_CODING_AGENT_DIR', async () => {
     readdir.mockResolvedValue([
       { name: 'work', isDirectory: () => true },
     ]);
@@ -1197,7 +1226,7 @@ describe('PiSessionService', () => {
 
     expect(defaultResourceLoaderCtor).toHaveBeenCalledWith(expect.objectContaining({ agentDir: '/Users/test/.pi/work' }));
     expect(defaultResourceLoaderCtor.mock.calls.every(([options]) => options.agentDir === '/Users/test/.pi/work')).toBe(true);
-    expect(runWithAgentDirAndProxyEnv).not.toHaveBeenCalled();
+    expect(runWithAgentDirAndProxyEnv).toHaveBeenCalledWith('/Users/test/.pi/work', {}, expect.any(Function));
     expect(process.env.PI_CODING_AGENT_DIR).toBe('/app/config');
   });
 
@@ -1212,7 +1241,9 @@ describe('PiSessionService', () => {
 
     await service.resumeSession('client-1', '/Users/test/.pi/work/sessions/project/session.jsonl');
 
-    expect(runWithAgentDirAndProxyEnv).not.toHaveBeenCalled();
+    expect(runWithAgentDirAndProxyEnv).toHaveBeenCalledWith(
+      '/Users/test/.pi/work', { ALL_PROXY: 'http://localhost:7890' }, expect.any(Function),
+    );
   });
 
   it('runs work with the selected profile proxy env', async () => {
@@ -1413,7 +1444,8 @@ describe('PiSessionService', () => {
 
   it('force-disposes active sessions by pi session id', async () => {
     const dispose = vi.fn();
-    createAgentSession.mockResolvedValueOnce({ session: { sessionId: 'session-force', dispose } });
+    createAgentSession.mockResolvedValueOnce({ session: { sessionId: 'session-force', dispose,
+      getActiveToolNames: () => [], setActiveToolsByName: vi.fn(), bindExtensions: vi.fn() } });
     const service = new PiSessionService();
 
     await service.createSession('client-1', { cwd: '/workspace' });
@@ -1427,8 +1459,10 @@ describe('PiSessionService', () => {
     const firstDispose = vi.fn();
     const secondDispose = vi.fn();
     createAgentSession
-      .mockResolvedValueOnce({ session: { sessionId: 'session-1', dispose: firstDispose } })
-      .mockResolvedValueOnce({ session: { sessionId: 'session-2', dispose: secondDispose } });
+      .mockResolvedValueOnce({ session: { sessionId: 'session-1', dispose: firstDispose,
+        getActiveToolNames: () => [], setActiveToolsByName: vi.fn(), bindExtensions: vi.fn() } })
+      .mockResolvedValueOnce({ session: { sessionId: 'session-2', dispose: secondDispose,
+        getActiveToolNames: () => [], setActiveToolsByName: vi.fn(), bindExtensions: vi.fn() } });
     const service = new PiSessionService();
 
     const first = await service.createSession('client-1', { cwd: '/workspace' });

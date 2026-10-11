@@ -69,6 +69,12 @@ PI_CLOUD_MEMORY_POLICY=legacy
 
 Restart the server after changing this setting.
 
+## Profile Extension Packages
+
+Open **Agent profiles → Extensions** to enable or disable the extensions supplied by each package in the profile's `settings.json`. For example, uncheck `npm:pi-subagents` to disable delegation while leaving `npm:pi-mcp-adapter` enabled. Changes save immediately and apply to new or reopened sessions, including CLI Pi using the same profile; already-running sessions are unchanged.
+
+This uses Pi's native package filter: a disabled entry becomes `{ "source": "npm:pi-subagents", "extensions": [] }`. Packages stay installed, and their skills, prompts, and themes retain their existing settings. Existing extension filters are saved in the entry's `piCloudExtensionFilters` field and restored when re-enabled. These toggles cover profile package declarations, not standalone extension files or project-level package overrides.
+
 ## Agent Proxy Configuration
 
 Configure the proxy for each agent profile from the WebUI profile settings. The settings are stored in the Pi Cloud SQLite database and apply only to agent and model requests; the embedded terminal is not affected. Changes take effect on the next agent action without a restart.
@@ -121,3 +127,29 @@ A local MLX Audio service can be installed with Python 3.12 and `uv pip install 
 Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are optional because the server uses the Pi agent's own authentication by default.
 
 See `.env.example` for provider-specific variables and the dedicated [Feishu](feishu-gateway.md), [WeCom](wecom-gateway.md), and [WeChat](weixin-gateway.md) gateway manuals for messaging configuration.
+
+## MCP servers and permissions
+
+MCP support uses the `pi-mcp-adapter` extension installed in each agent profile. Install it with `pi install npm:pi-mcp-adapter` in the intended Pi agent directory (`PI_CODING_AGENT_DIR`), then create or resume a Pi Cloud session. Pi Cloud does not install third-party executable packages automatically.
+
+Open **Settings → MCP** and select an agent profile using the searchable selector. Each server has an enable/disable switch, connection status, and configuration source. Tool names and descriptions are available in a read-only list, collapsed by default. **Discover / refresh tools** explicitly starts a temporary adapter session, connects to the chosen server, refreshes its tool cache, and disposes the temporary session. This requires the adapter's `mcp` proxy tool; direct-only configurations with `disableProxyTool: true` must enable the proxy to use this action. OAuth servers may require authentication through Pi first. Cached inventories can be stale; stale or unknown tool identities cannot be called until discovered again.
+
+Use **Add MCP server** or **Edit server** to open the connection editor. Choose **Local command** and enter the command and arguments (one argument per line), or choose **HTTP server** and enter its URL. **Advanced settings** contains working directory, environment variables/HTTP headers, and additional JSON options. Existing secret values stay hidden; adding values updates or extends them without removing stored values. For example, a local connection corresponds to:
+
+```json
+{ "command": "npx", "args": ["-y", "your-mcp-server"] }
+```
+
+Or, for HTTP:
+
+```json
+{ "url": "https://example.com/mcp" }
+```
+
+MCP commands execute on the **backend**, with its operating-system permissions. Only configure trusted commands and endpoints. Optional `cwd` and project paths must satisfy Pi Cloud's allowed-root checks, including symlinks and environment-variable expansion. Prefer `${VARIABLE}` references in `env`/`headers` or `bearerTokenEnv` over inline credentials. Stored `env`, headers, bearer tokens, and OAuth settings are not returned to the browser and are preserved when editing the displayed connection fields. Avoid putting secrets in command arguments or URL query strings.
+
+Pi Cloud writes server entries only to `<profile>/mcp.json`, preserving unrelated settings. Effective precedence remains shared global config → profile config → project `.mcp.json` → project `.pi/mcp.json`. Shared global/imported servers can receive a profile override. Project overrides are read-only in this panel: edit their source file instead. Removing a **profile entry** may reveal a shared definition of the same server; it does not delete shared or project files. Connection configuration changes apply when creating or resuming a session; permission changes affect loaded sessions immediately when idle.
+
+Server switches control **permission**, not direct/proxy exposure. Disabling a server blocks its tools through both the gateway and direct calls, removes its direct tools from the model's active tool list, and blocks explicit gateway connection requests. The server restriction also applies to tools discovered later, without enumerating individual tool permissions. Re-enabling a server preserves existing adapter exclusions and legacy per-tool restrictions. Tool lists have no permission checkboxes.
+
+Type **`/mcp`** in chat to open the current session's MCP panel without sending a model prompt. Session settings can only further restrict profile-enabled servers. They cannot re-enable profile-disabled servers. Restrictions persist across resume and are isolated by profile and session. Pi Cloud stores permissions in `<profile>/pi-cloud-mcp.json`; this does not rewrite shared adapter configuration. Changes are rejected while an affected session is streaming. Permission restrictions do not prevent adapter eager/keep-alive connections from starting, and they are not an operating-system sandbox.

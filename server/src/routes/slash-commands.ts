@@ -26,6 +26,7 @@ const COMMAND_CACHE_TTL_MS = 60_000;
 const commandCache = new Map<string, { expiresAt: number; commands: SlashCommandItem[]; promise?: Promise<SlashCommandItem[]> }>();
 
 const builtInCommands: SlashCommandItem[] = [
+  { id: 'mcp', label: '/mcp', insertText: '/mcp ', description: 'Configure MCP tool permissions for this session.', category: 'built-in', aliases: ['MCP tools', 'MCP status'] },
   {
     id: 'diff',
     label: '/diff',
