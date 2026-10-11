@@ -50,7 +50,7 @@ import McpServerEditor from './McpServerEditor.vue';
 
 interface Tool { name: string; description: string }
 interface Server { name: string; source: string; transport: string; editable: boolean; canOverride?: boolean; enabled: boolean; profileEnabled: boolean; secretFields?: string[]; config: Record<string, unknown>; tools: Tool[]; cachedAt: number | null; cacheValid?: boolean; status?: string }
-const props = defineProps<{ sessionId?: string; clientId?: string; projectPath?: string }>();
+const props = defineProps<{ sessionId?: string; clientId?: string; projectPath?: string; selectedAgentProfileId?: string }>();
 const t = i18n.global.t;
 const { showToast } = useToasts();
 const profiles = ref<{ id: string; label?: string }[]>([]);
@@ -83,7 +83,7 @@ async function load() {
       const result = await request('/api/sessions/agent-profiles');
       if (disposed || id !== requestId) return;
       profiles.value = result.profiles || [];
-      profileId.value = profiles.value[0]?.id || '';
+      profileId.value = profiles.value.find(profile => profile.id === props.selectedAgentProfileId)?.id || profiles.value[0]?.id || '';
     }
     if (!props.sessionId && !profileId.value) return;
     const url = props.sessionId ? `/api/sessions/${encodeURIComponent(props.sessionId)}/mcp?${new URLSearchParams({ clientId: props.clientId || '' })}` : profileUrl() + contextQuery();
@@ -127,6 +127,11 @@ async function removeServer() {
   await mutate(() => request(`${profileUrl()}/servers/${encodeURIComponent(name)}${contextQuery()}`, 'DELETE'));
 }
 watch(() => [props.sessionId, props.clientId, props.projectPath], () => { editor.value = null; removeTarget.value = ''; void load(); }, { immediate: true });
+watch(() => props.selectedAgentProfileId, (value) => {
+  if (!props.sessionId && profiles.value.length) {
+    selectProfile(profiles.value.find(profile => profile.id === value)?.id || profiles.value[0]?.id || '');
+  }
+});
 onBeforeUnmount(() => { disposed = true; ++requestId; });
 </script>
 

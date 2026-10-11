@@ -760,7 +760,7 @@
                 @delete-preset="emit('deleteSkillPreset', $event)"
               />
               <ManagedSkillsPanel v-if="activeSection === 'sharedSkills'" @changed="emit('managedSkillsChanged')" />
-              <McpPanel v-if="activeSection === 'mcp'" :client-id="clientId" :project-path="projectPath" />
+              <McpPanel v-if="activeSection === 'mcp'" :client-id="clientId" :project-path="projectPath" :selected-agent-profile-id="selectedAgentProfileId" />
             </div>
           </main>
   </section>
@@ -818,6 +818,7 @@ const t = i18n.global.t;
 const props = withDefaults(defineProps<{
   clientId?: string;
   projectPath?: string;
+  selectedAgentProfileId?: string;
   totpEnabled: boolean;
   showHintInfo: boolean;
   showCodeBlockLanguageHeaders: boolean;

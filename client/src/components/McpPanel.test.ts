@@ -51,6 +51,35 @@ describe('MCP browser configuration', () => {
     expect(requests.find(r => r.body?.config)).toEqual({ url: '/api/sessions/agent-profiles/two/mcp/servers/remote', body: { config: { url: 'https://example.com/mcp' } } });
     expect(wrapper.find('[role=dialog]').exists()).toBe(false);
   });
+  it('defaults to the sidebar profile and follows sidebar profile changes', async () => {
+    const fetch = vi.fn(async (url) => new Response(JSON.stringify(String(url).endsWith('agent-profiles')
+      ? { profiles: [{ id: 'default' }, { id: 'work' }] }
+      : inventory)));
+    vi.stubGlobal('fetch', fetch);
+    const wrapper = mount(McpPanel, { props: { selectedAgentProfileId: 'work' } });
+    await flushPromises();
+    expect(wrapper.findComponent(CustomSelect).props('modelValue')).toBe('work');
+    expect(fetch).toHaveBeenLastCalledWith('/api/sessions/agent-profiles/work/mcp', undefined);
+
+    wrapper.findComponent(CustomSelect).vm.$emit('update:modelValue', 'default');
+    await flushPromises();
+    expect(wrapper.findComponent(CustomSelect).props('modelValue')).toBe('default');
+
+    await wrapper.setProps({ selectedAgentProfileId: 'default' });
+    await flushPromises();
+    expect(fetch).toHaveBeenLastCalledWith('/api/sessions/agent-profiles/default/mcp', undefined);
+    await wrapper.setProps({ selectedAgentProfileId: 'work' });
+    await flushPromises();
+    expect(wrapper.findComponent(CustomSelect).props('modelValue')).toBe('work');
+  });
+  it('falls back to the first available profile when the sidebar profile is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => new Response(JSON.stringify(String(url).endsWith('agent-profiles')
+      ? { profiles: [{ id: 'default' }] }
+      : inventory))));
+    const wrapper = mount(McpPanel, { props: { selectedAgentProfileId: 'missing' } });
+    await flushPromises();
+    expect(wrapper.findComponent(CustomSelect).props('modelValue')).toBe('default');
+  });
   it('sends profile server changes without enumerating tools', async () => {
     const fetch = vi.fn(async (url) => new Response(JSON.stringify(String(url).endsWith('agent-profiles') ? { profiles: [{ id: 'one' }] } : inventory)));
     vi.stubGlobal('fetch', fetch);

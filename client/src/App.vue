@@ -513,6 +513,7 @@
 
     <LazySettingsPage
       v-if="showSettings"
+      :selected-agent-profile-id="selectedAgentProfileId"
       :client-id="clientId"
       :project-path="activeProjectPath"
       :totp-enabled="user?.totpEnabled || false"
