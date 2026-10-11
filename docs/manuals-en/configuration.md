@@ -53,11 +53,20 @@ Managed skills are stored in `~/.agents/skills/` on the server, shared across ag
 |---|---|---|
 | `PI_CLOUD_SESSION_TTL_HOURS` | `8` | Session idle timeout and renewal window in hours |
 | `PI_CLOUD_SESSION_MAX_HOURS` | `720` | Maximum session lifetime, including renewals, in hours |
-| `PI_CLOUD_COOKIE_SECURE` | `false` | Restrict the session cookie to HTTPS connections |
+| `PI_CLOUD_COOKIE_SECURE` | `false` | Restrict the session cookie to HTTPS connections; automatically enabled for an HTTPS passkey origin |
+| `PI_CLOUD_PASSKEY_ORIGIN` | unset | Enable passkeys for this exact HTTPS origin, or `http://localhost:<port>` in development; no trailing slash |
 | `PI_CLOUD_TRUST_PROXY` | `false` | Trust `X-Forwarded-*` headers from a reverse proxy |
 | `SKIP_2FA_VERIFY` | `false` | Emergency TOTP bypass for login and password-confirmed recovery actions; keep disabled during normal operation |
 
 When exposing Pi Cloud on a network, use HTTPS through a trusted reverse proxy and keep authentication enabled. Set `PI_CLOUD_TRUST_PROXY=true` and `PI_CLOUD_COOKIE_SECURE=true` when deployed behind HTTPS as described in the [deployment manual](deployment.md#reverse-proxy-nginx).
+
+### Passkey login
+
+Set `PI_CLOUD_PASSKEY_ORIGIN=https://pi.example.com` and restart, then access that exact origin. The RP ID is its hostname, not a parent domain. For development use `http://localhost:5173` (not `127.0.0.1`). Unset the variable to disable passkeys. An HTTPS origin also enables secure session cookies, so use HTTPS for all logins.
+
+Log in normally and open **Settings → Security → Passkeys** to add a named credential. Adding and deleting keys requires the current password and TOTP if enabled, even in `SKIP_2FA_VERIFY` recovery mode. The login page offers **Sign in with a passkey**; this is an independent login method requiring device/provider user verification, without an additional password or TOTP. Bitwarden, platform authenticators, and compatible security keys work through standard WebAuthn.
+
+Only public keys and credential metadata are stored in SQLite. Keep password + TOTP or a spare passkey as a recovery method. Credentials are scoped to the configured username and RP ID; changing either does not transfer credentials. Register separate keys for development and production. Pending challenges expire after five minutes and are invalidated by a server restart.
 
 ## Memory Policy
 

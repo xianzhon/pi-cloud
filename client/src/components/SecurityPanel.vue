@@ -26,6 +26,8 @@
       </div>
     </section>
 
+    <PasskeyPanel :totp-enabled="totpEnabled" @updated="loadAudit" />
+
     <section class="security-card">
       <div class="audit-header">
         <h3>{{ t('components.securityPanel.auditLog') }}</h3>
@@ -89,6 +91,7 @@
 import { i18n } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import ConfirmModal from './ConfirmModal.vue';
+import PasskeyPanel from './PasskeyPanel.vue';
 
 const t = i18n.global.t;
 
@@ -161,6 +164,11 @@ function formatAuditTime(value: string): string {
 }
 
 const auditTypeLabels: Record<string, string> = {
+  passkey_added: t('passkeys.added'),
+  passkey_deleted: t('passkeys.deleted'),
+  passkey_login_success: t('passkeys.login'),
+  passkey_login_failure: t('passkeys.failed'),
+  passkey_registration_failure: t('passkeys.failed'),
   login_success: t('components.securityPanel.login'),
   login_failure: t('components.securityPanel.loginAttempt'),
   logout: t('components.securityPanel.logout'),

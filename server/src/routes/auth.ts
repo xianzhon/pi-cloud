@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { passkeyRoutes } from './passkeys.js';
 import rateLimit from '@fastify/rate-limit';
 import type { AuthConfig } from '../config/auth';
 import type { AuditLog } from '../auth/audit';
@@ -253,7 +254,13 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
       authenticated: Boolean(session),
       user: session ? { username: session.username, totpEnabled: totp.getStatus().enabled } : null,
       sessionExpiresAt: session?.expires_at || null,
+      passkeysEnabled: Boolean(config.passkeyOrigin),
     };
+  });
+
+  await app.register(passkeyRoutes, {
+    prefix: '/passkeys', config, db, sessions, audit, rateLimiter,
+    totpEnabled: () => totp.getStatus().enabled, requireAuth, requireSensitiveActionAuth,
   });
 
   app.post('/login', async (req, reply) => {

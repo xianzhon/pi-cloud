@@ -53,11 +53,20 @@ pi-cloud --hostname 0.0.0.0 --no-open
 |---|---|---|
 | `PI_CLOUD_SESSION_TTL_HOURS` | `8` | 会话空闲超时和续期窗口，单位为小时 |
 | `PI_CLOUD_SESSION_MAX_HOURS` | `720` | 包括续期在内的最长会话生命周期，单位为小时 |
-| `PI_CLOUD_COOKIE_SECURE` | `false` | 将会话 Cookie 限制为仅通过 HTTPS 连接传输 |
+| `PI_CLOUD_COOKIE_SECURE` | `false` | 将会话 Cookie 限制为仅通过 HTTPS 连接传输；配置 HTTPS 通行密钥访问源时自动启用 |
+| `PI_CLOUD_PASSKEY_ORIGIN` | 未设置 | 为此精确 HTTPS 访问源启用通行密钥，开发可用 `http://localhost:<端口>`；不含末尾斜杠 |
 | `PI_CLOUD_TRUST_PROXY` | `false` | 信任反向代理发送的 `X-Forwarded-*` 请求头 |
 | `SKIP_2FA_VERIFY` | `false` | 紧急情况下为登录及已验证密码的恢复操作绕过 TOTP；正常运行时应保持禁用 |
 
 通过网络开放 Pi Cloud 时，请使用可信反向代理提供 HTTPS，并保持身份验证启用。按照[部署手册](deployment.md#反向代理nginx)配置 HTTPS 反向代理时，请设置 `PI_CLOUD_TRUST_PROXY=true` 和 `PI_CLOUD_COOKIE_SECURE=true`。
+
+### 通行密钥登录
+
+设置 `PI_CLOUD_PASSKEY_ORIGIN=https://pi.example.com` 并重启，然后通过此精确访问源打开应用。RP ID 为其主机名，不扩大到父域名。开发可用 `http://localhost:5173`（不是 `127.0.0.1`）。不设置此变量则禁用通行密钥。HTTPS 访问源也会自动启用安全会话 Cookie，因此所有登录都应使用 HTTPS。
+
+正常登录后，打开 **设置 → 安全 → 通行密钥** 添加具名凭据。添加和删除均需验证当前密码及已启用的 TOTP，即使开启 `SKIP_2FA_VERIFY` 恢复模式也必须验证。登录页提供 **使用通行密钥登录**；这是要求设备/提供者进行用户验证的独立登录方式，无需额外输入密码或 TOTP。Bitwarden、平台认证器及兼容安全密钥通过标准 WebAuthn 工作。
+
+SQLite 仅保存公钥和凭据元数据。请保留密码 + TOTP 或备用通行密钥作为恢复方式。凭据绑定配置的用户名和 RP ID，更改任意一项均不会转移凭据。开发和生产环境应分别注册。待验证 challenge 五分钟后过期，服务器重启会使其失效。
 
 ## 记忆策略
 

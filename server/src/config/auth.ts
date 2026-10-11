@@ -12,6 +12,7 @@ export interface AuthConfig {
   skip2faVerify: boolean;
   cookieSecure: boolean;
   cookieName: string;
+  passkeyOrigin?: string;
 }
 
 const DEFAULT_SESSION_TTL_HOURS = 8;
@@ -49,6 +50,15 @@ export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig
     throw new Error('PI_CLOUD_AUTH_PASSWORD_HASH or PI_CLOUD_AUTH_PASSWORD is required');
   }
 
+  const passkeyOrigin = env.PI_CLOUD_PASSKEY_ORIGIN?.trim() || undefined;
+  if (passkeyOrigin) {
+    const url = new URL(passkeyOrigin);
+    if (url.origin !== passkeyOrigin || url.username || url.password
+      || !(url.protocol === 'https:' || (url.protocol === 'http:' && url.hostname === 'localhost'))) {
+      throw new Error('PI_CLOUD_PASSKEY_ORIGIN must be an exact HTTPS origin or http://localhost:<port>');
+    }
+  }
+
   return {
     username,
     password,
@@ -58,7 +68,8 @@ export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig
     dbPath: env.PI_CLOUD_DB_PATH || defaultDbPath(env),
     trustProxy: parseBoolean(env.PI_CLOUD_TRUST_PROXY),
     skip2faVerify: parseBoolean(env.SKIP_2FA_VERIFY),
-    cookieSecure: parseBoolean(env.PI_CLOUD_COOKIE_SECURE),
+    cookieSecure: parseBoolean(env.PI_CLOUD_COOKIE_SECURE) || Boolean(passkeyOrigin?.startsWith('https:')),
+    passkeyOrigin,
     cookieName: 'pi_cloud_session',
   };
 }

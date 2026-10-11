@@ -30,7 +30,8 @@
       </template>
 
       <p v-if="loginError" class="login-error">{{ loginError }}</p>
-      <button class="login-submit" type="submit">{{ requires2fa ? t('components.loginView.verify') : t('components.loginView.signIn') }}</button>
+      <button v-if="passkeysEnabled && browserSupportsWebAuthn()" class="login-passkey" type="button" :disabled="passkeyBusy || submitting" @click="signInWithPasskey">{{ t('passkeys.login') }}</button>
+      <button class="login-submit" type="submit" :disabled="passkeyBusy || submitting">{{ requires2fa ? t('components.loginView.verify') : t('components.loginView.signIn') }}</button>
     </form>
   </div>
 </template>
@@ -38,21 +39,34 @@
 <script setup lang="ts">
 import { i18n } from '../i18n';
 import { ref } from 'vue';
+import { browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { useAuth } from '../composables/useAuth';
 
 const t = i18n.global.t;
 
-const { login, submitTotp, requires2fa, loginError } = useAuth();
+const { login, loginWithPasskey, passkeysEnabled, passkeyBusy, submitTotp, requires2fa, loginError } = useAuth();
 const username = ref('');
 const password = ref('');
 const totpCode = ref('');
+const submitting = ref(false);
+
+async function signInWithPasskey() {
+  if (submitting.value) return;
+  if (await loginWithPasskey()) {
+    password.value = '';
+    totpCode.value = '';
+  }
+}
 
 async function submit() {
-  if (requires2fa.value) {
-    await submitTotp(totpCode.value);
-    return;
+  if (passkeyBusy.value || submitting.value) return;
+  submitting.value = true;
+  try {
+    if (requires2fa.value) await submitTotp(totpCode.value);
+    else await login(username.value, password.value);
+  } finally {
+    submitting.value = false;
   }
-  await login(username.value, password.value);
 }
 </script>
 
@@ -157,6 +171,18 @@ async function submit() {
   color: var(--login-error-text);
   font-size: 0.875rem;
   text-align: center;
+}
+
+.login-passkey {
+  min-height: 44px;
+  border: 1px solid var(--login-card-border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+}
+.login-passkey:disabled,
+.login-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .login-submit {

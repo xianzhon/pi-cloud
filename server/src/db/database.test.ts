@@ -34,6 +34,8 @@ describe('openPiCloudDatabase', () => {
       'agent_profile_settings',
       'application_settings',
       'audit_events',
+      'auth_passkey_users',
+      'auth_passkeys',
       'commit_message_prompts',
       'feishu_gateway_configs',
       'feishu_gateway_sessions',
@@ -338,10 +340,11 @@ describe('openPiCloudDatabase', () => {
       { version: 10, name: 'project-history-favorites' },
       { version: 11, name: 'project-task-images' },
       { version: 12, name: 'task-execution-queue' },
+      { version: 13, name: 'passkeys' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 12 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 13 });
     db.close();
   });
 
