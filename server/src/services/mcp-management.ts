@@ -190,7 +190,7 @@ export class McpManagement {
       const previous = owned[name] || effective?.entry || {};
       const next = { ...previous, ...entry };
       for (const field of ['env', 'headers']) {
-        if (entry[field]) next[field] = { ...(previous[field] as Record<string, string> || {}), ...(entry[field] as Record<string, string>) };
+        if (entry[field]) next[field] = { ...(previous[field] as Record<string, string>), ...(entry[field] as Record<string, string>) };
       }
       if (entry.url) { delete next.command; delete next.args; } else delete next.url;
       config.mcpServers = { ...owned, [name]: next };
