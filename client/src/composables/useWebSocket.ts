@@ -1,6 +1,10 @@
 // client/src/composables/useWebSocket.ts
 import { ref, onUnmounted } from 'vue';
 import { getTabClientId } from '../utils/tabClientId';
+import { notifySessionExpired } from '../services/apiClient';
+
+// The server closes sockets with this code when the login session expires or is revoked.
+const AUTH_REQUIRED_CLOSE_CODE = 4401;
 
 const clientId = getTabClientId();
 
@@ -49,7 +53,7 @@ function connect() {
     }
   };
 
-  ws.onclose = () => {
+  ws.onclose = (event?: CloseEvent) => {
     if (socket.value === ws) {
       socket.value = null;
     }
@@ -57,6 +61,12 @@ function connect() {
     console.log('WebSocket disconnected');
     isConnected.value = false;
     emit('disconnected');
+    if (event?.code === AUTH_REQUIRED_CLOSE_CODE) {
+      // Reconnecting cannot succeed until the user logs in again; connect() resumes afterwards.
+      manuallyClosed = true;
+      notifySessionExpired();
+      return;
+    }
     if (!manuallyClosed) {
       scheduleReconnect();
     }

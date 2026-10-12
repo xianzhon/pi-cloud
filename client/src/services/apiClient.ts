@@ -29,6 +29,11 @@ export function onSessionExpired(handler: SessionExpiredHandler): () => void {
   return () => sessionExpiredHandlers.delete(handler);
 }
 
+/** Report an expired session detected outside an HTTP response, such as a WebSocket close. */
+export function notifySessionExpired(): void {
+  for (const handler of sessionExpiredHandlers) handler();
+}
+
 export function getApiErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'string' && error) return error;
@@ -62,9 +67,7 @@ export async function apiRequest<TResponse, TRequest = never>(
     : await fetch(url);
   const payload = await parseJson(response);
 
-  if (response.status === 401 && handleUnauthorized) {
-    for (const handler of sessionExpiredHandlers) handler();
-  }
+  if (response.status === 401 && handleUnauthorized) notifySessionExpired();
 
   if (!response.ok) {
     throw new ApiError(

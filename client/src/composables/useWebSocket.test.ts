@@ -162,4 +162,21 @@ describe('useWebSocket', () => {
 
     expect(MockWebSocket.instances).toHaveLength(1);
   });
+
+  it('reports an expired login instead of reconnecting when the server closes with 4401', async () => {
+    const { useWebSocket } = await importComposable();
+    const { onSessionExpired } = await import('../services/apiClient');
+    const expired = vi.fn();
+    onSessionExpired(expired);
+    useWebSocket();
+    const socket = MockWebSocket.instances[0];
+    socket.open();
+
+    socket.readyState = MockWebSocket.CLOSED;
+    (socket.onclose as unknown as (event: { code: number }) => void)({ code: 4401 });
+    vi.runOnlyPendingTimers();
+
+    expect(expired).toHaveBeenCalledOnce();
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
 });

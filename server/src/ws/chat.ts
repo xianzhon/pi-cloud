@@ -9,6 +9,8 @@ import { sendJson } from './safe-send.js';
 import { bindSocketSession } from './session-auth.js';
 
 const ABORT_GRACE_MS = 5_000;
+// Long tool runs can leave the socket silent; ping so proxies keep it open and dead peers are dropped.
+const HEARTBEAT_INTERVAL_MS = 25_000;
 
 interface WSMessage {
   type: 'watch' | 'prompt' | 'steer' | 'followUp' | 'abort';
@@ -141,6 +143,24 @@ export async function chatWebSocket(app: FastifyInstance) {
     }
 
     const isAuthenticated = bindSocketSession(socket, req, auth.authConfig, auth.sessions, session);
+    let receivedPong = true;
+    socket.on('pong', () => { receivedPong = true; });
+    const heartbeat = setInterval(() => {
+      if (socket.readyState !== 1) return;
+      if (!receivedPong) {
+        req.log?.warn({ clientId }, 'Terminating unresponsive chat WebSocket');
+        socket.terminate();
+        return;
+      }
+      receivedPong = false;
+      try {
+        socket.ping();
+      } catch (error) {
+        req.log?.warn({ err: error }, 'Chat WebSocket ping failed');
+        socket.terminate();
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+    heartbeat.unref();
     const safeClientId = clientId;
     const connectedClient = { socket, watchedSessionId: undefined as string | undefined };
     clients.add(connectedClient);
@@ -434,6 +454,7 @@ export async function chatWebSocket(app: FastifyInstance) {
     });
 
     socket.on('close', () => {
+      clearInterval(heartbeat);
       clients.delete(connectedClient);
       console.log(`Client disconnected: ${safeClientId}`);
       unsubscribeMemoryUpdates();

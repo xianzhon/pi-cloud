@@ -59,6 +59,8 @@ class FakeSocket {
   }
 
   close() {}
+  ping = vi.fn();
+  terminate = vi.fn();
 
   emit(type: string, data?: any) {
     this.handlers.get(type)?.(data);
@@ -119,6 +121,24 @@ describe('chat websocket', () => {
     messages.forEach(publish);
     expect(watcher.sent.map((item) => JSON.parse(item))).toEqual(messages);
     expect(other.sent).toEqual([]);
+  });
+
+  it('pings idle sockets and terminates peers that stop answering', async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = await openSocket();
+      vi.advanceTimersByTime(25_000);
+      expect(socket.ping).toHaveBeenCalledTimes(1);
+      socket.emit('pong');
+      vi.advanceTimersByTime(25_000);
+      expect(socket.ping).toHaveBeenCalledTimes(2);
+      expect(socket.terminate).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(25_000);
+      expect(socket.terminate).toHaveBeenCalledTimes(1);
+      socket.emit('close');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps a streaming session running when the client disconnects', async () => {
