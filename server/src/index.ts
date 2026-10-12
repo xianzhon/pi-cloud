@@ -69,6 +69,7 @@ import { ModelWindowKickoffStore } from './services/model-window-kickoff-store.j
 import { ModelWindowKickoffScheduler } from './services/model-window-kickoff-scheduler.js';
 import { NotificationChannelService } from './services/notification-channel.js';
 import { installGracefulShutdown } from './shutdown.js';
+import { isolateSecretEnv } from './utils/secret-env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -446,6 +447,8 @@ export async function buildApp(): Promise<FastifyInstance> {
 
 export async function startServer(): Promise<FastifyInstance> {
   const app = await buildApp();
+  // Startup configuration has been read; keep secrets out of child process environments.
+  isolateSecretEnv();
   installGracefulShutdown(app);
   try {
     await app.listen({ port, host: process.env.HOST || '127.0.0.1' });

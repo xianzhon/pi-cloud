@@ -60,7 +60,7 @@ Managed skills are stored in `~/.agents/skills/` on the server, shared across ag
 
 When exposing Pi Cloud on a network, use HTTPS through a trusted reverse proxy and keep authentication enabled. Set `PI_CLOUD_TRUST_PROXY=true` and `PI_CLOUD_COOKIE_SECURE=true` when deployed behind HTTPS as described in the [deployment manual](deployment.md#reverse-proxy-nginx).
 
-Browser requests that change state, and all WebSocket connections, must come from the same origin (scheme, host, and port) as the `Host` header. Pages served from another port on the same machine are rejected.
+Browser requests that change state, and all WebSocket connections, must come from the same origin (scheme, host, and port) as the `Host` header. Pages served from another port on the same machine are rejected. After startup, Pi Cloud removes its own secrets (authentication password, credential key, gateway, and speech API secrets) from the environment inherited by terminals, agent tools, MCP servers, and Git.
 
 ### Passkey login
 

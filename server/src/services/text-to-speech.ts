@@ -1,3 +1,5 @@
+import { secretEnv } from '../utils/secret-env.js';
+
 const DEFAULT_MODEL = 'mlx-community/Kokoro-82M-bf16';
 const DEFAULT_VOICE = 'af_heart';
 const DEFAULT_FORMAT = 'wav';
@@ -59,7 +61,7 @@ export async function synthesizeSpeech(text: string, options: TextToSpeechOption
   const voice = process.env.PI_CLOUD_TTS_VOICE?.trim() || DEFAULT_VOICE;
   const language = process.env.PI_CLOUD_TTS_LANGUAGE?.trim();
   const format = process.env.PI_CLOUD_TTS_FORMAT?.trim().toLowerCase() || DEFAULT_FORMAT;
-  const apiKey = process.env.PI_CLOUD_TTS_API_KEY?.trim();
+  const apiKey = secretEnv('PI_CLOUD_TTS_API_KEY')?.trim();
   const fetchImpl = options.fetch ?? fetch;
   const retryDelayMs = options.retryDelayMs ?? RETRY_DELAY_MS;
   const body = {

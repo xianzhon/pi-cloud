@@ -13,6 +13,7 @@ import type { PiSessionService } from './session-manager.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
 import { saveWeixinImage } from './weixin-image-store.js';
 import { buildWeixinCdnDownloadUrl, decryptWeixinMedia, parseWeixinAesKey } from './weixin-media-crypto.js';
+import { secretEnv } from '../utils/secret-env.js';
 
 interface WeixinGatewayConfig {
   enabled: boolean;
@@ -198,7 +199,7 @@ export class WeixinGatewayService {
     return {
       enabled: parseBoolean(process.env.PI_CLOUD_WECHAT_GATEWAY_ENABLED, false),
       accountId: process.env.PI_CLOUD_WECHAT_ACCOUNT_ID?.trim() || credential?.accountId || '',
-      token: process.env.PI_CLOUD_WECHAT_TOKEN?.trim() || credential?.token || '',
+      token: secretEnv('PI_CLOUD_WECHAT_TOKEN')?.trim() || credential?.token || '',
       baseUrl: (process.env.PI_CLOUD_WECHAT_BASE_URL?.trim() || credential?.baseUrl || ILINK_BASE_URL).replace(/\/+$/, ''),
       defaultCwd: cwdChoices[0],
       cwdChoices,

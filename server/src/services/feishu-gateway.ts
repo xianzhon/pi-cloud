@@ -6,6 +6,7 @@ import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gatewa
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import type { PiSessionService } from './session-manager.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
+import { secretEnv } from '../utils/secret-env.js';
 
 interface FeishuGatewayConfig {
   appId: string;
@@ -107,9 +108,9 @@ export class FeishuGatewayService {
     const cwdChoices = gatewaySettings.cwds;
     return {
       appId: process.env.PI_CLOUD_FEISHU_APP_ID?.trim() || '',
-      appSecret: process.env.PI_CLOUD_FEISHU_APP_SECRET?.trim() || '',
-      verificationToken: process.env.PI_CLOUD_FEISHU_VERIFICATION_TOKEN?.trim() || '',
-      encryptKey: process.env.PI_CLOUD_FEISHU_ENCRYPT_KEY?.trim() || '',
+      appSecret: secretEnv('PI_CLOUD_FEISHU_APP_SECRET')?.trim() || '',
+      verificationToken: secretEnv('PI_CLOUD_FEISHU_VERIFICATION_TOKEN')?.trim() || '',
+      encryptKey: secretEnv('PI_CLOUD_FEISHU_ENCRYPT_KEY')?.trim() || '',
       allowedUsers: (process.env.PI_CLOUD_FEISHU_ALLOWED_USERS || '').split(',').map((item) => item.trim()).filter(Boolean),
       domain: domain === 'lark' ? 'lark' : 'feishu',
       defaultCwd: cwdChoices[0],

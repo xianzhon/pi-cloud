@@ -11,6 +11,7 @@ import type { PiSessionService } from './session-manager.js';
 import { MAX_AUDIO_BYTES, transcribeAudio } from './speech-to-text.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
 import { decryptWecomPayload, verifyWecomSignature } from './wecom-crypto.js';
+import { secretEnv, type SecretEnvName } from '../utils/secret-env.js';
 
 interface WecomGatewayConfig {
   corpId: string;
@@ -268,10 +269,10 @@ export class WecomGatewayService {
     const skillset = this.resolveSkillsetConfig(gatewaySettings.defaultSkillset);
     return {
       corpId: process.env.PI_CLOUD_WECOM_CORP_ID?.trim() || saved?.corpId || '',
-      corpSecret: process.env.PI_CLOUD_WECOM_CORP_SECRET?.trim() || saved?.corpSecret || '',
+      corpSecret: secretEnv('PI_CLOUD_WECOM_CORP_SECRET')?.trim() || saved?.corpSecret || '',
       agentId: process.env.PI_CLOUD_WECOM_AGENT_ID?.trim() || saved?.agentId || '',
-      callbackToken: process.env.PI_CLOUD_WECOM_CALLBACK_TOKEN?.trim() || saved?.callbackToken || '',
-      encodingAesKey: process.env.PI_CLOUD_WECOM_ENCODING_AES_KEY?.trim() || saved?.encodingAesKey || '',
+      callbackToken: secretEnv('PI_CLOUD_WECOM_CALLBACK_TOKEN')?.trim() || saved?.callbackToken || '',
+      encodingAesKey: secretEnv('PI_CLOUD_WECOM_ENCODING_AES_KEY')?.trim() || saved?.encodingAesKey || '',
       allowedUsers: process.env.PI_CLOUD_WECOM_ALLOWED_USERS !== undefined
         ? parseList(process.env.PI_CLOUD_WECOM_ALLOWED_USERS)
         : saved?.allowedUsers || [],
@@ -291,7 +292,7 @@ export class WecomGatewayService {
       'PI_CLOUD_WECOM_AGENT_ID',
       'PI_CLOUD_WECOM_CALLBACK_TOKEN',
       'PI_CLOUD_WECOM_ENCODING_AES_KEY',
-    ].some((key) => Boolean(process.env[key]?.trim()));
+    ].some((key) => Boolean((process.env[key] ?? secretEnv(key as SecretEnvName))?.trim()));
   }
 
   private loadSavedCredentials(): SavedWecomCredentials | null {

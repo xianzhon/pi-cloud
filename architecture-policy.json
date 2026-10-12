@@ -11,6 +11,7 @@
         "server-memory",
         "server-routes",
         "server-services",
+        "server-utils",
         "server-ws"
       ],
       "owner": "server composition"

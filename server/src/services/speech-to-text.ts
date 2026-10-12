@@ -1,3 +1,5 @@
+import { secretEnv } from '../utils/secret-env.js';
+
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_MODEL = 'gpt-4o-mini-transcribe';
 const MAX_TRANSCRIPTION_ATTEMPTS = 3;
@@ -33,11 +35,11 @@ function wait(ms: number): Promise<void> {
 }
 
 export function isSpeechToTextConfigured(): boolean {
-  return Boolean(process.env.PI_CLOUD_STT_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim());
+  return Boolean(secretEnv('PI_CLOUD_STT_API_KEY')?.trim() || process.env.OPENAI_API_KEY?.trim());
 }
 
 export async function transcribeAudio(audio: Buffer, contentType: string, options: SpeechToTextOptions = {}): Promise<string> {
-  const apiKey = process.env.PI_CLOUD_STT_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim();
+  const apiKey = secretEnv('PI_CLOUD_STT_API_KEY')?.trim() || process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error('Speech-to-text is not configured.');
 
   const baseUrl = (process.env.PI_CLOUD_STT_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, '');
