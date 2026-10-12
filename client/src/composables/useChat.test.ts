@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent } from 'vue';
 import { useChat } from './useChat';
+import { i18n, setLocale } from '../i18n';
 
 const handlers = new Map<string, (data: any) => void>();
 const send = vi.fn<(message: { type: string; payload: any }) => boolean>(() => true);
@@ -32,10 +33,37 @@ function mountChat() {
 
 describe('useChat', () => {
   afterEach(() => {
+    setLocale('en');
     handlers.clear();
     localStorage.clear();
     send.mockReset();
     vi.restoreAllMocks();
+  });
+
+  it('does not resubscribe to a stale session after switching', async () => {
+    const { chat, wrapper } = mountChat();
+    let resolveA!: (value: any) => void;
+    vi.stubGlobal('fetch', vi.fn((url: string) => url.includes('/A?')
+      ? new Promise((resolve) => { resolveA = resolve; })
+      : Promise.resolve({ json: async () => ({ messages: [] }) })));
+    const pendingA = chat.loadSessionHistory('A');
+    await chat.loadSessionHistory('B');
+    send.mockClear();
+    resolveA({ json: async () => ({ messages: [] }) });
+    await pendingA;
+    expect(chat.sessionId.value).toBe('B');
+    expect(send).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('localizes model failure cards on language changes without translating provider diagnostics', () => {
+    const { chat, wrapper } = mountChat();
+    handlers.get('event')?.({ event: { type: 'message_end', message: { role: 'assistant', stopReason: 'error', errorMessage: 'Provider diagnostic' } } });
+    expect(chat.messages.value[0].title).toBe('Model response failed');
+    setLocale('zh-CN');
+    expect(chat.messages.value[0].title).toBe(i18n.global.t('modelResponse.failed'));
+    expect(chat.messages.value[0].content).toBe('Provider diagnostic');
+    wrapper.unmount();
   });
 
   it('does not add optimistic state when the socket cannot send', () => {

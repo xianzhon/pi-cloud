@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { getSessionFromRequest } from '../auth/request.js';
 
 const mocks = vi.hoisted(() => {
   const prompt = vi.fn(async (_text: string, options?: { preflightResult?: (accepted: boolean) => void }) => {
@@ -70,7 +71,7 @@ async function createSocketServer() {
     memoryRuntime: { onUpdated: vi.fn(() => () => {}), onRecall: vi.fn(() => () => {}) },
     authServices: {
       authConfig: { trustProxy: false },
-      sessions: {},
+      sessions: { onRevoked: vi.fn(() => () => {}) },
       audit: { record: vi.fn() },
     },
     addHook: vi.fn(),
@@ -91,6 +92,15 @@ async function openSocket() {
 }
 
 describe('chat websocket', () => {
+  it('rejects prompts after the cookie session is invalidated', async () => {
+    const socket = await openSocket();
+    mocks.prompt.mockClear();
+    vi.mocked(getSessionFromRequest).mockReturnValueOnce(null);
+    socket.emit('message', Buffer.from(JSON.stringify({ type: 'prompt', payload: { text: 'bad', sessionId: 'session-1' } })));
+    await Promise.resolve();
+    expect(mocks.prompt).not.toHaveBeenCalled();
+  });
+
   it('forwards background execution messages only to matching watchers', async () => {
     let publish!: (message: any) => void;
     mocks.sessionService.onSessionExecutionMessage.mockImplementationOnce((listener) => {

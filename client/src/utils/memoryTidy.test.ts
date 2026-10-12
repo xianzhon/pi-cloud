@@ -29,7 +29,7 @@ describe('findMemoryTidySuggestions', () => {
     ]);
 
     expect(suggestions).toHaveLength(1);
-    expect(suggestions[0]).toMatchObject({ reason: 'exact_duplicate' });
+    expect(suggestions[0]).toMatchObject({ reason: 'exact_duplicate', explanationKey: 'memoryTidy.exact_duplicate' });
     expect(suggestions[0].archive.id).toBe('old');
     expect(suggestions[0].keep.id).toBe('new');
   });
@@ -41,7 +41,7 @@ describe('findMemoryTidySuggestions', () => {
     ]);
 
     expect(suggestions).toHaveLength(1);
-    expect(suggestions[0]).toMatchObject({ reason: 'near_duplicate' });
+    expect(suggestions[0]).toMatchObject({ reason: 'near_duplicate', explanationKey: 'memoryTidy.near_duplicate' });
   });
 
   it('suggests stale contradiction cleanup for old no-way memories', () => {
@@ -51,7 +51,7 @@ describe('findMemoryTidySuggestions', () => {
     ]);
 
     expect(suggestions).toHaveLength(1);
-    expect(suggestions[0]).toMatchObject({ reason: 'stale_contradiction' });
+    expect(suggestions[0]).toMatchObject({ reason: 'stale_contradiction', explanationKey: 'memoryTidy.stale_contradiction' });
     expect(suggestions[0].archive.id).toBe('stale');
     expect(suggestions[0].keep.id).toBe('current');
   });

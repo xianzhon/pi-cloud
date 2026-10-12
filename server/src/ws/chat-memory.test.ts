@@ -62,7 +62,7 @@ async function setup() {
   const app = {
     authServices: {
       authConfig: { trustProxy: false },
-      sessions: {},
+      sessions: { onRevoked: vi.fn(() => () => {}) },
       audit: { record: vi.fn() },
     },
     memoryRuntime: runtime,

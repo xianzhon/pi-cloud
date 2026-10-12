@@ -177,7 +177,7 @@
                     />
                     <span class="memory-tidy-copy">
                       <span class="memory-chip memory-chip--category">{{ tidyReasonLabel(suggestion.reason) }}</span>
-                      <span>{{ suggestion.explanation }}</span>
+                      <span>{{ t(suggestion.explanationKey) }}</span>
                       <del>{{ suggestion.archive.content }}</del>
                       <strong>{{ t('components.memoryCenter.keepMemory', { content: suggestion.keep.content }) }}</strong>
                     </span>

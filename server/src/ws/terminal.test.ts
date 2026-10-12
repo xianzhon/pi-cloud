@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getSessionFromRequest } from '../auth/request.js';
 
 const mocks = vi.hoisted(() => ({
   terminal: {
@@ -57,7 +58,7 @@ async function openSocket(cwd: string, terminalId?: string, resumeToken?: string
   const app = {
     authServices: {
       authConfig: { trustProxy: false },
-      sessions: {},
+      sessions: { onRevoked: vi.fn(() => () => {}) },
       audit: { record: vi.fn() },
     },
     services: {
@@ -108,6 +109,16 @@ describe('terminal websocket', () => {
     vi.useRealTimers();
     delete process.env.PI_CLOUD_ALLOWED_ROOTS;
     await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('rejects control messages after the cookie session is invalidated', async () => {
+    const socket = await openSocket(tempDir);
+    vi.mocked(getSessionFromRequest).mockReturnValueOnce(null);
+    socket.emit('message', Buffer.from(JSON.stringify({ type: 'input', terminalId: 'term-owned', data: 'bad' })));
+    socket.emit('message', Buffer.from(JSON.stringify({ type: 'dispose', terminalId: 'term-owned' })));
+    expect(socket.close).toHaveBeenCalledWith(4401, 'Authentication required');
+    expect(mocks.writeTo).not.toHaveBeenCalled();
+    expect(mocks.dispose).not.toHaveBeenCalled();
   });
 
   it('only writes to the terminal created for this socket', async () => {

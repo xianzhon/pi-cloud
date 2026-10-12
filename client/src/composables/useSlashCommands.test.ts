@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
+import { i18n, setLocale } from '../i18n';
 import { findSlashToken, replaceSlashToken, useSlashCommands } from './useSlashCommands';
 
 const remoteCommands = [
@@ -40,6 +41,22 @@ describe('slash command helpers', () => {
 describe('useSlashCommands', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('updates built-in descriptions on language changes while preserving skill text', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ commands: remoteCommands }) })));
+    const slash = useSlashCommands();
+    await slash.loadCommands();
+    try {
+      slash.updateQuery('/copy', 5);
+      expect(slash.suggestions.value[0].description).toBe(i18n.global.t('slashCommands.copy'));
+      setLocale('zh-CN');
+      expect(slash.suggestions.value[0].description).toBe(i18n.global.t('slashCommands.copy'));
+      slash.updateQuery('/frontend', 9);
+      expect(slash.suggestions.value[0].description).toBe('Use frontend design skill');
+    } finally {
+      setLocale('en');
+    }
   });
 
   it('loads slash commands and filters by shorthand label, description, and aliases', async () => {

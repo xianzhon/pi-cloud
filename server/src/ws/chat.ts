@@ -6,6 +6,7 @@ import { validateImages, type ImageValidationResult } from '../services/image-in
 import type { PiSessionService } from '../services/session-manager.js';
 import { saveUploadedImages } from '../services/uploaded-image-store.js';
 import { sendJson } from './safe-send.js';
+import { bindSocketSession } from './session-auth.js';
 
 const ABORT_GRACE_MS = 5_000;
 
@@ -139,6 +140,7 @@ export async function chatWebSocket(app: FastifyInstance) {
       return;
     }
 
+    const isAuthenticated = bindSocketSession(socket, req, auth.authConfig, auth.sessions, session);
     const safeClientId = clientId;
     const connectedClient = { socket, watchedSessionId: undefined as string | undefined };
     clients.add(connectedClient);
@@ -226,6 +228,7 @@ export async function chatWebSocket(app: FastifyInstance) {
     }
 
     socket.on('message', async (rawData: Buffer) => {
+      if (!isAuthenticated()) return;
       try {
         const message: WSMessage = JSON.parse(rawData.toString());
         
@@ -247,6 +250,7 @@ export async function chatWebSocket(app: FastifyInstance) {
 
           case 'prompt': {
             const session = await ensureTargetSession(message.payload?.sessionId);
+            if (!isAuthenticated()) return;
             if (!session) {
               sendJson(socket, {
                 type: 'error',
@@ -323,6 +327,7 @@ export async function chatWebSocket(app: FastifyInstance) {
 
             try {
               await sessionService.runForegroundWithClientProfileProxy(safeClientId, async () => {
+                if (!isAuthenticated()) return;
                 if (compactInstructions !== null) {
                   const result = await session.compact(compactInstructions || undefined);
                   sendJson(socket, {
@@ -338,6 +343,7 @@ export async function chatWebSocket(app: FastifyInstance) {
                     session,
                     imageResult,
                   );
+                  if (!isAuthenticated()) return;
                   await session.prompt(preparedPrompt.text, {
                     ...(imageResult.images.length ? { images: imageResult.images } : {}),
                     preflightResult: requestId
@@ -363,6 +369,7 @@ export async function chatWebSocket(app: FastifyInstance) {
           case 'steer':
           case 'followUp': {
             const session = await ensureTargetSession(message.payload?.sessionId);
+            if (!isAuthenticated()) return;
             if (!session) break;
             const imageResult = validateImages(message.payload?.images, session.model);
             if (!imageResult.ok) {
@@ -386,6 +393,7 @@ export async function chatWebSocket(app: FastifyInstance) {
                 session,
                 imageResult,
               );
+              if (!isAuthenticated()) return;
               await session.prompt(preparedPrompt.text, {
                 streamingBehavior,
                 ...(imageResult.images.length ? { images: imageResult.images } : {}),
@@ -399,6 +407,7 @@ export async function chatWebSocket(app: FastifyInstance) {
 
           case 'abort': {
             const session = await ensureTargetSession(message.payload?.sessionId);
+            if (!isAuthenticated()) return;
             if (session) {
               const aborted = await abortSessionBestEffort(session);
               if (!aborted) {

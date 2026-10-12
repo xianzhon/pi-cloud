@@ -908,7 +908,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       if (result.status === 'destination_exists') return reply.status(409).send(result);
       return result;
     } catch (error) {
-      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to clone repository' });
+      return reply.status((error as { statusCode?: number }).statusCode || 400).send({ error: error instanceof Error ? error.message : 'Failed to clone repository' });
     }
   });
 

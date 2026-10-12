@@ -7,7 +7,7 @@ export interface MemoryTidySuggestion {
   reason: MemoryTidyReason;
   archive: MemoryRecord;
   keep: MemoryRecord;
-  explanation: string;
+  explanationKey: string;
 }
 
 const STOP_WORDS = new Set(['the', 'and', 'for', 'that', 'this', 'with']);
@@ -30,9 +30,7 @@ export function findMemoryTidySuggestions(memories: MemoryRecord[]): MemoryTidyS
           reason: exact ? 'exact_duplicate' : 'near_duplicate',
           archive,
           keep,
-          explanation: exact
-            ? 'Same memory text after case and spacing normalization.'
-            : 'Very similar wording in the same scope and category.',
+          explanationKey: `memoryTidy.${exact ? 'exact_duplicate' : 'near_duplicate'}`,
         });
       }
     }
@@ -47,7 +45,7 @@ export function findMemoryTidySuggestions(memories: MemoryRecord[]): MemoryTidyS
         reason: 'stale_contradiction',
         archive: stalePair.archive,
         keep: stalePair.keep,
-        explanation: 'A newer implemented/available memory appears to supersede an older “no way/currently no” memory.',
+        explanationKey: 'memoryTidy.stale_contradiction',
       });
     }
   }

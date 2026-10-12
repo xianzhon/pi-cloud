@@ -4,6 +4,7 @@ import { rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { expandHomePath } from '../utils/paths.js';
+import { resolveAllowedCreationPath, resolveAllowedPath } from '../utils/path-security.js';
 
 export type CloneJobStatus = 'running' | 'completed' | 'failed' | 'canceled';
 
@@ -39,9 +40,9 @@ export class RepositoryCloner {
 
   async start(input: StartCloneInput): Promise<CloneStartResult> {
     const remoteUrl = input.remoteUrl.trim();
-    const destinationPath = input.destinationPath.trim();
     if (!remoteUrl) throw new Error('Git URL is required');
-    if (!destinationPath) throw new Error('Destination path is required');
+    if (!input.destinationPath.trim()) throw new Error('Destination path is required');
+    const destinationPath = await resolveAllowedCreationPath(input.destinationPath.trim());
 
     const pathExists = this.options.pathExists || defaultPathExists;
     if (await pathExists(destinationPath)) return { status: 'destination_exists', existingPath: destinationPath };
@@ -69,6 +70,7 @@ export class RepositoryCloner {
     const job = this.jobs.get(id);
     if (!job) throw new Error('Clone job not found');
     if (job.status !== 'running') return this.getJob(id)!;
+    await resolveAllowedPath(job.destinationPath);
     job.status = 'canceled';
     job.process?.kill('SIGTERM');
     await (this.options.removePath || defaultRemovePath)(job.destinationPath);
@@ -97,7 +99,10 @@ export class RepositoryCloner {
   }
 
   private spawnCloneWithEnv(job: CloneJob, remoteUrl: string, usingToken: boolean, env: NodeJS.ProcessEnv): void {
-    const secrets = [this.options.githubSettings().token, this.options.giteaSettings().token].filter(Boolean);
+    const encodedCredentials = Object.entries(env)
+      .filter(([key, value]) => key.startsWith('GIT_CONFIG_VALUE_') && value?.startsWith('Authorization: Basic '))
+      .map(([, value]) => value!.slice('Authorization: Basic '.length));
+    const secrets = [this.options.githubSettings().token, this.options.giteaSettings().token, ...encodedCredentials].filter(Boolean);
     const args = ['clone', '--progress', ...(job.shallow ? ['--depth', '1'] : []), '--', remoteUrl, job.destinationPath];
     const child = this.options.spawnGit(args, { env });
     job.process = child;
@@ -120,9 +125,9 @@ export class RepositoryCloner {
         return;
       }
 
-      const retryUrl = this.authenticatedRetryUrl(job.remoteUrl, stderr, usingToken);
-      if (retryUrl) {
-        this.spawnCloneWithEnv(job, retryUrl, true, env);
+      const retryEnv = this.authenticatedRetryEnv(job.remoteUrl, stderr, usingToken, env);
+      if (retryEnv) {
+        this.spawnCloneWithEnv(job, job.remoteUrl, true, retryEnv);
         return;
       }
 
@@ -139,15 +144,15 @@ export class RepositoryCloner {
     return env;
   }
 
-  private authenticatedRetryUrl(remoteUrl: string, stderr: string, usingToken: boolean): string | null {
+  private authenticatedRetryEnv(remoteUrl: string, stderr: string, usingToken: boolean, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null {
     if (usingToken || !isAuthFailure(stderr)) return null;
     const github = this.options.githubSettings();
     if (github.token && isMatchingHttpsHost(remoteUrl, github.serverUrl || 'https://github.com')) {
-      return withToken(remoteUrl, 'x-access-token', github.token);
+      return withCredentials(env, remoteUrl, 'x-access-token', github.token);
     }
     const gitea = this.options.giteaSettings();
     if (gitea.token && gitea.serverUrl && isMatchingHttpsHost(remoteUrl, gitea.serverUrl)) {
-      return withToken(remoteUrl, 'oauth2', gitea.token);
+      return withCredentials(env, remoteUrl, 'oauth2', gitea.token);
     }
     return null;
   }
@@ -209,17 +214,25 @@ function isMatchingHttpsHost(remoteUrl: string, serverUrl: string): boolean {
   try {
     const remote = new URL(remoteUrl);
     const server = new URL(serverUrl);
-    return remote.protocol === 'https:' && remote.hostname.toLowerCase() === server.hostname.toLowerCase();
+    return remote.protocol === 'https:' && remote.origin === server.origin;
   } catch {
     return false;
   }
 }
 
-function withToken(remoteUrl: string, username: string, token: string): string {
-  const parsed = new URL(remoteUrl);
-  parsed.username = username;
-  parsed.password = token;
-  return parsed.toString();
+function withCredentials(env: NodeJS.ProcessEnv, remoteUrl: string, username: string, token: string): NodeJS.ProcessEnv {
+  const authorization = `Basic ${Buffer.from(`${username}:${token}`).toString('base64')}`;
+  const count = Number(env.GIT_CONFIG_COUNT || 0);
+  // Environment-only configuration is not saved in .git/config. Disable helpers
+  // for this invocation so they cannot persist the supplied credentials either.
+  return {
+    ...env,
+    GIT_CONFIG_COUNT: String(count + 2),
+    [`GIT_CONFIG_KEY_${count}`]: `http.${remoteUrl}.extraHeader`,
+    [`GIT_CONFIG_VALUE_${count}`]: `Authorization: ${authorization}`,
+    [`GIT_CONFIG_KEY_${count + 1}`]: 'credential.helper',
+    [`GIT_CONFIG_VALUE_${count + 1}`]: '',
+  };
 }
 
 async function defaultPathExists(path: string): Promise<boolean> {

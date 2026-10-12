@@ -1,5 +1,6 @@
 // client/src/composables/useChat.ts
 import { computed, onUnmounted, ref } from 'vue';
+import { i18n } from '../i18n';
 import { useWebSocket } from './useWebSocket';
 import { usePreferences } from './usePreferences';
 import { createClientId } from '../utils/id';
@@ -86,6 +87,9 @@ interface Message {
   kind?: MessageKind;
   status?: MessageStatus;
   title?: string;
+  titleKey?: string;
+  titleParams?: Record<string, string | number>;
+  contentKey?: string;
   toolName?: string;
   toolInput?: string;
   toolOutput?: string;
@@ -485,7 +489,13 @@ export function useChat() {
     return ensureSessionState(targetSessionId || streamingSessionId.value || sessionId.value);
   }
 
-  const messages = computed(() => getViewedSessionState().messages);
+  const messages = computed(() => getViewedSessionState().messages.map((message) =>
+    message.titleKey || message.contentKey ? {
+      ...message,
+      title: message.titleKey ? i18n.global.t(message.titleKey, message.titleParams || {}) : message.title,
+      content: message.contentKey ? i18n.global.t(message.contentKey) : message.content,
+    } : message,
+  ));
   const isStreaming = computed(() => getViewedSessionState().isStreaming);
   const streamingStartedAt = computed(() => getViewedSessionState().streamingStartedAt);
 
@@ -517,7 +527,7 @@ export function useChat() {
     state.receivedModelOutcome = true;
   }
 
-  function showModelFailure(message: string, targetSessionId?: string | null): Message {
+  function showModelFailure(message: string, targetSessionId?: string | null, contentKey?: string): Message {
     const state = ensureSessionState(targetSessionId);
     removeEmptyCurrentMessage(targetSessionId);
     const failure = state.retryMessage || {
@@ -527,9 +537,10 @@ export function useChat() {
       timestamp: Date.now(),
       kind: 'status' as const,
     };
-    failure.content = message || 'The model returned an error without details.';
+    failure.content = message || '';
+    failure.contentKey = contentKey || (!message ? 'modelResponse.noDetails' : undefined);
     failure.status = 'failure';
-    failure.title = 'Model response failed';
+    failure.titleKey = 'modelResponse.failed';
     if (!state.retryMessage) state.messages.push(failure);
     state.retryMessage = failure;
     state.receivedModelOutcome = true;
@@ -788,7 +799,7 @@ export function useChat() {
       case 'agent_settled': {
         const state = getStreamingSessionState(targetSessionId);
         if (!state.receivedModelOutcome) {
-          showModelFailure('The model completed without returning a response.', targetSessionId);
+          showModelFailure('', targetSessionId, 'modelResponse.noResponse');
         }
         const startedAt = state.streamingStartedAt;
         const finalResponse = [...state.messages].reverse().find((message) => message.role === 'assistant' && (!message.kind || message.kind === 'text') && message.content.trim());
@@ -804,7 +815,8 @@ export function useChat() {
       case 'auto_retry_start': {
         const failure = showModelFailure(event.errorMessage, targetSessionId);
         failure.status = 'pending';
-        failure.title = `Model unavailable - retrying (${event.attempt}/${event.maxAttempts})`;
+        failure.titleKey = 'modelResponse.retrying';
+        failure.titleParams = { attempt: event.attempt, maxAttempts: event.maxAttempts };
         break;
       }
 
@@ -1042,8 +1054,8 @@ export function useChat() {
 
   async function loadSessionHistory(newSessionId: string, options: LoadSessionHistoryOptions = {}) {
     try {
-      setViewedSession(newSessionId);
-      send({ type: 'watch', payload: { sessionId: newSessionId } });
+      if (!options.force || !sessionId.value) setViewedSession(newSessionId);
+      if (sessionId.value === newSessionId) send({ type: 'watch', payload: { sessionId: newSessionId } });
       const response = await fetch(`/api/sessions/${newSessionId}?clientId=${encodeURIComponent(clientId)}`);
       const data = await response.json();
       
@@ -1111,11 +1123,12 @@ export function useChat() {
               normalizedMessages.push({
                 id: msg.id || msg.responseId || createClientId(),
                 role: 'assistant',
-                content: msg.errorMessage || 'The model returned an error without details.',
+                content: msg.errorMessage || '',
+                contentKey: !msg.errorMessage ? 'modelResponse.noDetails' : undefined,
                 timestamp,
                 kind: 'status',
                 status: 'failure',
-                title: 'Model response failed',
+                titleKey: 'modelResponse.failed',
               });
             }
             return;
@@ -1169,8 +1182,8 @@ export function useChat() {
           state.streamingStartedAt = data.streamingStartedAt;
         }
       }
-      // Re-subscribe after the snapshot so this acknowledgement wins any completion race during loading.
-      send({ type: 'watch', payload: { sessionId: newSessionId } });
+      // A stale/background snapshot must not replace the currently viewed subscription.
+      if (sessionId.value === newSessionId) send({ type: 'watch', payload: { sessionId: newSessionId } });
     } catch (error) {
       console.error('Failed to load session history:', error);
     }

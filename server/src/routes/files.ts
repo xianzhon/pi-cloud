@@ -9,7 +9,7 @@ import * as path from 'path';
 import { ZipArchive } from 'archiver';
 import { globIterate } from 'glob';
 import { archivePreview, isArchivePath } from '../utils/archive-preview.js';
-import { resolveAllowedExistingPath, resolveAllowedPath } from '../utils/path-security.js';
+import { resolveAllowedCreationPath, resolveAllowedExistingPath, resolveAllowedPath } from '../utils/path-security.js';
 
 interface TreeNode {
   name: string;
@@ -516,10 +516,16 @@ export async function fileRoutes(app: FastifyInstance) {
 
   app.post('/write', async (req) => {
     const { path: filePath, content } = req.body as { path: string; content: string };
-    const resolvedPath = await resolveAllowedPath(filePath);
+    const resolvedPath = await resolveAllowedCreationPath(filePath);
     await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
-    await fs.writeFile(resolvedPath, content, 'utf-8');
-    const stats = await fs.stat(resolvedPath);
+    const handle = await fs.open(resolvedPath, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW);
+    let stats: Stats;
+    try {
+      await handle.writeFile(content, 'utf-8');
+      stats = await handle.stat();
+    } finally {
+      await handle.close();
+    }
     app.authServices?.audit.record({
       type: 'file_write',
       status: 'success',

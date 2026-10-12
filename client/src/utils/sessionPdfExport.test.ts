@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { i18n, setLocale, type AppLocale } from '../i18n';
 import {
   exportSessionPdf,
   getPdfExportMessages,
@@ -18,6 +19,7 @@ const messages: ExportMessage[] = [
 
 describe('sessionPdfExport', () => {
   afterEach(() => {
+    setLocale('en');
     vi.useRealTimers();
     document.querySelectorAll('iframe').forEach((frame) => frame.remove());
   });
@@ -47,7 +49,8 @@ describe('sessionPdfExport', () => {
     expect(getSessionPdfFilename()).toBe('pi-session-transcript-2026-01-02-0304.pdf');
   });
 
-  it('renders all message variants into the print frame and cleans it up after printing', async () => {
+  it.each(['en', 'zh-CN'] as AppLocale[])('renders localized message labels into the print frame (%s) and cleans it up', async (locale) => {
+    setLocale(locale);
     vi.useFakeTimers();
     const originalCreateElement = document.createElement.bind(document);
     let printedHtml = '';
@@ -77,8 +80,11 @@ describe('sessionPdfExport', () => {
     expect(printedHtml).toContain('session-review-');
     expect(printedHtml).toContain('Session &amp; Review');
     expect(printedHtml).toContain('/tmp/&lt;repo&gt;');
-    expect(printedHtml).toContain('Tool call · read');
-    expect(printedHtml).toContain('Tool result');
+    expect(printedHtml).toContain(`${i18n.global.t('sessionPdf.tool_call')} · read`);
+    expect(printedHtml).toContain(i18n.global.t('sessionPdf.tool_result'));
+    expect(printedHtml).toContain(i18n.global.t('sessionPdf.exported'));
+    expect(printedHtml).toContain(i18n.global.t('sessionPdf.user'));
+    expect(printedHtml).toContain(`lang="${locale}"`);
     expect(printedHtml).toContain('pdf-code-block');
     expect(focus).toHaveBeenCalled();
     expect(print).toHaveBeenCalled();

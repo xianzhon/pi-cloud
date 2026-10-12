@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
+import { i18n, setLocale } from '../i18n';
 import TaskInboxPanel from './TaskInboxPanel.vue';
 
 const tasks = ref<any[]>([]);
@@ -69,6 +70,21 @@ describe('TaskInboxPanel', () => {
     previewIssue.mockResolvedValue(issuePreview);
     createIssue.mockResolvedValue({ ...waitingTask, giteaIssue: createdIssue });
     generateIssueContent.mockResolvedValue({ title: 'Polished issue title', body: '## Summary\nPolished body' });
+  });
+
+  it('updates status tabs when the language changes without remounting', async () => {
+    const wrapper = mountPanel();
+    try {
+      expect(wrapper.text()).toContain('Waiting');
+      setLocale('zh-CN');
+      await wrapper.vm.$nextTick();
+      for (const key of ['waiting', 'started', 'completed']) {
+        expect(wrapper.text()).toContain(i18n.global.t(`components.taskInboxPanel.${key}`));
+      }
+    } finally {
+      setLocale('en');
+      wrapper.unmount();
+    }
   });
 
   it('defaults to current-project waiting tasks and supports all-project labels', async () => {

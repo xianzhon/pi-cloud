@@ -224,11 +224,11 @@ const maxPanelWidthRatio = 0.85;
 let resizeStartX = 0;
 let resizeStartWidth = 0;
 const isPanelResizing = ref(false);
-const statusOptions: Array<{ value: ProjectTaskVisibleStatus; label: string }> = [
+const statusOptions = computed<Array<{ value: ProjectTaskVisibleStatus; label: string }>>(() => [
   { value: 'waiting', label: t('components.taskInboxPanel.waiting') },
   { value: 'started', label: t('components.taskInboxPanel.started') },
   { value: 'completed', label: t('components.taskInboxPanel.completed') },
-];
+]);
 
 watch([() => props.currentProjectPath, scope, status], () => void load(props.currentProjectPath), { immediate: true });
 const taskRefreshTimer = window.setInterval(() => {

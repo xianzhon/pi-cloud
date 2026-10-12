@@ -388,7 +388,7 @@
         <button 
           class="send-btn" 
           @click="handleSend()"
-          :disabled="isPreparingSession || !hasDraftContent || imagesBlocked"
+          :disabled="isPreparingSession || isSubmittingImages || !hasDraftContent || imagesBlocked"
         >
           {{ isPreparingSession ? '...' : t('components.chatPanel.send') }}
         </button>
@@ -989,6 +989,9 @@ const {
   clearAcceptedAttachments,
 } = useChatAttachments((key, params) => t(key, params || {}));
 const isPolishingPrompt = ref(false);
+const isSubmittingImages = ref(false);
+let draftRevision = 0;
+watch(inputText, () => { draftRevision += 1; }, { flush: 'sync' });
 const showUserPrompts = ref(false);
 const userPromptPickerRef = ref<HTMLElement>();
 const promptPolishError = ref('');
@@ -1995,16 +1998,20 @@ async function transcribeRecording(audio: Blob): Promise<void> {
 
 async function polishPrompt(): Promise<void> {
   if (!canPolishPrompt.value) return;
+  const originalPrompt = inputText.value;
+  const originalRevision = draftRevision;
+  const originalSessionId = props.sessionId;
   isPolishingPrompt.value = true;
   promptPolishError.value = '';
   try {
     const response = await fetch('/api/tasks/polish', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId: props.clientId, title: t('components.chatPanel.chatPrompt'), prompt: inputText.value }),
+      body: JSON.stringify({ clientId: props.clientId, title: t('components.chatPanel.chatPrompt'), prompt: originalPrompt }),
     });
     const data = await response.json().catch(() => ({})) as { content?: { prompt?: string }; error?: string };
     if (!response.ok || !data.content?.prompt) throw new Error(data.error || t('components.chatPanel.failedToPolishPrompt'));
+    if (draftRevision !== originalRevision || props.sessionId !== originalSessionId) return;
     inputText.value = data.content.prompt;
     await resizeInputAfterDomUpdate();
     inputRef.value?.focus();
@@ -2067,11 +2074,17 @@ defineExpose({
 });
 
 async function sendImageMessage(text: string, targetSessionId: string | undefined, images: PendingAttachment[]): Promise<boolean> {
-  return (await sendMessage(text, targetSessionId, {
-    images,
-    awaitAcceptance: true,
-    onRejected: (message) => { attachmentError.value = message; },
-  })) === true;
+  if (isSubmittingImages.value) return false;
+  isSubmittingImages.value = true;
+  try {
+    return (await sendMessage(text, targetSessionId, {
+      images,
+      awaitAcceptance: true,
+      onRejected: (message) => { attachmentError.value = message; },
+    })) === true;
+  } finally {
+    isSubmittingImages.value = false;
+  }
 }
 
 function handleAnnotateImage(image: ChatImage): void {
@@ -2091,15 +2104,17 @@ function handleAnnotateImage(image: ChatImage): void {
   void resizeInputAfterDomUpdate().then(() => inputRef.value?.focus());
 }
 
-function clearAcceptedDraft(imageDraft: PendingAttachment[]): void {
-  inputText.value = '';
+function clearAcceptedDraft(imageDraft: PendingAttachment[], submittedRevision: number): void {
+  if (draftRevision === submittedRevision) inputText.value = '';
   clearAcceptedAttachments(imageDraft);
   resizeInputAfterDomUpdate();
 }
 
 async function handleSendToNewSession() {
   const text = inputText.value;
-  if (isReviewMode.value || !hasDraftContent.value || imagesBlocked.value || !props.sessionId || !props.createInheritedSession || isPreparingSession.value) return;
+  const submittedRevision = draftRevision;
+  const imageDraft = [...attachments.value];
+  if (isReviewMode.value || !hasDraftContent.value || imagesBlocked.value || !props.sessionId || !props.createInheritedSession || isPreparingSession.value || isSubmittingImages.value) return;
 
   isPreparingSession.value = true;
   try {
@@ -2107,7 +2122,6 @@ async function handleSendToNewSession() {
     if (!targetSessionId) return;
 
     slashCommands.close();
-    const imageDraft = [...attachments.value];
     const sent = imageDraft.length
       ? await sendImageMessage(text, targetSessionId, imageDraft)
       : sendMessage(text, targetSessionId);
@@ -2116,7 +2130,7 @@ async function handleSendToNewSession() {
     window.dispatchEvent(new CustomEvent('session-first-message', {
       detail: { id: targetSessionId, firstMessage: text },
     }));
-    clearAcceptedDraft(imageDraft);
+    clearAcceptedDraft(imageDraft, submittedRevision);
     void refreshSessionStatus();
   } finally {
     isPreparingSession.value = false;
@@ -2125,8 +2139,10 @@ async function handleSendToNewSession() {
 
 async function handleSend(options?: { hideCommandMessage?: boolean }): Promise<boolean> {
   const text = inputText.value;
+  const submittedRevision = draftRevision;
+  const imageDraft = [...attachments.value];
   const showCommandMessage = !options?.hideCommandMessage;
-  if (isReviewMode.value || !hasDraftContent.value || isPreparingSession.value || imagesBlocked.value) return false;
+  if (isReviewMode.value || !hasDraftContent.value || isPreparingSession.value || isSubmittingImages.value || imagesBlocked.value) return false;
 
   if (text.trim() && isSessionCommand(text)) {
     await handleSessionCommand(text);
@@ -2222,7 +2238,6 @@ async function handleSend(options?: { hideCommandMessage?: boolean }): Promise<b
 
   slashCommands.close();
   const shouldNotifyFirstMessage = Boolean(targetSessionId && !isStreaming.value);
-  const imageDraft = [...attachments.value];
   const sent = imageDraft.length
     ? await sendImageMessage(text, targetSessionId, imageDraft)
     : sendMessage(text, targetSessionId);
@@ -2235,7 +2250,7 @@ async function handleSend(options?: { hideCommandMessage?: boolean }): Promise<b
       },
     }));
   }
-  clearAcceptedDraft(imageDraft);
+  clearAcceptedDraft(imageDraft, submittedRevision);
   void refreshSessionStatus();
   return true;
 }
@@ -3056,6 +3071,7 @@ function handleMessagesKeydown(event: KeyboardEvent) {
 }
 
 function handleInputKeydown(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229) return;
   const key = event.key.toLowerCase();
 
   if (key === 'backspace' && event.ctrlKey && deletePreviousInputWord(event)) return;

@@ -2,6 +2,9 @@ import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 import { marked, Renderer } from 'marked';
 import { ansiToHtml } from './ansi';
+import { i18n } from '../i18n';
+
+const t = i18n.global.t;
 
 export type ExportMessageKind = 'text' | 'thinking' | 'tool_call' | 'tool_result' | 'status';
 
@@ -92,7 +95,7 @@ function createMarkdownRenderer() {
     const highlighted = language && hljs.getLanguage(language)
       ? hljs.highlight(code, { language, ignoreIllegals: true }).value
       : escapeHtml(code);
-    const label = language || 'text';
+    const label = language || t('sessionPdf.text');
     return `<div class="pdf-code-block"><div class="pdf-code-label">${escapeHtml(label)}</div><pre><code>${highlighted}</code></pre></div>`;
   };
   return renderer;
@@ -106,7 +109,7 @@ function renderMarkdown(content: string): string {
 function formatDate(timestamp?: number): string {
   if (!timestamp) return '';
   try {
-    return new Date(timestamp).toLocaleString();
+    return new Date(timestamp).toLocaleString(i18n.global.locale.value);
   } catch {
     return '';
   }
@@ -115,12 +118,12 @@ function formatDate(timestamp?: number): string {
 function roleLabel(message: ExportMessage): string {
   if (message.kind && message.kind !== 'text') {
     if (message.kind === 'tool_call' || message.kind === 'tool_result') {
-      const label = message.kind === 'tool_call' ? 'Tool call' : 'Tool result';
+      const label = t(`sessionPdf.${message.kind}`);
       return `${label}${message.toolName ? ` · ${message.toolName}` : ''}`;
     }
-    return message.title || message.kind.replace(/_/g, ' ');
+    return message.title || t(`sessionPdf.${message.kind}`);
   }
-  return message.role === 'user' ? 'User' : 'Assistant';
+  return t(`sessionPdf.${message.role}`);
 }
 
 function messageBody(message: ExportMessage): string {
@@ -147,19 +150,19 @@ function renderMessage(message: ExportMessage): string {
 }
 
 function buildExportHtml(options: ExportSessionPdfOptions, exportDate: Date): string {
-  const title = options.sessionTitle?.trim() || 'Session Transcript';
-  const exportedAt = exportDate.toLocaleString();
+  const title = options.sessionTitle?.trim() || t('sessionPdf.transcript');
+  const exportedAt = exportDate.toLocaleString(i18n.global.locale.value);
   const messages = getPdfExportMessages(options.messages, options.includeDetails, options.includeThinking);
   return `
     <section class="pdf-export-root">
       <header class="pdf-document-header">
-        <p class="pdf-eyebrow">Pi Cloud transcript</p>
+        <p class="pdf-eyebrow">${escapeHtml(t('sessionPdf.eyebrow'))}</p>
         <h1>${escapeHtml(title)}</h1>
         <dl>
-          <div><dt>Exported</dt><dd>${escapeHtml(exportedAt)}</dd></div>
-          ${options.projectPath ? `<div><dt>Project</dt><dd>${escapeHtml(options.projectPath)}</dd></div>` : ''}
-          <div><dt>Details</dt><dd>${options.includeDetails ? 'Included' : 'Hidden'}</dd></div>
-          <div><dt>Thinking</dt><dd>${options.includeThinking ? 'Included' : 'Hidden'}</dd></div>
+          <div><dt>${escapeHtml(t('sessionPdf.exported'))}</dt><dd>${escapeHtml(exportedAt)}</dd></div>
+          ${options.projectPath ? `<div><dt>${escapeHtml(t('sessionPdf.project'))}</dt><dd>${escapeHtml(options.projectPath)}</dd></div>` : ''}
+          <div><dt>${escapeHtml(t('sessionPdf.details'))}</dt><dd>${escapeHtml(t(options.includeDetails ? 'sessionPdf.included' : 'sessionPdf.hidden'))}</dd></div>
+          <div><dt>${escapeHtml(t('sessionPdf.thinking'))}</dt><dd>${escapeHtml(t(options.includeThinking ? 'sessionPdf.included' : 'sessionPdf.hidden'))}</dd></div>
         </dl>
       </header>
       <main>${messages.map(renderMessage).join('')}</main>
@@ -173,7 +176,7 @@ function exportStyles(): string {
       size: letter;
       margin: 0.65in 0.6in 0.8in;
       @bottom-center {
-        content: "Page " counter(page) " of " counter(pages);
+        content: ${JSON.stringify(`${t('sessionPdf.page')} `)} counter(page) ${JSON.stringify(` ${t('sessionPdf.of')} `)} counter(pages);
         color: #64748b;
         font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 10px;
@@ -365,7 +368,7 @@ function exportStyles(): string {
 function buildPrintDocument(options: ExportSessionPdfOptions, exportDate: Date): string {
   const title = getSessionPdfFilename(options.sessionTitle);
   return `<!doctype html>
-<html>
+<html lang="${escapeHtml(i18n.global.locale.value)}">
   <head>
     <meta charset="utf-8">
     <title>${escapeHtml(title)}</title>

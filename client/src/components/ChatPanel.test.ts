@@ -348,6 +348,55 @@ describe('ChatPanel', () => {
     expect(transcriptionWrapper.find('.dictation-error').text()).toBe('Whisper unavailable');
   });
 
+  it.each([{ isComposing: true }, { keyCode: 229 }])('does not handle Enter during IME composition (%j)', async (ime) => {
+    const wrapper = mount(ChatPanel);
+    await wrapper.find('#chat-input').setValue('中文');
+    await wrapper.find('#chat-input').trigger('keydown', { key: 'Enter', ...ime });
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(wrapper.find('textarea').element.value).toBe('中文');
+  });
+
+  it.each(['edited draft', ''])('does not overwrite subsequent edits or a sent draft with a polish response (%j)', async (nextDraft) => {
+    let finish!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn((url: string | URL | Request) => String(url) === '/api/tasks/polish'
+      ? new Promise<Response>((resolve) => { finish = resolve; })
+      : Promise.resolve(new Response('{}'))));
+    const wrapper = mount(ChatPanel, { props: { sessionId: 'session-1', clientId: 'client-1' } });
+    const input = wrapper.find('#chat-input');
+    await input.setValue('original draft');
+    const pending = (wrapper.vm as any).polishPrompt();
+    if (nextDraft) await input.setValue(nextDraft);
+    else await wrapper.find('.send-btn').trigger('click');
+    finish(new Response(JSON.stringify({ content: { prompt: 'polished draft' } })));
+    await pending;
+    expect((input.element as HTMLTextAreaElement).value).toBe(nextDraft);
+  });
+
+  it('preserves text and attachments added during image acceptance and blocks duplicate sends', async () => {
+    let accept!: (accepted: boolean) => void;
+    sendMessage.mockImplementationOnce(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => new Response(JSON.stringify(
+      String(url).includes('/status') ? { model: { provider: 'test', id: 'vision', input: ['text', 'image'] } } : {},
+    ))));
+    const wrapper = mount(ChatPanel, { props: { sessionId: 'session-1', clientId: 'client-1' } });
+    await vi.waitFor(() => expect((wrapper.vm as any).sessionStatus?.model?.input).toContain('image'));
+    const input = wrapper.find('#chat-input');
+    await input.setValue('submitted draft');
+    await input.trigger('paste', { clipboardData: { files: [new File(['image'], 'first.png', { type: 'image/png' })] } });
+    await vi.waitFor(() => expect(wrapper.findAll('.attachment-item')).toHaveLength(1));
+    await wrapper.find('.send-btn').trigger('click');
+    await input.setValue('new draft');
+    await input.trigger('keydown', { key: 'Enter' });
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    await input.trigger('paste', { clipboardData: { files: [new File(['image'], 'second.png', { type: 'image/png' })] } });
+    await vi.waitFor(() => expect(wrapper.findAll('.attachment-item')).toHaveLength(2));
+    accept(true);
+    await flushPromises();
+    expect((input.element as HTMLTextAreaElement).value).toBe('new draft');
+    expect(wrapper.findAll('.attachment-item')).toHaveLength(1);
+    expect(wrapper.text()).toContain('second.png');
+  });
+
   it('attaches valid picker images, rejects invalid files, and sends an image-only message after acceptance', async () => {
     sendMessage.mockResolvedValueOnce(true);
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => new Response(JSON.stringify(

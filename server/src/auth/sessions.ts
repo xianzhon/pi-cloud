@@ -25,6 +25,13 @@ export interface CreateSessionInput {
 }
 
 export class SessionStore {
+  private readonly revocationListeners = new Set<(sessionId: string) => void>();
+
+  onRevoked(listener: (sessionId: string) => void): () => void {
+    this.revocationListeners.add(listener);
+    return () => { this.revocationListeners.delete(listener); };
+  }
+
   constructor(private db: PiCloudDatabase, private cookieName: string) {}
 
   createSession(input: CreateSessionInput): { cookieName: string; token: string; expiresAt: Date } {
@@ -88,12 +95,17 @@ export class SessionStore {
 
   revokeToken(token: string | undefined): void {
     if (!token) return;
-    this.db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token));
+    const tokenHash = hashToken(token);
+    const row = this.db.prepare('SELECT id FROM sessions WHERE token_hash = ?').get(tokenHash) as { id: string } | undefined;
+    this.db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
+    if (row) for (const listener of this.revocationListeners) listener(row.id);
   }
 
   revokeExpired(now: Date = new Date()): number {
     const nowIso = now.toISOString();
+    const rows = this.db.prepare('SELECT id FROM sessions WHERE expires_at <= ? OR absolute_expires_at <= ?').all(nowIso, nowIso) as Array<{ id: string }>;
     const result = this.db.prepare('DELETE FROM sessions WHERE expires_at <= ? OR absolute_expires_at <= ?').run(nowIso, nowIso);
+    for (const row of rows) for (const listener of this.revocationListeners) listener(row.id);
     return Number(result.changes || 0);
   }
 }

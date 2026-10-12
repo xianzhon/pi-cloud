@@ -1,6 +1,13 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { execFileSync, spawn } from 'node:child_process';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepositoryCloner, parseGitProgressLine, maskSecret, type CloneProgressEvent } from './repository-cloner.js';
+
+beforeEach(() => { vi.stubEnv('PI_CLOUD_DISABLE_PATH_CHECK', 'true'); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 function cloner() {
   return new RepositoryCloner({
@@ -121,6 +128,43 @@ function jobCloner(options: {
 }
 
 describe('RepositoryCloner jobs', () => {
+  it('rejects outside and dangling-link destinations before spawning or removing anything', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'clone-boundary-'));
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'clone-outside-'));
+    vi.stubEnv('PI_CLOUD_ALLOWED_ROOTS', root);
+    vi.stubEnv('PI_CLOUD_DISABLE_PATH_CHECK', 'false');
+    const { service, processes, removed } = jobCloner();
+    try {
+      await fs.symlink(path.join(outside, 'missing'), path.join(root, 'link'));
+      for (const destinationPath of [path.join(outside, 'repo'), path.join(root, 'link'), path.join(root, 'link', 'repo')]) {
+        await expect(service.start({ remoteUrl: 'https://github.com/acme/tool.git', destinationPath })).rejects.toThrow('outside the configured allowed roots');
+      }
+      expect(processes).toHaveLength(0);
+      expect(removed).toHaveLength(0);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('canonicalizes an allowed destination for cloning and cancellation', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'clone-canonical-'));
+    vi.stubEnv('PI_CLOUD_ALLOWED_ROOTS', root);
+    vi.stubEnv('PI_CLOUD_DISABLE_PATH_CHECK', 'false');
+    try {
+      await fs.mkdir(path.join(root, 'target'));
+      await fs.symlink(path.join(root, 'target'), path.join(root, 'alias'));
+      const { service, processes, removed } = jobCloner();
+      const canonical = path.join(await fs.realpath(root), 'target', 'repo');
+      const result = await service.start({ remoteUrl: 'https://github.com/acme/tool.git', destinationPath: path.join(root, 'alias', 'repo') });
+      expect(processes[0].args.at(-1)).toBe(canonical);
+      await service.cancel(result.jobId!);
+      expect(removed).toEqual([canonical]);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('returns destination_exists before spawning git', async () => {
     const { service, processes } = jobCloner({ existing: true });
 
@@ -160,6 +204,45 @@ describe('RepositoryCloner jobs', () => {
 });
 
 describe('RepositoryCloner auth, proxy, and cancel', () => {
+  it('keeps the origin credential-free after an authenticated retry with real Git', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'clone-credentials-'));
+    vi.stubEnv('PI_CLOUD_ALLOWED_ROOTS', root);
+    vi.stubEnv('PI_CLOUD_DISABLE_PATH_CHECK', 'false');
+    const source = path.join(root, 'source.git');
+    const destination = path.join(root, 'clone');
+    const remoteUrl = 'https://github.com/acme/private.git';
+    const token = 'dummy-secret-token';
+    const first = new FakeGitProcess();
+    let usingRetry = false;
+    try {
+      execFileSync('git', ['init', '--bare', source], { stdio: 'ignore' });
+      const service = new RepositoryCloner({
+        spawnGit: (args, options) => {
+          if (!usingRetry) { usingRetry = true; return first as any; }
+          expect(execFileSync('git', ['config', '--get-urlmatch', 'http.extraHeader', remoteUrl], { env: options.env, encoding: 'utf8' }).trim())
+            .toBe(`Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`);
+          // Redirect to a local fixture without network access; Git still stores the original URL.
+          return spawn('git', ['-c', `url.${source}.insteadOf=${remoteUrl}`, ...args], options);
+        },
+        githubSettings: () => ({ serverUrl: 'https://github.com', token }),
+        giteaSettings: () => ({ serverUrl: '', token: '' }),
+        githubProxyEnv: async () => ({}),
+        gitCloneParentPath: () => root,
+      });
+      const result = await service.start({ remoteUrl, destinationPath: destination });
+      first.stderr.emit('data', Buffer.from('Authentication failed'));
+      first.emit('exit', 128);
+      await vi.waitFor(() => expect(service.getJob(result.jobId!)?.status).toBe('completed'));
+      expect(execFileSync('git', ['-C', destination, 'config', '--get', 'remote.origin.url'], { encoding: 'utf8' }).trim()).toBe(remoteUrl);
+      const config = await fs.readFile(path.join(destination, '.git', 'config'), 'utf8');
+      expect(config).not.toContain(token);
+      expect(config).not.toContain(Buffer.from(`x-access-token:${token}`).toString('base64'));
+      expect(config).not.toContain('extraHeader');
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('applies proxy env for GitHub clone jobs', async () => {
     const { service, processes } = jobCloner();
     await service.start({ remoteUrl: 'https://github.com/acme/tool.git', destinationPath: '/Users/test/git/github/acme/tool' });
@@ -186,7 +269,14 @@ describe('RepositoryCloner auth, proxy, and cancel', () => {
     processes[0].emit('exit', 128, null);
 
     expect(processes).toHaveLength(2);
-    expect(processes[1].args).toContain('https://x-access-token:secret-token@github.com/acme/private.git');
+    expect(processes[1].args).toContain('https://github.com/acme/private.git');
+    expect(processes[1].args.join(' ')).not.toContain('secret-token');
+    const env = processes[1].spawnOptions.env;
+    expect(env.GIT_CONFIG_COUNT).toBe('2');
+    expect(env.GIT_CONFIG_KEY_0).toBe('http.https://github.com/acme/private.git.extraHeader');
+    expect(env.GIT_CONFIG_VALUE_0).toBe(`Authorization: Basic ${Buffer.from('x-access-token:secret-token').toString('base64')}`);
+    expect(env.GIT_CONFIG_KEY_1).toBe('credential.helper');
+    expect(env.GIT_CONFIG_VALUE_1).toBe('');
     processes[1].emit('exit', 0, null);
     expect(service.getJob(result.jobId!)?.latest).toEqual({ type: 'completed', status: 'Clone completed', projectPath: '/Users/test/git/github/acme/private', percent: 100 });
   });

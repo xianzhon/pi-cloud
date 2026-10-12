@@ -4,6 +4,8 @@ import { isAllowedRequestOrigin } from '../auth/origin.js';
 import { getRequestContext, getSessionFromRequest } from '../auth/request.js';
 import { resolveAllowedPath } from '../utils/path-security.js';
 
+import { bindSocketSession } from './session-auth.js';
+
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const MAX_SOCKET_BUFFER_BYTES = 1_000_000;
 
@@ -66,6 +68,7 @@ export async function terminalWebSocket(app: FastifyInstance) {
       return;
     }
 
+    const isAuthenticated = bindSocketSession(socket, req, auth.authConfig, auth.sessions, session);
     const attachmentId = Symbol('terminal-websocket');
     let terminal: ReturnType<typeof terminalManager.create>;
     let resolvedCwd: string | undefined;
@@ -89,6 +92,7 @@ export async function terminalWebSocket(app: FastifyInstance) {
         socket.close();
         return;
       }
+      if (!isAuthenticated()) return;
       terminal = terminalManager.create(clientId, resolvedCwd, session.username, attachmentId);
     }
 
@@ -140,6 +144,7 @@ export async function terminalWebSocket(app: FastifyInstance) {
     heartbeat.unref();
 
     socket.on('message', (rawData: Buffer) => {
+      if (!isAuthenticated()) return;
       try {
         const message = JSON.parse(rawData.toString());
         // A replaced socket must not be able to control or dispose the new attachment.

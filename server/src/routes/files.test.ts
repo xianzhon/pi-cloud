@@ -70,6 +70,30 @@ describe('fileRoutes', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
+  it('rejects writes through dangling file and directory symlinks without creating outside files', async () => {
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-write-outside-'));
+    try {
+      const outsideFile = path.join(outsideDir, 'escaped.txt');
+      await fs.symlink(outsideFile, path.join(tempDir, 'dangling.txt'));
+      await fs.symlink(path.join(outsideDir, 'missing-dir'), path.join(tempDir, 'dangling-dir'));
+      for (const filePath of [path.join(tempDir, 'dangling.txt'), path.join(tempDir, 'dangling-dir', 'escaped.txt')]) {
+        const response = await app.inject({ method: 'POST', url: '/api/files/write', payload: { path: filePath, content: 'escaped' } });
+        expect(response.statusCode).toBe(403);
+      }
+      await expect(fs.readdir(outsideDir)).resolves.toEqual([]);
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('writes through existing allowed symlinks using the canonical target', async () => {
+    const link = path.join(tempDir, 'readme-link');
+    await fs.symlink(path.join(tempDir, 'README.md'), link);
+    const response = await app.inject({ method: 'POST', url: '/api/files/write', payload: { path: link, content: 'updated' } });
+    expect(response.statusCode).toBe(200);
+    await expect(fs.readFile(path.join(tempDir, 'README.md'), 'utf8')).resolves.toBe('updated');
+  });
+
   it('returns a sorted tree and excludes hidden files and node_modules by default', async () => {
     const response = await app.inject({
       method: 'GET',

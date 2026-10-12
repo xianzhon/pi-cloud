@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue';
+import { i18n } from '../i18n';
 import type { SlashCommandItem, SlashToken } from '../types/slashCommands';
 
 const clientOnlyCommands: SlashCommandItem[] = [
@@ -186,6 +187,12 @@ export function useSlashCommands() {
     if (!activeToken.value) return [];
     const query = activeToken.value?.query || '';
     return commands.value
+      .map((command) => {
+        const key = `slashCommands.${command.id}`;
+        return command.category === 'built-in' && i18n.global.te(key)
+          ? { ...command, description: i18n.global.t(key) }
+          : command;
+      })
       .filter((command) => commandMatches(command, query))
       .sort((a, b) => {
         const rankDiff = commandRank(a, query) - commandRank(b, query);

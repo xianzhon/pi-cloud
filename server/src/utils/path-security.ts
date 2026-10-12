@@ -49,7 +49,14 @@ async function nearestExistingPath(candidate: string): Promise<string> {
   let current = candidate;
   while (true) {
     try {
-      await fs.access(current);
+      await fs.lstat(current);
+      // A dangling link is not a missing path: writes would follow it.
+      try {
+        await fs.realpath(current);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new PathAccessError(candidate);
+        throw error;
+      }
       return current;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
@@ -68,7 +75,8 @@ export async function resolveAllowedPath(requestedPath: string | undefined): Pro
   const resolvedPath = path.resolve(expandHomePath(requestedPath));
   if (isPathCheckDisabled()) return resolvedPath;
 
-  const configuredRoots = configuredAllowedRoots().map(root => path.resolve(expandHomePath(root)));
+  const roots = await allowedRoots();
+  const configuredRoots = [...configuredAllowedRoots().map(root => path.resolve(expandHomePath(root))), ...roots];
   const matchedRoot = configuredRoots.find(root => isInsideRoot(resolvedPath, root));
   if (!matchedRoot) throw new PathAccessError(resolvedPath);
 
@@ -81,7 +89,6 @@ export async function resolveAllowedPath(requestedPath: string | undefined): Pro
 
   const existingPath = await nearestExistingPath(resolvedPath);
   const realExistingPath = await realpathIfExists(existingPath);
-  const roots = await allowedRoots();
 
   if (!roots.some(root => isInsideRoot(realExistingPath, root))) {
     throw new PathAccessError(resolvedPath);
@@ -90,11 +97,20 @@ export async function resolveAllowedPath(requestedPath: string | undefined): Pro
   return resolvedPath;
 }
 
+// Resolve existing ancestors so creation does not follow the user-supplied alias.
+export async function resolveAllowedCreationPath(requestedPath: string): Promise<string> {
+  const resolvedPath = await resolveAllowedPath(requestedPath);
+  const existingPath = await nearestExistingPath(resolvedPath);
+  const canonicalPath = path.join(await fs.realpath(existingPath), path.relative(existingPath, resolvedPath));
+  return resolveAllowedPath(canonicalPath);
+}
+
 export async function resolveAllowedExistingPath(requestedPath: string | undefined): Promise<string> {
   const resolvedPath = path.resolve(expandHomePath(requestedPath));
   if (isPathCheckDisabled()) return fs.realpath(resolvedPath);
 
-  const configuredRoots = configuredAllowedRoots().map(root => path.resolve(expandHomePath(root)));
+  const roots = await allowedRoots();
+  const configuredRoots = [...configuredAllowedRoots().map(root => path.resolve(expandHomePath(root))), ...roots];
   const matchedRoot = configuredRoots.find(root => isInsideRoot(resolvedPath, root));
   if (!matchedRoot) throw new PathAccessError(resolvedPath);
 
@@ -105,7 +121,6 @@ export async function resolveAllowedExistingPath(requestedPath: string | undefin
   }
 
   const realPath = await fs.realpath(resolvedPath);
-  const roots = await allowedRoots();
   if (!roots.some(root => isInsideRoot(realPath, root))) {
     throw new PathAccessError(resolvedPath);
   }
