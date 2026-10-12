@@ -2450,21 +2450,37 @@ async function saveFile() {
   isSaving.value = true;
   clearStatusTimer();
   statusType.value = 'saving';
-  statusMessage.value = 'Saving...';
+  statusMessage.value = t('components.editorPanel.savingFile');
 
   try {
-    const response = await fetch('/api/files/write', {
+    const write = (expectedMtime?: number) => fetch('/api/files/write', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: filePath, content }),
+      body: JSON.stringify({ path: filePath, content, ...(expectedMtime !== undefined ? { expectedMtime } : {}) }),
     });
+    // Send the loaded mtime so the server refuses to overwrite changes made since (e.g. by the agent).
+    let response = await write(fileTimestamps.get(filePath));
+    if (response.status === 409) {
+      const overwrite = await requestConfirm({
+        title: t('components.editorPanel.fileChangedOnDiskTitle'),
+        message: t('components.editorPanel.fileChangedOnDiskMessage', { name: basename(filePath) }),
+        confirmText: t('components.editorPanel.overwriteFile'),
+        variant: 'warning',
+      });
+      if (!overwrite) {
+        statusType.value = 'error';
+        statusMessage.value = t('components.editorPanel.notSavedFileChanged');
+        return;
+      }
+      response = await write();
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     if (data.mtime) fileTimestamps.set(filePath, data.mtime);
     clearDirty(filePath);
     await refreshGitChanges();
     statusType.value = 'success';
-    statusMessage.value = 'Saved';
+    statusMessage.value = t('components.editorPanel.savedFile');
     scheduleStatusClear();
   } catch (error) {
     console.error(t('components.editorPanel.failedToSaveFile'), error);

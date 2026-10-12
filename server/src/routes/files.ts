@@ -514,9 +514,25 @@ export async function fileRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/write', async (req) => {
-    const { path: filePath, content } = req.body as { path: string; content: string };
+  app.post('/write', async (req, reply) => {
+    const { path: filePath, content, expectedMtime } = req.body as { path?: string; content?: unknown; expectedMtime?: unknown };
+    if (!filePath?.trim() || typeof content !== 'string') {
+      return reply.code(400).send({ error: 'File path and text content are required' });
+    }
+    if (expectedMtime !== undefined && (typeof expectedMtime !== 'number' || !Number.isFinite(expectedMtime))) {
+      return reply.code(400).send({ error: 'expectedMtime must be a number' });
+    }
     const resolvedPath = await resolveAllowedCreationPath(filePath);
+    // Reject the write when the file changed after the editor loaded it (for example, an agent edit).
+    if (expectedMtime !== undefined) {
+      const currentMtime = await fs.stat(resolvedPath).then((stats) => stats.mtimeMs, (error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      });
+      if (currentMtime !== expectedMtime) {
+        return reply.code(409).send({ error: 'File changed on disk since it was opened', mtime: currentMtime });
+      }
+    }
     await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
     const handle = await fs.open(resolvedPath, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW);
     let stats: Stats;

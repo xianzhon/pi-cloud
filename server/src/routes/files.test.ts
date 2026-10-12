@@ -509,6 +509,23 @@ describe('fileRoutes', () => {
     await expect(fs.readFile(filePath, 'utf8')).resolves.toBe('updated');
   });
 
+  it('rejects a write when the file changed after it was opened', async () => {
+    const filePath = path.join(tempDir, 'README.md');
+    const opened = await app.inject({ method: 'GET', url: `/api/files/read?path=${encodeURIComponent(filePath)}` });
+    const { mtime } = opened.json();
+
+    const saved = await app.inject({ method: 'POST', url: '/api/files/write', payload: { path: filePath, content: 'first', expectedMtime: mtime } });
+    expect(saved.statusCode).toBe(200);
+
+    await fs.writeFile(filePath, 'agent edit');
+    await fs.utimes(filePath, new Date(), new Date(Date.now() + 5_000));
+    const stale = await app.inject({ method: 'POST', url: '/api/files/write', payload: { path: filePath, content: 'second', expectedMtime: saved.json().mtime } });
+
+    expect(stale.statusCode).toBe(409);
+    expect(typeof stale.json().mtime).toBe('number');
+    await expect(fs.readFile(filePath, 'utf8')).resolves.toBe('agent edit');
+  });
+
   it('creates parent directories when writing file contents', async () => {
     const filePath = path.join(tempDir, 'screenshots', '.annotations', 'image.png.annotations.json');
     const response = await app.inject({
