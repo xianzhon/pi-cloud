@@ -184,6 +184,19 @@ function recordPrActivity(options: GitHostingRouteOptions, input: Parameters<Ses
   }
 }
 
+function serverOrigin(serverUrl: string | undefined): string {
+  try { return new URL(serverUrl || '').origin; } catch { return (serverUrl || '').trim(); }
+}
+
+// A stored token must never be sent to a server other than the one it was saved for.
+function retainedToken(current: { serverUrl?: string; token?: string }, body: { serverUrl?: string; token?: string }): string {
+  if (body.token) return body.token;
+  if (body.serverUrl !== undefined && current.token && serverOrigin(body.serverUrl) !== serverOrigin(current.serverUrl)) {
+    throw new Error('Enter the access token again when changing the server URL');
+  }
+  return current.token || '';
+}
+
 function settingsResponse(options: GitHostingRouteOptions) {
   return { settings: options.settings.getSanitized(), githubSettings: options.githubSettings.getSanitized() };
 }
@@ -282,7 +295,7 @@ export async function gitHostingRoutes(app: FastifyInstance, options: GitHosting
     const body = req.body as { serverUrl?: string; token?: string };
     try {
       const current = options.settings.get();
-      options.settings.save({ serverUrl: body.serverUrl ?? current.serverUrl, token: body.token || current.token });
+      options.settings.save({ serverUrl: body.serverUrl ?? current.serverUrl, token: retainedToken(current, body) });
       return settingsResponse(options);
     } catch (error) {
       return sendError(reply, error, 400);
@@ -298,7 +311,7 @@ export async function gitHostingRoutes(app: FastifyInstance, options: GitHosting
     const body = req.body as { serverUrl?: string; token?: string };
     try {
       const current = options.githubSettings.get();
-      options.githubSettings.save({ serverUrl: body.serverUrl ?? current.serverUrl, token: body.token || current.token });
+      options.githubSettings.save({ serverUrl: body.serverUrl ?? current.serverUrl, token: retainedToken(current, body) });
       return settingsResponse(options);
     } catch (error) {
       return sendError(reply, error, 400);
@@ -333,7 +346,7 @@ export async function gitHostingRoutes(app: FastifyInstance, options: GitHosting
     const body = req.body as { serverUrl?: string; token?: string };
     try {
       const current = options.githubSettings.get();
-      await options.createGithubClient({ ...current, serverUrl: body.serverUrl ?? current.serverUrl, token: body.token || current.token }).testConnection();
+      await options.createGithubClient({ ...current, serverUrl: body.serverUrl ?? current.serverUrl, token: retainedToken(current, body) }).testConnection();
       return { success: true };
     } catch (error) {
       return sendError(reply, error, 400);
@@ -344,7 +357,7 @@ export async function gitHostingRoutes(app: FastifyInstance, options: GitHosting
     const body = req.body as { serverUrl?: string; token?: string };
     try {
       const current = options.settings.get();
-      await options.createClient({ serverUrl: body.serverUrl ?? current.serverUrl, token: body.token || current.token }).testConnection();
+      await options.createClient({ serverUrl: body.serverUrl ?? current.serverUrl, token: retainedToken(current, body) }).testConnection();
       return { success: true };
     } catch (error) {
       return sendError(reply, error, 400);

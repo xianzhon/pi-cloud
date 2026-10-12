@@ -78,11 +78,28 @@ describe('git hosting routes', () => {
     const settings = { get: vi.fn().mockReturnValue({ serverUrl: 'https://saved.example.com', token: 'saved-token' }), getSanitized: vi.fn() };
     await gitHostingRoutes(api.app as any, routeOptions({ settings, createClient }) as any);
 
-    const result = await api.handlers['POST /test']({ body: { serverUrl: 'https://draft.example.com' } }, {});
+    const result = await api.handlers['POST /test']({ body: { serverUrl: 'https://saved.example.com/' } }, {});
 
-    expect(createClient).toHaveBeenCalledWith({ serverUrl: 'https://draft.example.com', token: 'saved-token' });
+    expect(createClient).toHaveBeenCalledWith({ serverUrl: 'https://saved.example.com/', token: 'saved-token' });
     expect(settings.get).toHaveBeenCalled();
     expect(result).toEqual({ success: true });
+  });
+
+  it('never sends a saved token to a different server', async () => {
+    const api = app();
+    const createClient = vi.fn();
+    const settings = { save: vi.fn(), get: vi.fn().mockReturnValue({ serverUrl: 'https://saved.example.com', token: 'saved-token' }), getSanitized: vi.fn() };
+    await gitHostingRoutes(api.app as any, routeOptions({ settings, createClient }) as any);
+    const send = vi.fn();
+    const reply = { status: vi.fn(() => ({ send })) };
+
+    await api.handlers['POST /test']({ body: { serverUrl: 'https://attacker.example.com' } }, reply);
+    await api.handlers['POST /settings']({ body: { serverUrl: 'https://attacker.example.com' } }, reply);
+
+    expect(createClient).not.toHaveBeenCalled();
+    expect(settings.save).not.toHaveBeenCalled();
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(send).toHaveBeenCalledWith({ error: 'Enter the access token again when changing the server URL' });
   });
 
   it('tests GitHub connectivity directly when no proxy is set', async () => {
