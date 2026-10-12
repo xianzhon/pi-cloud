@@ -29,6 +29,8 @@ const MAX_FILE_TREE_DEPTH = 10;
 const MAX_FILE_TREE_NODES = 5_000;
 const FILE_TREE_TIMEOUT_MS = 5_000;
 const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
+// A control character can occupy six bytes as a JSON escape, plus the request envelope.
+const MAX_WRITE_BODY_BYTES = 6 * MAX_TEXT_FILE_BYTES + 64 * 1024;
 const MAX_FILE_SEARCH_RESULTS = 5_000;
 const FILE_SEARCH_TIMEOUT_MS = 5_000;
 const FILE_SEARCH_IGNORES = ['**/.git/**', '**/node_modules/**'];
@@ -514,7 +516,8 @@ export async function fileRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/write', async (req, reply) => {
+  // Text files up to MAX_TEXT_FILE_BYTES can be opened, so saving them must fit the JSON body too.
+  app.post('/write', { bodyLimit: MAX_WRITE_BODY_BYTES }, async (req, reply) => {
     const { path: filePath, content, expectedMtime } = req.body as { path?: string; content?: unknown; expectedMtime?: unknown };
     if (!filePath?.trim() || typeof content !== 'string') {
       return reply.code(400).send({ error: 'File path and text content are required' });

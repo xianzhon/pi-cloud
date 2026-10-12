@@ -526,6 +526,29 @@ describe('fileRoutes', () => {
     await expect(fs.readFile(filePath, 'utf8')).resolves.toBe('agent edit');
   });
 
+  it('accepts text files larger than the default request body limit', async () => {
+    const filePath = path.join(tempDir, 'large.txt');
+    const content = 'x'.repeat(3 * 1024 * 1024);
+    const response = await app.inject({ method: 'POST', url: '/api/files/write', payload: { path: filePath, content } });
+
+    expect(response.statusCode).toBe(200);
+    expect((await fs.stat(filePath)).size).toBe(content.length);
+  });
+
+  it('accepts read-sized text even when JSON escaping expands the body sixfold', async () => {
+    const filePath = path.join(tempDir, 'escaped.txt');
+    const content = '\u0001'.repeat(7 * 1024 * 1024);
+    const response = await app.inject({ method: 'POST', url: '/api/files/write', payload: { path: filePath, content } });
+
+    expect(response.statusCode).toBe(200);
+    expect((await fs.stat(filePath)).size).toBe(content.length);
+  });
+
+  it('rejects writes without text content', async () => {
+    const response = await app.inject({ method: 'POST', url: '/api/files/write', payload: { path: path.join(tempDir, 'x.txt'), content: { nope: true } } });
+    expect(response.statusCode).toBe(400);
+  });
+
   it('creates parent directories when writing file contents', async () => {
     const filePath = path.join(tempDir, 'screenshots', '.annotations', 'image.png.annotations.json');
     const response = await app.inject({
