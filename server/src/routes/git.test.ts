@@ -1068,7 +1068,7 @@ describe('gitRoutes branch', () => {
     }
   });
 
-  it('deletes the original branch after switching by default and records its tip', async () => {
+  it('deletes the original branch after switching when requested and records its tip', async () => {
     const cwd = await createRepo();
     const recordBranchDeleted = vi.fn();
     const app = await buildApp({ activityStore: { recordCommit: vi.fn(), recordBranchDeleted } });
@@ -1081,7 +1081,7 @@ describe('gitRoutes branch', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/git/switch-branch',
-        payload: { cwd, name: 'target', sessionId: 'session-1' },
+        payload: { cwd, name: 'target', sessionId: 'session-1', deleteOriginal: true },
       });
 
       expect(response.statusCode).toBe(200);
@@ -1094,6 +1094,67 @@ describe('gitRoutes branch', () => {
         branch: originalBranch,
         commit: originalCommit,
       });
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the original branch unless deletion is requested', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      const originalBranch = await git(cwd, 'branch', '--show-current');
+      await git(cwd, 'checkout', '-b', 'target');
+      await git(cwd, 'checkout', originalBranch);
+
+      const response = await app.inject({ method: 'POST', url: '/api/git/switch-branch', payload: { cwd, name: 'target' } });
+
+      expect(response.statusCode).toBe(200);
+      expect((await git(cwd, 'branch', '--format=%(refname:short)')).split('\n')).toContain(originalBranch);
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to delete an original branch with unmerged commits', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      const originalBranch = await git(cwd, 'branch', '--show-current');
+      await git(cwd, 'branch', 'target');
+      await writeFile(join(cwd, 'unmerged.txt'), 'keep this commit\n');
+      await git(cwd, 'add', 'unmerged.txt');
+      await git(cwd, 'commit', '-m', 'unmerged work');
+      const tip = await git(cwd, 'rev-parse', originalBranch);
+
+      const response = await app.inject({ method: 'POST', url: '/api/git/switch-branch', payload: { cwd, name: 'target', deleteOriginal: true } });
+
+      expect(response.statusCode).toBe(400);
+      expect(await git(cwd, 'rev-parse', originalBranch)).toBe(tip);
+    } finally {
+      await app.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses branch names that are options or file paths', async () => {
+    const cwd = await createRepo();
+    const app = await buildApp();
+    try {
+      await writeFile(join(cwd, 'tracked.txt'), 'committed\n');
+      await git(cwd, 'add', 'tracked.txt');
+      await git(cwd, 'commit', '-m', 'add tracked file');
+      await writeFile(join(cwd, 'tracked.txt'), 'local edit\n');
+
+      for (const name of ['tracked.txt', '-f', '--force']) {
+        const response = await app.inject({ method: 'POST', url: '/api/git/switch-branch', payload: { cwd, name } });
+        expect(response.statusCode, name).toBe(400);
+      }
+      const created = await app.inject({ method: 'POST', url: '/api/git/branch', payload: { cwd, name: 'feature/x', baseBranch: '--orphan' } });
+      expect(created.statusCode).toBe(400);
+      expect(await readFile(join(cwd, 'tracked.txt'), 'utf8')).toBe('local edit\n');
     } finally {
       await app.close();
       await rm(cwd, { recursive: true, force: true });

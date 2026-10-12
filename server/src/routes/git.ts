@@ -239,6 +239,15 @@ function sanitizeBranchName(name: string) {
     || 'changes';
 }
 
+// Reject option-like or invalid names so user input can never become a git flag or a pathspec.
+async function validateBranchName(cwd: string, name: string): Promise<string> {
+  if (!name || name.startsWith('-')) throw new Error('Invalid branch name');
+  await runGit(cwd, ['check-ref-format', '--branch', name]).catch(() => {
+    throw new Error(`Invalid branch name: ${name}`);
+  });
+  return name;
+}
+
 function parseBranchName(name: string | undefined, files: GitStatusFile[]) {
   const requestedName = name?.trim();
   if (requestedName) return requestedName;
@@ -999,10 +1008,11 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     try {
       const status = await runGit(resolvedCwd, ['status', '--porcelain']);
       const files = parseStatusFiles(status);
-      const name = parseBranchName(body.name, files);
+      const name = await validateBranchName(resolvedCwd, parseBranchName(body.name, files));
       const args = ['checkout', '-b', name];
       const baseBranch = body.baseBranch?.trim();
-      if (baseBranch) args.push(baseBranch);
+      if (baseBranch) args.push(await validateBranchName(resolvedCwd, baseBranch));
+      args.push('--');
       const output = await runGit(resolvedCwd, args);
       return {
         cwd: resolvedCwd,
@@ -1027,14 +1037,17 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions =
     }
 
     try {
+      await validateBranchName(resolvedCwd, name);
       const originalBranch = (await runGit(resolvedCwd, ['branch', '--show-current'])).trim();
       const originalCommit = originalBranch ? (await runGit(resolvedCwd, ['rev-parse', originalBranch])).trim() : '';
-      const checkoutOutput = await runGit(resolvedCwd, ['checkout', name]);
+      // The trailing `--` makes git treat the name strictly as a ref, never as a file to restore.
+      const checkoutOutput = await runGit(resolvedCwd, ['checkout', name, '--']);
       const pullOutput = body.pull
         ? await runGitWithOutput(resolvedCwd, ['pull', '--ff-only'], { ...process.env, ...options.githubProxyEnv?.() })
         : '';
-      const shouldDeleteOriginal = body.deleteOriginal !== false && Boolean(originalBranch) && originalBranch !== name;
-      const deleteOutput = shouldDeleteOriginal ? await runGit(resolvedCwd, ['branch', '-D', '--', originalBranch]) : '';
+      // Keep branches unless deletion is requested, and never discard unmerged commits.
+      const shouldDeleteOriginal = body.deleteOriginal === true && Boolean(originalBranch) && originalBranch !== name;
+      const deleteOutput = shouldDeleteOriginal ? await runGit(resolvedCwd, ['branch', '-d', '--', originalBranch]) : '';
 
       if (shouldDeleteOriginal) {
         recordBranchDeletedActivity(options, {
