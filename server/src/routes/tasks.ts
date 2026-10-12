@@ -56,9 +56,12 @@ export async function taskRoutes(app: FastifyInstance, options: TaskRouteOptions
       status: query.status as ProjectTaskStatus | undefined,
     });
     const latestPrs = options.activityStore?.listLatestPrForSessions(tasks.flatMap((task) => task.sessionId ? [task.sessionId] : []));
+    // The inbox polls this list; omit base64 images (up to 20 x 10 MB per task) and
+    // let the editor fetch them from GET /:id when a task is opened.
     return {
-      tasks: tasks.map((task) => ({
+      tasks: tasks.map(({ images, ...task }) => ({
         ...task,
+        imageCount: images?.length ?? 0,
         pullRequest: pullRequestFromActivity(task.sessionId ? latestPrs?.get(task.sessionId) : undefined),
       })),
     };

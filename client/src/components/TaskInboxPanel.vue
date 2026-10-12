@@ -194,7 +194,7 @@ const emit = defineEmits<{
   openSession: [sessionId: string, agentProfileId: string];
 }>();
 
-const { tasks, scope, status, loading, error, startingTaskId, load, create, update, remove, start, complete } = useProjectTasks(props.clientId);
+const { tasks, scope, status, loading, error, startingTaskId, load, get, create, update, remove, start, complete } = useProjectTasks(props.clientId);
 const gitHosting = useGitHosting();
 const editorVisible = ref(false);
 const executionVisible = ref(false);
@@ -245,9 +245,10 @@ function openEditTask(task: ProjectTask) {
 
 async function openTaskEditor(task: ProjectTask | null) {
   actionError.value = '';
-  editingTask.value = task;
-  editorVisible.value = true;
   try {
+    // List results omit images; load them so saving the edit does not drop attachments.
+    editingTask.value = task?.imageCount ? await get(task.id) : task;
+    editorVisible.value = true;
     await props.loadPresets();
     await nextTick();
     await taskEditorRef.value?.preload?.();

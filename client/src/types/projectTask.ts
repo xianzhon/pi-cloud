@@ -33,6 +33,8 @@ export interface ProjectTask extends ProjectTaskDraft {
   status: ProjectTaskStatus;
   sessionId: string | null;
   giteaIssue: ProjectTaskGiteaIssue | null;
+  /** Set on list results, which omit `images`; load the task by ID to get them. */
+  imageCount?: number;
   pullRequest?: {
     number: number;
     url: string;

@@ -16,12 +16,13 @@ const update = vi.fn();
 const remove = vi.fn();
 const start = vi.fn();
 const complete = vi.fn();
+const get = vi.fn();
 const previewIssue = vi.fn();
 const createIssue = vi.fn();
 const generateIssueContent = vi.fn();
 
 vi.mock('../composables/useProjectTasks', () => ({
-  useProjectTasks: () => ({ tasks, scope, status, loading, error, startingTaskId, load, create, update, remove, start, complete }),
+  useProjectTasks: () => ({ tasks, scope, status, loading, error, startingTaskId, load, get, create, update, remove, start, complete }),
 }));
 
 vi.mock('../composables/useGitHosting', () => ({
@@ -32,7 +33,7 @@ vi.mock('./TaskEditorDialog.vue', () => ({
   default: {
     props: ['visible', 'task'],
     emits: ['close', 'save'],
-    template: '<div v-if="visible" class="task-editor-stub"><button class="editor-save" @click="$emit(\'save\', { title: \'Saved\' })">save</button></div>',
+    template: '<div v-if="visible" class="task-editor-stub" :data-image-count="task?.images?.length ?? 0"><button class="editor-save" @click="$emit(\'save\', { title: \'Saved\' })">save</button></div>',
   },
 }));
 
@@ -133,6 +134,18 @@ describe('TaskInboxPanel', () => {
     await wrapper.get('[aria-label="Edit task"]').trigger('click');
     await wrapper.get('.editor-save').trigger('click');
     expect(update).toHaveBeenCalledWith('task-1', { title: 'Saved' });
+  });
+
+  it('loads omitted images before editing a task that has attachments', async () => {
+    tasks.value = [{ ...waitingTask, imageCount: 1 }];
+    get.mockResolvedValue({ ...waitingTask, images: [{ type: 'image', data: 'abc', mimeType: 'image/png' }] });
+    const wrapper = mountPanel();
+
+    await wrapper.get('[aria-label="Edit task"]').trigger('click');
+    await flushPromises();
+
+    expect(get).toHaveBeenCalledWith('task-1');
+    expect(wrapper.get('.task-editor-stub').attributes('data-image-count')).toBe('1');
   });
 
   it('polishes issue title and body with AI', async () => {

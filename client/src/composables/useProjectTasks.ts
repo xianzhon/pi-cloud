@@ -38,6 +38,13 @@ export function useProjectTasks(clientId: string) {
     }
   }
 
+  async function get(id: string): Promise<ProjectTask> {
+    const data = await apiRequest<{ task: ProjectTask }>(`/api/tasks/${encodeURIComponent(id)}`, {
+      fallbackMessage: 'Task request failed',
+    });
+    return data.task;
+  }
+
   async function create(draft: ProjectTaskDraft): Promise<ProjectTask> {
     const data = await mutate<{ task: ProjectTask }>('/api/tasks', 'POST', draft);
     return data.task;
@@ -106,6 +113,7 @@ export function useProjectTasks(clientId: string) {
     error,
     startingTaskId,
     load,
+    get,
     create,
     update,
     remove,

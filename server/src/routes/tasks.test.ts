@@ -93,7 +93,20 @@ describe('task routes', () => {
     const result = await handlers['GET /']({ query: { scope: 'project', projectPath: '/repo/app', status: 'waiting' } }, createReply());
 
     expect(store.list).toHaveBeenCalledWith({ projectPath: '/repo/app', status: 'waiting' });
-    expect(result).toEqual({ tasks: [task] });
+    expect(result).toEqual({ tasks: [{ ...task, imageCount: 0 }] });
+  });
+
+  it('omits image data from the polled task list but keeps it on the task detail', async () => {
+    const image = { type: 'image', data: 'a'.repeat(1024), mimeType: 'image/png' };
+    store.list.mockReturnValue([{ ...task, images: [image, image] }]);
+    store.get.mockReturnValue({ ...task, images: [image] });
+    const handlers = await setup();
+
+    const list = await handlers['GET /']({ query: { scope: 'all' } }, createReply());
+    expect(list.tasks[0].images).toBeUndefined();
+    expect(list.tasks[0].imageCount).toBe(2);
+    const detail = await handlers['GET /:id']({ params: { id: 'task-1' } }, createReply());
+    expect(detail.task.images).toEqual([image]);
   });
 
   it('creates and updates a fully validated task draft', async () => {
