@@ -36,32 +36,34 @@ describe('websocket authentication', () => {
     const address = app.server.address();
     const port = typeof address === 'object' && address ? address.port : 0;
 
-    const message = await new Promise<string>((resolve) => {
+    const status = await new Promise<number>((resolve) => {
       const ws = new WebSocketClient(`ws://127.0.0.1:${port}/ws/chat?clientId=test-client`, {
         headers: { cookie: cookieHeader, origin: 'https://evil.example' },
       });
-      ws.on('message', (data) => resolve(String(data)));
-      ws.on('close', () => resolve('closed-without-message'));
+      ws.on('unexpected-response', (_req, res) => resolve(res.statusCode || 0));
+      ws.on('open', () => resolve(101));
+      ws.on('error', () => {});
     });
 
-    expect(message).toContain('Origin not allowed');
+    expect(status).toBe(403);
     await app.close();
   }, 10_000);
 
-  it('rejects unauthenticated chat websocket connections and records a websocket audit event', async () => {
+  it('rejects unauthenticated chat websocket upgrades and records a websocket audit event', async () => {
     const { buildApp } = await import('../index');
     const app = await buildApp();
     await app.listen({ port: 0, host: '127.0.0.1' });
     const address = app.server.address();
     const port = typeof address === 'object' && address ? address.port : 0;
 
-    const message = await new Promise<string>((resolve) => {
-      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/chat?clientId=test-client`);
-      ws.addEventListener('message', (event) => resolve(String(event.data)));
-      ws.addEventListener('close', () => resolve('closed-without-message'));
+    const status = await new Promise<number>((resolve) => {
+      const ws = new WebSocketClient(`ws://127.0.0.1:${port}/ws/chat?clientId=test-client`);
+      ws.on('unexpected-response', (_req, res) => resolve(res.statusCode || 0));
+      ws.on('open', () => resolve(101));
+      ws.on('error', () => {});
     });
 
-    expect(message).toContain('Authentication required');
+    expect(status).toBe(401);
     await app.close();
 
     const db = new Database(dbPath);

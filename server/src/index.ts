@@ -185,7 +185,11 @@ export function isPublicRoute(req: { routeOptions?: { url?: string } }): boolean
   if (PUBLIC_API_ROUTES.has(route)) return true;
   // Auth routes enforce their own per-route session requirements.
   if (route === '/api/auth' || route.startsWith('/api/auth/')) return true;
-  return !route.startsWith('/api/');
+  return !route.startsWith('/api/') && !route.startsWith('/ws/');
+}
+
+function isWebSocketRoute(req: { routeOptions?: { url?: string } }): boolean {
+  return Boolean(req.routeOptions?.url?.startsWith('/ws/'));
 }
 
 function isMutatingRequest(req: { method: string }): boolean {
@@ -351,10 +355,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(websocket, { options: { maxPayload: 280 * 1024 * 1024 } });
 
   app.addHook('onRequest', async (req, reply) => {
-    if (isMutatingRequest(req) && !isAllowedRequestOrigin(req, authConfig.trustProxy)) {
+    const webSocket = isWebSocketRoute(req);
+    if ((webSocket || isMutatingRequest(req)) && !isAllowedRequestOrigin(req, authConfig.trustProxy)) {
       const context = getRequestContext(req, authConfig.trustProxy);
       audit.record({
-        type: 'http_origin_rejected',
+        type: webSocket ? 'websocket_origin_rejected' : 'http_origin_rejected',
         status: 'failure',
         ...context,
         metadata: { url: req.url.split('?')[0], method: req.method, origin: req.headers.origin },
@@ -364,11 +369,14 @@ export async function buildApp(): Promise<FastifyInstance> {
 
     if (isPublicRoute(req)) return;
 
-    const session = renewSessionFromRequest(req, reply, authConfig, sessions);
+    // Reject unauthenticated WebSocket upgrades before the socket is accepted.
+    const session = webSocket
+      ? getSessionFromRequest(req, authConfig, sessions)
+      : renewSessionFromRequest(req, reply, authConfig, sessions);
     if (!session) {
       const context = getRequestContext(req, authConfig.trustProxy);
       audit.record({
-        type: 'unauthorized_http',
+        type: webSocket ? 'websocket_auth_failure' : 'unauthorized_http',
         status: 'failure',
         ...context,
         metadata: { url: req.url.split('?')[0], method: req.method },
