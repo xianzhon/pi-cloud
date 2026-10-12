@@ -500,7 +500,7 @@
         v-if="fileContextMenu.node.type === 'directory' && cutFilePath"
         @click="pasteCutFileIntoContext"
       >
-        Paste {{ basename(cutFilePath) }} here
+        {{ t('components.editorPanel.pasteItemHere', { name: basename(cutFilePath) }) }}
       </button>
       <button @click="renameContextNode">{{ t('components.editorPanel.rename') }}</button>
       <button class="danger" @click="deleteContextNode">{{ t('components.editorPanel.delete') }}</button>
@@ -2590,7 +2590,7 @@ async function refreshActiveFile() {
 
   clearStatusTimer();
   statusType.value = 'saving';
-  statusMessage.value = 'Checking...';
+  statusMessage.value = t('components.editorPanel.checkingFile');
 
   const [changed] = await Promise.all([
     refreshFile(activeTab.value),
@@ -2599,7 +2599,7 @@ async function refreshActiveFile() {
 
   if (changed) {
     statusType.value = 'success';
-    statusMessage.value = 'Refreshed';
+    statusMessage.value = t('components.editorPanel.refreshedFile');
   } else {
     statusType.value = 'success';
     statusMessage.value = t('components.editorPanel.upToDate');
@@ -2620,12 +2620,12 @@ async function handleRefresh() {
   selectedDirectoryPath.value = rootDirectory();
   clearStatusTimer();
   statusType.value = 'saving';
-  statusMessage.value = 'Refreshing...';
+  statusMessage.value = t('components.editorPanel.refreshingFiles');
 
   await refreshAllOpenFiles();
 
   statusType.value = 'success';
-  statusMessage.value = 'Refreshed';
+  statusMessage.value = t('components.editorPanel.refreshedFile');
   scheduleStatusClear();
 }
 
@@ -2672,7 +2672,7 @@ async function createNewFile(targetDirectory = selectedDirectoryPath.value || ro
   const filePath = resolveNewFilePath(trimmed, targetDirectory);
   clearStatusTimer();
   statusType.value = 'saving';
-  statusMessage.value = 'Creating...';
+  statusMessage.value = t('components.editorPanel.creatingItem');
 
   try {
     const response = await fetch('/api/files/create', {
@@ -2693,7 +2693,7 @@ async function createNewFile(targetDirectory = selectedDirectoryPath.value || ro
     await refreshDirectoryInTree(dirname(data.path || filePath));
     await openFile(data.path || filePath);
     statusType.value = 'success';
-    statusMessage.value = 'Created';
+    statusMessage.value = t('components.editorPanel.createdItem');
     scheduleStatusClear();
   } catch (error) {
     console.error(t('components.editorPanel.failedToCreateFile'), error);
@@ -2849,7 +2849,7 @@ async function pasteCutFileIntoContext() {
 
   clearStatusTimer();
   statusType.value = 'saving';
-  statusMessage.value = 'Moving...';
+  statusMessage.value = t('components.editorPanel.movingItem');
 
   try {
     const response = await fetch('/api/files/rename', {
@@ -2874,7 +2874,7 @@ async function pasteCutFileIntoContext() {
     await refreshDirectoryInTree(targetDirectoryPath);
     cutFilePath.value = undefined;
     statusType.value = 'success';
-    statusMessage.value = 'Moved';
+    statusMessage.value = t('components.editorPanel.movedItem');
     scheduleStatusClear();
   } catch (error) {
     console.error(t('components.editorPanel.failedToMoveFile'), error);
@@ -2900,7 +2900,7 @@ async function copyPath(text: string) {
   try {
     await navigator.clipboard.writeText(text);
     statusType.value = 'success';
-    statusMessage.value = 'Copied';
+    statusMessage.value = t('components.editorPanel.copiedItem');
     scheduleStatusClear();
   } catch (error) {
     console.error(t('components.editorPanel.failedToCopyPath'), error);
@@ -2929,7 +2929,7 @@ async function createNewFolder(targetDirectory = selectedDirectoryPath.value || 
   const folderPath = resolveNewFilePath(trimmed, targetDirectory);
   clearStatusTimer();
   statusType.value = 'saving';
-  statusMessage.value = 'Creating...';
+  statusMessage.value = t('components.editorPanel.creatingItem');
 
   try {
     const response = await fetch('/api/files/mkdir', {
@@ -3073,7 +3073,7 @@ async function renamePath(node: Pick<TreeNodeData, 'path' | 'type'>) {
   const targetPath = resolveRenamePath(trimmed, node.path);
   clearStatusTimer();
   statusType.value = 'saving';
-  statusMessage.value = 'Renaming...';
+  statusMessage.value = t('components.editorPanel.renamingItem');
 
   try {
     const response = await fetch('/api/files/rename', {
@@ -3098,7 +3098,7 @@ async function renamePath(node: Pick<TreeNodeData, 'path' | 'type'>) {
       await refreshDirectoryInTree(dirname(data.path || targetPath));
     }
     statusType.value = 'success';
-    statusMessage.value = 'Renamed';
+    statusMessage.value = t('components.editorPanel.renamedItem');
     scheduleStatusClear();
   } catch (error) {
     console.error(t('components.editorPanel.failedToRenameFile'), error);
@@ -3124,7 +3124,7 @@ async function deleteContextNode() {
 
   clearStatusTimer();
   statusType.value = 'saving';
-  statusMessage.value = 'Deleting...';
+  statusMessage.value = t('components.editorPanel.deletingItem');
 
   try {
     const response = await fetch('/api/files/delete', {
@@ -3139,7 +3139,7 @@ async function deleteContextNode() {
     if (selectedDirectoryPath.value === node.path) selectedDirectoryPath.value = undefined;
     await refreshDirectoryInTree(dirname(node.path));
     statusType.value = 'success';
-    statusMessage.value = 'Deleted';
+    statusMessage.value = t('components.editorPanel.deletedItem');
     scheduleStatusClear();
   } catch (error) {
     console.error(t('components.editorPanel.failedToDeleteFile'), error);
@@ -3286,7 +3286,7 @@ async function locateActiveFileInTree() {
 
   clearStatusTimer();
   statusType.value = 'saving';
-  statusMessage.value = 'Locating...';
+  statusMessage.value = t('components.editorPanel.locatingFile');
 
   for (const directory of directoryChainForFile(activeTab.value)) {
     const expanded = await expandDirectoryPath(directory);
@@ -3313,7 +3313,7 @@ async function locateActiveFileInTree() {
 
   activeNode.scrollIntoView({ block: 'center', inline: 'nearest' });
   statusType.value = 'success';
-  statusMessage.value = 'Located';
+  statusMessage.value = t('components.editorPanel.locatedFile');
   scheduleStatusClear();
 }
 
