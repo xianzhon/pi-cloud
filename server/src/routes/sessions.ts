@@ -179,6 +179,17 @@ interface SessionRouteOptions {
 }
 
 const PR_STATUS_CACHE_TTL_MS = 5 * 60 * 1000;
+const PR_STATUS_REFRESH_TIMEOUT_MS = 5_000;
+// The session list waits for PR refreshes, so back off from providers that fail or hang.
+const prStatusRetryAt = new Map<string, number>();
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('PR status refresh timed out')), timeoutMs); }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 function prStatusCheckedAt(activity: SessionActivityRecord): number {
   const checkedAt = typeof activity.data.checkedAt === 'string' ? Date.parse(activity.data.checkedAt) : NaN;
@@ -196,12 +207,16 @@ async function refreshPrActivities(
   const now = Date.now();
   await Promise.all(Array.from(activities.entries()).map(async ([sessionId, activity]) => {
     if (activity.data.status === 'merged' || now - prStatusCheckedAt(activity) < PR_STATUS_CACHE_TTL_MS) return;
+    const retryKey = String(activity.id);
+    if ((prStatusRetryAt.get(retryKey) ?? 0) > now) return;
     try {
-      const status = await refreshPrStatus(activity);
+      const status = await withTimeout(refreshPrStatus(activity), PR_STATUS_REFRESH_TIMEOUT_MS);
+      prStatusRetryAt.delete(retryKey);
       const updated = updatePrStatus.call(activityStore, activity.id, status);
       if (updated) activities.set(sessionId, updated);
     } catch {
-      // Keep the cached status when the provider is unavailable.
+      // Keep the cached status when the provider is unavailable, and retry later.
+      prStatusRetryAt.set(retryKey, now + PR_STATUS_CACHE_TTL_MS);
     }
   }));
   return activities;

@@ -1031,6 +1031,26 @@ describe('session routes', () => {
     ]);
   });
 
+  it('backs off from pull request status refreshes that fail', async () => {
+    vi.mocked(sessionService.listSessions).mockResolvedValue([
+      { id: 'session-pr', path: '/sessions/base/session-pr.jsonl', cwd: '/repo/app', created: '', modified: '', messageCount: 0 },
+    ]);
+    vi.mocked(sessionService.isSessionStreaming).mockReturnValue(false);
+    listWorktreeMetadataByBase.mockReturnValue([]);
+    const activity = { id: 'activity-pr-backoff', sessionId: 'session-pr', data: { number: 1, url: 'https://github.com/o/r/pull/1', status: 'ready' } };
+    const refreshPrStatus = vi.fn().mockRejectedValue(new Error('provider down'));
+    const activityStore = { listLatestPrForSessions: vi.fn(() => new Map([['session-pr', activity]])), updatePrStatus: vi.fn() };
+
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any, { activityStore, refreshPrStatus } as any);
+
+    await handlers['GET /']({ query: { clientId: 'client-1', projectPath: '/repo/app', scope: 'project' } });
+    await handlers['GET /']({ query: { clientId: 'client-1', projectPath: '/repo/app', scope: 'project' } });
+
+    expect(refreshPrStatus).toHaveBeenCalledTimes(1);
+  });
+
   it('paginates session list items after applying the project filter', async () => {
     vi.mocked(sessionService.listSessions).mockResolvedValue([
       { id: 'session-3', path: '/sessions/3.jsonl', cwd: '/repo/app', created: '2026-07-03T00:00:00.000Z', modified: '2026-07-03T00:00:00.000Z', messageCount: 1 },
