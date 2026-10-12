@@ -31,8 +31,16 @@ interface AuditEventRow {
   metadata?: string;
 }
 
+const DEFAULT_MAX_AUDIT_EVENTS = 10_000;
+const PRUNE_EVERY_INSERTS = 100;
+
 export class AuditLog {
-  constructor(private db: PiCloudDatabase) {}
+  private insertsSincePrune = 0;
+
+  // Unauthenticated requests are audited, so retention must be bounded.
+  constructor(private db: PiCloudDatabase, private readonly maxEvents = DEFAULT_MAX_AUDIT_EVENTS) {
+    this.prune();
+  }
 
   record(event: AuditEventInput): void {
     this.db.prepare(`
@@ -47,6 +55,15 @@ export class AuditLog {
       userAgent: event.userAgent,
       metadata: JSON.stringify(event.metadata || {}),
     });
+    if (++this.insertsSincePrune >= PRUNE_EVERY_INSERTS) this.prune();
+  }
+
+  prune(): void {
+    this.insertsSincePrune = 0;
+    this.db.prepare(`
+      DELETE FROM audit_events
+      WHERE id <= (SELECT id FROM audit_events ORDER BY id DESC LIMIT 1 OFFSET ?)
+    `).run(this.maxEvents);
   }
 
   clear(): void {
@@ -75,5 +92,6 @@ export class AuditLog {
 }
 
 function clampAuditLimit(limit: number): number {
-  return Math.min(Math.max(limit, 1), 500);
+  if (!Number.isFinite(limit)) return 100;
+  return Math.min(Math.max(Math.trunc(limit), 1), 500);
 }

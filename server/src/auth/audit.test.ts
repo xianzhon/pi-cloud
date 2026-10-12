@@ -31,6 +31,22 @@ describe('AuditLog', () => {
     expect(events[1].metadata).toEqual({ reason: 'bad_credentials' });
   });
 
+  it('keeps only the newest events once retention is exceeded', () => {
+    const bounded = new AuditLog(db, 5);
+    for (let index = 0; index < 150; index++) bounded.record({ type: `event_${index}`, status: 'info' });
+
+    const events = bounded.list(500);
+    expect(events.length).toBeLessThanOrEqual(5 + 99);
+    expect(events[0].type).toBe('event_149');
+    bounded.prune();
+    expect(bounded.list(500).map((event) => event.type)).toEqual(['event_149', 'event_148', 'event_147', 'event_146', 'event_145']);
+  });
+
+  it('falls back to the default limit for invalid values', () => {
+    audit.record({ type: 'login_success', status: 'success' });
+    expect(audit.list(Number.NaN)).toHaveLength(1);
+  });
+
   it('clears all audit events', () => {
     audit.record({ type: 'login_success', status: 'success' });
 
