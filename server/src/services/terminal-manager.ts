@@ -4,6 +4,14 @@ import * as pty from '@lydell/node-pty';
 
 const DEFAULT_DISCONNECT_GRACE_MS = 10 * 60 * 1000;
 const MAX_OUTPUT_BUFFER_CHARS = 1_000_000;
+const MAX_TERMINAL_DIMENSION = 1_000;
+export const MAX_TERMINALS_PER_CLIENT = 20;
+
+export class TerminalLimitError extends Error {
+  constructor() {
+    super(`A browser tab can open at most ${MAX_TERMINALS_PER_CLIENT} terminals`);
+  }
+}
 
 export interface TerminalOutputChunk {
   seq: number;
@@ -39,6 +47,7 @@ export class TerminalManager {
   constructor(private readonly disconnectGraceMs = DEFAULT_DISCONNECT_GRACE_MS) {}
 
   create(clientId: string, cwd?: string, owner = '', attachmentId: symbol | null = null): TerminalSession {
+    if (this.getByClient(clientId).length >= MAX_TERMINALS_PER_CLIENT) throw new TerminalLimitError();
     const id = `term-${randomUUID()}`;
 
     // Bash is not guaranteed to exist on Windows; COMSPEC points to the system command shell.
@@ -158,7 +167,8 @@ export class TerminalManager {
 
   resize(id: string, cols: number, rows: number): void {
     const session = this.terminals.get(id);
-    if (session) session.pty.resize(cols, rows);
+    const clamp = (value: number) => Number.isFinite(value) ? Math.min(Math.max(Math.floor(value), 1), MAX_TERMINAL_DIMENSION) : 1;
+    if (session) session.pty.resize(clamp(cols), clamp(rows));
   }
 
   writeTo(id: string, data: string): void {

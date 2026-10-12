@@ -93,7 +93,13 @@ export async function terminalWebSocket(app: FastifyInstance) {
         return;
       }
       if (!isAuthenticated()) return;
-      terminal = terminalManager.create(clientId, resolvedCwd, session.username, attachmentId);
+      try {
+        terminal = terminalManager.create(clientId, resolvedCwd, session.username, attachmentId);
+      } catch (error) {
+        safeSend({ type: 'error', message: error instanceof Error ? error.message : 'Terminal could not be created' });
+        socket.close();
+        return;
+      }
     }
 
     const terminalId = terminal.id;

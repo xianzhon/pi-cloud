@@ -10,7 +10,7 @@ const spawn = vi.fn(() => ({
 
 vi.mock('@lydell/node-pty', () => ({ default: { spawn }, spawn }));
 
-const { TerminalManager } = await import('./terminal-manager.js');
+const { TerminalManager, MAX_TERMINALS_PER_CLIENT, TerminalLimitError } = await import('./terminal-manager.js');
 
 describe('TerminalManager', () => {
   beforeEach(() => {
@@ -31,6 +31,22 @@ describe('TerminalManager', () => {
     expect(spawn).toHaveBeenCalledWith(expect.any(String), [], expect.objectContaining({
       env: process.env,
     }));
+  });
+
+  it('clamps terminal dimensions to a safe range', () => {
+    const manager = new TerminalManager();
+    const terminal = manager.create('client-1', '/workspace');
+
+    manager.resize(terminal.id, 1e9, -5);
+    expect(terminal.pty.resize).toHaveBeenCalledWith(1000, 1);
+  });
+
+  it('limits the number of terminals a browser tab can open', () => {
+    const manager = new TerminalManager();
+    for (let index = 0; index < MAX_TERMINALS_PER_CLIENT; index++) manager.create('client-1', '/workspace');
+
+    expect(() => manager.create('client-1', '/workspace')).toThrow(TerminalLimitError);
+    expect(() => manager.create('client-2', '/workspace')).not.toThrow();
   });
 
   it('uses the configured terminal shell', () => {
