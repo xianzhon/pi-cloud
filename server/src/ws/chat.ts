@@ -112,7 +112,7 @@ export async function chatWebSocket(app: FastifyInstance) {
 
   app.get('/ws/chat', { websocket: true }, (socket, req) => {
     const auth = app.authServices;
-    if (!isAllowedRequestOrigin(req)) {
+    if (!isAllowedRequestOrigin(req, auth.authConfig.trustProxy)) {
       const context = getRequestContext(req, auth.authConfig.trustProxy);
       auth.audit.record({ type: 'websocket_origin_rejected', status: 'failure', ...context, metadata: { path: '/ws/chat', origin: req.headers.origin } });
       sendJson(socket, { type: 'error', message: 'Origin not allowed' });

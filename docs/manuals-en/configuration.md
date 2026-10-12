@@ -60,6 +60,8 @@ Managed skills are stored in `~/.agents/skills/` on the server, shared across ag
 
 When exposing Pi Cloud on a network, use HTTPS through a trusted reverse proxy and keep authentication enabled. Set `PI_CLOUD_TRUST_PROXY=true` and `PI_CLOUD_COOKIE_SECURE=true` when deployed behind HTTPS as described in the [deployment manual](deployment.md#reverse-proxy-nginx).
 
+Browser requests that change state, and all WebSocket connections, must come from the same origin (scheme, host, and port) as the `Host` header. Pages served from another port on the same machine are rejected.
+
 ### Passkey login
 
 Set `PI_CLOUD_PASSKEY_ORIGIN=https://pi.example.com` and restart, then access that exact origin. The RP ID is its hostname, not a parent domain. For development use `http://localhost:5173` (not `127.0.0.1`). Unset the variable to disable passkeys. An HTTPS origin also enables secure session cookies, so use HTTPS for all logins.

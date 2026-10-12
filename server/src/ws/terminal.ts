@@ -53,7 +53,7 @@ export async function terminalWebSocket(app: FastifyInstance) {
 
     const auth = app.authServices;
     const context = getRequestContext(req, auth.authConfig.trustProxy);
-    if (!isAllowedRequestOrigin(req)) {
+    if (!isAllowedRequestOrigin(req, auth.authConfig.trustProxy)) {
       auth.audit.record({ type: 'websocket_origin_rejected', status: 'failure', ...context, metadata: { path: '/ws/terminal', origin: req.headers.origin } });
       safeSend({ type: 'error', message: 'Origin not allowed' });
       socket.close();

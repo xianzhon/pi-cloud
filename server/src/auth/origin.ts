@@ -1,19 +1,28 @@
 import type { FastifyRequest } from 'fastify';
 
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+const DEFAULT_PORTS: Record<string, string> = { 'http:': '80', 'https:': '443', 'ws:': '80', 'wss:': '443' };
 
-function hostnameFromHostHeader(hostHeader: string | undefined): string {
-  if (!hostHeader) return '';
-  const trimmed = hostHeader.trim().toLowerCase();
-  if (trimmed.startsWith('[')) return trimmed.slice(0, trimmed.indexOf(']') + 1);
-  return trimmed.split(':')[0];
+function parseHostHeader(hostHeader: string): { hostname: string; port: string } | null {
+  const value = hostHeader.trim().toLowerCase();
+  try {
+    const url = new URL(`http://${value}`);
+    if (url.username || url.password || url.pathname !== '/') return null;
+    // URL drops the scheme default port, so restore an explicit `:80`.
+    return { hostname: url.hostname, port: url.port || (/:\d+$/.test(value) ? '80' : '') };
+  } catch {
+    return null;
+  }
 }
 
-function isLoopbackHost(hostname: string): boolean {
-  return LOOPBACK_HOSTS.has(hostname.toLowerCase());
-}
-
-export function isAllowedOrigin(origin: string | undefined, hostHeader: string | undefined): boolean {
+/**
+ * Browser origins must match the requested host and port exactly. Ports are
+ * part of the check because cookies are shared across ports on the same host,
+ * so a page on another local port must not be able to drive this server.
+ *
+ * Reverse proxies that rewrite Host without the port (nginx `$host`) are only
+ * tolerated when the operator has declared a trusted proxy.
+ */
+export function isAllowedOrigin(origin: string | undefined, hostHeader: string | undefined, trustProxy = false): boolean {
   if (!origin) return true;
 
   let originUrl: URL;
@@ -22,28 +31,19 @@ export function isAllowedOrigin(origin: string | undefined, hostHeader: string |
   } catch {
     return false;
   }
+  if (!hostHeader) return false;
 
-  const requestHost = hostnameFromHostHeader(hostHeader);
-  const originHost = originUrl.hostname.toLowerCase();
-  if (!requestHost) return false;
-  if (originHost === requestHost) return true;
+  const requestHost = parseHostHeader(hostHeader);
+  if (!requestHost || originUrl.hostname.toLowerCase() !== requestHost.hostname) return false;
 
-  // Permit local development where the frontend and backend run on different loopback ports.
-  return isLoopbackHost(originHost) && isLoopbackHost(requestHost);
+  const originPort = originUrl.port || DEFAULT_PORTS[originUrl.protocol] || '';
+  if (requestHost.port) return originPort === requestHost.port;
+  return trustProxy || originPort === DEFAULT_PORTS[originUrl.protocol];
 }
 
-export function isAllowedCorsOrigin(origin: string | undefined): boolean {
-  if (!origin) return true;
-  try {
-    return isLoopbackHost(new URL(origin).hostname);
-  } catch {
-    return false;
-  }
-}
-
-export function isAllowedRequestOrigin(req: FastifyRequest): boolean {
+export function isAllowedRequestOrigin(req: FastifyRequest, trustProxy = false): boolean {
   const headers = req.headers ?? {};
   const origin = Array.isArray(headers.origin) ? headers.origin[0] : headers.origin;
   const host = Array.isArray(headers.host) ? headers.host[0] : headers.host;
-  return isAllowedOrigin(origin, host);
+  return isAllowedOrigin(origin, host, trustProxy);
 }

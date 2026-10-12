@@ -60,6 +60,8 @@ pi-cloud --hostname 0.0.0.0 --no-open
 
 通过网络开放 Pi Cloud 时，请使用可信反向代理提供 HTTPS，并保持身份验证启用。按照[部署手册](deployment.md#反向代理nginx)配置 HTTPS 反向代理时，请设置 `PI_CLOUD_TRUST_PROXY=true` 和 `PI_CLOUD_COOKIE_SECURE=true`。
 
+会修改状态的浏览器请求以及所有 WebSocket 连接，都必须来自与 `Host` 请求头相同的源（协议、主机和端口）。同一台设备上其他端口提供的页面会被拒绝。
+
 ### 通行密钥登录
 
 设置 `PI_CLOUD_PASSKEY_ORIGIN=https://pi.example.com` 并重启，然后通过此精确访问源打开应用。RP ID 为其主机名，不扩大到父域名。开发可用 `http://localhost:5173`（不是 `127.0.0.1`）。不设置此变量则禁用通行密钥。HTTPS 访问源也会自动启用安全会话 Cookie，因此所有登录都应使用 HTTPS。

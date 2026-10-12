@@ -115,6 +115,21 @@ describe('buildApp auth protection', () => {
     await app.close();
   });
 
+  it('rejects mutating requests from another port on the same host', async () => {
+    const { buildApp } = await import('./index');
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { origin: 'http://localhost:8080', host: 'localhost:3000' },
+      payload: { username: 'me', password: 'secret' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    await app.close();
+  });
+
   it('rejects mutating HTTP requests from a different origin', async () => {
     const { buildApp } = await import('./index');
     const app = await buildApp();

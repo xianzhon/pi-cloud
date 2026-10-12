@@ -6,7 +6,6 @@ import * as os from 'node:os';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { config as loadEnv } from 'dotenv';
-import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
@@ -34,8 +33,8 @@ import { renderDefaultConfig } from './config/default-config.js';
 import { openPiCloudDatabase, type PiCloudDatabase } from './db/database.js';
 import { AuditLog } from './auth/audit.js';
 import { IpRateLimiter } from './auth/rate-limit.js';
-import { isAllowedCorsOrigin, isAllowedRequestOrigin } from './auth/origin.js';
-import { getRequestContext, renewSessionFromRequest } from './auth/request.js';
+import { isAllowedRequestOrigin } from './auth/origin.js';
+import { getRequestContext, getSessionFromRequest, renewSessionFromRequest } from './auth/request.js';
 import { SessionStore } from './auth/sessions.js';
 import { TotpService } from './auth/totp.js';
 import { PiSessionService } from './services/session-manager.js';
@@ -326,10 +325,6 @@ export async function buildApp(): Promise<FastifyInstance> {
     db.close();
   });
 
-  await app.register(cors, {
-    origin: (origin, callback) => callback(null, isAllowedCorsOrigin(origin)),
-  });
-
   await app.register(cookie);
 
   app.addHook('onSend', async (_req, reply, payload) => {
@@ -355,7 +350,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(websocket, { options: { maxPayload: 280 * 1024 * 1024 } });
 
   app.addHook('onRequest', async (req, reply) => {
-    if (isMutatingRequest(req) && !isAllowedRequestOrigin(req)) {
+    if (isMutatingRequest(req) && !isAllowedRequestOrigin(req, authConfig.trustProxy)) {
       const context = getRequestContext(req, authConfig.trustProxy);
       audit.record({
         type: 'http_origin_rejected',
