@@ -96,6 +96,25 @@ describe('buildApp auth protection', () => {
     await app.close();
   });
 
+  it('protects API routes reached through percent-encoded paths', async () => {
+    const { buildApp } = await import('./index');
+    const app = await buildApp();
+
+    for (const url of [
+      '/%61pi/files/tree?path=.&depth=1',
+      '/ap%69/files/read?path=package.json',
+      '/%61pi/sessions?clientId=client-1',
+      '/%61pi/tasks?scope=all',
+    ]) {
+      for (const method of ['GET', 'HEAD'] as const) {
+        const response = await app.inject({ method, url });
+        expect(response.statusCode, `${method} ${url}`).toBe(401);
+      }
+    }
+
+    await app.close();
+  });
+
   it('rejects mutating HTTP requests from a different origin', async () => {
     const { buildApp } = await import('./index');
     const app = await buildApp();

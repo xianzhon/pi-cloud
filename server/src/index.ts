@@ -175,14 +175,17 @@ declare module 'fastify' {
   }
 }
 
-function isPublicRoute(req: { method: string; url: string }): boolean {
-  const url = req.url.split('?')[0];
-  if (url === '/api/health') return true;
-  if (url.startsWith('/api/auth')) return true;
-  if (url === '/api/gateways/feishu/events') return true;
-  if (url === '/api/gateways/wecom/callback') return true;
-  if (req.method === 'GET' && !url.startsWith('/api/')) return true;
-  return false;
+const PUBLIC_API_ROUTES = new Set(['/api/health', '/api/gateways/feishu/events', '/api/gateways/wecom/callback']);
+
+// Decide by the matched route pattern, never the raw URL: the router decodes
+// percent-encoded paths, so `/%61pi/...` would otherwise bypass a prefix check.
+export function isPublicRoute(req: { routeOptions?: { url?: string } }): boolean {
+  const route = req.routeOptions?.url;
+  if (!route) return true; // Unmatched requests only reach the not-found handler.
+  if (PUBLIC_API_ROUTES.has(route)) return true;
+  // Auth routes enforce their own per-route session requirements.
+  if (route === '/api/auth' || route.startsWith('/api/auth/')) return true;
+  return !route.startsWith('/api/');
 }
 
 function isMutatingRequest(req: { method: string }): boolean {
