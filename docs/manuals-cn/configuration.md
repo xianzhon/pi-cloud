@@ -27,6 +27,7 @@ Pi Cloud 从 shell 环境变量和 `.env` 文件中读取配置，shell 变量�
 | `PI_CLOUD_DISABLE_PATH_CHECK` | `false` | 禁用文件、终端初始目录和 Git API 路径的允许根目录检查 |
 | `PI_CLOUD_ENABLE_SYSTEM_OPEN` | `false` | 允许通过非 localhost URL（例如本地 nginx 主机名）使用**通过系统工具打开** |
 | `PI_CLOUD_TERMINAL_SHELL` | Windows 上为 `COMSPEC`/`cmd.exe`；macOS/Linux 上为 `SHELL`/`bash` | 终端 shell 可执行文件，例如 `powershell.exe`、`pwsh.exe` 或 `/bin/zsh` |
+| `PI_CLOUD_LOOP_DETECTION_THRESHOLD` | `5` | 连续出现指定次数的相同工具调用时停止 agent 运行；设为 `0` 可禁用循环检测 |
 
 通过 `localhost`、`127.0.0.1`、`::1` 和 `*.localhost` 访问时，**通过系统工具打开**会自动可用。若通过自定义反向代理主机名访问同一台本地设备，请设置 `PI_CLOUD_ENABLE_SYSTEM_OPEN=true`。该操作会在运行 Pi Cloud 的设备上启动应用程序，因此仅应在可信的本地部署中启用。更改此设置后请重启服务器。
 

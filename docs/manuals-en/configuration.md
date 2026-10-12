@@ -27,6 +27,7 @@ On the first run of a global installation, Pi Cloud copies the complete sample c
 | `PI_CLOUD_DISABLE_PATH_CHECK` | `false` | Disable allowed-root checks for file, terminal cwd, and Git API paths |
 | `PI_CLOUD_ENABLE_SYSTEM_OPEN` | `false` | Enable **Open with system tool** through non-localhost URLs, such as a local nginx hostname |
 | `PI_CLOUD_TERMINAL_SHELL` | `COMSPEC`/`cmd.exe` on Windows; `SHELL`/`bash` on macOS/Linux | Terminal shell executable, such as `powershell.exe`, `pwsh.exe`, or `/bin/zsh` |
+| `PI_CLOUD_LOOP_DETECTION_THRESHOLD` | `5` | Stop an agent run after this many consecutive identical tool calls; `0` disables loop detection |
 
 **Open with system tool** is automatically available through `localhost`, `127.0.0.1`, `::1`, and `*.localhost`. Set `PI_CLOUD_ENABLE_SYSTEM_OPEN=true` when accessing the same local machine through a custom reverse-proxy hostname. The action launches an application on the machine running Pi Cloud, so enable it only for trusted local deployments. Restart the server after changing this setting.
 

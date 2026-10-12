@@ -11,6 +11,14 @@ import { bindSocketSession } from './session-auth.js';
 const ABORT_GRACE_MS = 5_000;
 // Long tool runs can leave the socket silent; ping so proxies keep it open and dead peers are dropped.
 const HEARTBEAT_INTERVAL_MS = 25_000;
+const DEFAULT_LOOP_DETECTION_THRESHOLD = 5;
+
+// Polling a build or log legitimately repeats a tool call, so the threshold is configurable; 0 disables.
+export function loopDetectionThreshold(value = process.env.PI_CLOUD_LOOP_DETECTION_THRESHOLD): number {
+  if (value === undefined || value.trim() === '') return DEFAULT_LOOP_DETECTION_THRESHOLD;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_LOOP_DETECTION_THRESHOLD;
+}
 
 interface WSMessage {
   type: 'watch' | 'prompt' | 'steer' | 'followUp' | 'abort';
@@ -300,12 +308,12 @@ export async function chatWebSocket(app: FastifyInstance) {
 
             // Loop detection: track consecutive identical tool calls
             const toolCallHistory: Array<{ name: string; input: string }> = [];
-            const MAX_REPEATED_TOOL_CALLS = 3;
+            const MAX_REPEATED_TOOL_CALLS = loopDetectionThreshold();
             let loopDetected = false;
 
             const unsubscribe = session.subscribe((event) => {
               // Detect repeated identical tool calls
-              if (!loopDetected && event.type === 'tool_execution_start') {
+              if (MAX_REPEATED_TOOL_CALLS > 0 && !loopDetected && event.type === 'tool_execution_start') {
                 const name = event.toolName;
                 const input = event.args != null ? JSON.stringify(event.args) : '';
                 toolCallHistory.push({ name, input });

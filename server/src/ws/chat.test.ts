@@ -265,4 +265,13 @@ describe('chat websocket', () => {
       type: 'prompt_preflight', requestId: 'reject-request', accepted: false, code,
     }));
   });
+
+  it('reads the loop detection threshold from the environment', async () => {
+    const { loopDetectionThreshold } = await import('./chat.js');
+    expect(loopDetectionThreshold(undefined)).toBe(5);
+    expect(loopDetectionThreshold('8')).toBe(8);
+    expect(loopDetectionThreshold('0')).toBe(0);
+    expect(loopDetectionThreshold('-1')).toBe(5);
+    expect(loopDetectionThreshold('abc')).toBe(5);
+  });
 });
