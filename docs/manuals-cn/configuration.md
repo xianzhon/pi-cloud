@@ -55,7 +55,7 @@ pi-cloud --hostname 0.0.0.0 --no-open
 | `PI_CLOUD_SESSION_MAX_HOURS` | `720` | 包括续期在内的最长会话生命周期，单位为小时 |
 | `PI_CLOUD_COOKIE_SECURE` | `false` | 将会话 Cookie 限制为仅通过 HTTPS 连接传输；配置 HTTPS 通行密钥访问源时自动启用 |
 | `PI_CLOUD_PASSKEY_ORIGIN` | 未设置 | 为此精确 HTTPS 访问源启用通行密钥，开发可用 `http://localhost:<端口>`；不含末尾斜杠 |
-| `PI_CLOUD_TRUST_PROXY` | `false` | 信任反向代理发送的 `X-Forwarded-*` 请求头 |
+| `PI_CLOUD_TRUST_PROXY` | `false` | 信任一层反向代理：使用 `X-Forwarded-For` 的最后一跳作为客户端地址，并接受不含外部端口的 `Host` 请求头 |
 | `SKIP_2FA_VERIFY` | `false` | 紧急情况下为登录及已验证密码的恢复操作绕过 TOTP；正常运行时应保持禁用 |
 
 通过网络开放 Pi Cloud 时，请使用可信反向代理提供 HTTPS，并保持身份验证启用。按照[部署手册](deployment.md#反向代理nginx)配置 HTTPS 反向代理时，请设置 `PI_CLOUD_TRUST_PROXY=true` 和 `PI_CLOUD_COOKIE_SECURE=true`。

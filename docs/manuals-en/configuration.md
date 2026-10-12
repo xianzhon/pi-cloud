@@ -55,7 +55,7 @@ Managed skills are stored in `~/.agents/skills/` on the server, shared across ag
 | `PI_CLOUD_SESSION_MAX_HOURS` | `720` | Maximum session lifetime, including renewals, in hours |
 | `PI_CLOUD_COOKIE_SECURE` | `false` | Restrict the session cookie to HTTPS connections; automatically enabled for an HTTPS passkey origin |
 | `PI_CLOUD_PASSKEY_ORIGIN` | unset | Enable passkeys for this exact HTTPS origin, or `http://localhost:<port>` in development; no trailing slash |
-| `PI_CLOUD_TRUST_PROXY` | `false` | Trust `X-Forwarded-*` headers from a reverse proxy |
+| `PI_CLOUD_TRUST_PROXY` | `false` | Trust one reverse proxy: use the last `X-Forwarded-For` hop as the client address and accept a `Host` header without the external port |
 | `SKIP_2FA_VERIFY` | `false` | Emergency TOTP bypass for login and password-confirmed recovery actions; keep disabled during normal operation |
 
 When exposing Pi Cloud on a network, use HTTPS through a trusted reverse proxy and keep authentication enabled. Set `PI_CLOUD_TRUST_PROXY=true` and `PI_CLOUD_COOKIE_SECURE=true` when deployed behind HTTPS as described in the [deployment manual](deployment.md#reverse-proxy-nginx).

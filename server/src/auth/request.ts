@@ -7,9 +7,13 @@ export interface RequestContext {
   userAgent?: string;
 }
 
+// Use the right-most X-Forwarded-For hop: it is the address the trusted proxy
+// observed. Left-most entries are supplied by the client and can be forged to
+// evade per-IP login throttling.
 export function getRequestContext(req: FastifyRequest, trustProxy: boolean): RequestContext {
   const forwardedFor = req.headers['x-forwarded-for'];
-  const proxyIp = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor?.split(',')[0]?.trim();
+  const proxyIp = (Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor)
+    ?.split(',').map((hop) => hop.trim()).filter(Boolean).at(-1);
   return {
     ip: trustProxy && proxyIp ? proxyIp : req.ip,
     userAgent: req.headers['user-agent'],
