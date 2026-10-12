@@ -34,6 +34,15 @@ describe('TotpService', () => {
     expect(totp.getStatus()).toEqual({ enabled: false });
   });
 
+  it('rejects a code that has already been used', async () => {
+    const setup = await totp.createSetup();
+    const code = generateSync({ secret: setup.secret });
+    expect(totp.enable(setup.secret, code)).toBe(true);
+
+    expect(totp.verify(code)).toBe(true);
+    expect(totp.verify(code)).toBe(false);
+  });
+
   it('enables, verifies, and disables totp', async () => {
     const setup = await totp.createSetup();
     const code = generateSync({ secret: setup.secret });

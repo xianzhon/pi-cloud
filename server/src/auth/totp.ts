@@ -27,6 +27,7 @@ export class TotpService {
 
     this.setValue('totp.secret', this.credentials.encrypt(secret));
     this.setValue('totp.enabled', 'true');
+    this.deleteValue('totp.lastTimeStep');
     return true;
   }
 
@@ -34,12 +35,19 @@ export class TotpService {
     if (!this.getStatus().enabled) return true;
     const storedSecret = this.getValue('totp.secret');
     if (!storedSecret) return false;
-    return verifySync({ token: code, secret: this.credentials.decrypt(storedSecret) }).valid;
+    const result = verifySync({ token: code, secret: this.credentials.decrypt(storedSecret) });
+    if (!result.valid) return false;
+    // Each time step may be used once, so an observed code cannot be replayed within its window.
+    const timeStep = ('timeStep' in result ? result.timeStep : Math.floor(Date.now() / 30_000)) + (result.delta ?? 0);
+    if (timeStep <= Number(this.getValue('totp.lastTimeStep') || '-1')) return false;
+    this.setValue('totp.lastTimeStep', String(timeStep));
+    return true;
   }
 
   disable(): void {
     this.setValue('totp.enabled', 'false');
     this.deleteValue('totp.secret');
+    this.deleteValue('totp.lastTimeStep');
   }
 
   private getValue(key: string): string | undefined {

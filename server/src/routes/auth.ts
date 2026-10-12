@@ -189,7 +189,8 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     const validPassword = await verifyConfiguredPassword(body.password || '', config);
     const totpEnabled = totp.getStatus().enabled;
     const canBypassTotp = config.skip2faVerify && (action === 'totp_enable' || action === 'totp_disable');
-    const validTotp = !totpEnabled || canBypassTotp || Boolean(body.totpCode && totp.verify(body.totpCode));
+    // Codes are single-use, so only consume one once the password has been accepted.
+    const validTotp = validPassword && (!totpEnabled || canBypassTotp || Boolean(body.totpCode && totp.verify(body.totpCode)));
     if (!validPassword || !validTotp) {
       rateLimiter.recordFailure(context.ip);
       audit.record({ type: 'sensitive_action_failure', status: 'failure', username: config.username, ...context, metadata: { action } });

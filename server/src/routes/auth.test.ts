@@ -212,7 +212,7 @@ describe('authRoutes', () => {
       payload: { secret: replacementSetup.secret, code: replacementCode, password: 'secret' },
     });
     expect(resetWithoutCurrentCode.statusCode).toBe(401);
-    expect(totp!.verify(originalCode)).toBe(true);
+    expect(totp!.getStatus().enabled).toBe(true);
 
     const reset = await app.inject({
       method: 'POST',
@@ -221,7 +221,7 @@ describe('authRoutes', () => {
       payload: { secret: replacementSetup.secret, code: replacementCode, password: 'secret', totpCode: originalCode },
     });
     expect(reset.statusCode).toBe(200);
-    expect(totp!.verify(replacementCode)).toBe(true);
+    expect(reset.json()).toEqual({ success: true, enabled: true });
 
     const disableWithoutPassword = await app.inject({
       method: 'POST',
