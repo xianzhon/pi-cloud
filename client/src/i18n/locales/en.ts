@@ -1499,7 +1499,7 @@ export default {
       wecomAgentId: 'Agent ID',
       wecomAppSecret: 'App secret',
       wecomAllowedUsers: 'Allowed member user IDs',
-      wecomAllowedUsersPlaceholder: 'alice, bob (empty allows all members)',
+      wecomAllowedUsersPlaceholder: 'alice, bob (required; * allows every member who can see the app)',
       enterToReplaceSavedSecret: 'Enter the app secret to update this connection',
       saveAndGenerateCallback: 'Save and generate callback',
       regenerateCallbackSecrets: 'Regenerate callback secrets',

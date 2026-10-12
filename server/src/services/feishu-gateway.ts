@@ -12,6 +12,7 @@ interface FeishuGatewayConfig {
   appSecret: string;
   verificationToken: string;
   encryptKey: string;
+  allowedUsers: string[];
   domain: 'feishu' | 'lark';
   defaultCwd?: string;
   cwdChoices: string[];
@@ -36,6 +37,7 @@ interface FeishuMessagePayload {
   chatType: string;
   threadId?: string;
   text: string;
+  senderIds: string[];
 }
 
 interface FeishuTokenCache {
@@ -86,6 +88,14 @@ export class FeishuGatewayService {
     if (this.markDuplicate(message.eventId) || this.markDuplicate(message.messageId)) {
       return { ok: true, duplicate: true };
     }
+    // Gateway users can drive the agent's shell tools, so access must be granted explicitly.
+    if (!isFeishuSenderAllowed(config.allowedUsers, message.senderIds)) {
+      const senderId = message.senderIds[0] || 'unknown';
+      console.warn('[feishu-gateway] ignored message from unauthorized sender', { senderIds: message.senderIds });
+      void this.sendReply(config, message.messageId, `You are not allowed to use this gateway. Ask the administrator to add your ID (${senderId}) to PI_CLOUD_FEISHU_ALLOWED_USERS.`)
+        .catch((error) => console.warn('[feishu-gateway] unauthorized-sender reply failed:', error instanceof Error ? error.message : error));
+      return { ok: true, ignored: true };
+    }
 
     this.enqueue(message, config);
     return { ok: true };
@@ -100,6 +110,7 @@ export class FeishuGatewayService {
       appSecret: process.env.PI_CLOUD_FEISHU_APP_SECRET?.trim() || '',
       verificationToken: process.env.PI_CLOUD_FEISHU_VERIFICATION_TOKEN?.trim() || '',
       encryptKey: process.env.PI_CLOUD_FEISHU_ENCRYPT_KEY?.trim() || '',
+      allowedUsers: (process.env.PI_CLOUD_FEISHU_ALLOWED_USERS || '').split(',').map((item) => item.trim()).filter(Boolean),
       domain: domain === 'lark' ? 'lark' : 'feishu',
       defaultCwd: cwdChoices[0],
       cwdChoices,
@@ -189,6 +200,9 @@ export class FeishuGatewayService {
       chatType: stringValue(message.chat_type) || 'p2p',
       threadId: stringValue(message.thread_id) || stringValue(message.parent_id) || stringValue(message.root_id),
       text,
+      senderIds: ['open_id', 'user_id', 'union_id']
+        .map((key) => stringValue(asRecord(asRecord(event.sender).sender_id)[key]))
+        .filter(Boolean),
     };
   }
 
@@ -658,4 +672,9 @@ function extractLastAssistantText(messages: unknown): string {
     }
   }
   return '';
+}
+
+// `*` explicitly allows every sender; an empty list denies everyone.
+export function isFeishuSenderAllowed(allowedUsers: string[], senderIds: string[]): boolean {
+  return allowedUsers.includes('*') || senderIds.some((id) => allowedUsers.includes(id));
 }

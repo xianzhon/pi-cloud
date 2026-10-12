@@ -215,8 +215,15 @@ export class WecomGatewayService {
     const message = parseWecomMessage(decryptWecomPayload(encrypted, config.encodingAesKey, config.corpId));
     this.markCallbackVerified();
     if (!message || message.agentId !== config.agentId) return 'success';
-    if (config.allowedUsers.length && !config.allowedUsers.includes(message.userId)) return 'success';
     if (this.markDuplicate(message.messageId)) return 'success';
+    // Gateway users can drive the agent's shell tools, so access must be granted explicitly.
+    if (!isWecomUserAllowed(config.allowedUsers, message.userId)) {
+      console.warn('[wecom-gateway] ignored message from unauthorized member', { userId: message.userId });
+      void this.sendReply(config, message.userId, `You are not allowed to use this gateway. Ask the administrator to add your member ID (${message.userId}) to the allowed members.`).catch((error) => {
+        console.warn('[wecom-gateway] unauthorized-member reply failed:', error instanceof Error ? error.message : error);
+      });
+      return 'success';
+    }
 
     if (!['text', 'image', 'voice'].includes(message.messageType)) {
       void this.sendReply(config, message.userId, 'This WeCom gateway supports text, image, and voice messages only.').catch((error) => {
@@ -755,6 +762,11 @@ function decodeXmlEntities(value: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, '&');
+}
+
+// An empty list denies everyone; `*` explicitly allows every member who can see the app.
+export function isWecomUserAllowed(allowedUsers: string[], userId: string): boolean {
+  return allowedUsers.includes('*') || allowedUsers.includes(userId);
 }
 
 function parseList(value?: string): string[] {

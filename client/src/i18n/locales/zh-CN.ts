@@ -1499,7 +1499,7 @@ export default {
       wecomAgentId: '应用 Agent ID',
       wecomAppSecret: '应用 Secret',
       wecomAllowedUsers: '允许使用的成员 User ID',
-      wecomAllowedUsersPlaceholder: 'alice, bob（留空允许所有成员）',
+      wecomAllowedUsersPlaceholder: 'alice, bob（必填；* 表示允许所有可见成员）',
       enterToReplaceSavedSecret: '输入应用 Secret 以更新此连接',
       saveAndGenerateCallback: '保存并生成回调配置',
       regenerateCallbackSecrets: '重新生成回调密钥',

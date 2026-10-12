@@ -81,6 +81,33 @@ describe('FeishuGatewayService', () => {
     });
   });
 
+  it('only queues messages from allowlisted senders', async () => {
+    process.env.PI_CLOUD_FEISHU_APP_ID = 'cli_test';
+    process.env.PI_CLOUD_FEISHU_APP_SECRET = 'secret_test';
+    process.env.PI_CLOUD_FEISHU_VERIFICATION_TOKEN = 'verify_test';
+    delete process.env.PI_CLOUD_FEISHU_ENCRYPT_KEY;
+    const service = createService(openPiCloudDatabase(':memory:') as any);
+    const enqueue = vi.spyOn(service as any, 'enqueue').mockImplementation(() => undefined);
+    const sendReply = vi.spyOn(service as any, 'sendReply').mockResolvedValue(undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const event = (id: string, openId: string) => ({
+      token: 'verify_test',
+      header: { event_type: 'im.message.receive_v1', event_id: `event-${id}` },
+      event: {
+        sender: { sender_id: { open_id: openId } },
+        message: { message_id: `message-${id}`, chat_id: 'chat', chat_type: 'p2p', message_type: 'text', content: '{"text":"hi"}' },
+      },
+    });
+
+    await expect(service.handleCallback(event('1', 'ou_stranger'))).resolves.toEqual({ ok: true, ignored: true });
+    expect(sendReply).toHaveBeenCalledWith(expect.anything(), 'message-1', expect.stringContaining('ou_stranger'));
+
+    process.env.PI_CLOUD_FEISHU_ALLOWED_USERS = 'ou_owner';
+    await expect(service.handleCallback(event('2', 'ou_stranger'))).resolves.toEqual({ ok: true, ignored: true });
+    await expect(service.handleCallback(event('3', 'ou_owner'))).resolves.toEqual({ ok: true });
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+
   it('persists a Feishu chat profile selected by command', async () => {
     const db = openPiCloudDatabase(':memory:');
     const service = createService(db as any);

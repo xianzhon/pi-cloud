@@ -28,6 +28,7 @@ POST /api/gateways/feishu/events
 - 可选的 verification token 检查
 - 飞书聊天与 Pi 会话绑定
 - `/new` 和 `/reset`
+- 私聊和群聊的发送者白名单（`PI_CLOUD_FEISHU_ALLOWED_USERS`）
 
 暂不支持：
 
@@ -35,7 +36,6 @@ POST /api/gateways/feishu/events
 - 图片、文件、音频或视频
 - 音频转写。飞书音频消息接收事件目前只提供 `duration`、`file_key` 等音频元数据，不包含客户端语音转文字结果。
 - 交互式卡片
-- 群聊中的用户白名单
 
 ## 1. 配置 Pi Cloud 环境
 
@@ -51,11 +51,19 @@ PI_CLOUD_FEISHU_DOMAIN=feishu
 # PI_CLOUD_FEISHU_ENCRYPT_KEY=your-encrypt-key
 ```
 
+然后允许可以使用网关的飞书用户：
+
+```env
+# 用英文逗号分隔的 open_id、user_id 或 union_id。`*` 表示允许所有发送者。
+PI_CLOUD_FEISHU_ALLOWED_USERS=ou_xxx
+```
+
 注意：
 
 - 中国区飞书使用 `PI_CLOUD_FEISHU_DOMAIN=feishu`。
 - 国际版 Lark 使用 `PI_CLOUD_FEISHU_DOMAIN=lark`。
 - 在**设置 > 网关**中配置允许访问的文件夹、默认网关配置文件、模型和技能集。
+- 网关用户可以在 Pi Cloud 主机上运行 coding agent 的工具，因此默认拒绝访问。未列在 `PI_CLOUD_FEISHU_ALLOWED_USERS` 中的发送者消息会被忽略，机器人会回复该发送者的 `open_id`，便于将其加入白名单。
 - 更改 `.env` 后请重启 Pi Cloud 服务器。
 
 ## 2. 让飞书能够访问回调 URL

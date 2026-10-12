@@ -28,6 +28,7 @@ interface WeixinGatewayConfig {
   skillPresetId?: string | null;
   dmPolicy: 'pairing' | 'allowlist' | 'open' | 'disabled';
   allowedUsers: string[];
+  ownerUserId?: string;
 }
 
 interface WeixinChatConfig {
@@ -207,6 +208,8 @@ export class WeixinGatewayService {
       ...this.resolveSkillsetConfig(gatewaySettings.defaultSkillset),
       dmPolicy: parseDmPolicy(process.env.PI_CLOUD_WECHAT_DM_POLICY),
       allowedUsers: parseList(process.env.PI_CLOUD_WECHAT_ALLOWED_USERS),
+      // Environment credentials do not identify the WeChat user who paired the bot.
+      ownerUserId: process.env.PI_CLOUD_WECHAT_ACCOUNT_ID?.trim() ? undefined : credential?.userId,
     };
   }
 
@@ -344,7 +347,10 @@ export class WeixinGatewayService {
 
     const { chatType, chatId } = this.guessChat(message, config.accountId);
     if (chatType === 'group') return null; // MVP: iLink group delivery is unreliable; keep WebUI Weixin DM-only for now.
-    if (!this.isDmAllowed(senderId, config)) return null;
+    if (!this.isDmAllowed(senderId, config)) {
+      console.warn('[weixin-gateway] ignored direct message from unauthorized sender', { senderId, dmPolicy: config.dmPolicy });
+      return null;
+    }
 
     const items = Array.isArray(message.item_list) ? message.item_list.map(asRecord) : [];
     const text = extractText(items).trim();
@@ -376,7 +382,9 @@ export class WeixinGatewayService {
     if (config.dmPolicy === 'disabled') return false;
     if (config.dmPolicy === 'allowlist') return config.allowedUsers.includes(senderId);
     if (config.dmPolicy === 'open') return parseBoolean(process.env.PI_CLOUD_WECHAT_ALLOW_ALL_USERS || process.env.GATEWAY_ALLOW_ALL_USERS, false);
-    return true; // pairing mode accepts inbound DMs so operators can discover sender IDs.
+    // Pairing mode trusts the WeChat user who scanned the pairing QR code, plus the allowlist.
+    // Other senders can drive the agent's shell tools, so they are only logged for discovery.
+    return senderId === config.ownerUserId || config.allowedUsers.includes(senderId);
   }
 
   private logUnsupportedInboundMessage(message: Record<string, unknown>, items: Record<string, unknown>[], reason: string): void {

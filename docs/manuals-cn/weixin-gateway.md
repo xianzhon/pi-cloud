@@ -119,7 +119,7 @@ PI_CLOUD_WECHAT_BASE_URL=https://ilinkai.weixin.qq.com
 
 | 值 | 行为 |
 |---|---|
-| `pairing` | 默认值。接受传入的私聊消息，适合在设置和查找发送者 ID 时使用。 |
+| `pairing` | 默认值。接受扫描配对二维码的微信用户以及 `PI_CLOUD_WECHAT_ALLOWED_USERS` 中列出的用户。其他发送者的消息会被忽略，并在日志中记录其发送者 ID。 |
 | `allowlist` | 仅接受 `PI_CLOUD_WECHAT_ALLOWED_USERS` 中列出的用户。 |
 | `open` | 只有同时设置 `PI_CLOUD_WECHAT_ALLOW_ALL_USERS=true` 或 `GATEWAY_ALLOW_ALL_USERS=true` 时，才接受所有用户。 |
 | `disabled` | 忽略所有私聊消息。 |
@@ -131,7 +131,7 @@ PI_CLOUD_WECHAT_DM_POLICY=allowlist
 PI_CLOUD_WECHAT_ALLOWED_USERS=user-id-1,user-id-2
 ```
 
-收紧策略之前，可以在配对模式测试期间通过服务器日志或 `/status` 确定发送者 ID。
+网关用户可以在 Pi Cloud 主机上运行 coding agent 的工具。如需授权其他用户，请在服务器日志 `ignored direct message from unauthorized sender` 中找到其发送者 ID，并加入 `PI_CLOUD_WECHAT_ALLOWED_USERS`。如果凭据来自 `PI_CLOUD_WECHAT_ACCOUNT_ID`/`PI_CLOUD_WECHAT_TOKEN`，系统无法识别配对用户，请显式列出所有允许的发送者。
 
 ## 网络说明
 
@@ -202,4 +202,4 @@ https://ilinkai.weixin.qq.com
 
 - 不要提交 `.env`，其中可能包含网关凭据。
 - 保存的微信配对凭据存储在本地 Pi Cloud 数据库中。
-- 如果不受信任的用户可能访问机器人账号，请在设置完成后使用 `PI_CLOUD_WECHAT_DM_POLICY=allowlist` 限制私聊访问。
+- 默认 `pairing` 策略只接受配对用户和白名单用户；如需仅允许白名单用户，请使用 `PI_CLOUD_WECHAT_DM_POLICY=allowlist`。

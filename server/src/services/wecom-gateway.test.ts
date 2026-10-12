@@ -242,11 +242,29 @@ describe('WecomGatewayService', () => {
     configureEnvironment('user-2');
     const service = createService();
     const enqueue = vi.spyOn(service as any, 'enqueue').mockImplementation(() => undefined);
+    const sendReply = vi.spyOn(service as any, 'sendReply').mockResolvedValue(undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const messageXml = '<xml><ToUserName>corp-test</ToUserName><FromUserName>user-1</FromUserName><MsgType>text</MsgType><Content>hello</Content><MsgId>12345</MsgId><AgentID>1000002</AgentID></xml>';
     const encrypted = encryptWecomPayload(messageXml, AES_KEY, CORP_ID);
 
     expect(service.handleCallback(signedQuery(encrypted), `<xml><Encrypt>${encrypted}</Encrypt></xml>`)).toBe('success');
     expect(enqueue).not.toHaveBeenCalled();
+    expect(sendReply).toHaveBeenCalledWith(expect.anything(), 'user-1', expect.stringContaining('user-1'));
+  });
+
+  it('denies every member when the allowlist is empty and allows everyone only with *', () => {
+    for (const [allowedUsers, expected] of [['', 0], ['*', 1]] as const) {
+      configureEnvironment(allowedUsers);
+      const service = createService();
+      const enqueue = vi.spyOn(service as any, 'enqueue').mockImplementation(() => undefined);
+      vi.spyOn(service as any, 'sendReply').mockResolvedValue(undefined);
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const messageXml = '<xml><ToUserName>corp-test</ToUserName><FromUserName>user-1</FromUserName><MsgType>text</MsgType><Content>hello</Content><MsgId>12345</MsgId><AgentID>1000002</AgentID></xml>';
+      const encrypted = encryptWecomPayload(messageXml, AES_KEY, CORP_ID);
+
+      service.handleCallback(signedQuery(encrypted), `<xml><Encrypt>${encrypted}</Encrypt></xml>`);
+      expect(enqueue).toHaveBeenCalledTimes(expected);
+    }
   });
 
   it('caches an access token and sends an application markdown message to the member', async () => {

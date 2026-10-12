@@ -119,7 +119,7 @@ Notes:
 
 | Value | Behavior |
 | --- | --- |
-| `pairing` | Default. Accept inbound direct messages. Useful while setting up and discovering sender IDs. |
+| `pairing` | Default. Accept the WeChat user who scanned the pairing QR code and users listed in `PI_CLOUD_WECHAT_ALLOWED_USERS`. Messages from other senders are ignored and their sender IDs are logged. |
 | `allowlist` | Accept only users listed in `PI_CLOUD_WECHAT_ALLOWED_USERS`. |
 | `open` | Accept all users only if `PI_CLOUD_WECHAT_ALLOW_ALL_USERS=true` or `GATEWAY_ALLOW_ALL_USERS=true` is also set. |
 | `disabled` | Ignore all direct messages. |
@@ -131,7 +131,7 @@ PI_CLOUD_WECHAT_DM_POLICY=allowlist
 PI_CLOUD_WECHAT_ALLOWED_USERS=user-id-1,user-id-2
 ```
 
-Use server logs or `/status` during pairing-mode testing to identify sender IDs before tightening the policy.
+Gateway users can run the coding agent's tools on the Pi Cloud host. To grant another user access, find their sender ID in the server log entry `ignored direct message from unauthorized sender` and add it to `PI_CLOUD_WECHAT_ALLOWED_USERS`. When credentials come from `PI_CLOUD_WECHAT_ACCOUNT_ID`/`PI_CLOUD_WECHAT_TOKEN`, the paired user is unknown, so list every permitted sender explicitly.
 
 ## Network notes
 
@@ -202,4 +202,4 @@ Then send the next normal message.
 
 - Do not commit `.env`; it may contain gateway credentials.
 - Saved WeChat pairing credentials are stored in the local Pi Cloud database.
-- Restrict direct-message access with `PI_CLOUD_WECHAT_DM_POLICY=allowlist` once setup is complete if the bot account is reachable by users you do not trust.
+- The default `pairing` policy accepts only the paired user and allowlisted users; use `PI_CLOUD_WECHAT_DM_POLICY=allowlist` to accept allowlisted users only.

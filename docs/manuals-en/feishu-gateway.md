@@ -28,6 +28,7 @@ Supported now:
 - Optional verification token check
 - Feishu chat to Pi session binding
 - `/new` and `/reset`
+- Sender allowlist (`PI_CLOUD_FEISHU_ALLOWED_USERS`) for direct and group messages
 
 Not supported yet:
 
@@ -35,7 +36,6 @@ Not supported yet:
 - Images, files, audio, or video
 - Audio transcription. Feishu audio receive-message events currently provide only audio metadata such as `duration` and `file_key`; they do not include client-side speech-to-text transcript text.
 - Interactive cards
-- Per-user allowlists in group chats
 
 ## 1. Configure Pi Cloud environment
 
@@ -51,11 +51,19 @@ PI_CLOUD_FEISHU_DOMAIN=feishu
 # PI_CLOUD_FEISHU_ENCRYPT_KEY=your-encrypt-key
 ```
 
+Then allow the Feishu users who may use the gateway:
+
+```env
+# Comma-separated open_id, user_id, or union_id values. `*` allows every sender.
+PI_CLOUD_FEISHU_ALLOWED_USERS=ou_xxx
+```
+
 Notes:
 
 - Use `PI_CLOUD_FEISHU_DOMAIN=feishu` for China Feishu.
 - Use `PI_CLOUD_FEISHU_DOMAIN=lark` for international Lark.
 - Configure the allowed folders, default gateway profile, model, and skillset in **Settings > Gateway**.
+- Gateway users can run the coding agent's tools on the Pi Cloud host, so access is denied by default. Messages from senders not listed in `PI_CLOUD_FEISHU_ALLOWED_USERS` are ignored; the bot replies with the sender's `open_id` so you can add it.
 - Restart the Pi Cloud server after changing `.env`.
 
 ## 2. Make the callback URL reachable by Feishu

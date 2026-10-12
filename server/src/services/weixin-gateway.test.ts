@@ -97,7 +97,9 @@ describe('WeixinGatewayService behavior', () => {
     expect(internal.isDmAllowed('u', config({ dmPolicy: 'open' }))).toBe(true);
     process.env.PI_CLOUD_WECHAT_ALLOW_ALL_USERS = 'false';
     expect(internal.isDmAllowed('u', config({ dmPolicy: 'open' }))).toBe(false);
-    expect(internal.isDmAllowed('u', config({ dmPolicy: 'pairing' }))).toBe(true);
+    expect(internal.isDmAllowed('u', config({ dmPolicy: 'pairing' }))).toBe(false);
+    expect(internal.isDmAllowed('owner', config({ dmPolicy: 'pairing', ownerUserId: 'owner' }))).toBe(true);
+    expect(internal.isDmAllowed('u', config({ dmPolicy: 'pairing', ownerUserId: 'owner', allowedUsers: ['u'] }))).toBe(true);
     db.close();
   });
 
