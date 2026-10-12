@@ -5,6 +5,7 @@ const listLocalBranches = vi.fn();
 const getGitStatus = vi.fn();
 const removeWorktree = vi.fn();
 const pullFastForwardOnly = vi.fn();
+const getUncommittedChanges = vi.fn(async () => [] as string[]);
 const saveWorktreeMetadata = vi.fn();
 const getWorktreeMetadata = vi.fn();
 const listWorktreeMetadataByBase = vi.fn();
@@ -40,7 +41,7 @@ function cloneRouteOptions() {
 }
 
 vi.mock('../services/worktree-manager.js', () => ({
-  worktreeManager: { resolveSessionCwd, listLocalBranches, getGitStatus, removeWorktree, pullFastForwardOnly },
+  worktreeManager: { resolveSessionCwd, listLocalBranches, getGitStatus, removeWorktree, pullFastForwardOnly, getUncommittedChanges },
 }));
 
 vi.mock('../services/worktree-metadata-store.js', () => ({
@@ -136,7 +137,7 @@ function createMockApp() {
     authServices: { audit: { record: vi.fn() } },
     services: {
       sessions: sessionService,
-      worktrees: { resolveSessionCwd, listLocalBranches, getGitStatus, removeWorktree, pullFastForwardOnly },
+      worktrees: { resolveSessionCwd, listLocalBranches, getGitStatus, removeWorktree, pullFastForwardOnly, getUncommittedChanges },
       worktreeMetadata: {
         save: saveWorktreeMetadata,
         get: getWorktreeMetadata,
@@ -936,6 +937,42 @@ describe('session routes', () => {
     expect(pullFastForwardOnly).toHaveBeenCalledWith('/repo/app');
     expect(markWorktreeFinished).toHaveBeenCalledWith('session-1');
     expect(result).toEqual({ success: true });
+  });
+
+  it('refuses to finish a worktree that has uncommitted changes', async () => {
+    getWorktreeMetadata.mockReturnValue({
+      sessionId: 'session-1', baseRepoPath: '/repo/app', worktreePath: '/repo/.app-worktrees/feature-a',
+      branchName: 'feature/a', branchMode: 'new', baseBranch: 'main', worktreeManaged: true, worktreeStatus: 'active',
+    });
+    vi.mocked(sessionService.isSessionStreaming).mockReturnValue(false);
+    getUncommittedChanges.mockResolvedValueOnce([' M src/index.ts']);
+
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    await handlers['POST /:id/finish-worktree']({ body: { clientId: 'client-1' }, params: { id: 'session-1' } }, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(409);
+    expect(removeWorktree).not.toHaveBeenCalled();
+    expect(sessionService.forceDisposeBySessionId).not.toHaveBeenCalledWith('session-1');
+  });
+
+  it('does not finish a worktree when its status cannot be checked', async () => {
+    getWorktreeMetadata.mockReturnValue({
+      sessionId: 'session-1', baseRepoPath: '/repo/app', worktreePath: '/repo/.app-worktrees/feature-a',
+      branchName: 'feature/a', worktreeManaged: true, worktreeStatus: 'active',
+    });
+    vi.mocked(sessionService.isSessionStreaming).mockReturnValue(false);
+    getUncommittedChanges.mockRejectedValueOnce(new Error('status failed'));
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any);
+
+    await expect(handlers['POST /:id/finish-worktree']({ body: { clientId: 'client-1' }, params: { id: 'session-1' } }, {})).rejects.toThrow('status failed');
+    expect(removeWorktree).not.toHaveBeenCalled();
+    expect(sessionService.forceDisposeBySessionId).not.toHaveBeenCalled();
   });
 
   it('includes managed worktree sessions in the base project session list', async () => {

@@ -1453,6 +1453,15 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       return reply.status(404).send({ error: 'Active managed worktree session not found' });
     }
 
+    // `git worktree remove --force` would discard uncommitted work, so refuse instead.
+    const uncommitted = await worktreeManager.getUncommittedChanges(metadata.worktreePath);
+    if (uncommitted.length) {
+      return reply.status(409).send({
+        error: `The worktree has ${uncommitted.length} uncommitted change(s). Commit or discard them before finishing.`,
+        uncommittedChanges: uncommitted,
+      });
+    }
+
     sessionService.forceDisposeBySessionId(id);
     const agentDir = await sessionService.getClientAgentDirForRoutes(clientId);
     await sessionFileRelocator.relocate({

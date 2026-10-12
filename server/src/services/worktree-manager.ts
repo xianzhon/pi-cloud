@@ -102,8 +102,13 @@ export class WorktreeManager {
     };
   }
 
+  async getUncommittedChanges(worktreePath: string): Promise<string[]> {
+    const { stdout } = await this.execFile('git', ['status', '--porcelain'], { cwd: worktreePath });
+    return stdout.split('\n').filter((line) => line.trim());
+  }
+
   async removeWorktree(baseRepoPath: string, worktreePath: string): Promise<void> {
-    await this.execFile('git', ['worktree', 'remove', '--force', worktreePath], { cwd: baseRepoPath });
+    await this.execFile('git', ['worktree', 'remove', worktreePath], { cwd: baseRepoPath });
   }
 
   async pullFastForwardOnly(baseRepoPath: string): Promise<void> {

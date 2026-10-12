@@ -95,12 +95,12 @@ describe('WorktreeManager', () => {
     expect(execFile).not.toHaveBeenCalledWith('git', expect.arrayContaining(['add']), expect.anything());
   });
 
-  it('force removes managed worktrees during cleanup', async () => {
+  it('removes managed worktrees without forcing away dirty files', async () => {
     execFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
 
     await manager().removeWorktree('/repo/app', '/repo/.app-worktrees/feature-a');
 
-    expect(execFile).toHaveBeenCalledWith('git', ['worktree', 'remove', '--force', '/repo/.app-worktrees/feature-a'], { cwd: '/repo/app' });
+    expect(execFile).toHaveBeenCalledWith('git', ['worktree', 'remove', '/repo/.app-worktrees/feature-a'], { cwd: '/repo/app' });
   });
 
   it('pulls the base repository with fast-forward only through the GitHub proxy', async () => {
