@@ -172,7 +172,7 @@ export async function chatWebSocket(app: FastifyInstance) {
     const safeClientId = clientId;
     const connectedClient = { socket, watchedSessionId: undefined as string | undefined };
     clients.add(connectedClient);
-    console.log(`Client connected: ${safeClientId}`);
+    req.log?.info({ clientId: safeClientId }, 'Chat WebSocket connected');
     sessionService.cancelCleanup(safeClientId);
 
     function broadcastToSession(sessionId: string, message: unknown): void {
@@ -464,7 +464,7 @@ export async function chatWebSocket(app: FastifyInstance) {
     socket.on('close', () => {
       clearInterval(heartbeat);
       clients.delete(connectedClient);
-      console.log(`Client disconnected: ${safeClientId}`);
+      req.log?.info({ clientId: safeClientId }, 'Chat WebSocket disconnected');
       unsubscribeMemoryUpdates();
       unsubscribeMemoryRecall();
       sessionService.scheduleCleanup(safeClientId);
