@@ -81,6 +81,18 @@ describe('FeishuGatewayService', () => {
     });
   });
 
+  it('rejects plaintext callbacks once an encrypt key is configured', async () => {
+    process.env.PI_CLOUD_FEISHU_APP_ID = 'cli_test';
+    process.env.PI_CLOUD_FEISHU_APP_SECRET = 'secret_test';
+    process.env.PI_CLOUD_FEISHU_VERIFICATION_TOKEN = 'verify_test';
+    process.env.PI_CLOUD_FEISHU_ENCRYPT_KEY = 'encrypt_test';
+    const service = createService(openPiCloudDatabase(':memory:') as any);
+
+    await expect(service.handleCallback({ type: 'url_verification', token: 'verify_test', challenge: 'c' })).rejects.toMatchObject({
+      statusCode: 401,
+    });
+  });
+
   it('only queues messages from allowlisted senders', async () => {
     process.env.PI_CLOUD_FEISHU_APP_ID = 'cli_test';
     process.env.PI_CLOUD_FEISHU_APP_SECRET = 'secret_test';

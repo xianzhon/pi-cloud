@@ -64,6 +64,7 @@ PI_CLOUD_FEISHU_ALLOWED_USERS=ou_xxx
 - 国际版 Lark 使用 `PI_CLOUD_FEISHU_DOMAIN=lark`。
 - 在**设置 > 网关**中配置允许访问的文件夹、默认网关配置文件、模型和技能集。
 - 网关用户可以在 Pi Cloud 主机上运行 coding agent 的工具，因此默认拒绝访问。未列在 `PI_CLOUD_FEISHU_ALLOWED_USERS` 中的发送者消息会被忽略，机器人会回复该发送者的 `open_id`，便于将其加入白名单。
+- 设置 `PI_CLOUD_FEISHU_ENCRYPT_KEY` 后，未加密的回调会被拒绝。
 - 更改 `.env` 后请重启 Pi Cloud 服务器。
 
 ## 2. 让飞书能够访问回调 URL

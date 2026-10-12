@@ -64,6 +64,7 @@ Notes:
 - Use `PI_CLOUD_FEISHU_DOMAIN=lark` for international Lark.
 - Configure the allowed folders, default gateway profile, model, and skillset in **Settings > Gateway**.
 - Gateway users can run the coding agent's tools on the Pi Cloud host, so access is denied by default. Messages from senders not listed in `PI_CLOUD_FEISHU_ALLOWED_USERS` are ignored; the bot replies with the sender's `open_id` so you can add it.
+- When `PI_CLOUD_FEISHU_ENCRYPT_KEY` is set, unencrypted callbacks are rejected.
 - Restart the Pi Cloud server after changing `.env`.
 
 ## 2. Make the callback URL reachable by Feishu

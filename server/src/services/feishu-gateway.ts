@@ -1,4 +1,4 @@
-import { createDecipheriv, createHash } from 'node:crypto';
+import { createDecipheriv, createHash, timingSafeEqual } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { PiCloudDatabase } from '../db/database.js';
@@ -128,7 +128,15 @@ export class FeishuGatewayService {
 
   private decryptPayload(payload: Record<string, unknown>, config: FeishuGatewayConfig): Record<string, unknown> {
     const encrypted = stringValue(payload.encrypt);
-    if (!encrypted) return payload;
+    if (!encrypted) {
+      // Feishu encrypts every callback once an Encrypt Key is set; plaintext would prove nothing.
+      if (config.encryptKey) {
+        const error = new Error('Feishu callbacks must be encrypted when PI_CLOUD_FEISHU_ENCRYPT_KEY is configured');
+        (error as Error & { statusCode?: number }).statusCode = 401;
+        throw error;
+      }
+      return payload;
+    }
     if (!config.encryptKey) {
       console.warn('[feishu-gateway] received encrypted callback payload but PI_CLOUD_FEISHU_ENCRYPT_KEY is not configured');
       const error = new Error('Feishu encrypted callback requires PI_CLOUD_FEISHU_ENCRYPT_KEY');
@@ -163,7 +171,7 @@ export class FeishuGatewayService {
       throw error;
     }
     const token = stringValue(payload.token) || stringValue(asRecord(payload.header).token);
-    if (token === config.verificationToken) return;
+    if (safeEqual(token, config.verificationToken)) return;
     console.warn('[feishu-gateway] verification token mismatch', {
       encrypted: typeof payload.encrypt === 'string',
       bodyType: stringValue(payload.type) || undefined,
@@ -678,4 +686,10 @@ function extractLastAssistantText(messages: unknown): string {
 // `*` explicitly allows every sender; an empty list denies everyone.
 export function isFeishuSenderAllowed(allowedUsers: string[], senderIds: string[]): boolean {
   return allowedUsers.includes('*') || senderIds.some((id) => allowedUsers.includes(id));
+}
+
+function safeEqual(left: string, right: string): boolean {
+  const leftDigest = createHash('sha256').update(left).digest();
+  const rightDigest = createHash('sha256').update(right).digest();
+  return timingSafeEqual(leftDigest, rightDigest) && left.length === right.length;
 }
