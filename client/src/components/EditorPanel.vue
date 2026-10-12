@@ -3408,6 +3408,8 @@ watch(() => props.autoRefresh, (enabled) => {
 function startAutoRefresh() {
   if (autoRefreshTimer) return;
   autoRefreshTimer = setInterval(() => {
+    // Each refresh re-reads every open file, so skip it while the tab is in the background.
+    if (document.hidden) return;
     refreshAllOpenFiles();
   }, 5000);
 }
