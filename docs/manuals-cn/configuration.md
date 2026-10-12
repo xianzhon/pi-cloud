@@ -24,7 +24,7 @@ Pi Cloud 从 shell 环境变量和 `.env` 文件中读取配置，shell 变量�
 | `PI_CLOUD_DB_PATH` | 用户配置目录 | 自定义 SQLite 数据库路径 |
 | `PI_CLOUD_CREDENTIAL_ENCRYPTION_KEY` | 自动生成的密钥文件 | 用于加密 SQLite 内凭证的 Base64 编码 32 字节密钥 |
 | `PI_CLOUD_ALLOWED_ROOTS` | 用户主目录 | 文件浏览器和终端可以访问的目录，以逗号分隔 |
-| `PI_CLOUD_DISABLE_PATH_CHECK` | Windows 上为 `true`；macOS/Linux 上为 `false` | 禁用文件、终端初始目录和 Git API 路径的允许根目录检查 |
+| `PI_CLOUD_DISABLE_PATH_CHECK` | `false` | 禁用文件、终端初始目录和 Git API 路径的允许根目录检查 |
 | `PI_CLOUD_ENABLE_SYSTEM_OPEN` | `false` | 允许通过非 localhost URL（例如本地 nginx 主机名）使用**通过系统工具打开** |
 | `PI_CLOUD_TERMINAL_SHELL` | Windows 上为 `COMSPEC`/`cmd.exe`；macOS/Linux 上为 `SHELL`/`bash` | 终端 shell 可执行文件，例如 `powershell.exe`、`pwsh.exe` 或 `/bin/zsh` |
 
@@ -32,7 +32,7 @@ Pi Cloud 从 shell 环境变量和 `.env` 文件中读取配置，shell 变量�
 
 TOTP 密钥、GitHub/Gitea token 和网关凭证使用 AES-256-GCM 加密后存入 SQLite。若未设置 `PI_CLOUD_CREDENTIAL_ENCRYPTION_KEY`，Pi Cloud 会创建仅当前用户可读的 `<数据库路径>.credentials.key`。可用 `openssl rand -base64 32` 生成由环境变量托管的密钥。请在保存凭证前完成配置；数据库中存在加密凭证时不要更换密钥，并将密钥与数据库分开备份。密钥丢失后相关凭证无法恢复。已有明文凭证会在下次启动时自动加密。
 
-当 `PI_CLOUD_DISABLE_PATH_CHECK=true` 时，`PI_CLOUD_ALLOWED_ROOTS` 会被忽略。Windows 默认禁用这些检查，以便访问其他磁盘上的路径；如需限制访问，请设置 `PI_CLOUD_DISABLE_PATH_CHECK=false` 并配置 `PI_CLOUD_ALLOWED_ROOTS`。禁用检查后，WebUI 文件系统端点可以访问服务器进程有权限访问的任何路径，因此请仅在可信部署中使用。
+当 `PI_CLOUD_DISABLE_PATH_CHECK=true` 时，`PI_CLOUD_ALLOWED_ROOTS` 会被忽略。所有平台默认启用这些检查。在 Windows 上，请显式列出需要访问的其他磁盘或文件夹，例如 `PI_CLOUD_ALLOWED_ROOTS=C:\Users\you,D:\Projects`。禁用检查后，WebUI 文件系统端点可以访问服务器进程有权限访问的任何路径，因此请仅在可信部署中使用。
 
 常用服务器选项对应的 CLI 参数如下：
 

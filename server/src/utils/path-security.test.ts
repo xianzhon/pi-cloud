@@ -90,19 +90,11 @@ describe('path security', () => {
     }
   });
 
-  it('disables the path check by default on Windows', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
-    process.env.PI_CLOUD_ALLOWED_ROOTS = 'C:\\Users\\test';
-
-    await expect(resolveAllowedPath('D:\\Projects')).resolves.toBe(path.resolve('D:\\Projects'));
-  });
-
-  it('allows Windows users to explicitly enable the path check', async () => {
+  it('enforces the path check by default on Windows', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
     const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-allowed-'));
     const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-outside-'));
     process.env.PI_CLOUD_ALLOWED_ROOTS = allowedDir;
-    process.env.PI_CLOUD_DISABLE_PATH_CHECK = 'false';
 
     try {
       await expect(resolveAllowedPath(outsideDir)).rejects.toThrow('Path is outside the configured allowed roots');

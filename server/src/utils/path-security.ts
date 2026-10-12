@@ -15,8 +15,7 @@ export class PathAccessError extends Error {
 
 function isPathCheckDisabled(): boolean {
   const configured = process.env.PI_CLOUD_DISABLE_PATH_CHECK?.trim().toLowerCase();
-  if (!configured) return process.platform === 'win32';
-  return ['true', '1', 'yes', 'on'].includes(configured);
+  return ['true', '1', 'yes', 'on'].includes(configured || '');
 }
 
 function configuredAllowedRoots(): string[] {
