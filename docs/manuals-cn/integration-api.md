@@ -19,6 +19,7 @@
 | 方法 | 端点 | 用途 |
 | --- | --- | --- |
 | GET | `/api/integration/profiles` | 列出 Agent 配置 ID 和默认模型 |
+| GET | `/api/integration/profiles/:profileId/models` | 列出指定配置的可用模型 |
 | POST | `/api/integration/sessions` | 创建持久化会话并提出第一个问题 |
 | POST | `/api/integration/sessions/:id/messages` | 在已有会话中继续提问 |
 | GET | `/api/integration/sessions/:id?agentProfileId=default` | 获取状态及最后一条助手回答 |
@@ -26,6 +27,19 @@
 两个 POST 端点均接受 `prompt`（必填，非空白，最多 200,000 字符）、`agentProfileId`（默认为 `default`）和 `stream`（默认为 `false`）。创建端点还接受 `cwd`（现有目录，默认为 Pi Cloud 的工作目录）及可选的 `modelProvider`/`modelId` 参数对。后续问题沿用会话已有模型和上下文。
 
 应用应保存 **`sessionId` 和 `agentProfileId` 两者**，后续请求继续发送配置 ID。会话 ID 仅在对应配置中解析，不接受调用方指定的会话文件路径。已有持久化历史的会话可在 Pi Cloud 重启后恢复，包括最初在 WebUI 中创建的会话。尚无持久化回答的空 WebUI 会话不能通过此 API 访问。
+
+### 查询可用模型
+
+从 `/api/integration/profiles` 选择配置 ID，再查询该配置的可用模型：
+
+```bash
+curl "$PI_CLOUD_URL/api/integration/profiles/default/models" \
+  -H "Authorization: Bearer $PI_CLOUD_TOKEN"
+```
+
+响应为 `{ "models": [...] }`。每个模型包含 `provider`、`id`、`name`、`contextWindow`、`reasoning`、`input` 和 `current`（是否为该配置的默认模型）。可用性依据该配置的凭据和提供商设置确定，不返回凭据。未知配置返回 `400`；没有可用模型时返回空列表。
+
+创建会话时，将返回的 `provider` 和 `id` 分别作为 `modelProvider` 和 `modelId` 发送。省略两者则使用配置的默认模型。后续提问沿用会话的模型。
 
 ### 创建会话并提问
 

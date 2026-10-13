@@ -17,6 +17,7 @@ const METADATA = 'id, name, prefix, created_at AS createdAt, expires_at AS expir
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 const ALLOWED_ROUTES = new Set([
   'GET /api/integration/profiles',
+  'GET /api/integration/profiles/:profileId/models',
   'POST /api/integration/sessions',
   'GET /api/integration/sessions/:id',
   'POST /api/integration/sessions/:id/messages',

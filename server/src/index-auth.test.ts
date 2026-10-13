@@ -87,7 +87,14 @@ describe('buildApp auth protection', () => {
       const { token, id } = created.json();
       const headers = { authorization: `Bearer ${token}`, cookie };
       expect((await app.inject({ url: '/api/integration/profiles', headers })).statusCode).toBe(200);
-      for (const url of ['/api/auth/tokens', '/api/auth/me', '/%61pi/files/read?path=package.json', '/ws/chat']) {
+      vi.spyOn(app.services.sessions, 'listAgentProfileModels').mockResolvedValue([]);
+      const modelsUrl = '/api/integration/profiles/default/models';
+      const models = await app.inject({ url: modelsUrl, headers: { authorization: `Bearer ${token}` } });
+      expect(models.statusCode).toBe(200);
+      expect(models.json()).toEqual({ models: [] });
+      expect((await app.inject({ url: modelsUrl })).statusCode).toBe(401);
+      expect((await app.inject({ url: modelsUrl, headers: { authorization: 'Bearer invalid' } })).statusCode).toBe(401);
+      for (const url of ['/api/auth/tokens', '/api/auth/me', '/api/sessions/agent-profiles/default/models', '/%61pi/files/read?path=package.json', '/ws/chat']) {
         expect((await app.inject({ url, headers })).statusCode).toBe(403);
       }
       expect((await app.inject({ method: 'POST', url: '/api/auth/login', headers, payload: { username: 'me', password: 'secret' } })).statusCode).toBe(403);

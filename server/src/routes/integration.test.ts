@@ -34,6 +34,7 @@ function mockService() {
   return {
     session,
     listAgentProfiles: vi.fn(async () => [{ id: 'default', label: 'Default' }, { id: 'notes', label: 'Notes' }]),
+    listAgentProfileModels: vi.fn(async (profileId: string) => profileId === 'notes' ? [{ provider: 'test', id: 'notes-model', name: 'Notes model', contextWindow: 128000, reasoning: false, input: ['text'], current: true }] : []),
     setClientAgentProfile: vi.fn(async () => ({})),
     createSession: vi.fn(async () => ({ session, skillPolicy: {} })),
     getSession: vi.fn((): AgentSession | undefined => undefined),
@@ -56,6 +57,23 @@ beforeEach(async () => {
 afterEach(async () => { await app.close(); });
 
 describe('integration sessions', () => {
+  it('lists available models for the selected profile without creating a session', async () => {
+    const response = await app.inject('/api/integration/profiles/notes/models');
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.json()).toEqual({ models: [{ provider: 'test', id: 'notes-model', name: 'Notes model', contextWindow: 128000, reasoning: false, input: ['text'], current: true }] });
+    expect(service.createSession).not.toHaveBeenCalled();
+    expect((await app.inject('/api/integration/profiles/default/models')).json()).toEqual({ models: [] });
+  });
+
+  it('rejects unknown and invalid profiles when listing models', async () => {
+    const unknown = await app.inject('/api/integration/profiles/unknown/models');
+    expect(unknown.statusCode).toBe(400);
+    expect(unknown.json()).toEqual({ error: 'Unknown agent profile' });
+    expect((await app.inject(`/api/integration/profiles/${'x'.repeat(81)}/models`)).statusCode).toBe(400);
+    expect(service.listAgentProfileModels).not.toHaveBeenCalled();
+  });
+
   it('creates a persistent profile session, asks, and returns JSON', async () => {
     const response = await app.inject({ method: 'POST', url: '/api/integration/sessions', payload: { cwd: os.homedir(), agentProfileId: 'notes', prompt: 'Explain my note' } });
     expect(response.statusCode).toBe(200);

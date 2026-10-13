@@ -19,6 +19,7 @@ Tokens are stored hashed and are limited to the integration endpoints below. The
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | GET | `/api/integration/profiles` | List profile IDs and default models |
+| GET | `/api/integration/profiles/:profileId/models` | List available models for a profile |
 | POST | `/api/integration/sessions` | Create a persistent session and ask its first question |
 | POST | `/api/integration/sessions/:id/messages` | Ask a follow-up in an existing session |
 | GET | `/api/integration/sessions/:id?agentProfileId=default` | Retrieve status and the last assistant answer |
@@ -26,6 +27,19 @@ Tokens are stored hashed and are limited to the integration endpoints below. The
 Both POST endpoints accept `prompt` (required, nonblank, up to 200,000 characters), `agentProfileId` (defaults to `default`), and `stream` (defaults to `false`). The create endpoint also accepts `cwd` (an existing directory, default: Pi Cloud's working directory) and an optional `modelProvider`/`modelId` pair. Follow-ups retain the session's existing model and context.
 
 Save **both `sessionId` and `agentProfileId`** in your application and send the profile ID on subsequent requests. Session IDs are resolved inside that profile, not through caller-supplied session-file paths. Sessions with persisted history can be restored after Pi Cloud restarts, including sessions originally created in the WebUI. An unused WebUI session with no persisted response is not available through the integration API.
+
+### Discover models
+
+Select a profile ID from `/api/integration/profiles`, then list its available models:
+
+```bash
+curl "$PI_CLOUD_URL/api/integration/profiles/default/models" \
+  -H "Authorization: Bearer $PI_CLOUD_TOKEN"
+```
+
+The response is `{ "models": [...] }`. Each model includes `provider`, `id`, `name`, `contextWindow`, `reasoning`, `input`, and `current` (whether it is the profile's default model). Availability uses that profile's configured credentials and providers; credentials are not returned. An unknown profile returns `400`; a profile with no available models returns an empty list.
+
+Use a returned `provider` and `id` as `modelProvider` and `modelId` when creating a session. Omit both to use the profile's default model. Follow-ups retain the session's model.
 
 ### Create and ask
 

@@ -114,6 +114,14 @@ export async function integrationRoutes(app: FastifyInstance) {
     })),
   }));
 
+  app.get('/profiles/:profileId/models', { schema: { params: {
+    type: 'object', required: ['profileId'], properties: { profileId: questionProperties.agentProfileId },
+  } } }, async (req, reply) => {
+    const { profileId } = req.params as { profileId: string };
+    if (!(await sessions.listAgentProfiles()).some(profile => profile.id === profileId)) return reply.status(400).send({ error: 'Unknown agent profile' });
+    return { models: await sessions.listAgentProfileModels(profileId) };
+  });
+
   app.post('/sessions', {
     bodyLimit: 1024 * 1024,
     schema: { body: {
