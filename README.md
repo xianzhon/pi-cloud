@@ -109,7 +109,7 @@ See the [Deployment Manual](docs/manuals-en/deployment.md) for source and npm pa
 
 ## Documentation
 
-Browse the [documentation index](docs/README.md) for all user manuals and developer references.
+Browse the [documentation index](docs/README.md) for all user manuals and developer references. To connect other applications to persistent AI sessions with API tokens and optional streaming, see the [Integration API Manual](docs/manuals-en/integration-api.md).
 
 ## Development
 

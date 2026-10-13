@@ -76,6 +76,27 @@ describe('buildApp auth protection', () => {
     await app.close();
   }, 15_000);
 
+  it('accepts integration tokens but never lets them access account, file or WebSocket APIs', async () => {
+    const { buildApp } = await import('./index');
+    const app = await buildApp();
+    try {
+      const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+      const cookie = String(login.headers['set-cookie']).split(';')[0];
+      const created = await app.inject({ method: 'POST', url: '/api/auth/tokens', headers: { cookie, origin: 'http://localhost', host: 'localhost' }, payload: { name: 'Notes', password: 'secret', expiresAt: new Date(Date.now() + 60_000).toISOString() } });
+      expect(created.statusCode).toBe(201);
+      const { token, id } = created.json();
+      const headers = { authorization: `Bearer ${token}`, cookie };
+      expect((await app.inject({ url: '/api/integration/profiles', headers })).statusCode).toBe(200);
+      for (const url of ['/api/auth/tokens', '/api/auth/me', '/%61pi/files/read?path=package.json', '/ws/chat']) {
+        expect((await app.inject({ url, headers })).statusCode).toBe(403);
+      }
+      expect((await app.inject({ method: 'POST', url: '/api/auth/login', headers, payload: { username: 'me', password: 'secret' } })).statusCode).toBe(403);
+      expect((await app.inject({ url: '/api/integration/profiles', headers: { ...headers, authorization: 'Bearer invalid' } })).statusCode).toBe(401);
+      await app.inject({ method: 'DELETE', url: `/api/auth/tokens/${id}`, headers: { cookie, origin: 'http://localhost', host: 'localhost' }, payload: { password: 'secret' } });
+      expect((await app.inject({ url: '/api/integration/profiles', headers })).statusCode).toBe(401);
+    } finally { await app.close(); }
+  }, 15_000);
+
   it('allows protected API after login', async () => {
     const { buildApp } = await import('./index');
     const app = await buildApp();

@@ -70,6 +70,9 @@ describe('Simplified Chinese locale', () => {
       .filter(([key]) => key !== allowedTechnicalMemoryKey);
     const forbidden = /型号|令牌|所有州|内存|公关|分行|基地支部|波兰|抛光|犯罪|残疾人|型材|法典|新会议|现场会议|公开会议|合并请求请求|新航站楼|存储库|工作空间|代理配置|代理资料|审核日志/;
 
-    expect(entriesToCheck.filter(([, value]) => forbidden.test(value))).toEqual([]);
+    // “令牌” is correct for authentication tokens, but not model token counts.
+    expect(entriesToCheck.filter(([key, value]) => forbidden.test(
+      key.startsWith('apiTokens.') ? value.replaceAll('令牌', '') : value,
+    ))).toEqual([]);
   });
 });

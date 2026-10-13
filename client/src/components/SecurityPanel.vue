@@ -27,6 +27,7 @@
     </section>
 
     <PasskeyPanel :totp-enabled="totpEnabled" @updated="loadAudit" />
+    <ApiTokensPanel :totp-enabled="totpEnabled" @updated="loadAudit" />
 
     <section class="security-card">
       <div class="audit-header">
@@ -92,6 +93,7 @@ import { i18n } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import ConfirmModal from './ConfirmModal.vue';
 import PasskeyPanel from './PasskeyPanel.vue';
+import ApiTokensPanel from './ApiTokensPanel.vue';
 
 const t = i18n.global.t;
 

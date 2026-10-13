@@ -1,4 +1,16 @@
 export default {
+  apiTokens: {
+    title: 'API 令牌',
+    help: '将其他应用连接到 AI 会话。令牌可调用智能体工具；请仅保存在服务端，切勿放入浏览器代码。',
+    create: '创建令牌', revoke: '撤销', empty: '暂无 API 令牌。',
+    name: '名称', expires: '过期时间', lastUsed: '最后使用', never: '从未使用',
+    shownOnce: '请立即复制此令牌，之后将无法再次查看。',
+    copy: '复制', dismiss: '关闭', copied: '令牌已复制', copyFailed: '无法复制令牌，请选中后手动复制。',
+    working: '处理中…', revokeConfirm: '撤销令牌“{name}”？使用它的应用将失去访问权限。',
+    confirmHelp: '设置名称和过期时间，并输入密码；如已启用双重验证，还需输入验证码。',
+    invalidInput: '请输入名称和未来的过期时间。',
+    created: 'API 令牌已创建', revoked: 'API 令牌已撤销', failed: 'API 令牌操作失败',
+  },
   modelResponse: {
     failed: '模型响应失败',
     retrying: '模型不可用，正在重试（{attempt}/{maxAttempts}）',

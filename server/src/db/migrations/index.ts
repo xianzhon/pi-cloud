@@ -12,6 +12,7 @@ import { projectHistoryFavoritesMigration } from './010-project-history-favorite
 import { projectTaskImagesMigration } from './011-project-task-images.js';
 import { taskExecutionQueueMigration } from './012-task-execution-queue.js';
 import { passkeysMigration } from './013-passkeys.js';
+import { apiTokensMigration } from './014-api-tokens.js';
 import type { DatabaseMigration } from './migration.js';
 
 const migrations: DatabaseMigration[] = [
@@ -28,6 +29,7 @@ const migrations: DatabaseMigration[] = [
   projectTaskImagesMigration,
   taskExecutionQueueMigration,
   passkeysMigration,
+  apiTokensMigration,
 ];
 
 export function runDatabaseMigrations(db: PiCloudDatabase): void {

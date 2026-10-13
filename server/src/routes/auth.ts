@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { passkeyRoutes } from './passkeys.js';
+import { ApiTokenStore } from '../auth/api-tokens.js';
+import { isAllowedRequestOrigin } from '../auth/origin.js';
 import rateLimit from '@fastify/rate-limit';
 import type { AuthConfig } from '../config/auth';
 import type { AuditLog } from '../auth/audit';
@@ -20,6 +22,7 @@ interface AuthRouteOptions {
   totp: TotpService;
   rateLimiter: IpRateLimiter;
   db: PiCloudDatabase;
+  apiTokens?: ApiTokenStore;
 }
 
 type PreferencePatchBody = {
@@ -75,6 +78,49 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
   const { config, sessions, audit, totp, rateLimiter, db } = options;
   const presetStore = new SkillPresetStore(db);
   const userPromptStore = new UserPromptStore(db);
+  const apiTokens = options.apiTokens || new ApiTokenStore(db, config);
+
+  app.get('/tokens', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    if (req.headers.authorization !== undefined) return reply.status(403).send({ error: 'Browser session required' });
+    if (!requireAuth(req, reply)) return;
+    return { tokens: apiTokens.list() };
+  });
+
+  async function authorizeTokenManagement(req: FastifyRequest, reply: FastifyReply, action: string): Promise<boolean> {
+    reply.header('Cache-Control', 'no-store');
+    if (req.headers.authorization !== undefined || !req.headers.origin || !isAllowedRequestOrigin(req, config.trustProxy)) {
+      reply.status(403).send({ error: 'Browser session and same-origin request required' });
+      return false;
+    }
+    if (!requireAuth(req, reply)) return false;
+    if (!await requireSensitiveActionAuth(req, reply, (req.body || {}) as { password?: string; totpCode?: string }, action)) return false;
+    return Boolean(requireAuth(req, reply));
+  }
+
+  const tokenBodySchema = {
+    type: 'object',
+    properties: { password: { type: 'string' }, totpCode: { type: 'string' }, name: { type: 'string', minLength: 1, maxLength: 80 }, expiresAt: { type: 'string' } },
+  };
+  app.post('/tokens', { schema: { body: { ...tokenBodySchema, required: ['name', 'expiresAt', 'password'] } } }, async (req, reply) => {
+    const body = req.body as { name: string; expiresAt: string };
+    const expires = Date.parse(body.expiresAt);
+    if (!body.name.trim() || !Number.isFinite(expires) || expires <= Date.now()) {
+      return reply.status(400).send({ error: 'Name (1–80 characters) and a future expiration date required' });
+    }
+    if (!await authorizeTokenManagement(req, reply, 'api_token_create')) return;
+    const token = apiTokens.create(body.name.trim(), new Date(expires).toISOString());
+    audit.record({ type: 'api_token_created', status: 'success', username: config.username, ...getRequestContext(req, config.trustProxy), metadata: { tokenId: token.id } });
+    return reply.status(201).send(token);
+  });
+
+  app.delete('/tokens/:id', { schema: { body: tokenBodySchema } }, async (req, reply) => {
+    if (!await authorizeTokenManagement(req, reply, 'api_token_revoke')) return;
+    const id = (req.params as { id: string }).id;
+    if (!apiTokens.revoke(id)) return reply.status(404).send({ error: 'API token not found' });
+    audit.record({ type: 'api_token_revoked', status: 'success', username: config.username, ...getRequestContext(req, config.trustProxy), metadata: { tokenId: id } });
+    return { success: true };
+  });
 
   function getPreferenceValue(key: string): string | undefined {
     const row = db

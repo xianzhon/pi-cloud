@@ -109,7 +109,7 @@ pnpm dev
 
 ## 文档
 
-浏览[文档索引](docs/README.md)，查看全部用户手册和开发者参考资料。
+浏览[文档索引](docs/README.md)，查看全部用户手册和开发者参考资料。如需使用 API 令牌和可选流式响应将其他应用连接到持久化 AI 会话，请参阅[集成 API 手册](docs/manuals-cn/integration-api.md)。
 
 ## 开发
 
