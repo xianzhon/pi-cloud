@@ -1333,6 +1333,40 @@ describe('PiSessionService', () => {
     expect(sessions[0].id).toBe('session-1');
   });
 
+  it('waits for an in-flight session list instead of returning the empty cache placeholder', async () => {
+    const service = new PiSessionService();
+    vi.spyOn(service as any, 'getClientAgentDir').mockResolvedValue('/Users/test/.pi/work');
+    let finishLoading!: (sessions: object[]) => void;
+    sessionManagerList.mockImplementationOnce(() => new Promise((resolve) => {
+      finishLoading = resolve;
+    }));
+
+    const firstRequest = service.listSessions('client-1', '/workspace');
+    await vi.waitFor(() => expect(sessionManagerList).toHaveBeenCalledTimes(1));
+
+    let secondRequestFinished = false;
+    const secondRequest = service.listSessions('client-1', '/workspace').then((sessions) => {
+      secondRequestFinished = true;
+      return sessions;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(secondRequestFinished).toBe(false);
+
+    finishLoading([{
+      id: 'session-1',
+      path: '/Users/test/.pi/work/sessions/--workspace--/session-1.jsonl',
+      cwd: '/workspace',
+      created: '2026-06-07T00:00:00.000Z',
+      modified: '2026-06-07T00:00:00.000Z',
+      messageCount: 1,
+    }]);
+    const [firstSessions, secondSessions] = await Promise.all([firstRequest, secondRequest]);
+    expect(firstSessions.map((session) => session.id)).toEqual(['session-1']);
+    expect(secondSessions).toEqual(firstSessions);
+    expect(await service.listSessions('client-1', '/workspace')).toEqual(firstSessions);
+    expect(sessionManagerList).toHaveBeenCalledTimes(1);
+  });
+
   it('lists all sessions across all project directories in the selected profile', async () => {
     readdir.mockImplementation(async (path: string) => {
       if (path === '/Users/test/.pi') {

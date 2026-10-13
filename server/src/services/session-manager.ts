@@ -1015,8 +1015,8 @@ export class PiSessionService {
       cacheKey = `${agentDir}\u0000${cwd || '*'}`;
       const now = Date.now();
       const cached = this.sessionListCache.get(cacheKey);
-      if (cached && cached.expiresAt > now) return cached.sessions;
       if (cached?.promise) return cached.promise;
+      if (cached && cached.expiresAt > now) return cached.sessions;
 
       const promise = this.readSessionList(agentDir, cwd);
       this.sessionListCache.set(cacheKey, { expiresAt: now + SESSION_LIST_CACHE_TTL_MS, sessions: cached?.sessions || [], promise });
