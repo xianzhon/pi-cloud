@@ -473,6 +473,26 @@ describe('ChatPanel', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
+  it('allows a pasted image before a new session has selected its model', async () => {
+    const ensureSession = vi.fn().mockResolvedValue('new-session');
+    sendMessage.mockResolvedValueOnce(true);
+    const wrapper = mount(ChatPanel, { props: { clientId: 'client-1', ensureSession } });
+    const input = wrapper.find('textarea');
+
+    await input.trigger('paste', {
+      clipboardData: { files: [new File([new Uint8Array([1])], 'photo.jpg', { type: 'image/jpeg' })] },
+    });
+    await vi.waitFor(() => expect(wrapper.find('.attachment-item').exists()).toBe(true));
+
+    expect(wrapper.text()).not.toContain('This model can’t read images');
+    expect(wrapper.find('.send-btn').attributes('disabled')).toBeUndefined();
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(ensureSession).toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith('', 'new-session', expect.objectContaining({ awaitAcceptance: true }));
+  });
+
   it('uses the attachment validation path for paste and drop and enforces the twenty-image limit', async () => {
     const wrapper = mount(ChatPanel);
     const textarea = wrapper.find('textarea');

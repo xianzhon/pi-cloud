@@ -1169,7 +1169,7 @@ const promptPolishTooltip = computed(() => {
   return t('components.chatPanel.polishPrompt');
 });
 const modelSupportsImages = computed(() => sessionStatus.value?.model?.input?.includes('image') === true);
-const imagesBlocked = computed(() => attachments.value.length > 0 && !modelSupportsImages.value);
+const imagesBlocked = computed(() => attachments.value.length > 0 && Boolean(props.sessionId) && !modelSupportsImages.value);
 const streamingStatusLabel = computed(() => getStreamingStatusLabel());
 
 function formatElapsedTime(totalSeconds: number): string {
