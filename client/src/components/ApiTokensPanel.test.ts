@@ -41,6 +41,24 @@ describe('API token settings', () => {
     expect(request).toHaveBeenCalledWith('/api/auth/tokens/id-1', { method: 'DELETE', handleUnauthorized: false, body: { password: 'password', totpCode: '' } });
   });
 
+  it.each([
+    { name: '   ', expiresAt: '2099-01-01T00:00' },
+    { name: 'Notes', expiresAt: '' },
+    { name: 'Notes', expiresAt: '2000-01-01T00:00' },
+  ])('rejects invalid token input: $name / $expiresAt', async ({ name, expiresAt }) => {
+    wrapper = mount(ApiTokensPanel, { props: { totpEnabled: false }, global: { stubs: { Teleport: true } } });
+    await flushPromises();
+    await wrapper.find('header button').trigger('click');
+    await wrapper.find('input').setValue(name);
+    await wrapper.find('input[type="datetime-local"]').setValue(expiresAt);
+    wrapper.findComponent(ConfirmModal).vm.$emit('confirm');
+    await flushPromises();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+    expect(wrapper.findComponent(ConfirmModal).props('visible')).toBe(true);
+    expect(wrapper.find('header button').attributes('disabled')).toBeUndefined();
+  });
+
   it('keeps the dialog open on authentication failure', async () => {
     wrapper = mount(ApiTokensPanel, { props: { totpEnabled: false }, global: { stubs: { Teleport: true } } });
     await flushPromises();

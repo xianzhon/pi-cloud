@@ -19,7 +19,7 @@
       <button type="button" class="dialog-action" @click="copy">{{ t('apiTokens.copy') }}</button>
       <button type="button" class="dialog-action" @click="newToken = ''">{{ t('apiTokens.dismiss') }}</button>
     </div>
-    <ConfirmModal :visible="dialogOpen" :variant="target ? 'danger' : 'primary'" :confirm-text="t(busy ? 'apiTokens.working' : target ? 'apiTokens.revoke' : 'apiTokens.create')" @confirm="confirm" @cancel="close">
+    <ConfirmModal :visible="dialogOpen" :variant="target ? 'danger' : 'primary'" :confirm-text="confirmText" @confirm="confirm" @cancel="close">
       <template #title>{{ t(target ? 'apiTokens.revoke' : 'apiTokens.create') }}</template>
       <template #message>
         <div class="token-form">
@@ -38,13 +38,19 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { i18n } from '../i18n';
 import { useToasts } from '../composables/useToasts';
 import { apiRequest, getApiErrorMessage } from '../services/apiClient';
 import ConfirmModal from './ConfirmModal.vue';
 
-interface ApiToken { id: string; name: string; prefix: string; expiresAt: string; lastUsedAt: string | null }
+interface ApiToken {
+  id: string;
+  name: string;
+  prefix: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+}
 defineProps<{ totpEnabled: boolean }>();
 const emit = defineEmits<{ updated: [] }>();
 const t = i18n.global.t;
@@ -61,11 +67,16 @@ const error = ref('');
 const newToken = ref('');
 let disposed = false;
 
-async function load() {
+const confirmText = computed(() => {
+  if (busy.value) return t('apiTokens.working');
+  return t(target.value ? 'apiTokens.revoke' : 'apiTokens.create');
+});
+
+async function load(): Promise<void> {
   const data = await apiRequest<{ tokens: ApiToken[] }>('/api/auth/tokens');
   if (!disposed) tokens.value = data.tokens;
 }
-function open(token?: ApiToken) {
+function open(token?: ApiToken): void {
   target.value = token || null;
   name.value = '';
   const expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -75,32 +86,44 @@ function open(token?: ApiToken) {
   error.value = '';
   dialogOpen.value = true;
 }
-function close() {
+function close(): void {
   if (busy.value) return;
   dialogOpen.value = false;
   password.value = '';
   code.value = '';
   error.value = '';
 }
-async function copy() {
+async function copy(): Promise<void> {
   try {
     await navigator.clipboard.writeText(newToken.value);
     showToast(t('apiTokens.copied'), 'success');
-  } catch { showToast(t('apiTokens.copyFailed'), 'error'); }
+  } catch {
+    showToast(t('apiTokens.copyFailed'), 'error');
+  }
 }
-async function confirm() {
+async function confirm(): Promise<void> {
   if (busy.value) return;
   busy.value = true;
   error.value = '';
   try {
     const credentials = { password: password.value, totpCode: code.value };
     if (target.value) {
-      await apiRequest(`/api/auth/tokens/${encodeURIComponent(target.value.id)}`, { method: 'DELETE', body: credentials, handleUnauthorized: false });
+      await apiRequest(`/api/auth/tokens/${encodeURIComponent(target.value.id)}`, {
+        method: 'DELETE',
+        body: credentials,
+        handleUnauthorized: false,
+      });
     } else {
+      const tokenName = name.value.trim();
       const date = new Date(expiresAt.value);
-      if (!name.value.trim() || !Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) throw new Error(t('apiTokens.invalidInput'));
+      const expiration = date.getTime();
+      if (!tokenName || !Number.isFinite(expiration) || expiration <= Date.now()) {
+        throw new Error(t('apiTokens.invalidInput'));
+      }
       const result = await apiRequest<{ token: string }, typeof credentials & { name: string; expiresAt: string }>('/api/auth/tokens', {
-        method: 'POST', body: { ...credentials, name: name.value.trim(), expiresAt: date.toISOString() }, handleUnauthorized: false,
+        method: 'POST',
+        body: { ...credentials, name: tokenName, expiresAt: date.toISOString() },
+        handleUnauthorized: false,
       });
       if (!disposed) newToken.value = result.token;
     }
@@ -116,13 +139,23 @@ async function confirm() {
       error.value = getApiErrorMessage(cause, t('apiTokens.failed'));
       showToast(error.value, 'error');
     }
-  } finally { busy.value = false; }
+  } finally {
+    busy.value = false;
+  }
 }
 onMounted(async () => {
-  try { await load(); }
-  catch (cause) { if (!disposed) showToast(getApiErrorMessage(cause, t('apiTokens.failed')), 'error'); }
+  try {
+    await load();
+  } catch (cause) {
+    if (!disposed) showToast(getApiErrorMessage(cause, t('apiTokens.failed')), 'error');
+  }
 });
-onBeforeUnmount(() => { disposed = true; password.value = ''; code.value = ''; newToken.value = ''; });
+onBeforeUnmount(() => {
+  disposed = true;
+  password.value = '';
+  code.value = '';
+  newToken.value = '';
+});
 </script>
 
 <style scoped>

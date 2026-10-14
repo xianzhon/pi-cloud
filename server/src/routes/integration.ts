@@ -34,7 +34,7 @@ function describeSession(session: AgentSession, agentProfileId: string) {
 async function ask(
   sessions: PiSessionService, clientId: string, session: AgentSession, profileId: string,
   body: QuestionBody, reply: FastifyReply,
-) {
+): Promise<FastifyReply> {
   // Session discovery/creation may outlive the HTTP connection.
   if (reply.raw.destroyed) return reply;
   const metadata = describeSession(session, profileId);
@@ -103,9 +103,17 @@ async function ask(
   return reply;
 }
 
-export async function integrationRoutes(app: FastifyInstance) {
+export async function integrationRoutes(app: FastifyInstance): Promise<void> {
   const sessions = app.services.sessions;
   const busy = new Set<string>();
+
+  async function requireKnownProfile(profileId: string, reply: FastifyReply): Promise<boolean> {
+    const profiles = await sessions.listAgentProfiles();
+    if (profiles.some(profile => profile.id === profileId)) return true;
+    reply.status(400).send({ error: 'Unknown agent profile' });
+    return false;
+  }
+
   app.addHook('onRequest', async (_req, reply) => { reply.header('Cache-Control', 'no-store'); });
 
   app.get('/profiles', async () => ({
@@ -118,7 +126,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     type: 'object', required: ['profileId'], properties: { profileId: questionProperties.agentProfileId },
   } } }, async (req, reply) => {
     const { profileId } = req.params as { profileId: string };
-    if (!(await sessions.listAgentProfiles()).some(profile => profile.id === profileId)) return reply.status(400).send({ error: 'Unknown agent profile' });
+    if (!await requireKnownProfile(profileId, reply)) return;
     return { models: await sessions.listAgentProfileModels(profileId) };
   });
 
@@ -132,7 +140,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     const body = req.body as QuestionBody;
     if (Boolean(body.modelProvider) !== Boolean(body.modelId)) return reply.status(400).send({ error: 'Provide both modelProvider and modelId' });
     const profileId = body.agentProfileId || 'default';
-    if (!(await sessions.listAgentProfiles()).some(profile => profile.id === profileId)) return reply.status(400).send({ error: 'Unknown agent profile' });
+    if (!await requireKnownProfile(profileId, reply)) return;
     const cwd = await resolveAllowedExistingPath(body.cwd || process.cwd());
     if (!(await stat(cwd)).isDirectory()) return reply.status(400).send({ error: 'cwd must be a directory' });
     const clientId = `integration:${randomUUID()}`;
@@ -151,10 +159,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const profileId = body.agentProfileId || 'default';
     const clientId = `integration:${profileId}:${id}`;
-    if (!(await sessions.listAgentProfiles()).some(profile => profile.id === profileId)) {
-      reply.status(400).send({ error: 'Unknown agent profile' });
-      return;
-    }
+    if (!await requireKnownProfile(profileId, reply)) return;
     await sessions.setClientAgentProfile(clientId, profileId);
     // Resolve through the selected profile's session directory, never a caller-supplied file path.
     const persisted = await sessions.findPersistedSession(clientId, id);
