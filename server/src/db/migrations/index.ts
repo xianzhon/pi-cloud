@@ -15,6 +15,8 @@ import { passkeysMigration } from './013-passkeys.js';
 import { apiTokensMigration } from './014-api-tokens.js';
 import type { DatabaseMigration } from './migration.js';
 
+import { builtInPromptsMigration } from './015-built-in-prompts.js';
+
 const migrations: DatabaseMigration[] = [
   applicationSchemaMigration,
   gatewaySchemaMigration,
@@ -30,6 +32,7 @@ const migrations: DatabaseMigration[] = [
   taskExecutionQueueMigration,
   passkeysMigration,
   apiTokensMigration,
+  builtInPromptsMigration,
 ];
 
 export function runDatabaseMigrations(db: PiCloudDatabase): void {

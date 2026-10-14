@@ -259,7 +259,7 @@
         ></textarea>
         <div class="composer-meta-row">
           <span class="composer-hint">{{ t('components.chatPanel.enterSendsShiftEnterForNewlineCtrl') }}</span>
-          <div v-if="userPrompts.length" ref="userPromptPickerRef" class="user-prompt-picker">
+          <div v-if="userPrompts.some((prompt) => prompt.enabled !== false)" ref="userPromptPickerRef" class="user-prompt-picker">
             <button
               type="button"
               class="prompt-polish-btn tooltip tooltip-above"
@@ -271,8 +271,8 @@
               <PhTextT :size="16" />
             </button>
             <div v-if="showUserPrompts" class="user-prompt-menu" role="menu">
-              <button v-for="prompt in userPrompts" :key="prompt.id" type="button" role="menuitem" @click="insertUserPrompt(prompt.content)">
-                <strong>{{ prompt.name }}</strong>
+              <button v-for="prompt in userPrompts.filter((item) => item.enabled !== false)" :key="prompt.id" type="button" role="menuitem" @click="insertUserPrompt(prompt.content)">
+                <strong>{{ prompt.name }}<small v-if="prompt.builtIn"> · {{ t('components.userPromptsPanel.builtIn') }}</small></strong>
                 <span>{{ prompt.content }}</span>
               </button>
             </div>

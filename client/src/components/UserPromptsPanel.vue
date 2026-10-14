@@ -4,6 +4,7 @@
       <p>{{ t('components.userPromptsPanel.description') }}</p>
     </header>
 
+    <p v-if="saveError && !formVisible" class="save-error" role="alert">{{ saveError }}</p>
     <div class="prompt-workspace">
       <section class="prompt-library" :aria-label="t('components.userPromptsPanel.savedPrompts')">
         <div class="prompt-library-header">
@@ -19,7 +20,7 @@
 
         <div v-if="prompts.length" class="user-prompts-list">
           <article
-            v-for="prompt in prompts"
+            v-for="(prompt, index) in prompts"
             :key="prompt.id"
             class="user-prompt-card"
             :class="{ active: selectedId === prompt.id }"
@@ -28,13 +29,20 @@
             <div class="user-prompt-copy">
               <div class="user-prompt-heading">
                 <strong>{{ prompt.name }}</strong>
-                <time :datetime="prompt.updatedAt">{{ t('components.userPromptsPanel.updated', { date: formatDate(prompt.updatedAt) }) }}</time>
+                <div class="user-prompt-meta">
+                  <span v-if="prompt.builtIn" class="prompt-badge">{{ t('components.userPromptsPanel.builtIn') }}</span>
+                  <span v-if="prompt.enabled === false" class="prompt-badge">{{ t('components.userPromptsPanel.disabled') }}</span>
+                  <time :datetime="prompt.updatedAt">{{ t('components.userPromptsPanel.updated', { date: formatDate(prompt.updatedAt) }) }}</time>
+                </div>
               </div>
               <p>{{ prompt.content }}</p>
             </div>
             <div class="user-prompt-actions">
+              <button type="button" :disabled="saving || index === 0" :aria-label="t('components.userPromptsPanel.moveUp')" @click.stop="movePrompt(index, -1)">↑</button>
+              <button type="button" :disabled="saving || index === prompts.length - 1" :aria-label="t('components.userPromptsPanel.moveDown')" @click.stop="movePrompt(index, 1)">↓</button>
               <button type="button" :aria-label="t('components.userPromptsPanel.edit')" :title="t('components.userPromptsPanel.edit')" @click.stop="startEditing(prompt)"><PhPencilSimple :size="15" weight="bold" /></button>
-              <button type="button" class="danger" :aria-label="t('components.userPromptsPanel.delete')" :title="t('components.userPromptsPanel.delete')" @click.stop="emit('deletePrompt', prompt.id)"><PhTrash :size="15" weight="bold" /></button>
+              <button v-if="prompt.builtIn" type="button" class="toggle-prompt-button" :disabled="saving" @click.stop="togglePrompt(prompt)">{{ t(prompt.enabled === false ? 'components.userPromptsPanel.enable' : 'components.userPromptsPanel.disable') }}</button>
+              <button v-if="!prompt.builtIn" type="button" class="danger" :aria-label="t('components.userPromptsPanel.delete')" :title="t('components.userPromptsPanel.delete')" @click.stop="emit('deletePrompt', prompt.id)"><PhTrash :size="15" weight="bold" /></button>
             </div>
           </article>
         </div>
@@ -106,6 +114,7 @@ const emit = defineEmits<{
   createPrompt: [input: UserPromptInput, complete: SaveComplete];
   updatePrompt: [payload: { id: string; changes: UserPromptInput }, complete: SaveComplete];
   deletePrompt: [id: string];
+  reorderPrompts: [ids: string[], complete: SaveComplete];
 }>();
 const selectedId = ref<string | null>(null);
 const editingId = ref<string | null>(null);
@@ -121,6 +130,24 @@ watch(() => props.prompts, (prompts) => {
     selectedId.value = prompts[0]?.id ?? null;
   }
 }, { immediate: true });
+
+function movePrompt(index: number, direction: number): void {
+  const ids = props.prompts.map((prompt) => prompt.id);
+  [ids[index], ids[index + direction]] = [ids[index + direction]!, ids[index]!];
+  saving.value = true;
+  emit('reorderPrompts', ids, (error) => {
+    saving.value = false;
+    saveError.value = error ? (error instanceof Error ? error.message : t('components.userPromptsPanel.saveFailed')) : '';
+  });
+}
+
+function togglePrompt(prompt: UserPrompt): void {
+  saving.value = true;
+  emit('updatePrompt', { id: prompt.id, changes: { name: prompt.name, content: prompt.content, enabled: prompt.enabled === false } }, (error) => {
+    saving.value = false;
+    saveError.value = error ? (error instanceof Error ? error.message : t('components.userPromptsPanel.saveFailed')) : '';
+  });
+}
 
 function selectPrompt(prompt: UserPrompt): void {
   selectedId.value = prompt.id;
@@ -196,6 +223,20 @@ function save(): void {
 </script>
 
 <style scoped>
+.prompt-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .user-prompts-panel {
   height: 100%;
   min-height: 0;
@@ -315,10 +356,10 @@ h4 {
 }
 
 .user-prompt-card {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 0.75rem;
   padding: 0.875rem;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -339,10 +380,12 @@ h4 {
 }
 
 .user-prompt-copy {
-  min-width: 0;
+  /* Let the description span beneath both the heading and action buttons. */
+  display: contents;
 }
 
 .user-prompt-heading {
+  min-width: 0;
   display: grid;
   gap: 0.15rem;
 }
@@ -356,12 +399,22 @@ h4 {
   white-space: nowrap;
 }
 
+.user-prompt-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
 .user-prompt-heading time {
   color: var(--text-muted);
   font-size: 0.6875rem;
 }
 
 .user-prompt-copy p {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
   display: -webkit-box;
   margin: 0.45rem 0 0;
   overflow: hidden;
@@ -375,10 +428,24 @@ h4 {
 }
 
 .user-prompt-actions {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
-  flex: 0 0 auto;
+  flex-wrap: nowrap;
   gap: 0.35rem;
   transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.user-prompt-actions .toggle-prompt-button {
+  width: auto;
+  padding: 0 0.5rem;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.user-prompt-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 @media (hover: hover) {

@@ -573,6 +573,7 @@
       @delete-skill-preset="handleDeleteSkillPreset"
       @create-user-prompt="handleCreateUserPrompt"
       @update-user-prompt="handleUpdateUserPrompt"
+      @reorder-user-prompts="handleReorderUserPrompts"
       @delete-user-prompt="deleteUserPrompt"
       @load-user-prompts="handleLoadUserPrompts"
       @clear-launch-cache="handleClearLaunchCache"
@@ -754,7 +755,7 @@ const t = i18n.global.t;
 const restoredWorkspaceState = loadWorkspaceState();
 watch(language, setLocale, { immediate: true });
 
-const { prompts: userPrompts, loadPrompts: loadUserPrompts, createPrompt: createUserPrompt, updatePrompt: updateUserPrompt, deletePrompt: deleteUserPrompt } = useUserPrompts();
+const { prompts: userPrompts, loadPrompts: loadUserPrompts, createPrompt: createUserPrompt, updatePrompt: updateUserPrompt, deletePrompt: deleteUserPrompt, reorderPrompts: reorderUserPrompts } = useUserPrompts();
 
 const { resolvedTheme } = useTheme();
 const themeToggleLabel = computed(() => resolvedTheme.value === 'dark' ? t('app.switchToLightTheme') : t('app.switchToDarkTheme'));
@@ -2045,9 +2046,18 @@ async function handleCreateUserPrompt(input: { name: string; content: string }, 
   }
 }
 
-async function handleUpdateUserPrompt(payload: { id: string; changes: { name: string; content: string } }, complete: (error?: unknown) => void) {
+async function handleUpdateUserPrompt(payload: { id: string; changes: { name: string; content: string; enabled?: boolean } }, complete: (error?: unknown) => void) {
   try {
     await updateUserPrompt(payload.id, payload.changes);
+    complete();
+  } catch (error) {
+    complete(error);
+  }
+}
+
+async function handleReorderUserPrompts(ids: string[], complete: (error?: unknown) => void): Promise<void> {
+  try {
+    await reorderUserPrompts(ids);
     complete();
   } catch (error) {
     complete(error);

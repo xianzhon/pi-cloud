@@ -71,7 +71,7 @@ describe('openPiCloudDatabase', () => {
       'weixin_gateway_state',
     ]);
     const userPromptColumns = db.prepare('PRAGMA table_info(user_prompts)').all() as Array<{ name: string }>;
-    expect(userPromptColumns.map((column) => column.name)).toEqual(['id', 'name', 'content', 'created_at', 'updated_at']);
+    expect(userPromptColumns.map((column) => column.name)).toEqual(['id', 'name', 'content', 'created_at', 'updated_at', 'built_in', 'enabled', 'sort_order']);
 
     const kickoffColumns = db.prepare('PRAGMA table_info(model_window_kickoffs)').all() as Array<{ name: string; notnull: number }>;
     expect(kickoffColumns.map((column) => column.name)).toContain('project_path');
@@ -343,10 +343,11 @@ describe('openPiCloudDatabase', () => {
       { version: 12, name: 'task-execution-queue' },
       { version: 13, name: 'passkeys' },
       { version: 14, name: 'api-tokens' },
+      { version: 15, name: 'built-in-prompts' },
     ]);
 
     runDatabaseMigrations(db);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 14 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 15 });
     db.close();
   });
 

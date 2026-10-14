@@ -5,6 +5,9 @@ export interface UserPrompt {
   id: string;
   name: string;
   content: string;
+  builtIn?: boolean;
+  enabled?: boolean;
+  sortOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -12,6 +15,7 @@ export interface UserPrompt {
 export interface UserPromptInput {
   name: string;
   content: string;
+  enabled?: boolean;
 }
 
 const prompts = ref<UserPrompt[]>([]);
@@ -36,5 +40,10 @@ export function useUserPrompts() {
     await loadPrompts();
   }
 
-  return { prompts, loadPrompts, createPrompt, updatePrompt, deletePrompt };
+  async function reorderPrompts(ids: string[]): Promise<void> {
+    await apiRequest('/api/auth/user-prompts/order', { method: 'PUT', body: { ids } });
+    await loadPrompts();
+  }
+
+  return { prompts, loadPrompts, createPrompt, updatePrompt, deletePrompt, reorderPrompts };
 }

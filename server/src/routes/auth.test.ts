@@ -745,7 +745,10 @@ describe('authRoutes', () => {
     const cookieHeader = String(login.headers['set-cookie']).split(';')[0];
     const headers = { cookie: cookieHeader };
 
-    expect((await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json()).toEqual({ prompts: [] });
+    const initial = (await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json();
+    expect(initial.prompts).toHaveLength(1);
+    const builtIn = initial.prompts[0];
+    expect(builtIn).toMatchObject({ builtIn: true, enabled: true });
     const create = await app.inject({
       method: 'POST', url: '/api/auth/user-prompts', headers,
       payload: { name: 'Review', content: 'Review this change.' },
@@ -759,10 +762,22 @@ describe('authRoutes', () => {
     });
     expect(update.json()).toMatchObject({ prompt: { id, name: 'Test', content: 'Write focused tests.' } });
     expect((await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json())
-      .toMatchObject({ prompts: [{ id, name: 'Test', content: 'Write focused tests.' }] });
+      .toMatchObject({ prompts: [{ id: builtIn.id }, { id, name: 'Test', content: 'Write focused tests.' }] });
+
+    const disable = await app.inject({
+      method: 'PATCH', url: `/api/auth/user-prompts/${builtIn.id}`, headers,
+      payload: { name: 'Task later', content: 'Save the agreed task.', enabled: false, builtIn: false },
+    });
+    expect(disable.json()).toMatchObject({ prompt: { builtIn: true, enabled: false, content: 'Save the agreed task.' } });
+    expect((await app.inject({ method: 'DELETE', url: `/api/auth/user-prompts/${builtIn.id}`, headers })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PUT', url: '/api/auth/user-prompts/order', headers, payload: { ids: [id, builtIn.id] } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json().prompts.map((prompt: { id: string }) => prompt.id)).toEqual([id, builtIn.id]);
+    for (const ids of [[id], [id, id], [id, 'missing']]) {
+      expect((await app.inject({ method: 'PUT', url: '/api/auth/user-prompts/order', headers, payload: { ids } })).statusCode).toBe(400);
+    }
 
     expect((await app.inject({ method: 'DELETE', url: `/api/auth/user-prompts/${id}`, headers })).json()).toEqual({ success: true });
-    expect((await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json()).toEqual({ prompts: [] });
+    expect((await app.inject({ method: 'GET', url: '/api/auth/user-prompts', headers })).json()).toMatchObject({ prompts: [{ id: builtIn.id, enabled: false }] });
   });
 
   it('rate limits user prompt persistence requests by IP', async () => {

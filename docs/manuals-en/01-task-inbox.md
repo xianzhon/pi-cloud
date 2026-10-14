@@ -19,6 +19,12 @@ The Task Inbox lets you save work for Pi to do later, then start it as a new Pi 
 - Assign different models, agent profiles, or skill combinations to different work.
 - Prepare task descriptions and private notes now, then start the work later.
 
+## Built-in Task Inbox Prompt
+
+The chat prompt picker includes **Save to Task Inbox**, a built-in reusable prompt asking Pi to save the agreed requirements—including background, scope, constraints, and acceptance criteria—without implementing them yet. Selecting it inserts its text into your draft; send the message when ready.
+
+In **Settings → Prompts**, built-in prompts have a **Built-in** badge. You can edit their name and content or disable/re-enable them, but cannot delete them. Disabled prompts remain in Settings and are hidden from the chat picker. Use the up/down buttons to order built-in and user-created prompts together; the picker follows that order. User-created prompts remain editable and deletable. Edits, disabled state, and order are saved across restarts. These are reusable chat instructions, not changes to the agent's system instruction.
+
 ## Opening the Task Inbox
 
 ### Desktop

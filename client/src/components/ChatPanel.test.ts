@@ -147,6 +147,21 @@ describe('ChatPanel', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
+  it('hides disabled prompts and distinguishes built-ins in the ordered picker', async () => {
+    const prompt = { id: 'builtin', name: 'Task Inbox', content: 'Save task.', builtIn: true, createdAt: '', updatedAt: '' };
+    const wrapper = mount(ChatPanel, {
+      props: { userPrompts: [prompt, { ...prompt, id: 'disabled', name: 'Disabled task', enabled: false }, { ...prompt, id: 'user', name: 'Review', builtIn: false }] },
+    });
+    await wrapper.find('.user-prompt-picker > button').trigger('click');
+    const items = wrapper.findAll('.user-prompt-menu button');
+    expect(items).toHaveLength(2);
+    expect(items[0]!.text()).toContain('Task Inbox');
+    expect(items[0]!.text()).toContain('Built-in');
+    expect(items[1]!.text()).toContain('Review');
+    await wrapper.setProps({ userPrompts: [{ ...prompt, enabled: false }] });
+    expect(wrapper.find('.user-prompt-picker').exists()).toBe(false);
+  });
+
   it('closes the saved prompt menu when clicking outside it', async () => {
     const wrapper = mount(ChatPanel, {
       props: { userPrompts: [{ id: 'prompt-1', name: 'Review', content: 'Review this change.', createdAt: '2026-09-10T10:00:00.000Z', updatedAt: '2026-09-11T10:00:00.000Z' }] },

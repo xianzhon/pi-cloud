@@ -747,6 +747,7 @@
                 :prompts="userPrompts"
                 @create-prompt="forwardCreateUserPrompt"
                 @update-prompt="forwardUpdateUserPrompt"
+                @reorder-prompts="forwardReorderPrompts"
                 @delete-prompt="emit('deleteUserPrompt', $event)"
               />
               <ModelWindowKickoffPanel v-if="activeSection === 'modelWindowKickoff'" :client-id="clientId" />
@@ -1563,6 +1564,10 @@ function forwardCreateUserPrompt(input: UserPromptInput, complete: (error?: unkn
   emit('createUserPrompt', input, complete);
 }
 
+function forwardReorderPrompts(ids: string[], complete: (error?: unknown) => void): void {
+  emit('reorderUserPrompts', ids, complete);
+}
+
 function forwardUpdateUserPrompt(payload: { id: string; changes: UserPromptInput }, complete: (error?: unknown) => void): void {
   emit('updateUserPrompt', payload, complete);
 }
@@ -1645,6 +1650,7 @@ const emit = defineEmits<{
   createUserPrompt: [input: UserPromptInput, complete: (error?: unknown) => void];
   updateUserPrompt: [payload: { id: string; changes: UserPromptInput }, complete: (error?: unknown) => void];
   deleteUserPrompt: [id: string];
+  reorderUserPrompts: [ids: string[], complete: (error?: unknown) => void];
   loadUserPrompts: [];
   'update:showHintInfo': [value: boolean];
   'update:showCodeBlockLanguageHeaders': [value: boolean];

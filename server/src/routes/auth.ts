@@ -269,12 +269,13 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     return { name, mode, skills };
   }
 
-  function parseUserPromptBody(body: Record<string, unknown>): { name: string; content: string } {
+  function parseUserPromptBody(body: Record<string, unknown>): { name: string; content: string; enabled?: boolean } {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const content = typeof body.content === 'string' ? body.content.trim() : '';
     if (!name) throw new Error('name is required');
     if (!content) throw new Error('content is required');
-    return { name, content };
+    if (body.enabled !== undefined && typeof body.enabled !== 'boolean') throw new Error('enabled must be a boolean');
+    return { name, content, enabled: body.enabled as boolean | undefined };
   }
 
   function isUniqueConstraintError(error: unknown) {
@@ -550,6 +551,18 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
       }
     });
 
+    userPromptRoutes.put('/user-prompts/order', async (req, reply) => {
+      if (!requireAuth(req, reply)) return;
+      try {
+        const ids = (req.body as { ids?: unknown })?.ids;
+        if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) throw new Error('ids must be an array of strings');
+        userPromptStore.reorder(ids);
+        return { success: true };
+      } catch (error) {
+        return sendUserPromptError(reply, error);
+      }
+    });
+
     userPromptRoutes.patch('/user-prompts/:id', async (req, reply) => {
       const session = requireAuth(req, reply);
       if (!session) return;
@@ -568,8 +581,12 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     userPromptRoutes.delete('/user-prompts/:id', async (req, reply) => {
       const session = requireAuth(req, reply);
       if (!session) return;
-      userPromptStore.delete((req.params as { id: string }).id);
-      return { success: true };
+      try {
+        userPromptStore.delete((req.params as { id: string }).id);
+        return { success: true };
+      } catch (error) {
+        return sendUserPromptError(reply, error);
+      }
     });
   });
 
