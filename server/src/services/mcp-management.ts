@@ -52,6 +52,8 @@ export class McpManagement {
   private static writes = new Map<string, Promise<unknown>>();
   private readonly policyPath: string;
   private readonly managedToolNames = new Set<string>();
+  private loadedServers?: Map<string, ServerEntry>;
+  private loadedSettings?: string;
   constructor(readonly profilePath: string, readonly cwd: string, private readonly sharedPaths = [join(homedir(), '.config/mcp/mcp.json')]) {
     this.policyPath = join(profilePath, 'pi-cloud-mcp.json');
   }
@@ -216,8 +218,29 @@ export class McpManagement {
     });
     session.setActiveToolsByName([...session.getActiveToolNames().filter(name => !this.managedToolNames.has(name)), ...enabled]);
   }
+  hasOnlyBearerTokenChanges(server: string): boolean {
+    if (!this.loadedServers) return false;
+    const { servers, settings } = this.configuration();
+    if (servers.size !== this.loadedServers.size || JSON.stringify(settings) !== this.loadedSettings) return false;
+    let changed = false;
+    for (const [name, { entry }] of servers) {
+      const previous = this.loadedServers.get(name);
+      if (!previous) return false;
+      if (JSON.stringify(previous) === JSON.stringify(entry)) continue;
+      if (name !== server || typeof entry.bearerToken !== 'string') return false;
+      const withoutToken = (value: ServerEntry) => Object.fromEntries(Object.entries(value).filter(([field]) => field !== 'bearerToken'));
+      if (JSON.stringify(withoutToken(previous)) !== JSON.stringify(withoutToken(entry))) return false;
+      changed = true;
+    }
+    return changed;
+  }
   wrapExtensions(base: LoadExtensionsResult, sessionId: string, run: <T>(work: () => Promise<T>) => Promise<T>): LoadExtensionsResult {
-    const signatures = new Map([...this.configuration().servers].map(([name, value]) => [name, JSON.stringify(value.entry)]));
+    const { servers, settings } = this.configuration();
+    this.managedToolNames.clear();
+    this.loadedServers = base.extensions.some(extension => /(^|[/\\])pi-mcp-adapter([/\\]|$)/.test(extension.resolvedPath))
+      ? new Map([...servers].map(([name, value]) => [name, value.entry])) : undefined;
+    this.loadedSettings = JSON.stringify(settings);
+    const signatures = new Map([...servers].map(([name, value]) => [name, JSON.stringify(value.entry)]));
     const assertCurrent = (server: string) => {
       const current = this.configuration().servers.get(server);
       if (!current || signatures.get(server) !== JSON.stringify(current.entry)) throw new Error('MCP server configuration changed. Resume this session to reconnect before using its tools.');

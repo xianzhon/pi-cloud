@@ -128,6 +128,83 @@ describe('MCP management', () => {
     finally { resumed.dispose(); }
   });
 
+  it('reloads token-only changes through the SDK without replacing the conversation or bypassing permissions', async () => {
+    const { manager, profile, cwd } = setup();
+    const configPath = join(profile, 'mcp.json');
+    const entry = { url: 'https://example.com/mcp', auth: 'bearer', bearerToken: 'old-token', directTools: true };
+    writeFileSync(configPath, JSON.stringify({ mcpServers: { docs: entry } }));
+    const tokens: string[] = [];
+    let shutdowns = 0;
+    let sessionIdForPolicy = 's1';
+    const loader = new DefaultResourceLoader({ cwd, agentDir: profile, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true,
+      settingsManager: SettingsManager.inMemory(),
+      extensionFactories: [pi => {
+        let token = '';
+        pi.on('session_start', async () => {
+          const config = JSON.parse(readFileSync(configPath, 'utf8')).mcpServers.docs;
+          token = config.bearerToken;
+          writeFileSync(join(profile, 'mcp-cache.json'), JSON.stringify({ version: 1, servers: { docs: { configHash: mcpServerHash(config), tools: [{ name: 'read-doc' }, { name: 'delete_doc' }], cachedAt: Date.now() } } }));
+        });
+        pi.on('session_shutdown', async () => { shutdowns++; token = ''; });
+        for (const name of ['mcp', 'docs_read-doc', 'docs_delete_doc']) pi.registerTool({ name, label: 'MCP', description: 'fixture', parameters: Type.Any(), async execute() {
+          tokens.push(token);
+          return { content: [{ type: 'text', text: 'executed' }], details: {} };
+        } });
+      }],
+      extensionsOverride: base => { base.extensions[0].resolvedPath = '/fixture/pi-mcp-adapter/index.ts'; return manager.wrapExtensions(base, sessionIdForPolicy, work => work()); },
+    });
+    await loader.reload();
+    const { session } = await createAgentSession({ cwd, agentDir: profile, resourceLoader: loader, sessionManager: SessionManager.inMemory(cwd), settingsManager: SettingsManager.inMemory() });
+    await session.bindExtensions({ mode: 'print' });
+    const sessionId = session.sessionId;
+    sessionIdForPolicy = sessionId;
+    session.sessionManager.appendMessage({ role: 'user', content: 'Keep this conversation', timestamp: Date.now() });
+    const invoke = (name: string, params: Record<string, unknown> = {}) => session.extensionRunner.getToolDefinition(name)!.execute('test', params, new AbortController().signal, undefined, session.extensionRunner.createContext());
+    try {
+      await invoke('mcp', { tool: 'read-doc', server: 'docs' });
+      expect(tokens).toEqual(['old-token']);
+      await manager.setSessionTools(sessionId, [{ server: 'docs', tool: 'delete_doc', enabled: false }]);
+      await manager.saveServer('docs', { url: entry.url, bearerToken: 'new-token' });
+      expect(manager.hasOnlyBearerTokenChanges('docs')).toBe(true);
+      expect(manager.hasOnlyBearerTokenChanges('other')).toBe(false);
+      // Old transports remain guarded until reload actually completes.
+      await expect(invoke('mcp', { connect: 'docs' })).rejects.toThrow(/Resume/);
+      await session.reload();
+      await session.bindExtensions({ mode: 'print' });
+      manager.refreshActiveTools(session);
+      expect(shutdowns).toBe(1);
+      expect(session.sessionId).toBe(sessionId);
+      expect(session.sessionManager.getBranch().some(item => item.type === 'message' && item.message.role === 'user')).toBe(true);
+      expect(manager.hasOnlyBearerTokenChanges('docs')).toBe(false);
+      await invoke('mcp', { tool: 'read-doc', server: 'docs' });
+      await invoke('docs_read-doc');
+      expect(tokens).toEqual(['old-token', 'new-token', 'new-token']);
+      expect(session.getActiveToolNames()).not.toContain('docs_delete_doc');
+      await expect(invoke('docs_delete_doc')).rejects.toThrow(/disabled/);
+      await expect(invoke('mcp', { tool: 'delete_doc', server: 'docs' })).rejects.toThrow(/disabled/);
+      await manager.saveServer('docs', { url: 'https://changed.example.com/mcp', bearerToken: 'third-token' });
+      expect(manager.hasOnlyBearerTokenChanges('docs')).toBe(false);
+    } finally { session.dispose(); }
+  });
+
+  it('does not hot reload environment references, other servers, or settings changes', async () => {
+    const { manager, profile } = setup();
+    const path = join(profile, 'mcp.json');
+    const entry = { url: 'https://example.com/mcp', auth: 'bearer', bearerToken: 'old-token' };
+    const snapshot = () => manager.wrapExtensions({ extensions: [{ resolvedPath: '/fixture/pi-mcp-adapter/index.ts', tools: new Map(), handlers: new Map() }], errors: [], runtime: {} } as any, 's1', work => work());
+    const setConfig = (docs: Record<string, unknown>, extra = {}) => writeFileSync(path, JSON.stringify({ mcpServers: { docs }, ...extra }));
+    setConfig(entry);
+    snapshot();
+    setConfig({ ...entry, bearerTokenEnv: 'NEW_TOKEN' });
+    expect(manager.hasOnlyBearerTokenChanges('docs')).toBe(false);
+    setConfig({ ...entry, bearerToken: 'new-token' }, { settings: { toolPrefix: 'changed' } });
+    expect(manager.hasOnlyBearerTokenChanges('docs')).toBe(false);
+    writeFileSync(path, JSON.stringify({ mcpServers: { docs: { ...entry, bearerToken: 'new-token' }, added: { command: 'node' } } }));
+    expect(manager.hasOnlyBearerTokenChanges('docs')).toBe(false);
+    setConfig({ ...entry, bearerToken: 'new-token' });
+    expect(manager.hasOnlyBearerTokenChanges('docs')).toBe(true);
+  });
+
   it('honors adapter exclusions and project provenance without writing shared files', async () => {
     const { manager, profile, cwd } = setup();
     writeFileSync(join(cwd, '.mcp.json'), JSON.stringify({ mcpServers: { docs: { command: 'node', excludeTools: ['read-doc'] } } }));

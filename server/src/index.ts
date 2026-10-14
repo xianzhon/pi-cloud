@@ -26,6 +26,8 @@ import { gitHostingRoutes, type GitHostingRouteOptions } from './routes/git-host
 import { reviewSourceRoutes } from './routes/review-sources.js';
 import { modelWindowKickoffRoutes } from './routes/model-window-kickoffs.js';
 import { authRoutes } from './routes/auth.js';
+import { integrationRoutes } from './routes/integration.js';
+import { ApiTokenStore } from './auth/api-tokens.js';
 import { chatWebSocket } from './ws/chat.js';
 import { terminalWebSocket } from './ws/terminal.js';
 import { loadAuthConfig, type AuthConfig } from './config/auth.js';
@@ -310,6 +312,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const taskExecutionQueue = new TaskExecutionQueue({ db, tasks: projectTaskStore, starter: projectTaskStarter, sessions: piSessionService });
   const audit = new AuditLog(db);
   const sessions = new SessionStore(db, authConfig.cookieName);
+  const apiTokens = new ApiTokenStore(db, authConfig);
   const totp = new TotpService(db, 'Pi Cloud', authConfig.username);
   const rateLimiter = new IpRateLimiter({ maxFailures: 5, windowMs: 15 * 60 * 1000 });
   app.decorate('authServices', { authConfig, db, audit, sessions, totp, rateLimiter });
@@ -367,6 +370,11 @@ export async function buildApp(): Promise<FastifyInstance> {
       return reply.status(403).send({ error: 'Origin not allowed' });
     }
 
+    if (req.headers.authorization !== undefined) {
+      apiTokens.authorizeRequest(req, reply);
+      return;
+    }
+
     if (isPublicRoute(req)) return;
 
     // Reject unauthenticated WebSocket upgrades before the socket is accepted.
@@ -385,7 +393,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
-  await app.register(authRoutes, { prefix: '/api/auth', config: authConfig, sessions, audit, totp, rateLimiter, db });
+  await app.register(authRoutes, { prefix: '/api/auth', config: authConfig, sessions, audit, totp, rateLimiter, db, apiTokens });
+  await app.register(integrationRoutes, { prefix: '/api/integration' });
   await app.register(sessionRoutes, {
     prefix: '/api/sessions',
     projectTaskStore,

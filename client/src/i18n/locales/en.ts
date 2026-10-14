@@ -1,4 +1,16 @@
 export default {
+  apiTokens: {
+    title: 'API Tokens',
+    help: 'Connect other applications to AI sessions. Tokens can run agent tools; keep them on your server, never in browser code.',
+    create: 'Create token', revoke: 'Revoke', empty: 'No API tokens yet.',
+    name: 'Name', expires: 'Expires', lastUsed: 'Last used', never: 'Never',
+    shownOnce: 'Copy this token now. It will not be shown again.',
+    copy: 'Copy', dismiss: 'Dismiss', copied: 'Token copied', copyFailed: 'Could not copy token. Select and copy it manually.',
+    working: 'Working…', revokeConfirm: 'Revoke token “{name}”? Applications using it will lose access.',
+    confirmHelp: 'Choose a name and expiration date. Confirm with your password and verification code if 2FA is enabled.',
+    invalidInput: 'Enter a name and a future expiration date.',
+    created: 'API token created', revoked: 'API token revoked', failed: 'API token operation failed',
+  },
   modelResponse: {
     failed: 'Model response failed',
     retrying: 'Model unavailable - retrying ({attempt}/{maxAttempts})',

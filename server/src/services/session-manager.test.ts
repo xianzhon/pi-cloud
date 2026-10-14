@@ -260,6 +260,48 @@ describe('PiSessionService', () => {
     }
   });
 
+  it('applies saved bearer tokens to matching loaded sessions in profile context', async () => {
+    const service = new PiSessionService({ db });
+    const state = service as any;
+    const inventory = { servers: [] };
+    const saving = { saveServer: vi.fn(async () => inventory), list: vi.fn(() => inventory) };
+    vi.spyOn(state, 'profileMcp').mockResolvedValue({ profile: { id: 'default', path: '/profiles/default' }, manager: saving });
+    const makeSession = (profileId: string, changed: boolean) => {
+      const handler = vi.fn(async () => { expect(process.env.PI_CODING_AGENT_DIR).toBe('/profiles/default'); });
+      const session = { isStreaming: false, reload: vi.fn(async () => { expect(process.env.PI_CODING_AGENT_DIR).toBe('/profiles/default'); }), bindExtensions: vi.fn(async () => {}), extensionRunner: { getCommand: vi.fn(() => ({ handler })), createCommandContext: vi.fn(() => ({})) }, messages: ['preserved'] };
+      const manager = { hasOnlyBearerTokenChanges: vi.fn(() => changed), refreshActiveTools: vi.fn() };
+      state.sessions.set(`${profileId}-${changed}`, session);
+      state.mcpContexts.set(session, { profileId, manager });
+      return { session, manager, handler };
+    };
+    const changed = makeSession('default', true);
+    const overridden = makeSession('default', false);
+    const otherProfile = makeSession('other', true);
+    expect(await service.saveMcpServer('default', 'docs', { url: 'https://example.com/mcp', bearerToken: 'new-token' })).toBe(inventory);
+    expect(saving.saveServer).toHaveBeenCalledWith('docs', { url: 'https://example.com/mcp', bearerToken: 'new-token' });
+    expect(changed.manager.hasOnlyBearerTokenChanges).toHaveBeenCalledWith('docs');
+    expect(changed.session.reload).toHaveBeenCalledOnce();
+    expect(changed.session.bindExtensions).toHaveBeenCalledWith({ mode: 'print' });
+    expect(changed.handler).toHaveBeenCalledWith('status', {});
+    expect(changed.manager.refreshActiveTools).toHaveBeenCalledWith(changed.session);
+    expect(changed.session.messages).toEqual(['preserved']);
+    expect(overridden.session.reload).not.toHaveBeenCalled();
+    expect(otherProfile.session.reload).not.toHaveBeenCalled();
+  });
+
+  it('rejects token changes while a matching profile session is streaming', async () => {
+    const service = new PiSessionService({ db });
+    const state = service as any;
+    const saveServer = vi.fn();
+    vi.spyOn(state, 'profileMcp').mockResolvedValue({ profile: { id: 'default', path: '/profiles/default' }, manager: { saveServer } });
+    const session = { isStreaming: true, reload: vi.fn() };
+    state.sessions.set('s1', session);
+    state.mcpContexts.set(session, { profileId: 'default' });
+    await expect(service.saveMcpServer('default', 'docs', { bearerToken: 'new-token' })).rejects.toThrow(/streaming/);
+    expect(saveServer).not.toHaveBeenCalled();
+    expect(session.reload).not.toHaveBeenCalled();
+  });
+
   it('does not read profile database settings after cancelled discovery', async () => {
     const service = new PiSessionService({ db });
     const settings = vi.spyOn(service as any, 'getProfileSettings');
@@ -1331,6 +1373,40 @@ describe('PiSessionService', () => {
     expect(sessionManagerList).toHaveBeenCalledWith('/workspace', '/Users/test/.pi/work/sessions/--workspace--');
     expect(sessions).toHaveLength(1);
     expect(sessions[0].id).toBe('session-1');
+  });
+
+  it('waits for an in-flight session list instead of returning the empty cache placeholder', async () => {
+    const service = new PiSessionService();
+    vi.spyOn(service as any, 'getClientAgentDir').mockResolvedValue('/Users/test/.pi/work');
+    let finishLoading!: (sessions: object[]) => void;
+    sessionManagerList.mockImplementationOnce(() => new Promise((resolve) => {
+      finishLoading = resolve;
+    }));
+
+    const firstRequest = service.listSessions('client-1', '/workspace');
+    await vi.waitFor(() => expect(sessionManagerList).toHaveBeenCalledTimes(1));
+
+    let secondRequestFinished = false;
+    const secondRequest = service.listSessions('client-1', '/workspace').then((sessions) => {
+      secondRequestFinished = true;
+      return sessions;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(secondRequestFinished).toBe(false);
+
+    finishLoading([{
+      id: 'session-1',
+      path: '/Users/test/.pi/work/sessions/--workspace--/session-1.jsonl',
+      cwd: '/workspace',
+      created: '2026-06-07T00:00:00.000Z',
+      modified: '2026-06-07T00:00:00.000Z',
+      messageCount: 1,
+    }]);
+    const [firstSessions, secondSessions] = await Promise.all([firstRequest, secondRequest]);
+    expect(firstSessions.map((session) => session.id)).toEqual(['session-1']);
+    expect(secondSessions).toEqual(firstSessions);
+    expect(await service.listSessions('client-1', '/workspace')).toEqual(firstSessions);
+    expect(sessionManagerList).toHaveBeenCalledTimes(1);
   });
 
   it('lists all sessions across all project directories in the selected profile', async () => {

@@ -60,6 +60,43 @@ describe('authRoutes', () => {
     totp = undefined;
   });
 
+  it('creates, lists and revokes API tokens only with browser and sensitive-action authentication', async () => {
+    ({ app, tempDir, db, totp } = await buildApp());
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    const headers = { cookie, origin: 'http://localhost', host: 'localhost' };
+    const payload = { name: 'Notes', expiresAt: new Date(Date.now() + 60_000).toISOString(), password: 'secret' };
+    expect((await app.inject({ method: 'POST', url: '/api/auth/tokens', payload, headers: { cookie } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/api/auth/tokens', payload, headers: { ...headers, origin: 'http://evil.example' } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/api/auth/tokens', payload: { ...payload, password: 'wrong' }, headers })).statusCode).toBe(401);
+    const created = await app.inject({ method: 'POST', url: '/api/auth/tokens', payload, headers });
+    expect(created.statusCode).toBe(201);
+    expect(created.headers['cache-control']).toBe('no-store');
+    const { id, token } = created.json();
+    const listed = await app.inject({ url: '/api/auth/tokens', headers });
+    expect(listed.json().tokens).toHaveLength(1);
+    expect(listed.body).not.toContain(token);
+    expect((await app.inject({ url: '/api/auth/tokens', headers: { ...headers, authorization: `Bearer ${token}` } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'DELETE', url: `/api/auth/tokens/${id}`, payload: { password: 'secret' }, headers })).statusCode).toBe(200);
+    expect((await app.inject({ url: '/api/auth/tokens', headers })).json().tokens).toEqual([]);
+    expect((await app.inject({ method: 'POST', url: '/api/auth/tokens', payload: { ...payload, expiresAt: '2000-01-01' }, headers })).statusCode).toBe(400);
+    const types = (db!.prepare('SELECT type FROM audit_events').all() as Array<{ type: string }>).map(row => row.type);
+    expect(types).toContain('api_token_created');
+    expect(types).toContain('api_token_revoked');
+  });
+
+  it('requires 2FA for API token changes even with recovery bypass enabled', async () => {
+    ({ app, tempDir, db, totp } = await buildApp({ skip2faVerify: true }));
+    const setup = await totp!.createSetup();
+    totp!.enable(setup.secret, generateSync({ secret: setup.secret }));
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const headers = { cookie: String(login.headers['set-cookie']).split(';')[0], origin: 'http://localhost', host: 'localhost' };
+    const payload = { name: 'Notes', expiresAt: new Date(Date.now() + 60_000).toISOString(), password: 'secret' };
+    expect((await app.inject({ method: 'POST', url: '/api/auth/tokens', headers, payload })).statusCode).toBe(401);
+    const created = await app.inject({ method: 'POST', url: '/api/auth/tokens', headers, payload: { ...payload, totpCode: generateSync({ secret: setup.secret }) } });
+    expect(created.statusCode).toBe(201);
+  });
+
   it('logs in with username and password when 2FA is disabled', async () => {
     ({ app, tempDir, db, totp } = await buildApp());
     const response = await app.inject({
