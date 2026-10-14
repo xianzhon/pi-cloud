@@ -1,6 +1,8 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { once } from 'node:events';
+import { request, type IncomingMessage } from 'node:http';
 import * as os from 'node:os';
 import type { AppServices } from '../app-services.js';
 import { integrationRoutes } from './integration.js';
@@ -123,15 +125,26 @@ describe('integration sessions', () => {
     vi.mocked(service.session.prompt).mockImplementation(async () => { await pending; });
     vi.mocked(service.session.abort).mockImplementation(async () => { finish(); });
     const url = await app.listen({ host: '127.0.0.1', port: 0 });
-    const controller = new AbortController();
-    const response = await fetch(`${url}/api/integration/sessions/session-1/messages`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: 'question', stream: true }), signal: controller.signal,
+    // Avoid fetch's connection pool opening an idle replacement socket after disconnect.
+    const req = request(`${url}/api/integration/sessions/session-1/messages`, {
+      method: 'POST', agent: false, headers: { 'Content-Type': 'application/json' },
     });
-    const reader = response.body!.getReader();
-    expect(new TextDecoder().decode((await reader.read()).value)).toContain('event: session');
-    controller.abort();
-    await vi.waitFor(() => { expect(service.session.abort).toHaveBeenCalledTimes(1); expect(listener).toBeUndefined(); });
-    expect(service.scheduleCleanup).toHaveBeenCalled();
+    try {
+      const received = new Promise<IncomingMessage>((resolve, reject) => {
+        req.once('response', resolve);
+        req.once('error', reject);
+      });
+      req.end(JSON.stringify({ prompt: 'question', stream: true }));
+      const response = await received;
+      const [chunk] = await once(response, 'data');
+      expect(chunk.toString()).toContain('event: session');
+      response.destroy();
+      await vi.waitFor(() => { expect(service.session.abort).toHaveBeenCalledTimes(1); expect(listener).toBeUndefined(); });
+      expect(service.scheduleCleanup).toHaveBeenCalled();
+    } finally {
+      req.destroy();
+      finish();
+    }
   });
 
   it('reuses an already-loaded session without creating or restoring a second conversation', async () => {
