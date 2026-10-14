@@ -1,4 +1,4 @@
-export type ModelOption = { provider: string; id: string; name?: string; input?: string[] };
+export type ModelOption = { provider: string; id: string; name?: string; input?: string[]; current?: boolean };
 
 export type WorktreePayload =
   | { mode: 'none' }

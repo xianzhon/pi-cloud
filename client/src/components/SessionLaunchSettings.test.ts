@@ -25,6 +25,28 @@ function mountSettings(overrides: Record<string, unknown> = {}) {
 }
 
 describe('SessionLaunchSettings', () => {
+  it('shows the profile default model without selecting an explicit override', async () => {
+    const { wrapper, value } = mountSettings({
+      models: [{ provider: 'openai', id: 'gpt-5.4', name: 'GPT 5.4', current: true }],
+    });
+    const selector = wrapper.get('[aria-label="Session model"]');
+    expect(selector.text()).toContain('Use profile default — GPT 5.4 [openai]');
+
+    await selector.trigger('click');
+    await wrapper.findAll('.custom-select-option')[0].trigger('click');
+    expect(value().modelProvider).toBe('');
+    expect(value().modelId).toBe('');
+
+    await wrapper.setProps({ models: [{ provider: 'anthropic', id: 'claude-sonnet', current: true }] });
+    expect(selector.text()).toContain('Use profile default — claude-sonnet [anthropic]');
+  });
+
+  it('keeps the generic default label when no default model is available', () => {
+    const { wrapper } = mountSettings();
+    expect(wrapper.get('[aria-label="Session model"]').text()).toContain('Use profile default');
+    expect(wrapper.get('[aria-label="Session model"]').text()).not.toContain('GPT 5.4');
+  });
+
   it('requires an explicit model when requested', async () => {
     const onValidity = vi.fn();
     const { wrapper } = mountSettings({ requireModel: true, onValidityChange: onValidity });

@@ -161,8 +161,13 @@ const selectedModel = computed(() => props.modelValue.modelProvider && props.mod
 const branchOptions = computed<CustomSelectOption[]>(() => prioritizedBranches().map((branch) => ({ value: branch, label: branch })));
 const copyFileOptions = computed<CustomSelectOption[]>(() => [{ value: '', label: t('components.sessionLaunchSettings.none') }, ...props.copyFiles.map((file) => ({ value: file, label: file }))]);
 const presetOptions = computed<CustomSelectOption[]>(() => props.presets.map((preset) => ({ value: preset.id, label: preset.name })));
+const defaultModelLabel = computed(() => {
+  const label = t('components.sessionLaunchSettings.useProfileDefault');
+  const model = props.models.find((model) => model.current);
+  return model ? `${label} — ${model.name || model.id} [${model.provider}]` : label;
+});
 const modelOptions = computed<CustomSelectOption[]>(() => [
-  ...(props.requireModel ? [] : [{ value: '', label: t('components.sessionLaunchSettings.useProfileDefault') }]),
+  ...(props.requireModel ? [] : [{ value: '', label: defaultModelLabel.value }]),
   ...props.models.map((model) => ({ value: `${model.provider}\u0000${model.id}`, label: `${model.name || model.id} [${model.provider}]` })),
 ]);
 const valid = computed(() => {
