@@ -1427,7 +1427,21 @@ export class PiSessionService {
       const cwd = config.cwd.replace(/\$\{(\w+)\}/g, (_, name) => process.env[name] ?? '').replace(/\$env:(\w+)/g, (_, name) => process.env[name] ?? '');
       await resolveAllowedPath(cwd);
     }
-    return context.manager.saveServer(name, config);
+    await context.manager.saveServer(name, config);
+    for (const session of this.sessions.values()) {
+      const runtime = this.mcpContexts.get(session);
+      if (runtime?.profileId !== profileId || !runtime.manager.hasOnlyBearerTokenChanges(name)) continue;
+      await runWithAgentDirAndProxyEnv(context.profile.path, this.getProfileSettings(profileId).proxy, async () => {
+        // Reload closes old adapter transports and starts a fresh runtime without replacing history.
+        await session.reload();
+        // Print-mode bindings alone do not make SDK reload emit session_start.
+        await session.bindExtensions({ mode: 'print' });
+        const command = session.extensionRunner?.getCommand('mcp');
+        if (command) await command.handler('status', session.extensionRunner.createCommandContext());
+        runtime.manager.refreshActiveTools(session);
+      });
+    }
+    return context.manager.list();
   }
 
   async removeMcpServer(profileId: string, name: string, projectPath?: string) {
