@@ -291,7 +291,7 @@ describe('FeishuGatewayService', () => {
     sessionService.getSession = vi.fn(() => undefined) as any;
     sessionService.disposeSession = vi.fn() as any;
 
-    await (service as any).handleCommand('feishu:dm:chat', { messageId: 'mid', text: '小助理 新建对话' }, { ...minimalConfig(), defaultCwd: '/workspace/app' }, { ...minimalConfig(), defaultCwd: '/workspace/app' });
+    await (service as any).handleCommand('feishu:dm:chat', { messageId: 'mid', text: '/new' }, { ...minimalConfig(), defaultCwd: '/workspace/app' }, { ...minimalConfig(), defaultCwd: '/workspace/app' });
 
     expect(sessionService.disposeSession).toHaveBeenCalledWith('feishu:dm:chat');
     expect(replies[0]).toContain('Reset this Feishu chat. A fresh Pi session will start with your next message.');

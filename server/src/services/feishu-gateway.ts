@@ -2,7 +2,8 @@ import { createDecipheriv, createHash, timingSafeEqual } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { PiCloudDatabase } from '../db/database.js';
-import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
+import { GATEWAY_COMMON_ALIAS_HELP } from './gateway-command-aliases.js';
+import { resolveGatewayCommand } from './gateway-command-intent.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import type { PiSessionService } from './session-manager.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
@@ -293,10 +294,17 @@ export class FeishuGatewayService {
   }
 
   private async handleCommand(clientId: string, message: FeishuMessagePayload, baseConfig: FeishuGatewayConfig, effectiveConfig: FeishuGatewayConfig): Promise<boolean> {
-    const commandText = normalizeGatewayCommandText(message.text);
-    const [command = '', ...args] = commandText.split(/\s+/);
+    const resolved = await resolveGatewayCommand({
+      text: message.text, clientId, config: effectiveConfig,
+      sessions: this.sessionService, presets: this.presetStore.list(),
+    });
+    if (!resolved) return false;
+    if ('reply' in resolved) {
+      await this.sendReply(baseConfig, message.messageId, resolved.reply);
+      return true;
+    }
+    const { command, args } = resolved;
     const normalized = command.toLowerCase();
-    if (!normalized.startsWith('/')) return false;
 
     try {
       if (normalized === '/new' || normalized === '/reset') {
