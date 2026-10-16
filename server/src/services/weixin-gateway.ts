@@ -8,6 +8,7 @@ import type { PiCloudDatabase } from '../db/database.js';
 import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
 import { GATEWAY_COMMON_ALIAS_HELP } from './gateway-command-aliases.js';
 import { resolveGatewayCommand } from './gateway-command-intent.js';
+import type { GatewayTaskCommands } from './gateway-task-commands.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_COUNT, sniffImageMimeType, validateImages } from './image-input.js';
 import type { PiSessionService } from './session-manager.js';
@@ -119,6 +120,7 @@ export class WeixinGatewayService {
     private readonly db: PiCloudDatabase,
     gatewaySettings: GatewaySettingsStore | undefined,
     private readonly sessionService: PiSessionService,
+    private readonly taskCommands?: Pick<GatewayTaskCommands, 'execute'>,
   ) {
     this.credentials = credentialCipher(db);
     this.presetStore = new SkillPresetStore(db);
@@ -596,7 +598,7 @@ export class WeixinGatewayService {
   private async handleCommand(clientId: string, message: WeixinMessagePayload, baseConfig: WeixinGatewayConfig, effectiveConfig: WeixinGatewayConfig): Promise<boolean> {
     const resolved = await resolveGatewayCommand({
       text: message.text, clientId, config: effectiveConfig,
-      sessions: this.sessionService, presets: this.presetStore.list(),
+      sessions: this.sessionService, presets: this.presetStore.list(), tasks: this.taskCommands,
     });
     if (!resolved) return false;
     if ('reply' in resolved) {

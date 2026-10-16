@@ -4,6 +4,7 @@ import { completeSimple } from '@earendil-works/pi-ai/compat';
 import { ModelRegistry, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { stripGatewayCommandPrefix } from './gateway-command-aliases.js';
 import type { PiSessionService } from './session-manager.js';
+import type { GatewayTaskCommands } from './gateway-task-commands.js';
 
 interface GatewayCommandConfig {
   agentProfile?: string;
@@ -19,6 +20,7 @@ interface GatewayCommandOptions {
   sessions: PiSessionService;
   config: GatewayCommandConfig;
   presets: Array<{ id: string; name: string }>;
+  tasks?: Pick<GatewayTaskCommands, 'execute'>;
 }
 type GatewayCommandResult = { command: string; args: string[] } | { reply: string } | null;
 const INVALID_INTENT = { reply: '未能明确识别这条管理指令，未执行任何操作。请以指令前缀开头重新说明，每次只请求一个操作；或发送 /help 查看命令。' };
@@ -61,6 +63,9 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
           'Allowed shapes: {"action":"new_session"}, {"action":"status"}, {"action":"help"},',
           '{"action":"set_cwd","target":"<exact allowed directory>"}, {"action":"set_profile","target":"<exact profile id>"},',
           '{"action":"set_skillset","target":"<exact preset id or all>"}, {"action":"clarify","question":"<short question>"}.',
+          'Also allowed: {"action":"create_task","title":"<concise title>","prompt":"<self-contained task instructions>"}, {"action":"list_tasks"}, {"action":"start_task","target":"<user-provided exact title or task ID>"}.',
+          'Task actions apply only to the current project. Create saves a waiting inbox task without running it. Start runs one existing waiting task in a separate session, not the automatic queue.',
+          'For create_task preserve user requirements without inventing scope or facts; clarify if there is no actionable task description. For start_task copy the title or ID from the user; never invent an ID or resolve ordinal references such as the second task. Ordinal or contextual references require clarify.',
           'Interpret meaning, not keywords. Negated, quoted, hypothetical, unsupported, ambiguous, or multiple-action requests must use clarify, never pick one action.',
           'Changing a directory, profile, or skillset already resets the session; an explicitly separate second operation still requires clarification.',
           'Match names only when unambiguous; never invent a target. For lists of configuration choices, use help.',
@@ -77,7 +82,7 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
         tools: [],
       }, {
         apiKey: auth.apiKey, headers: auth.headers, env: auth.env,
-        maxTokens: 400, signal, sessionId: `gateway-intent:${randomUUID()}`,
+        maxTokens: 2000, signal, sessionId: `gateway-intent:${randomUUID()}`,
       });
     }, signal));
     signal.throwIfAborted();
@@ -95,6 +100,26 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
       if (Object.keys(value).length !== 1) return INVALID_INTENT;
       const commands = { new_session: '/new', status: '/status', help: '/help' };
       return { command: commands[value.action as keyof typeof commands], args: [] };
+    }
+    if (options.tasks) {
+      let taskIntent: Parameters<GatewayTaskCommands['execute']>[0] | undefined;
+      if (value.action === 'list_tasks' && Object.keys(value).length === 1) {
+        taskIntent = { action: 'list_tasks' };
+      } else if (value.action === 'create_task' && Object.keys(value).length === 3
+        && typeof value.title === 'string' && value.title.trim() && value.title.length <= 500
+        && typeof value.prompt === 'string' && value.prompt.trim() && value.prompt.length <= 20_000) {
+        taskIntent = { action: 'create_task', title: value.title.trim(), prompt: value.prompt.trim() };
+      } else if (value.action === 'start_task' && Object.keys(value).length === 2
+        && typeof value.target === 'string' && value.target.trim() && value.target.length <= 500) {
+        taskIntent = { action: 'start_task', target: value.target.trim() };
+      }
+      if (taskIntent) {
+        try {
+          return await options.tasks.execute(taskIntent, config);
+        } catch {
+          return { reply: '任务操作未能完成。请查看任务列表或 WebUI 中的任务状态后重试。' };
+        }
+      }
     }
     if (Object.keys(value).length !== 2 || typeof value.target !== 'string') return INVALID_INTENT;
     if (value.action === 'set_cwd') {

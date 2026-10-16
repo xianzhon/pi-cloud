@@ -56,6 +56,27 @@ describe('resolveGatewayCommand', () => {
     response(intent);
     expect(await resolveGatewayCommand({ ...options, text: '小助理：帮我调整一下配置' })).toEqual(expected);
   });
+  it.each([
+    { action: 'create_task', title: '修复登录', prompt: '修复登录错误' },
+    { action: 'list_tasks' },
+    { action: 'start_task', target: '修复登录' },
+  ])('dispatches task intent %j without a slash command', async (intent) => {
+    response(intent);
+    const execute = vi.fn(async () => ({ reply: '任务操作成功' }));
+    expect(await resolveGatewayCommand({ ...options, text: '小助理 处理任务', tasks: { execute } })).toEqual({ reply: '任务操作成功' });
+    expect(execute).toHaveBeenCalledWith(intent, options.config);
+  });
+  it.each([
+    { action: 'create_task', title: '', prompt: 'task' },
+    { action: 'create_task', title: 'task', prompt: 'task', extra: true },
+    { action: 'start_task', target: '' },
+    { action: 'list_tasks', target: 'all' },
+  ])('rejects malformed task intent %j before dispatch', async (intent) => {
+    response(intent);
+    const execute = vi.fn();
+    expect(await resolveGatewayCommand({ ...options, text: '小助理 处理任务', tasks: { execute } })).toHaveProperty('reply');
+    expect(execute).not.toHaveBeenCalled();
+  });
   it('uses the configured gateway model with isolated context and no tools', async () => {
     response({ action: 'status' });
     await resolveGatewayCommand({ ...options, text: '小助理 我现在在哪个项目？' });

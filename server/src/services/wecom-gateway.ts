@@ -6,6 +6,7 @@ import type { PiCloudDatabase } from '../db/database.js';
 import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
 import { GATEWAY_COMMON_ALIAS_HELP } from './gateway-command-aliases.js';
 import { resolveGatewayCommand } from './gateway-command-intent.js';
+import type { GatewayTaskCommands } from './gateway-task-commands.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_BYTES, sniffImageMimeType, validateImages } from './image-input.js';
 import type { PiSessionService } from './session-manager.js';
@@ -108,6 +109,7 @@ export class WecomGatewayService {
     private readonly db: PiCloudDatabase,
     gatewaySettings: GatewaySettingsStore | undefined,
     private readonly sessionService: PiSessionService,
+    private readonly taskCommands?: Pick<GatewayTaskCommands, 'execute'>,
   ) {
     this.credentials = credentialCipher(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
@@ -452,7 +454,7 @@ export class WecomGatewayService {
   private async handleCommand(clientId: string, message: Pick<WecomMessagePayload, 'userId' | 'text'>, baseConfig: WecomGatewayConfig, effectiveConfig: WecomGatewayConfig): Promise<boolean> {
     const resolved = await resolveGatewayCommand({
       text: message.text, clientId, config: effectiveConfig,
-      sessions: this.sessionService, presets: this.presetStore.list(),
+      sessions: this.sessionService, presets: this.presetStore.list(), tasks: this.taskCommands,
     });
     if (!resolved) return false;
     if ('reply' in resolved) {

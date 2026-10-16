@@ -4,6 +4,7 @@ import { isAbsolute } from 'node:path';
 import type { PiCloudDatabase } from '../db/database.js';
 import { GATEWAY_COMMON_ALIAS_HELP } from './gateway-command-aliases.js';
 import { resolveGatewayCommand } from './gateway-command-intent.js';
+import type { GatewayTaskCommands } from './gateway-task-commands.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import type { PiSessionService } from './session-manager.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
@@ -63,6 +64,7 @@ export class FeishuGatewayService {
     private readonly db: PiCloudDatabase,
     gatewaySettings: GatewaySettingsStore | undefined,
     private readonly sessionService: PiSessionService,
+    private readonly taskCommands?: Pick<GatewayTaskCommands, 'execute'>,
   ) {
     this.presetStore = new SkillPresetStore(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
@@ -296,7 +298,7 @@ export class FeishuGatewayService {
   private async handleCommand(clientId: string, message: FeishuMessagePayload, baseConfig: FeishuGatewayConfig, effectiveConfig: FeishuGatewayConfig): Promise<boolean> {
     const resolved = await resolveGatewayCommand({
       text: message.text, clientId, config: effectiveConfig,
-      sessions: this.sessionService, presets: this.presetStore.list(),
+      sessions: this.sessionService, presets: this.presetStore.list(), tasks: this.taskCommands,
     });
     if (!resolved) return false;
     if ('reply' in resolved) {
