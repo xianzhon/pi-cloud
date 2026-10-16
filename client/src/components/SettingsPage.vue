@@ -566,6 +566,28 @@
                   </div>
                 </section>
 
+                <section class="settings-card gateway-settings gateway-command-help" aria-labelledby="gateway-command-help-title">
+                  <div class="settings-card-copy">
+                    <h4 id="gateway-command-help-title">{{ t('components.settingsDialog.gatewayCommands.title') }}</h4>
+                    <p>{{ t('components.settingsDialog.gatewayCommands.introduction') }}</p>
+                  </div>
+                  <p class="settings-inline-note">{{ t('components.settingsDialog.gatewayCommands.prefix') }}</p>
+                  <div class="gateway-command-groups">
+                    <div v-for="group in gatewayCommandGroups" :key="group.name" class="gateway-command-group">
+                      <h5>{{ t(`components.settingsDialog.gatewayCommands.${group.name}`) }}</h5>
+                      <ul>
+                        <li v-for="command in group.commands" :key="command">{{ t(`components.settingsDialog.gatewayCommands.${command}`) }}</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <ul class="gateway-command-rules">
+                    <li>{{ t('components.settingsDialog.gatewayCommands.singleAction') }}</li>
+                    <li>{{ t('components.settingsDialog.gatewayCommands.configurationRules') }}</li>
+                    <li>{{ t('components.settingsDialog.gatewayCommands.taskRules') }}</li>
+                  </ul>
+                  <p class="settings-inline-note">{{ t('components.settingsDialog.gatewayCommands.helpHint') }}</p>
+                </section>
+
                 <section class="settings-card gateway-settings wecom-settings" aria-labelledby="wecom-settings-title">
                   <div class="wecom-header">
                     <div class="settings-card-copy">
@@ -1001,6 +1023,11 @@ const draftGithubServerUrl = ref(props.githubServerUrl);
 const draftGithubToken = ref('');
 const draftGitCloneParentPath = ref(props.gitCloneParentPath);
 const draftGithubProxyUrl = ref(props.githubProxyUrl);
+const gatewayCommandGroups = [
+  { name: 'session', commands: ['newSession', 'status', 'help'] },
+  { name: 'configuration', commands: ['cwd', 'profile', 'skillset'] },
+  { name: 'tasks', commands: ['createTask', 'listTasks', 'startTask'] },
+];
 const draftGatewayCwds = ref(normalizeGatewayCwds(props.gatewayCwds));
 const draftGatewayDefaultProfile = ref(props.gatewayDefaultProfile);
 const draftGatewayDefaultSkillset = ref(props.gatewayDefaultSkillset);
@@ -2212,6 +2239,28 @@ const emit = defineEmits<{
 
 .gateway-settings-header {
   gap: 1rem;
+}
+
+.gateway-command-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+
+.gateway-command-group h5 {
+  margin: 0 0 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.gateway-command-group ul,
+.gateway-command-rules {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 
 .gateway-defaults-grid {

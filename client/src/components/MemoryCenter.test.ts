@@ -171,6 +171,86 @@ describe('MemoryCenter', () => {
     expect(controller.deleteMemory).toHaveBeenCalledWith('memory-0', 1);
   });
 
+  it.each([true, false])('defaults new rules to Always regardless of category/pin order (%s)', async (pinFirst) => {
+    const controller = createController();
+    const wrapper = mountCenter(controller);
+    await flushPromises();
+    await wrapper.find('.memory-add-button').trigger('click');
+    await wrapper.find('.memory-add-editor textarea').setValue('Commit finished changes');
+    if (pinFirst) await wrapper.find('.memory-add-editor input[type="checkbox"]').setValue(true);
+    await wrapper.find('[aria-label="New memory category"]').setValue('rule');
+    if (!pinFirst) await wrapper.find('.memory-add-editor input[type="checkbox"]').setValue(true);
+    expect((wrapper.find('[aria-label="New pinned applicability"]').element as HTMLSelectElement).value).toBe('always');
+    await wrapper.find('.memory-add-editor').trigger('submit');
+    expect(controller.createMemory).toHaveBeenCalledWith(expect.objectContaining({
+      category: 'rule', pinned: true, pinnedApplicability: 'always',
+    }));
+  });
+
+  it('retains an explicit Matched selection when changing a new memory to a rule', async () => {
+    const controller = createController();
+    const wrapper = mountCenter(controller);
+    await flushPromises();
+    await wrapper.find('.memory-add-button').trigger('click');
+    await wrapper.find('.memory-add-editor textarea').setValue('Use arrow keys for keyboard menus');
+    await wrapper.find('.memory-add-editor input[type="checkbox"]').setValue(true);
+    await wrapper.find('[aria-label="New pinned applicability"]').setValue('always');
+    await wrapper.find('[aria-label="New pinned applicability"]').setValue('matched');
+    await wrapper.find('[aria-label="New memory category"]').setValue('rule');
+    await wrapper.find('.memory-add-editor').trigger('submit');
+    expect(controller.createMemory).toHaveBeenCalledWith(expect.objectContaining({
+      category: 'rule', pinnedApplicability: 'matched',
+    }));
+  });
+
+  it('preserves stored Matched rules when editing or pinning and explains unpinned instructions', async () => {
+    const controller = createController([record(0, { category: 'rule', pinned: false, pinnedApplicability: 'matched' })]);
+    const wrapper = mountCenter(controller);
+    await flushPromises();
+    expect(wrapper.text()).toContain('Rules and preferences apply automatically only when pinned.');
+    await wrapper.find('.memory-action-pin').trigger('click');
+    expect(controller.updateMemory).toHaveBeenLastCalledWith('memory-0', 1, { pinned: true });
+    await wrapper.find('.memory-action-edit').trigger('click');
+    await wrapper.find('.memory-edit-editor input[type="checkbox"]').setValue(true);
+    expect((wrapper.find('[aria-label="Edit pinned applicability"]').element as HTMLSelectElement).value).toBe('matched');
+    await wrapper.find('.memory-edit-editor').trigger('submit');
+    expect(controller.updateMemory).toHaveBeenLastCalledWith('memory-0', 1, expect.objectContaining({
+      pinned: true, pinnedApplicability: 'matched',
+    }));
+  });
+
+  it('preserves explicit Matched applicability when saving an unpinned rule', async () => {
+    const controller = createController([record(0, { category: 'rule', pinned: true, pinnedApplicability: 'matched' })]);
+    const wrapper = mountCenter(controller);
+    await flushPromises();
+    await wrapper.find('.memory-action-edit').trigger('click');
+    await wrapper.find('.memory-edit-editor input[type="checkbox"]').setValue(false);
+    await wrapper.find('.memory-edit-editor').trigger('submit');
+    expect(controller.updateMemory).toHaveBeenLastCalledWith('memory-0', 1, expect.objectContaining({
+      pinned: false, pinnedApplicability: 'matched',
+    }));
+  });
+
+  it('saves unpinned new rules with Always for later pinning and resets explicit add choices', async () => {
+    const controller = createController();
+    const wrapper = mountCenter(controller);
+    await flushPromises();
+    await wrapper.find('.memory-add-button').trigger('click');
+    await wrapper.find('.memory-add-editor textarea').setValue('Conditional rule');
+    await wrapper.find('[aria-label="New memory category"]').setValue('rule');
+    await wrapper.find('.memory-add-editor input[type="checkbox"]').setValue(true);
+    await wrapper.find('[aria-label="New pinned applicability"]').setValue('matched');
+    await wrapper.find('.memory-add-editor').trigger('submit');
+
+    await wrapper.find('.memory-add-button').trigger('click');
+    await wrapper.find('.memory-add-editor textarea').setValue('Commit finished changes');
+    await wrapper.find('[aria-label="New memory category"]').setValue('rule');
+    await wrapper.find('.memory-add-editor').trigger('submit');
+    expect(controller.createMemory).toHaveBeenLastCalledWith(expect.objectContaining({
+      category: 'rule', pinned: false, pinnedApplicability: 'always',
+    }));
+  });
+
   it('shows review evidence and supports approve, edit-and-approve, reject, source navigation, and extraction', async () => {
     const pending = record(0, {
       scope: 'global', projectId: undefined, status: 'pending', source: 'automatic',

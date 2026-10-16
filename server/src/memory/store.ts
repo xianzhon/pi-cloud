@@ -202,9 +202,7 @@ export class MemoryStore {
         contentHash: hashMemoryContent(content),
         tagsJson: JSON.stringify(tags),
         pinned: input.pinned ? 1 : 0,
-        // Pinned memories are matched by default so pinning does not add every rule to every turn.
-        // Callers can explicitly choose `always` for genuinely global instructions.
-        pinnedApplicability: input.pinnedApplicability ?? 'matched',
+        pinnedApplicability: input.pinnedApplicability ?? (input.category === 'rule' ? 'always' : 'matched'),
         status: input.status,
         source: input.source,
         sourceSessionId: input.sourceSessionId ?? null,

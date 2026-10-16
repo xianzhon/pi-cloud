@@ -210,7 +210,7 @@ describe('SettingsPage', () => {
     expect(wrapper.find('.user-prompt-card').text()).toContain('Review this change.');
     expect(wrapper.find('.user-prompt-heading time').attributes('datetime')).toBe('2026-09-11T10:00:00.000Z');
 
-    await wrapper.find('.user-prompt-actions button').trigger('click');
+    await wrapper.find('.user-prompt-actions button[aria-label="Edit prompt"]').trigger('click');
     await wrapper.find('.user-prompt-form textarea').setValue('Review this carefully.');
     await wrapper.find('.user-prompt-form').trigger('submit');
 
@@ -347,6 +347,27 @@ describe('SettingsPage', () => {
     await wrapper.find('.settings-back').trigger('click');
     await wrapper.find('.confirm-modal .btn-confirm').trigger('click');
     expect(wrapper.emitted('close')).toHaveLength(1);
+  });
+
+  it.each([
+    ['en', 'Supported natural-language instructions', 'Session management', 'Configuration changes', 'Task management', 'one action', 'current project', 'resets the conversation'],
+    ['zh-CN', '支持的自然语言指令', '会话管理', '配置切换', '任务管理', '一个操作', '当前项目', '重置对话'],
+  ] as const)('shows all nine gateway natural-language instructions in %s', async (locale, title, session, configuration, tasks, singleAction, project, reset) => {
+    setLocale(locale);
+    const wrapper = mountSettingsDialog();
+    (wrapper.vm as unknown as { activeSection: string }).activeSection = 'gateway';
+    await wrapper.vm.$nextTick();
+    const help = wrapper.find('.gateway-command-help');
+    expect(help.exists()).toBe(true);
+    for (const text of [title, session, configuration, tasks, singleAction, project, reset, '小助理', '/help', 'PI_CLOUD_GATEWAY_COMMAND_PREFIX']) {
+      expect(help.text()).toContain(text);
+    }
+    expect(help.findAll('.gateway-command-group li')).toHaveLength(9);
+    for (const example of ['小助理，重新开一个对话', '小助理，查看当前对话状态', '小助理，有哪些命令', '小助理，把工作目录切到', '小助理，切换到', '小助理，使用', '小助理，添加任务', '小助理，列出未开始的任务', '小助理，执行任务']) {
+      expect(help.text()).toContain(example);
+    }
+    expect(help.findAll('input, select, textarea, button')).toHaveLength(0);
+    expect(wrapper.emitted('saveGatewaySettings')).toBeUndefined();
   });
 
   it('shows persisted WeChat pairing status in gateway settings', async () => {

@@ -219,7 +219,7 @@ describe('MemoryStore', () => {
       .toEqual(['Run tests', 'Prefer concise output']);
   });
 
-  it('defaults pinned applicability to matched and keeps utility neutral', () => {
+  it('defaults rules to always, preserves explicit matched, and keeps utility neutral', () => {
     const project = store.getOrCreateProject('default', '/repo/app');
     const existingPin = store.createMemory(memoryInput({
       projectId: project.id,
@@ -229,14 +229,14 @@ describe('MemoryStore', () => {
     }));
     const matchedPin = store.createMemory(memoryInput({
       projectId: project.id,
-      category: 'preference',
+      category: 'rule',
       content: 'Use Vue patterns for client work',
       pinned: true,
       pinnedApplicability: 'matched',
     }));
 
     expect(existingPin).toMatchObject({
-      pinnedApplicability: 'matched',
+      pinnedApplicability: 'always',
       positiveUtilityCount: 0,
       negativeUtilityCount: 0,
     });
@@ -246,6 +246,20 @@ describe('MemoryStore', () => {
     expect(store.updateMemory(existingPin.id, existingPin.revision, {
       pinnedApplicability: 'matched',
     }).pinnedApplicability).toBe('matched');
+  });
+
+  it('preserves applicability when an unpinned rule is later pinned', () => {
+    const project = store.getOrCreateProject('default', '/repo/app');
+    for (const applicability of [undefined, 'matched'] as const) {
+      const rule = store.createMemory(memoryInput({
+        projectId: project.id, category: 'rule', content: `Commit changes ${applicability}`,
+        pinned: false, pinnedApplicability: applicability,
+      }));
+      const pinned = store.updateMemory(rule.id, rule.revision, { pinned: true });
+      expect(pinned.pinnedApplicability).toBe(applicability ?? 'always');
+    }
+    const fact = store.createMemory(memoryInput({ projectId: project.id, pinned: true }));
+    expect(fact.pinnedApplicability).toBe('matched');
   });
 
   it('marks selected memories as used without treating injection as utility', () => {

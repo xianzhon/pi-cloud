@@ -115,6 +115,30 @@ describe('MemoryExtractor', () => {
     });
   });
 
+  it('passes confirmed Docker facts to the model and accepts zero candidates without reporting a failure', async () => {
+    const dockerBranch = branch();
+    dockerBranch[1].message.content = 'Reduce the Docker image size.';
+    dockerBranch[2].message.content = [{ type: 'text', text:
+      'Confirmed: the Docker runtime uses Alpine and the build removes npm cache and unused Ace distributions. The image measured 123 MB in this run.',
+    }];
+    completeModel.mockResolvedValue({
+      content: [{ type: 'text', text: '{"candidates":[]}' }],
+      usage: { input: 100, output: 4, cacheRead: 0, cacheWrite: 0, totalTokens: 104 },
+      stopReason: 'stop',
+    });
+
+    const result = await createExtractor({ loadBranch: () => dockerBranch })
+      .execute(run, new AbortController().signal);
+
+    const prompt = completeModel.mock.calls[0][1].messages[0].content[0].text;
+    expect(prompt).toContain('Docker runtime uses Alpine');
+    expect(prompt).toContain('removes npm cache and unused Ace distributions');
+    expect(result).toEqual({ candidates: [], emittedCount: 0, discarded: 0, gateDecision: 'extract' });
+    expect(store.getExtractionRun(run.id)).toMatchObject({
+      gateDecision: 'extract', normalizedEvidenceCount: 2, inputTokens: 100, outputTokens: 4,
+    });
+  });
+
   it('reserves conflict context for weakly matched pinned instructions', async () => {
     for (let index = 0; index < 8; index += 1) {
       store.createMemory({

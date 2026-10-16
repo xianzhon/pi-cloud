@@ -2,7 +2,10 @@ import { createDecipheriv, createHash, timingSafeEqual } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { PiCloudDatabase } from '../db/database.js';
-import { GATEWAY_COMMON_ALIAS_HELP, normalizeGatewayCommandText } from './gateway-command-aliases.js';
+import { GATEWAY_COMMON_ALIAS_HELP, GATEWAY_CONTROL_HELP } from './gateway-command-aliases.js';
+import { resolveGatewayCommand } from './gateway-command-intent.js';
+import { GatewayMessageQueue, isImmediateGatewayCommand, requestGatewayAbort } from './gateway-message-queue.js';
+import type { GatewayTaskCommands } from './gateway-task-commands.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import type { PiSessionService } from './session-manager.js';
 import { SkillPresetStore, type SkillPresetRecord } from './skill-preset-store.js';
@@ -55,13 +58,14 @@ export class FeishuGatewayService {
   private readonly presetStore: SkillPresetStore;
   private readonly gatewaySettings: GatewaySettingsStore;
   private readonly seen = new Map<string, number>();
-  private readonly queues = new Map<string, Promise<void>>();
+  private readonly queues = new GatewayMessageQueue();
   private tokenCache?: FeishuTokenCache;
 
   constructor(
     private readonly db: PiCloudDatabase,
     gatewaySettings: GatewaySettingsStore | undefined,
     private readonly sessionService: PiSessionService,
+    private readonly taskCommands?: Pick<GatewayTaskCommands, 'execute'>,
   ) {
     this.presetStore = new SkillPresetStore(db);
     this.gatewaySettings = gatewaySettings || new GatewaySettingsStore(db);
@@ -228,15 +232,10 @@ export class FeishuGatewayService {
 
   private enqueue(message: FeishuMessagePayload, config: FeishuGatewayConfig): void {
     const clientId = this.clientIdForMessage(message);
-    const previous = this.queues.get(clientId) || Promise.resolve();
-    const next = previous
-      .catch(() => undefined)
-      .then(() => this.processMessage(clientId, message, config))
-      .catch((error) => console.error('[feishu-gateway] message handling failed:', error))
-      .finally(() => {
-        if (this.queues.get(clientId) === next) this.queues.delete(clientId);
-      });
-    this.queues.set(clientId, next);
+    const work = isImmediateGatewayCommand(message.text)
+      ? this.handleCommand(clientId, message, config, this.resolveChatConfig(clientId, config))
+      : this.queues.enqueue(clientId, (signal) => this.processMessage(clientId, message, config, signal));
+    void work.catch((error) => console.error('[feishu-gateway] message handling failed:', error));
   }
 
   private clientIdForMessage(message: FeishuMessagePayload): string {
@@ -245,15 +244,17 @@ export class FeishuGatewayService {
     return `feishu:${chatType}:${message.chatId}${thread}`;
   }
 
-  private async processMessage(clientId: string, message: FeishuMessagePayload, config: FeishuGatewayConfig): Promise<void> {
+  private async processMessage(clientId: string, message: FeishuMessagePayload, config: FeishuGatewayConfig, signal?: AbortSignal): Promise<void> {
     const effectiveConfig = this.resolveChatConfig(clientId, config);
     if (await this.handleCommand(clientId, message, config, effectiveConfig)) return;
+    if (signal?.aborted) return;
     if (!effectiveConfig.defaultCwd) {
       await this.sendReply(config, message.messageId, GATEWAY_FOLDERS_REQUIRED_MESSAGE);
       return;
     }
 
     const session = await this.ensureSession(clientId, effectiveConfig);
+    if (signal?.aborted) return;
     const chunks: string[] = [];
     const unsubscribe = session.subscribe((event: any) => {
       if (event?.type !== 'message_update') return;
@@ -265,12 +266,13 @@ export class FeishuGatewayService {
 
     try {
       await this.sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
-        await session.prompt(message.text);
+        if (!signal?.aborted) await session.prompt(message.text);
       });
     } finally {
       unsubscribe();
     }
 
+    if (signal?.aborted) return;
     const response = chunks.join('').trim() || extractLastAssistantText(session.messages) || '(Pi finished without a text response.)';
     await this.sendReply(config, message.messageId, response);
   }
@@ -293,12 +295,25 @@ export class FeishuGatewayService {
   }
 
   private async handleCommand(clientId: string, message: FeishuMessagePayload, baseConfig: FeishuGatewayConfig, effectiveConfig: FeishuGatewayConfig): Promise<boolean> {
-    const commandText = normalizeGatewayCommandText(message.text);
-    const [command = '', ...args] = commandText.split(/\s+/);
+    const resolved = await resolveGatewayCommand({
+      text: message.text, clientId, config: effectiveConfig,
+      sessions: this.sessionService, presets: this.presetStore.list(), tasks: this.taskCommands,
+    });
+    if (!resolved) return false;
+    if ('reply' in resolved) {
+      await this.sendReply(baseConfig, message.messageId, resolved.reply);
+      return true;
+    }
+    const { command, args } = resolved;
     const normalized = command.toLowerCase();
-    if (!normalized.startsWith('/')) return false;
 
     try {
+      if (normalized === '/stop' || normalized === '/abort') {
+        const cancelled = this.queues.stop(clientId);
+        await requestGatewayAbort(this.sessionService.getSession(clientId));
+        await this.sendReply(baseConfig, message.messageId, `已请求停止当前对话，取消 ${cancelled} 条执行中或排队消息；保留会话历史，不影响独立任务。`);
+        return true;
+      }
       if (normalized === '/new' || normalized === '/reset') {
         this.resetSession(clientId);
         await this.sendReply(
@@ -466,6 +481,7 @@ export class FeishuGatewayService {
     return [
       prefix,
       'Pi session status',
+      this.queues.formatStatus(clientId),
       '',
       `- Profile: ${profile?.id || 'default'}`,
       `- CWD: ${config.defaultCwd || '(not configured)'}`,
@@ -532,6 +548,7 @@ export class FeishuGatewayService {
       '- /reset or /new - start a fresh session with current config',
       '- /clear-config - return this chat to gateway environment defaults',
       '',
+      ...GATEWAY_CONTROL_HELP,
       ...GATEWAY_COMMON_ALIAS_HELP,
     ].join('\n');
   }

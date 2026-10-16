@@ -59,6 +59,7 @@ import { ProjectTaskStore } from './services/project-task-store.js';
 import { SkillPresetStore } from './services/skill-preset-store.js';
 import { CommitMessagePromptStore } from './services/commit-message-prompt-store.js';
 import { ChangeReasonPromptStore } from './services/change-reason-prompt-store.js';
+import { GatewayTaskCommands } from './services/gateway-task-commands.js';
 import { ProjectTaskStarter } from './services/project-task-starter.js';
 import { TaskExecutionQueue } from './services/task-execution-queue.js';
 import { RepositoryCloner } from './services/repository-cloner.js';
@@ -285,10 +286,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   const giteaSettings = new GiteaSettingsStore(db);
   const gatewaySettings = new GatewaySettingsStore(db);
   const githubSettings = new GithubSettingsStore(db);
-  const feishuGateway = new FeishuGatewayService(db, gatewaySettings, piSessionService);
-  const weixinGateway = new WeixinGatewayService(db, gatewaySettings, piSessionService);
-  const wecomGateway = new WecomGatewayService(db, gatewaySettings, piSessionService);
-  weixinGateway.start();
   const repositoryCloner = new RepositoryCloner({
     spawnGit: (args, options) => spawn('git', args, options),
     githubSettings: () => githubSettings.get(),
@@ -310,6 +307,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     presetStore: skillPresetStore,
   });
   const taskExecutionQueue = new TaskExecutionQueue({ db, tasks: projectTaskStore, starter: projectTaskStarter, sessions: piSessionService });
+  const gatewayTaskCommands = new GatewayTaskCommands({ store: projectTaskStore, starter: projectTaskStarter, sessions: piSessionService });
+  const feishuGateway = new FeishuGatewayService(db, gatewaySettings, piSessionService, gatewayTaskCommands);
+  const weixinGateway = new WeixinGatewayService(db, gatewaySettings, piSessionService, gatewayTaskCommands);
+  const wecomGateway = new WecomGatewayService(db, gatewaySettings, piSessionService, gatewayTaskCommands);
+  weixinGateway.start();
   const audit = new AuditLog(db);
   const sessions = new SessionStore(db, authConfig.cookieName);
   const apiTokens = new ApiTokenStore(db, authConfig);
@@ -324,6 +326,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     worktreeMetadata: worktreeMetadataStore,
   });
   app.addHook('onClose', async () => {
+    await gatewayTaskCommands.stop();
     await taskExecutionQueue.stop();
     await modelWindowKickoffScheduler.stop();
     await weixinGateway.stop();

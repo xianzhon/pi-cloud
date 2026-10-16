@@ -111,6 +111,9 @@
             </aside>
 
             <main class="memory-list-pane">
+              <div class="memory-guidance" role="note">
+                {{ t('components.memoryCenter.unpinnedInstructionsNotice') }}
+              </div>
               <div v-if="counts.pinnedOverflow" class="memory-notice memory-pinned-warning" role="status">
                 {{ t('components.memoryCenter.pinnedMemoryExceedsTheRecallBudgetUnpin') }}
               </div>
@@ -145,7 +148,7 @@
                   <label class="memory-check"><input v-model="addDraft.pinned" type="checkbox" /> {{ t('components.memoryCenter.pinForRecall') }}</label>
                   <select
                     v-if="addDraft.pinned"
-                    v-model="addDraft.pinnedApplicability"
+                    v-model="addPinnedApplicability"
                     :aria-label="t('components.memoryCenter.newPinnedApplicability')"
                   >
                     <option value="always">{{ t('components.memoryCenter.alwaysApplicable') }}</option>
@@ -399,7 +402,16 @@ const addDraft = reactive({
   content: '',
   tags: '',
   pinned: false,
-  pinnedApplicability: 'matched' as MemoryPinnedApplicability,
+  // Follow category defaults until the user explicitly chooses an applicability.
+  pinnedApplicability: undefined as MemoryPinnedApplicability | undefined,
+});
+const addPinnedApplicability = computed<MemoryPinnedApplicability>({
+  get(): MemoryPinnedApplicability {
+    return addDraft.pinnedApplicability ?? (addDraft.category === 'rule' ? 'always' : 'matched');
+  },
+  set(value: MemoryPinnedApplicability): void {
+    addDraft.pinnedApplicability = value;
+  },
 });
 const editDraft = reactive({
   category: 'fact' as MemoryCategory,
@@ -545,7 +557,7 @@ function startAdd(): void {
   addDraft.content = '';
   addDraft.tags = '';
   addDraft.pinned = false;
-  addDraft.pinnedApplicability = 'matched';
+  addDraft.pinnedApplicability = undefined;
   showAddEditor.value = true;
 }
 
@@ -557,7 +569,7 @@ async function submitAdd(): Promise<void> {
     content: addDraft.content.trim(),
     tags: parseTags(addDraft.tags),
     pinned: addDraft.pinned,
-    pinnedApplicability: addDraft.pinned ? addDraft.pinnedApplicability : 'always',
+    pinnedApplicability: addPinnedApplicability.value,
   }));
   showAddEditor.value = false;
 }
@@ -568,7 +580,7 @@ function startEdit(memory: MemoryRecord): void {
   editDraft.content = memory.content;
   editDraft.tags = memory.tags.join(', ');
   editDraft.pinned = memory.pinned;
-  editDraft.pinnedApplicability = memory.pinnedApplicability || 'matched';
+  editDraft.pinnedApplicability = memory.pinnedApplicability || (memory.category === 'rule' ? 'always' : 'matched');
 }
 
 async function submitEdit(memory: MemoryRecord): Promise<void> {
@@ -577,7 +589,7 @@ async function submitEdit(memory: MemoryRecord): Promise<void> {
     content: editDraft.content.trim(),
     tags: parseTags(editDraft.tags),
     pinned: editDraft.pinned,
-    pinnedApplicability: editDraft.pinned ? editDraft.pinnedApplicability : 'always',
+    pinnedApplicability: editDraft.pinnedApplicability,
   }));
   editingId.value = undefined;
 }
@@ -1464,6 +1476,12 @@ function formatDateTime(value: string): string {
   gap: 7px;
 }
 
+.memory-guidance {
+  margin-bottom: 9px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+}
 .memory-notice {
   margin-bottom: 9px;
   padding: 8px 10px;

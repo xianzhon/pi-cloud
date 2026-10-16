@@ -181,7 +181,32 @@ describe('MemoryService', () => {
     expect(store.getMemory(relevant.id)?.useCount).toBe(1);
   });
 
-  it('applies matched pinned memories only when relevant while retaining always compatibility', () => {
+  it.each(['explicit', 'manual_ui'] as const)('injects newly pinned rules without keyword overlap for %s saves', (source) => {
+    const rule = service.save(context, {
+      category: 'rule', content: 'After you finished the changes, commit it.', pinned: true,
+    }, source);
+
+    const result = service.buildRecall(context, 'Reduce Docker image size using Alpine');
+
+    expect(rule.pinnedApplicability).toBe('always');
+    expect(result.prompt).toContain(rule.content);
+    expect(result.memories).toEqual([expect.objectContaining({ id: rule.id, reason: 'pinned' })]);
+  });
+
+  it('keeps unpinned rules and preferences searchable but does not automatically inject them', () => {
+    for (const category of ['rule', 'preference'] as const) {
+      const memory = service.save(context, {
+        category, content: `${category}: Docker images should use Alpine`,
+      });
+      expect(service.search(context, 'Docker Alpine').map((item) => item.id)).toContain(memory.id);
+    }
+
+    expect(service.buildRecall(context, 'Docker images should use Alpine')).toMatchObject({
+      prompt: '', memories: [],
+    });
+  });
+
+  it.each(['rule', 'preference'] as const)('applies explicit matched %s pins only when relevant while retaining always compatibility', (category) => {
     const always = service.save(context, {
       category: 'rule',
       content: 'Keep changes surgical',
@@ -189,7 +214,7 @@ describe('MemoryService', () => {
       pinnedApplicability: 'always',
     });
     const matched = service.save(context, {
-      category: 'preference',
+      category,
       content: 'Use arrow keys for keyboard menus',
       pinned: true,
       pinnedApplicability: 'matched',
