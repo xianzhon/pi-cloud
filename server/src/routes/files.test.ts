@@ -806,6 +806,21 @@ describe('fileRoutes', () => {
     expect(response.json()).toEqual({ files: ['src/main.ts'], truncated: false });
   });
 
+  it('includes hidden files and files inside hidden directories in file search', async () => {
+    await fs.mkdir(path.join(tempDir, '.config'));
+    await fs.writeFile(path.join(tempDir, '.config', 'settings.json'), '{}');
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/search?path=${encodeURIComponent(tempDir)}&pattern=**/*`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().files.sort()).toEqual([
+      '.config/settings.json', '.hidden', 'README.md', 'src/main.ts',
+    ]);
+  });
+
   it('rejects search patterns that can escape the allowed search root', async () => {
     const response = await app.inject({
       method: 'GET',

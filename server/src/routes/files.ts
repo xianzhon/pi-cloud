@@ -780,6 +780,7 @@ export async function fileRoutes(app: FastifyInstance) {
         cwd: resolvedSearchPath,
         root: resolvedSearchPath,
         ignore: FILE_SEARCH_IGNORES,
+        dot: true,
         nodir: true,
         signal,
       })) {

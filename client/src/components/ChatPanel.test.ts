@@ -1528,7 +1528,11 @@ describe('ChatPanel', () => {
     expect(wrapper.text()).not.toContain('README.md');
   });
 
-  it('opens a selected file through the app-level editor event', async () => {
+  it.each([
+    ['@chat', 'src/components/ChatPanel.vue'],
+    ['@.hidden', '.hidden'],
+    ['@settings', '.config/settings.json'],
+  ])('finds and selects %s through the composer file search', async (query, filePath) => {
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
       const url = String(input);
@@ -1543,7 +1547,7 @@ describe('ChatPanel', () => {
         return Promise.resolve({
           ok: true,
           json: async () => ({
-            files: ['src/components/ChatPanel.vue'],
+            files: ['README.md', filePath],
           }),
         });
       }
@@ -1557,21 +1561,23 @@ describe('ChatPanel', () => {
     await nextTick();
 
     const textarea = wrapper.find('textarea');
-    await textarea.setValue('@chat');
-    (textarea.element as HTMLTextAreaElement).selectionStart = 5;
-    (textarea.element as HTMLTextAreaElement).selectionEnd = 5;
+    await textarea.setValue(query);
+    (textarea.element as HTMLTextAreaElement).selectionStart = query.length;
+    (textarea.element as HTMLTextAreaElement).selectionEnd = query.length;
     await textarea.trigger('input');
     await nextTick();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
 
+    expect(wrapper.findAll('.file-search-item')).toHaveLength(1);
     await wrapper.find('.file-search-item').trigger('click');
     await nextTick();
 
+    expect((textarea.element as HTMLTextAreaElement).value).toBe(`@${filePath} `);
     expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
       type: 'open-file-in-editor',
       detail: {
-        path: 'src/components/ChatPanel.vue',
+        path: filePath,
         kind: 'path',
         onlyIfEditorVisible: true,
       },
