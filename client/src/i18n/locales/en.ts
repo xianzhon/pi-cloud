@@ -988,6 +988,7 @@ export default {
       clear: 'Clear',
       cancel: 'Cancel',
       pinForRecall: 'Pin for recall',
+      unpinnedInstructionsNotice: 'Rules and preferences apply automatically only when pinned. Choose “Always applicable” for general instructions or “Only when matched” for context-specific ones. Existing pins are unchanged.',
       alwaysApplicable: 'Always applicable',
       onlyWhenMatched: 'Only when matched',
       saveMemory: 'Save memory',

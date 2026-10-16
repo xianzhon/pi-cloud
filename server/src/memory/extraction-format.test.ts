@@ -101,6 +101,66 @@ describe('extraction format', () => {
     ]);
   });
 
+  it.each([
+    'Confirmed: the Docker runtime now uses Alpine; the image build removes npm cache and unused Ace distributions.',
+    '已确认：Docker 运行时采用 Alpine；镜像构建会清理 npm 缓存和未使用的 Ace 发行文件。',
+  ])('retains confirmed Docker configuration as evidence, not just mutation paths: %s', (summary) => {
+    const source = buildExtractionSource([
+      {
+        type: 'message', id: 'docker-user', parentId: null, timestamp: '',
+        message: { role: 'user', content: 'Reduce the Docker image size.', timestamp: 1 },
+      },
+      {
+        type: 'message', id: 'docker-summary', parentId: 'docker-user', timestamp: '',
+        message: { role: 'assistant', timestamp: 2, content: [
+          { type: 'text', text: 'I am checking the image layers.' },
+          { type: 'text', text: summary },
+          { type: 'toolCall', id: 'edit-docker', name: 'edit', arguments: { path: 'Dockerfile' } },
+        ] },
+      },
+      {
+        type: 'message', id: 'docker-end', parentId: 'docker-summary', timestamp: '',
+        message: { role: 'toolResult', toolCallId: 'build', toolName: 'bash',
+          content: [{ type: 'text', text: 'Temporary image measurement: 123 MB. Raw build output.' }],
+          isError: false, timestamp: 3 },
+      },
+    ] as any, undefined, 'docker-end');
+
+    expect(source.evidence).toContainEqual(expect.objectContaining({ role: 'assistant', text: summary }));
+    const prompt = buildExtractionPrompt(source, []);
+    expect(prompt).toContain(summary);
+    expect(prompt).not.toContain('checking the image layers');
+    expect(prompt).not.toContain('Temporary image measurement');
+    const parsed = parseExtractionOutput(JSON.stringify({ candidates: [{
+      operation: 'new', scope: 'project', category: 'fact',
+      content: 'The Docker runtime uses Alpine.', tags: ['docker'], evidenceIds: ['e2'],
+    }, {
+      operation: 'new', scope: 'project', category: 'fact',
+      content: 'The Docker image build removes npm cache and unused Ace distributions.',
+      tags: ['docker'], evidenceIds: ['e2'],
+    }] }), source, []);
+    expect(parsed.valid.map((candidate) => candidate.content)).toEqual([
+      'The Docker runtime uses Alpine.',
+      'The Docker image build removes npm cache and unused Ace distributions.',
+    ]);
+    expect(parsed.discarded).toBe(0);
+  });
+
+  it('accepts a legitimate empty result for a one-off Docker task without inventing facts', () => {
+    const source = buildExtractionSource([{
+      type: 'message', id: 'docker-task', parentId: null, timestamp: '',
+      message: { role: 'user', content: 'Just inspect the Docker image size for this run.', timestamp: 1 },
+    }] as any, undefined, 'docker-task');
+
+    expect(parseExtractionOutput('{"candidates":[]}', source, [])).toEqual({
+      valid: [], emittedCount: 0, discarded: 0,
+    });
+    expect(parseExtractionOutput(JSON.stringify({ candidates: [{
+      operation: 'new', scope: 'project', category: 'rule',
+      content: 'Inspect Docker image size on every run.', tags: [], evidenceIds: ['e1'],
+    }] }), source, []).valid).toEqual([]);
+  });
+
   it('keeps the latest durable evidence when normalized input exceeds the cap', () => {
     const entries = Array.from({ length: 65 }, (_, index) => ({
       type: 'message', id: `m${index + 1}`, parentId: index ? `m${index}` : null, timestamp: '',

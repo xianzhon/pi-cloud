@@ -988,6 +988,7 @@ export default {
       clear: '清除',
       cancel: '取消',
       pinForRecall: '置顶以便召回',
+      unpinnedInstructionsNotice: '规则和偏好只有置顶后才会自动应用。通用指令请选择“始终适用”，特定场景下的指令请选择“仅当匹配时”。现有置顶记忆保持不变。',
       alwaysApplicable: '始终适用',
       onlyWhenMatched: '仅当匹配时',
       saveMemory: '保存记忆',
