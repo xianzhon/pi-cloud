@@ -609,7 +609,7 @@ export class WecomGatewayService {
       '/clear-config - restore gateway defaults',
       '/help - show this help',
       '',
-      GATEWAY_COMMON_ALIAS_HELP,
+      ...GATEWAY_COMMON_ALIAS_HELP,
     ].join('\n');
   }
 

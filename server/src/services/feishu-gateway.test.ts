@@ -275,10 +275,10 @@ describe('FeishuGatewayService', () => {
 
     const help = (service as any).formatHelp();
 
-    expect(help).toContain('Common aliases:');
-    expect(help).toContain('小助理新建对话 | 新对话');
-    expect(help).toContain('小助理当前对话 | 状态');
-    expect(help).toContain('小助理帮助｜命令列表');
+    expect(help).toContain('支持的自然语言指令');
+    expect(help).toContain('小助理，重新开一个对话');
+    expect(help).toContain('小助理，查看当前对话状态');
+    expect(help).toContain('小助理，有哪些命令？');
   });
 
   it('returns status summary after /new resets the Feishu session', async () => {
