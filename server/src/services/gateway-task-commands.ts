@@ -6,7 +6,13 @@ import type { PiSessionService } from './session-manager.js';
 export type GatewayTaskIntent =
   | { action: 'create_task'; title: string; prompt: string }
   | { action: 'list_tasks' }
-  | { action: 'start_task'; target: string };
+  | { action: 'start_task'; target: string }
+  | { action: 'start_task'; index: number };
+
+interface TaskListSnapshot {
+  projectPath: string;
+  taskIds: string[];
+}
 
 interface TaskConfig {
   defaultCwd?: string;
@@ -23,10 +29,11 @@ interface Dependencies {
 export class GatewayTaskCommands {
   private readonly shutdown = new AbortController();
   private readonly active = new Map<string, { abort(): Promise<void> }>();
+  private readonly taskLists = new Map<string, TaskListSnapshot>();
 
   constructor(private readonly dependencies: Dependencies) {}
 
-  async execute(intent: GatewayTaskIntent, config: TaskConfig): Promise<{ reply: string }> {
+  async execute(intent: GatewayTaskIntent, config: TaskConfig, chatId?: string): Promise<{ reply: string }> {
     this.shutdown.signal.throwIfAborted();
     if (!config.defaultCwd || !config.cwdChoices.includes(config.defaultCwd)) {
       throw new Error('Gateway project is not configured or allowed');
@@ -49,16 +56,22 @@ export class GatewayTaskCommands {
     }
     const tasks = store.list({ projectPath, status: 'waiting' });
     if (intent.action === 'list_tasks') {
+      if (chatId) this.taskLists.set(chatId, { projectPath, taskIds: tasks.map((task) => task.id) });
       return { reply: tasks.length
-        ? `当前项目未开始的任务：\n${tasks.map((task) => `${task.title}\nID: ${task.id}`).join('\n\n')}\n\n请以指令前缀开头，使用标题或 ID 指定要执行的任务。`
+        ? `当前项目未开始的任务：\n${tasks.map((task, index) => `任务 ${index + 1}：${task.title}`).join('\n')}\n\n请以指令前缀开头，使用任务编号或标题（可用无歧义的部分标题）指定要执行的任务。`
         : '当前项目没有未开始的任务。' };
     }
-    const target = intent.target.trim();
-    const matches = tasks.filter((task) => task.id === target || task.title === target || (target.length >= 8 && task.id.startsWith(target)));
+    const snapshot = chatId ? this.taskLists.get(chatId) : undefined;
+    const target = 'target' in intent ? intent.target.trim() : '';
+    const matches = 'index' in intent
+      ? tasks.filter((task) => snapshot?.projectPath === projectPath && task.id === snapshot.taskIds[intent.index - 1])
+      : tasks.filter((task) => target && task.title.includes(target));
     if (matches.length !== 1) {
-      return { reply: matches.length
-        ? '匹配到多个同名任务。请以指令前缀开头，重新发送完整指令并指定任务 ID。'
-        : '未匹配到当前项目的待办任务。请列出任务后，使用准确标题或 ID 指定。' };
+      return { reply: 'index' in intent
+        ? '该编号没有对应的待办任务，请重新列出任务后再按编号执行。'
+        : matches.length
+          ? '匹配到多个任务，未执行。请提供更完整的标题，或列出任务后使用编号选择。'
+          : '未匹配到当前项目的待办任务。请列出任务后，使用标题或编号指定。' };
     }
     const task = matches[0];
     const clientId = `gateway-task:${task.id}`;
@@ -83,6 +96,7 @@ export class GatewayTaskCommands {
 
   async stop(): Promise<void> {
     this.shutdown.abort();
+    this.taskLists.clear();
     let timer: NodeJS.Timeout | undefined;
     try {
       await Promise.race([

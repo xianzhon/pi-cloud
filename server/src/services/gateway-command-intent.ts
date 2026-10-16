@@ -63,9 +63,9 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
           'Allowed shapes: {"action":"new_session"}, {"action":"status"}, {"action":"help"},',
           '{"action":"set_cwd","target":"<exact allowed directory>"}, {"action":"set_profile","target":"<exact profile id>"},',
           '{"action":"set_skillset","target":"<exact preset id or all>"}, {"action":"clarify","question":"<short question>"}.',
-          'Also allowed: {"action":"create_task","title":"<concise title>","prompt":"<self-contained task instructions>"}, {"action":"list_tasks"}, {"action":"start_task","target":"<user-provided exact title or task ID>"}.',
+          'Also allowed: {"action":"create_task","title":"<concise title>","prompt":"<self-contained task instructions>"}, {"action":"list_tasks"}, {"action":"start_task","target":"<user-provided full or partial task title>"}, {"action":"start_task","index":<positive integer from the user>}.',
           'Task actions apply only to the current project. Create saves a waiting inbox task without running it. Start runs one existing waiting task in a separate session, not the automatic queue.',
-          'For create_task preserve user requirements without inventing scope or facts; clarify if there is no actionable task description. For start_task copy the title or ID from the user; never invent an ID or resolve ordinal references such as the second task. Ordinal or contextual references require clarify.',
+          'For create_task preserve user requirements without inventing scope or facts; clarify if there is no actionable task description. For start_task copy the full or partial task title from the user into target without expanding it; the server matches unambiguous title substrings; task IDs are not supported. For a list number or ordinal such as task 2, 第二个任务, or 2️⃣, return index:2 instead (no target). The server resolves numbers against the last task list for this chat. Never invent a title or number.',
           'Interpret meaning, not keywords. Negated, quoted, hypothetical, unsupported, ambiguous, or multiple-action requests must use clarify, never pick one action.',
           'Changing a directory, profile, or skillset already resets the session; an explicitly separate second operation still requires clarification.',
           'Match names only when unambiguous; never invent a target. For lists of configuration choices, use help.',
@@ -110,12 +110,15 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
         && typeof value.prompt === 'string' && value.prompt.trim() && value.prompt.length <= 20_000) {
         taskIntent = { action: 'create_task', title: value.title.trim(), prompt: value.prompt.trim() };
       } else if (value.action === 'start_task' && Object.keys(value).length === 2
+        && typeof value.index === 'number' && Number.isSafeInteger(value.index) && value.index > 0) {
+        taskIntent = { action: 'start_task', index: value.index };
+      } else if (value.action === 'start_task' && Object.keys(value).length === 2
         && typeof value.target === 'string' && value.target.trim() && value.target.length <= 500) {
         taskIntent = { action: 'start_task', target: value.target.trim() };
       }
       if (taskIntent) {
         try {
-          return await options.tasks.execute(taskIntent, config);
+          return await options.tasks.execute(taskIntent, config, clientId);
         } catch {
           return { reply: '任务操作未能完成。请查看任务列表或 WebUI 中的任务状态后重试。' };
         }
