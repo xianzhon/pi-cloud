@@ -14,6 +14,8 @@ describe('GatewayTaskCommands', () => {
   let prompt: ReturnType<typeof vi.fn>;
   let cleanup: ReturnType<typeof vi.fn>;
   let abort: ReturnType<typeof vi.fn>;
+  let sessions: PiSessionService;
+  let messages: Array<{ role: string; content: Array<{ type: string; text: string }> }>;
   beforeEach(() => {
     db = openPiCloudDatabase(':memory:');
     let nextId = 1;
@@ -26,9 +28,13 @@ describe('GatewayTaskCommands', () => {
       expect(task.projectPath).toBe(projectPath);
       return { task: store.markStarted(id, 'session-1'), sessionId: 'session-1', prompt: task.prompt, images: [] };
     }) };
-    const sessions = {
+    messages = [];
+    sessions = {
       listAgentProfileModels: async () => [{ provider: 'profile', id: 'default-model', current: true }],
-      getSession: () => ({ prompt, abort }),
+      getSession: () => ({ prompt, abort, messages }),
+      setClientAgentProfile: vi.fn(async () => ({})),
+      findPersistedSession: vi.fn(async () => ({ path: '/session.jsonl' })),
+      readSessionSnapshot: vi.fn(async () => ({ messages })),
       runForegroundWithClientProfileProxy: async (_id: string, fn: () => Promise<unknown>) => fn(),
       runSessionExecution: async (_session: unknown, fn: () => Promise<unknown>) => fn(),
       scheduleCleanup: cleanup,
@@ -203,6 +209,89 @@ describe('GatewayTaskCommands', () => {
       vi.useRealTimers();
       abort.mockResolvedValue(undefined);
     }
+  });
+  it('lists all inbox states on request while keeping the natural-language waiting list unchanged', async () => {
+    await create('等待任务');
+    const task = await create('完成任务');
+    store.claimStart(task.id); store.markStarted(task.id, 'old'); store.complete(task.id);
+    const result = await service.execute({ action: 'list_tasks', all: true }, config, 'chat');
+    expect(result.reply).toContain('等待任务');
+    expect(result.reply).toContain('completed');
+    expect(result.reply).toContain('完成任务');
+    expect((await service.execute({ action: 'task_status', index: 2 }, config, 'chat')).reply).toContain('completed');
+  });
+  it('reports running and stopping separately from the persisted started state, and stops only once', async () => {
+    let finish!: () => void;
+    prompt.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const task = await create();
+    await service.execute({ action: 'start_task', target: task.title }, config, 'chat');
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalled());
+    expect((await service.execute({ action: 'task_status', target: task.title }, config, 'chat')).reply).toContain('running');
+    expect((await service.execute({ action: 'stop_task', target: task.title }, config, 'chat')).reply).toContain('请求停止');
+    expect((await service.execute({ action: 'task_status', target: task.title }, config, 'chat')).reply).toContain('stopping');
+    await service.execute({ action: 'stop_task', target: task.title }, config, 'chat');
+    expect(abort).toHaveBeenCalledOnce();
+    expect(store.get(task.id)?.status).toBe('started');
+    finish();
+    await vi.waitFor(() => expect(cleanup).toHaveBeenCalled());
+  });
+  it('allows retrying a task stop after the abort call fails', async () => {
+    let finish!: () => void;
+    prompt.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+    abort.mockRejectedValueOnce(new Error('abort failed'));
+    const task = await create();
+    try {
+      await service.execute({ action: 'start_task', target: task.title }, config);
+      await vi.waitFor(() => expect(prompt).toHaveBeenCalled());
+      await expect(service.execute({ action: 'stop_task', target: task.title }, config)).rejects.toThrow('abort failed');
+      await service.execute({ action: 'stop_task', target: task.title }, config);
+      expect(abort).toHaveBeenCalledTimes(2);
+    } finally { finish?.(); }
+  });
+  it('returns the latest assistant text without thinking/tool output and bounds long results', async () => {
+    const task = await create();
+    await service.execute({ action: 'start_task', target: task.title }, config);
+    messages.push({ role: 'assistant', content: [{ type: 'thinking', text: 'secret' }, { type: 'text', text: '结果'.repeat(5000) }] });
+    const result = await service.execute({ action: 'task_result', target: task.title }, config);
+    expect(result.reply).toContain('结果');
+    expect(result.reply).not.toContain('secret');
+    expect(result.reply.length).toBeLessThan(5000);
+    expect(result.reply).toContain('WebUI');
+  });
+  it('reads persisted results with the task profile without restarting a session', async () => {
+    const task = await create();
+    store.claimStart(task.id); store.markStarted(task.id, 'saved-session');
+    vi.spyOn(sessions, 'getSession').mockReturnValue(undefined);
+    messages.push({ role: 'assistant', content: [{ type: 'text', text: '持久化结果' }] });
+    expect((await service.execute({ action: 'task_result', target: task.title }, config)).reply).toContain('持久化结果');
+    expect(sessions.setClientAgentProfile).toHaveBeenCalledWith(expect.any(String), 'default', expect.any(AbortSignal));
+    expect(sessions.readSessionSnapshot).toHaveBeenCalledWith(expect.any(String), '/session.jsonl');
+    expect(starter.start).not.toHaveBeenCalled();
+  });
+  it('never stops an execution not owned by gateway tasks or returns another project result', async () => {
+    const task = await create('WebUI任务');
+    store.claimStart(task.id); store.markStarted(task.id, 'external');
+    expect((await service.execute({ action: 'stop_task', target: task.title }, config)).reply).toContain('没有可停止');
+    const other = await create('其他项目任务', { ...config, defaultCwd: '/repo/other', cwdChoices: ['/repo/other'] });
+    expect((await service.execute({ action: 'task_result', target: other.title }, config)).reply).toContain('未匹配');
+    expect(abort).not.toHaveBeenCalled();
+  });
+  it('refuses stale list numbers and ambiguous result/stop targets', async () => {
+    const first = await create('重复任务'); await create('重复任务');
+    await service.execute({ action: 'list_tasks', all: true }, config, 'chat');
+    store.delete(first.id);
+    expect((await service.execute({ action: 'task_status', index: 1 }, config, 'chat')).reply).toContain('重新列出');
+    await create('重复任务');
+    expect((await service.execute({ action: 'stop_task', target: '重复' }, config, 'chat')).reply).toContain('多个任务');
+    expect(abort).not.toHaveBeenCalled();
+  });
+  it('does not fabricate results for waiting tasks or absent transcripts', async () => {
+    const task = await create();
+    expect((await service.execute({ action: 'task_result', target: task.title }, config)).reply).toContain('尚未');
+    store.claimStart(task.id); store.markStarted(task.id, 'missing');
+    vi.spyOn(sessions, 'getSession').mockReturnValue(undefined);
+    vi.mocked(sessions.findPersistedSession).mockResolvedValue(undefined);
+    expect((await service.execute({ action: 'task_result', target: task.title }, config)).reply).toContain('未找到');
   });
   it('refuses new operations after shutdown', async () => {
     await service.stop();

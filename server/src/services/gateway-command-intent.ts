@@ -4,7 +4,7 @@ import { completeSimple } from '@earendil-works/pi-ai/compat';
 import { ModelRegistry, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { stripGatewayCommandPrefix } from './gateway-command-aliases.js';
 import type { PiSessionService } from './session-manager.js';
-import type { GatewayTaskCommands } from './gateway-task-commands.js';
+import type { GatewayTaskCommands, GatewayTaskIntent } from './gateway-task-commands.js';
 
 interface GatewayCommandConfig {
   agentProfile?: string;
@@ -29,6 +29,22 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
   const text = options.text.trim();
   if (text.startsWith('/')) {
     const [command, ...args] = text.split(/\s+/);
+    if (command.toLowerCase() === '/task') {
+      const [subcommand, ...targetParts] = args;
+      const target = targetParts.join(' ');
+      const sub = subcommand?.toLowerCase();
+      const action = sub === 'status' ? 'task_status' : sub === 'result' ? 'task_result' : sub === 'stop' ? 'stop_task' : undefined;
+      let intent: GatewayTaskIntent | undefined;
+      if (subcommand?.toLowerCase() === 'list' && !target) intent = { action: 'list_tasks', all: true };
+      else if (action && target) {
+        if (/^[+-]?\d+(?:\.\d+)?$/.test(target)) {
+          const index = Number(target);
+          if (Number.isSafeInteger(index) && index > 0) intent = { action, index };
+        } else intent = { action, target };
+      }
+      if (!intent) return { reply: '用法：/task list 或 /task status|result|stop <任务编号或唯一标题>。编号来自本聊天最近一次任务列表。' };
+      return executeTask(options, intent);
+    }
     return { command, args };
   }
   const instruction = stripGatewayCommandPrefix(text);
@@ -64,6 +80,7 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
           '{"action":"set_cwd","target":"<exact allowed directory>"}, {"action":"set_profile","target":"<exact profile id>"},',
           '{"action":"set_skillset","target":"<exact preset id or all>"}, {"action":"clarify","question":"<short question>"}.',
           'Also allowed: {"action":"create_task","title":"<concise title>","prompt":"<self-contained task instructions>"}, {"action":"list_tasks"}, {"action":"start_task","target":"<user-provided full or partial task title>"}, {"action":"start_task","index":<positive integer from the user>}.',
+          'Also allowed: {"action":"task_status","target":"<title>"}, {"action":"task_result","target":"<title>"}, {"action":"stop_task","target":"<title>"}; each may instead use "index":<positive integer from the user>, never both target and index. These query status/latest assistant reply or stop a gateway-owned task, not the chat session.',
           'Task actions apply only to the current project. Create saves a waiting inbox task without running it. Start runs one existing waiting task in a separate session, not the automatic queue.',
           'For create_task preserve user requirements without inventing scope or facts; clarify if there is no actionable task description. For start_task copy the full or partial task title from the user into target without expanding it; the server matches unambiguous title substrings; task IDs are not supported. For a list number or ordinal such as task 2, 第二个任务, or 2️⃣, return index:2 instead (no target). The server resolves numbers against the last task list for this chat. Never invent a title or number.',
           'Interpret meaning, not keywords. Negated, quoted, hypothetical, unsupported, ambiguous, or multiple-action requests must use clarify, never pick one action.',
@@ -109,20 +126,14 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
         && typeof value.title === 'string' && value.title.trim() && value.title.length <= 500
         && typeof value.prompt === 'string' && value.prompt.trim() && value.prompt.length <= 20_000) {
         taskIntent = { action: 'create_task', title: value.title.trim(), prompt: value.prompt.trim() };
-      } else if (value.action === 'start_task' && Object.keys(value).length === 2
+      } else if (isTaskTargetAction(value.action) && Object.keys(value).length === 2
         && typeof value.index === 'number' && Number.isSafeInteger(value.index) && value.index > 0) {
-        taskIntent = { action: 'start_task', index: value.index };
-      } else if (value.action === 'start_task' && Object.keys(value).length === 2
+        taskIntent = { action: value.action, index: value.index };
+      } else if (isTaskTargetAction(value.action) && Object.keys(value).length === 2
         && typeof value.target === 'string' && value.target.trim() && value.target.length <= 500) {
-        taskIntent = { action: 'start_task', target: value.target.trim() };
+        taskIntent = { action: value.action, target: value.target.trim() };
       }
-      if (taskIntent) {
-        try {
-          return await options.tasks.execute(taskIntent, config, clientId);
-        } catch {
-          return { reply: '任务操作未能完成。请查看任务列表或 WebUI 中的任务状态后重试。' };
-        }
-      }
+      if (taskIntent) return executeTask(options, taskIntent);
     }
     if (Object.keys(value).length !== 2 || typeof value.target !== 'string') return INVALID_INTENT;
     if (value.action === 'set_cwd') {
@@ -138,6 +149,19 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
     return INVALID_INTENT;
   } catch {
     return { reply: '智能指令解析失败或超时，未执行任何操作。请重试，或直接使用 /help 查看命令。' };
+  }
+}
+
+function isTaskTargetAction(action: unknown): action is 'start_task' | 'task_status' | 'task_result' | 'stop_task' {
+  return ['start_task', 'task_status', 'task_result', 'stop_task'].includes(String(action));
+}
+
+async function executeTask(options: GatewayCommandOptions, intent: GatewayTaskIntent): Promise<{ reply: string }> {
+  if (!options.tasks) return { reply: '任务功能当前不可用。' };
+  try {
+    return await options.tasks.execute(intent, options.config, options.clientId);
+  } catch {
+    return { reply: '任务操作未能完成。请查看任务列表或 WebUI 中的任务状态后重试。' };
   }
 }
 

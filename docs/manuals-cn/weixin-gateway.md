@@ -96,7 +96,7 @@ PI_CLOUD_WECHAT_BASE_URL=https://ilinkai.weixin.qq.com
 /profiles
 /profile <profile-id>
 /cwds
-/cwd [absolute-path]
+/cwd [number]
 /skillsets
 /skillset <all|preset-name>
 /reset
@@ -112,6 +112,25 @@ PI_CLOUD_WECHAT_BASE_URL=https://ilinkai.weixin.qq.com
 - `/skillset all` 使用所有可用技能。`least`、`least-skills`、`debug` 等其他技能集是在 Web 中配置的技能预设。
 - `/clear-config` 删除该聊天的覆盖设置，并恢复 `PI_CLOUD_WECHAT_*` 环境变量中的默认值。
 - `/new` 和 `/reset` 会释放该微信聊天当前的内存中 Pi 会话，并将下一条消息绑定到新的 Pi 会话。
+
+## 执行控制和任务查询
+
+```text
+/stop                         # 别名 /abort
+/status
+/task list
+/task status <编号或唯一标题>
+/task result <编号或唯一标题>
+/task stop <编号或唯一标题>
+```
+
+- 这些 slash 控制命令不进入普通消息队列，当前对话执行中也能使用。`/status` 增加执行中/停止中/空闲、已用秒数、排队消息数。
+- `/stop` 请求中断当前对话，取消此前排队的消息，保留历史，不影响独立任务。停止是协作式请求，外部工具或不响应取消的模型不保证立即终止；后续普通消息会等待当前执行真正结束。
+- `/task list` 列出当前允许项目的所有任务及状态；自然语言“列出未开始的任务”仍只列待办。编号始终对应本聊天最近一次任务列表，重新列出会更新编号，服务重启后须重新列出。标题支持无歧义的部分匹配。
+- `/task status` 区分任务持久化状态与实时执行状态。`started` 不代表仍在运行或执行成功，执行结束也不会自动标记任务为 `completed`。
+- `/task result` 返回会话最近一条助手文本，不包含 thinking 或工具输出；长内容截断，可凭返回的会话 ID 在 WebUI 查看完整记录。重启后仍可读取持久化会话，但不会恢复执行或猜测执行成功。
+- `/task stop` 只停止当前服务中由网关启动的任务；WebUI 或自动队列执行须到对应入口停止。重复请求安全，不删除记录、不标记完成；启动准备中的任务请稍后重试。
+- 支持“小助理，查看任务 2 的状态 / 结果”和“小助理，停止任务 <标题>”。自然语言指令仍会排队，执行中需要即时控制请使用上面的 slash 命令。
 
 ## 自然语言管理指令
 

@@ -6,8 +6,9 @@ import QRCode from 'qrcode';
 import { Agent, fetch as undiciFetch } from 'undici';
 import type { PiCloudDatabase } from '../db/database.js';
 import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
-import { GATEWAY_COMMON_ALIAS_HELP } from './gateway-command-aliases.js';
+import { GATEWAY_COMMON_ALIAS_HELP, GATEWAY_CONTROL_HELP } from './gateway-command-aliases.js';
 import { resolveGatewayCommand } from './gateway-command-intent.js';
+import { GatewayMessageQueue, isImmediateGatewayCommand, requestGatewayAbort } from './gateway-message-queue.js';
 import type { GatewayTaskCommands } from './gateway-task-commands.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_COUNT, sniffImageMimeType, validateImages } from './image-input.js';
@@ -108,7 +109,7 @@ export class WeixinGatewayService {
   private readonly presetStore: SkillPresetStore;
   private readonly gatewaySettings: GatewaySettingsStore;
   private readonly seen = new Map<string, number>();
-  private readonly queues = new Map<string, Promise<void>>();
+  private readonly queues = new GatewayMessageQueue();
   private readonly typingTickets = new Map<string, string>();
   private running = false;
   private pollPromise?: Promise<void>;
@@ -501,24 +502,20 @@ export class WeixinGatewayService {
 
   private enqueue(message: WeixinMessagePayload, config: WeixinGatewayConfig): void {
     const clientId = this.clientIdForMessage(message);
-    const previous = this.queues.get(clientId) || Promise.resolve();
-    const next = previous
-      .catch(() => undefined)
-      .then(() => this.processMessage(clientId, message, config))
-      .catch((error) => console.error('[weixin-gateway] message handling failed:', error))
-      .finally(() => {
-        if (this.queues.get(clientId) === next) this.queues.delete(clientId);
-      });
-    this.queues.set(clientId, next);
+    const work = isImmediateGatewayCommand(message.text)
+      ? this.handleCommand(clientId, message, config, this.resolveChatConfig(clientId, config))
+      : this.queues.enqueue(clientId, (signal) => this.processMessage(clientId, message, config, signal));
+    void work.catch((error) => console.error('[weixin-gateway] message handling failed:', error));
   }
 
   private clientIdForMessage(message: WeixinMessagePayload): string {
     return `weixin:${message.chatType}:${message.chatId}`;
   }
 
-  private async processMessage(clientId: string, message: WeixinMessagePayload, config: WeixinGatewayConfig): Promise<void> {
+  private async processMessage(clientId: string, message: WeixinMessagePayload, config: WeixinGatewayConfig, signal?: AbortSignal): Promise<void> {
     const effectiveConfig = this.resolveChatConfig(clientId, config);
     if (await this.handleCommand(clientId, message, config, effectiveConfig)) return;
+    if (signal?.aborted) return;
     if (!effectiveConfig.defaultCwd) {
       await this.sendReply(config, message.chatId, GATEWAY_FOLDERS_REQUIRED_MESSAGE);
       return;
@@ -529,6 +526,7 @@ export class WeixinGatewayService {
     }
 
     const session = await this.ensureSession(clientId, effectiveConfig);
+    if (signal?.aborted) return;
     const imageResult = validateImages(message.images, session.model);
     if (!imageResult.ok) {
       await this.sendReply(config, message.chatId, imageResult.message);
@@ -549,13 +547,14 @@ export class WeixinGatewayService {
     const stopTypingIndicator = this.startTypingIndicator(config, message.chatId);
     try {
       await this.sessionService.runForegroundWithClientProfileProxy(clientId, async () => {
-        await session.prompt(promptText, imageResult.images.length ? { images: imageResult.images } : undefined);
+        if (!signal?.aborted) await session.prompt(promptText, imageResult.images.length ? { images: imageResult.images } : undefined);
       });
     } finally {
       stopTypingIndicator();
       unsubscribe();
     }
 
+    if (signal?.aborted) return;
     const response = chunks.join('').trim() || extractLastAssistantText(session.messages) || '(Pi finished without a text response.)';
     await this.sendReply(config, message.chatId, response);
   }
@@ -609,6 +608,12 @@ export class WeixinGatewayService {
     const normalized = command.toLowerCase();
 
     try {
+      if (normalized === '/stop' || normalized === '/abort') {
+        const cancelled = this.queues.stop(clientId);
+        await requestGatewayAbort(this.sessionService.getSession(clientId));
+        await this.sendReply(baseConfig, message.chatId, `已请求停止当前对话，取消 ${cancelled} 条执行中或排队消息；保留会话历史，不影响独立任务。`);
+        return true;
+      }
       if (normalized === '/new' || normalized === '/reset') {
         this.resetSession(clientId);
         await this.sendReply(
@@ -776,6 +781,7 @@ export class WeixinGatewayService {
     return [
       prefix,
       'Pi session status',
+      this.queues.formatStatus(clientId),
       '',
       `- Profile: ${profile?.id || 'default'}`,
       `- CWD: ${config.defaultCwd || '(not configured)'}`,
@@ -842,6 +848,7 @@ export class WeixinGatewayService {
       '- /reset or /new - start a fresh session with current config',
       '- /clear-config - return this chat to gateway environment defaults',
       '',
+      ...GATEWAY_CONTROL_HELP,
       ...GATEWAY_COMMON_ALIAS_HELP,
     ].join('\n');
   }

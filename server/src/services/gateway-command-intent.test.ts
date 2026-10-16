@@ -61,6 +61,9 @@ describe('resolveGatewayCommand', () => {
     { action: 'list_tasks' },
     { action: 'start_task', target: '登录' },
     { action: 'start_task', index: 2 },
+    { action: 'task_status', target: '登录' },
+    { action: 'task_result', index: 2 },
+    { action: 'stop_task', target: '登录' },
   ])('dispatches task intent %j without a slash command', async (intent) => {
     response(intent);
     const execute = vi.fn(async () => ({ reply: '任务操作成功' }));
@@ -77,11 +80,36 @@ describe('resolveGatewayCommand', () => {
     { action: 'start_task', index: '2' },
     { action: 'start_task', index: 2, target: '登录' },
     { action: 'list_tasks', target: 'all' },
+    { action: 'stop_task', index: 0 },
+    { action: 'task_status', target: '登录', extra: true },
+    { action: 'task_result', index: 2, target: '登录' },
   ])('rejects malformed task intent %j before dispatch', async (intent) => {
     response(intent);
     const execute = vi.fn();
     expect(await resolveGatewayCommand({ ...options, text: '小助理 处理任务', tasks: { execute } })).toHaveProperty('reply');
     expect(execute).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['/task list', { action: 'list_tasks', all: true }],
+    ['/TASK STATUS 2', { action: 'task_status', index: 2 }],
+    ['/task result 登录 页面', { action: 'task_result', target: '登录 页面' }],
+    ['/task stop 登录', { action: 'stop_task', target: '登录' }],
+  ])('dispatches deterministic task command %s without a model call', async (text, intent) => {
+    const execute = vi.fn(async () => ({ reply: 'done' }));
+    expect(await resolveGatewayCommand({ ...options, text, tasks: { execute } })).toEqual({ reply: 'done' });
+    expect(execute).toHaveBeenCalledWith(intent, options.config, options.clientId);
+    expect(mocks.complete).not.toHaveBeenCalled();
+  });
+  it.each(['/task', '/task delete 1', '/task constructor 登录', '/task __proto__ 登录', '/task toString 登录', '/task status', '/task stop 0', '/task result -1', '/task list extra'])('rejects incomplete or unsupported task command %s', async (text) => {
+    const execute = vi.fn();
+    expect(await resolveGatewayCommand({ ...options, text, tasks: { execute } })).toHaveProperty('reply');
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('contains task-operation errors without falling through to chat', async () => {
+    const execute = vi.fn(async () => { throw new Error('private path'); });
+    const result = await resolveGatewayCommand({ ...options, text: '/task list', tasks: { execute } });
+    expect(result).toHaveProperty('reply');
+    expect(JSON.stringify(result)).not.toContain('private path');
   });
   it('uses the configured gateway model with isolated context and no tools', async () => {
     response({ action: 'status' });

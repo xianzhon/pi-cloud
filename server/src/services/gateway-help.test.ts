@@ -14,6 +14,8 @@ describe('gateway /help', () => {
       const gateway = new Gateway(db, undefined, {} as PiSessionService);
       const help = (gateway as unknown as { formatHelp(): string }).formatHelp();
       expect(help).toContain('/status');
+      for (const command of ['/stop', '/abort', '/task list', '/task status', '/task result', '/task stop']) expect(help).toContain(command);
+      expect(help).toContain('排队');
       expect(help).toContain('/cwd');
       expect(help).toContain('支持的自然语言指令');
       for (const group of ['会话管理', '配置切换', '任务管理']) expect(help).toContain(group);

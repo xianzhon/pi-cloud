@@ -96,7 +96,7 @@ Send these commands in the WeChat chat:
 /profiles
 /profile <profile-id>
 /cwds
-/cwd [absolute-path]
+/cwd [number]
 /skillsets
 /skillset <all|preset-name>
 /reset
@@ -112,6 +112,25 @@ Notes:
 - `/skillset all` uses all available skills. Other skillsets such as `least`, `least-skills`, or `debug` are Web-configured skill presets.
 - `/clear-config` removes this chat's overrides and returns to the `PI_CLOUD_WECHAT_*` environment defaults.
 - `/new` and `/reset` dispose the current in-memory Pi session for that WeChat chat and bind the next message to a fresh Pi session.
+
+## Execution controls and task queries
+
+```text
+/stop                         # alias: /abort
+/status
+/task list
+/task status <number-or-unique-title>
+/task result <number-or-unique-title>
+/task stop <number-or-unique-title>
+```
+
+- These slash controls bypass the ordinary message queue, including while the chat is running. `/status` also shows running/stopping/idle, elapsed seconds, and pending message count.
+- `/stop` requests cancellation of the current chat and discards previously queued messages, preserving history and leaving independent tasks alone. Cancellation is cooperative: external tools or providers may not stop immediately. Later ordinary messages wait until the active execution actually settles.
+- `/task list` lists all inbox states in the currently allowed project; the natural-language waiting-task list still lists waiting tasks only. Numbers refer to this chat's most recent task list; re-listing changes numbering, and a restart requires re-listing. Unambiguous partial titles are accepted.
+- `/task status` separates durable inbox state from live execution state. `started` does not mean still running or successful; finishing execution does not automatically mark an inbox task `completed`.
+- `/task result` returns the latest assistant text, excluding thinking and tool output. Long text is truncated; use the returned session ID to find the full transcript in WebUI. Persisted results remain readable after restart without resuming execution or inferring success.
+- `/task stop` only stops tasks launched through the gateway in this server process. Stop WebUI/automatic-queue executions at their owning entry point. Repeated requests are safe; records are preserved and not marked completed. Retry after preparation finishes for tasks still starting.
+- Natural-language task status/result/stop instructions are also supported, e.g. “小助理，查看任务 2 的结果”. They still queue behind ordinary messages; use slash controls for immediate access during execution.
 
 ## Natural-language management instructions
 

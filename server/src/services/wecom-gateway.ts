@@ -4,8 +4,9 @@ import { isAbsolute } from 'node:path';
 import type { ImageContent } from '@earendil-works/pi-ai';
 import type { PiCloudDatabase } from '../db/database.js';
 import { credentialCipher, type CredentialCipher } from '../db/credential-encryption.js';
-import { GATEWAY_COMMON_ALIAS_HELP } from './gateway-command-aliases.js';
+import { GATEWAY_COMMON_ALIAS_HELP, GATEWAY_CONTROL_HELP } from './gateway-command-aliases.js';
 import { resolveGatewayCommand } from './gateway-command-intent.js';
+import { GatewayMessageQueue, isImmediateGatewayCommand, requestGatewayAbort } from './gateway-message-queue.js';
 import type { GatewayTaskCommands } from './gateway-task-commands.js';
 import { GatewaySettingsStore } from './gateway-settings-store.js';
 import { MAX_IMAGE_BYTES, sniffImageMimeType, validateImages } from './image-input.js';
@@ -101,7 +102,7 @@ export class WecomGatewayService {
   private readonly gatewaySettings: GatewaySettingsStore;
   private readonly presetStore: SkillPresetStore;
   private readonly seen = new Map<string, number>();
-  private readonly queues = new Map<string, Promise<void>>();
+  private readonly queues = new GatewayMessageQueue();
   private tokenCache?: WecomTokenCache;
   private environmentCallbackVerified = false;
 
@@ -347,20 +348,16 @@ export class WecomGatewayService {
 
   private enqueue(message: WecomMessagePayload, config: WecomGatewayConfig): void {
     const clientId = `wecom:dm:${message.userId}`;
-    const previous = this.queues.get(clientId) || Promise.resolve();
-    const next = previous
-      .catch(() => undefined)
-      .then(() => this.processMessage(clientId, message, config))
-      .catch((error) => console.error('[wecom-gateway] message handling failed:', error))
-      .finally(() => {
-        if (this.queues.get(clientId) === next) this.queues.delete(clientId);
-      });
-    this.queues.set(clientId, next);
+    const work = isImmediateGatewayCommand(message.text)
+      ? this.handleCommand(clientId, message, config, this.resolveChatConfig(clientId, config))
+      : this.queues.enqueue(clientId, (signal) => this.processMessage(clientId, message, config, signal));
+    void work.catch((error) => console.error('[wecom-gateway] message handling failed:', error));
   }
 
-  private async processMessage(clientId: string, message: WecomMessagePayload, config: WecomGatewayConfig): Promise<void> {
+  private async processMessage(clientId: string, message: WecomMessagePayload, config: WecomGatewayConfig, signal?: AbortSignal): Promise<void> {
     const effectiveConfig = this.resolveChatConfig(clientId, config);
     if (await this.handleCommand(clientId, message, config, effectiveConfig)) return;
+    if (signal?.aborted) return;
     if (!effectiveConfig.defaultCwd) {
       await this.sendReply(config, message.userId, 'No gateway folders configured. Add at least one allowed folder in Web UI Settings > Gateway.');
       return;
@@ -385,7 +382,9 @@ export class WecomGatewayService {
       }
     }
 
+    if (signal?.aborted) return;
     const session = await this.ensureSession(clientId, effectiveConfig);
+    if (signal?.aborted) return;
     let images: ImageContent[] = [];
     if (message.messageType === 'image') {
       if (!message.mediaId) {
@@ -414,11 +413,12 @@ export class WecomGatewayService {
     });
     try {
       await this.sessionService.runForegroundWithClientProfileProxy(clientId, () => (
-        session.prompt(promptText, imageResult.images.length ? { images: imageResult.images } : undefined)
+        signal?.aborted ? Promise.resolve() : session.prompt(promptText, imageResult.images.length ? { images: imageResult.images } : undefined)
       ));
     } finally {
       unsubscribe();
     }
+    if (signal?.aborted) return;
     const response = chunks.join('').trim() || extractLastAssistantText(session.messages) || '(Pi finished without a text response.)';
     await this.sendReply(config, message.userId, response);
   }
@@ -464,6 +464,12 @@ export class WecomGatewayService {
     const { command, args } = resolved;
     const normalized = command.toLowerCase();
     try {
+      if (normalized === '/stop' || normalized === '/abort') {
+        const cancelled = this.queues.stop(clientId);
+        await requestGatewayAbort(this.sessionService.getSession(clientId));
+        await this.sendReply(baseConfig, message.userId, `已请求停止当前对话，取消 ${cancelled} 条执行中或排队消息；保留会话历史，不影响独立任务。`);
+        return true;
+      }
       if (normalized === '/new' || normalized === '/reset') {
         this.resetSession(clientId);
         await this.sendReply(baseConfig, message.userId, await this.formatStatus(clientId, this.resolveChatConfig(clientId, baseConfig), 'Reset this WeCom chat. A fresh Pi session will start with your next message.'));
@@ -585,6 +591,7 @@ export class WecomGatewayService {
     return [
       prefix,
       'Pi session status',
+      this.queues.formatStatus(clientId),
       '',
       `- Profile: ${profile?.id || 'default'}`,
       `- CWD: ${config.defaultCwd || '(not configured)'}`,
@@ -609,6 +616,7 @@ export class WecomGatewayService {
       '/clear-config - restore gateway defaults',
       '/help - show this help',
       '',
+      ...GATEWAY_CONTROL_HELP,
       ...GATEWAY_COMMON_ALIAS_HELP,
     ].join('\n');
   }
