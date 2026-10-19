@@ -138,6 +138,39 @@ describe('useChat', () => {
     wrapper.unmount();
   });
 
+  it.each(['prompt', 'awaited prompt', 'agent_start', 'streaming_state'])('preserves a completed answer when idle detail history arrives late (%s)', async (start) => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    send.mockReturnValue(true);
+    const responses: Array<(value: any) => void> = [];
+    const fetchSpy = vi.fn(() => new Promise((resolve) => { responses.push(resolve); }));
+    vi.stubGlobal('fetch', fetchSpy);
+    usePreferences().setShowDetails(true);
+    const resolveStale = responses[0];
+
+    if (start === 'prompt' || start === 'awaited prompt') {
+      void chat.sendMessage('New question', 'session-1', { awaitAcceptance: start === 'awaited prompt' });
+    } else if (start === 'agent_start') {
+      handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_start' } });
+    } else {
+      handlers.get('streaming_state')?.({ sessionId: 'session-1', isStreaming: true });
+    }
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Completed answer' } } });
+    handlers.get('status')?.({ sessionId: 'session-1', status: 'idle' });
+    resolveStale({ json: async () => ({ messages: [], isStreaming: false }) });
+    await nextTick();
+    await nextTick();
+
+    expect(chat.isStreaming.value).toBe(false);
+    expect(chat.messages.value.some((message) => message.content === 'Completed answer')).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    responses[1]({ json: async () => ({ messages: [{ role: 'assistant', content: 'Completed answer' }], isStreaming: false }) });
+    await nextTick();
+    await nextTick();
+    expect(chat.messages.value.map((message) => message.content)).toEqual(['Completed answer']);
+    wrapper.unmount();
+  });
+
   it('does not resubscribe to a stale session after switching', async () => {
     const { chat, wrapper } = mountChat();
     let resolveA!: (value: any) => void;

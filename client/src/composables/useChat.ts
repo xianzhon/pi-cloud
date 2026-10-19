@@ -479,6 +479,16 @@ export function useChat() {
     window.dispatchEvent(new CustomEvent('refresh-sessions'));
   }
 
+  function deferHistoryForStreaming(targetSessionId?: string | null) {
+    if (!targetSessionId) return;
+    const request = historyRequests.get(targetSessionId);
+    if (!request) return;
+    // Even a run that finishes before this snapshot arrives makes it stale.
+    request.abort();
+    historyRequests.delete(targetSessionId);
+    if (showDetails.value) pendingDetailHistory.add(targetSessionId);
+  }
+
   function stopStreaming(targetSessionId?: string | null, completed = false) {
     const streamingState = getStreamingSessionState(targetSessionId);
     const wasStreaming = streamingState.isStreaming;
@@ -714,6 +724,7 @@ export function useChat() {
       ? data.streamingStartedAt
       : null;
     if (state.isStreaming) {
+      if (!wasStreaming) deferHistoryForStreaming(targetSessionId);
       streamingSessionId.value = targetSessionId;
       emitSessionStreamingState(targetSessionId, true);
     } else if (wasStreaming) {
@@ -812,6 +823,7 @@ export function useChat() {
 
       case 'agent_start':
       case 'compaction_start':
+        deferHistoryForStreaming(targetSessionId);
         if (targetSessionId) streamingSessionId.value = targetSessionId;
         const state = getStreamingSessionState(targetSessionId);
         state.isStreaming = true;
@@ -1008,6 +1020,7 @@ export function useChat() {
         },
       });
       if (!sent) return false;
+      deferHistoryForStreaming(resolvedSessionId);
       state.messages.push(userMessage);
       state.isStreaming = true;
       state.streamingStartedAt ??= Date.now();
@@ -1033,6 +1046,7 @@ export function useChat() {
       });
     });
 
+    deferHistoryForStreaming(resolvedSessionId);
     state.messages.push(userMessage);
     state.receivedModelOutcome = false;
     state.retryMessage = null;
