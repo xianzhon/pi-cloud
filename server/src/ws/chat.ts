@@ -6,6 +6,7 @@ import { validateImages, type ImageValidationResult } from '../services/image-in
 import type { PiSessionService } from '../services/session-manager.js';
 import { saveUploadedImages } from '../services/uploaded-image-store.js';
 import { sendJson } from './safe-send.js';
+import { compactChatEvent } from './chat-event.js';
 import { bindSocketSession } from './session-auth.js';
 
 const ABORT_GRACE_MS = 5_000;
@@ -114,8 +115,9 @@ export async function chatWebSocket(app: FastifyInstance) {
   const clients = new Set<{ socket: Parameters<typeof sendJson>[0]; watchedSessionId?: string }>();
 
   const unsubscribeExecution = sessionService.onSessionExecutionMessage((message) => {
+    const outgoing = message.type === 'event' ? { ...message, event: compactChatEvent(message.event) } : message;
     for (const client of clients) {
-      if (client.watchedSessionId === message.sessionId) sendJson(client.socket, message);
+      if (client.watchedSessionId === message.sessionId) sendJson(client.socket, outgoing);
     }
   });
   app.addHook('onClose', async () => { unsubscribeExecution(); });
@@ -348,7 +350,7 @@ export async function chatWebSocket(app: FastifyInstance) {
               broadcastToSession(sessionId, {
                 type: 'event',
                 sessionId,
-                event,
+                event: compactChatEvent(event),
                 streamingStartedAt,
               });
             });

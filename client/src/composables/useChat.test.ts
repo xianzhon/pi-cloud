@@ -40,6 +40,27 @@ describe('useChat', () => {
     vi.restoreAllMocks();
   });
 
+  it('renders compact text, thinking, and interleaved tool argument deltas', () => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    const emit = (event: any) => handlers.get('event')?.({ sessionId: 'session-1', event });
+    emit({ type: 'message_start', message: { role: 'assistant', responseId: 'r1', timestamp: 123 } });
+    for (const [type, delta] of [['thinking_delta', 'Thinking'], ['text_delta', 'Hello'], ['text_delta', ' world']]) {
+      emit({ type: 'message_update', assistantMessageEvent: { type, delta } });
+    }
+    for (const [toolCallId, inputDelta] of [['a', '{"path":'], ['b', '{"other":1}'], ['a', '"file"}']]) {
+      emit({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_delta', toolCallId, toolName: 'read', inputDelta } });
+    }
+    expect(chat.messages.value.find((message) => message.id === 'r1')).toMatchObject({ content: 'Hello world', thinking: 'Thinking' });
+    expect(chat.messages.value.find((message) => message.toolCallId === 'a')).toMatchObject({ toolInput: '{"path":"file"}' });
+    expect(chat.messages.value.find((message) => message.toolCallId === 'b')).toMatchObject({ toolInput: '{"other":1}' });
+    emit({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_end', toolCallId: 'a', toolName: 'read', args: { path: 'file' } } });
+    expect(chat.messages.value.find((message) => message.toolCallId === 'a')?.toolInput).toBe(JSON.stringify({ path: 'file' }, null, 2));
+    emit({ type: 'message_end', message: { role: 'assistant', responseId: 'r1', provider: 'test', model: 'model', usage: { totalTokens: 10 } } });
+    expect(chat.messages.value.find((message) => message.id === 'r1')).toMatchObject({ provider: 'test', model: 'model', usage: { totalTokens: 10 } });
+    wrapper.unmount();
+  });
+
   it('does not resubscribe to a stale session after switching', async () => {
     const { chat, wrapper } = mountChat();
     let resolveA!: (value: any) => void;

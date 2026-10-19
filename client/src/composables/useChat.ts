@@ -578,8 +578,10 @@ export function useChat() {
     const partialTool = event.partial?.content?.find?.((item: any) => normalizeType(item?.type) === 'tool_call');
     const toolCallId = event.toolCallId || event.tool_call_id || event.id || partialTool?.toolCallId || partialTool?.tool_call_id || partialTool?.id;
     const source = partialTool ? { ...partialTool, toolCallId } : event;
-    const toolInput = getToolInput(source) || stringifyValue(partialTool?.partialJson || '');
     const row = findToolRow(toolCallId, 'tool_call', targetSessionId || streamingSessionId.value || sessionId.value);
+    const toolInput = typeof event.inputDelta === 'string'
+      ? (row?.toolInput || '') + event.inputDelta
+      : getToolInput(source) || stringifyValue(partialTool?.partialJson || '');
 
     if (row) {
       row.content = toolInput;

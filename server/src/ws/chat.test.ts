@@ -121,6 +121,14 @@ describe('chat websocket', () => {
     messages.forEach(publish);
     expect(watcher.sent.map((item) => JSON.parse(item))).toEqual(messages);
     expect(other.sent).toEqual([]);
+    publish({ type: 'event', sessionId: 'background', event: {
+      type: 'message_update', message: { role: 'assistant', content: 'large snapshot' },
+      assistantMessageEvent: { type: 'text_delta', delta: 'new', partial: { content: 'large snapshot' } },
+    } });
+    expect(JSON.parse(watcher.sent.at(-1)!)).toMatchObject({ event: {
+      message: { role: 'assistant' }, assistantMessageEvent: { type: 'text_delta', delta: 'new' },
+    } });
+    expect(watcher.sent.at(-1)).not.toContain('large snapshot');
   });
 
   it('pings idle sockets and terminates peers that stop answering', async () => {
@@ -179,6 +187,14 @@ describe('chat websocket', () => {
     })));
     await vi.waitFor(() => expect(publishEvent).toBeDefined());
     publishEvent!({ type: 'agent_start' });
+    publishEvent!({ type: 'message_update', message: { role: 'assistant', content: 'large snapshot' },
+      assistantMessageEvent: { type: 'text_delta', delta: 'new', partial: { content: 'large snapshot' } },
+    });
+    for (const client of [desktop, mobile]) {
+      const update = client.sent.map((message) => JSON.parse(message)).find((message) => message.event?.type === 'message_update');
+      expect(update.event.assistantMessageEvent).toEqual({ type: 'text_delta', delta: 'new' });
+      expect(JSON.stringify(update)).not.toContain('large snapshot');
+    }
     publishEvent!({ type: 'agent_end' });
     finishPrompt!();
 
