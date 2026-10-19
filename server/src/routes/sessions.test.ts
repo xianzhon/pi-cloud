@@ -106,6 +106,8 @@ const sessionService = {
     updateSessionSkillPolicy: vi.fn(),
     findPersistedSession: vi.fn(),
     readSessionSnapshot: vi.fn(),
+    resumeSession: vi.fn(),
+    getSessionStreamingStartedAt: vi.fn(),
     readSessionRuntimeStatus: vi.fn(),
     getRuntimeStatus: vi.fn(),
     getSkillPolicy: vi.fn(),
@@ -196,6 +198,40 @@ describe('session routes', () => {
       id: 'default', label: 'default', path: '/Users/test/.pi/agent', isDefault: true,
     });
     resolveMemoryContext.mockResolvedValue({ project: { id: 'memory-project-1' } });
+  });
+
+  it.each([false, true])('projects active and persisted history with includeDetails=%s', async (includeDetails) => {
+    const { app, handlers } = createMockApp();
+    const { sessionRoutes } = await import('./sessions.js');
+    await sessionRoutes(app as any);
+    const messages = [
+      { role: 'assistant', content: [{ type: 'text', text: 'Answer' }, { type: 'thinking', thinking: 'PRIVATE' }] },
+      { role: 'toolResult', content: 'PRIVATE' },
+    ];
+    const session = { sessionId: 's1', messages, isStreaming: false };
+    const request = { params: { id: 's1' }, query: { clientId: 'c1', ...(includeDetails ? { includeDetails: 'true' } : {}) } };
+    sessionService.getAllSessions.mockReturnValueOnce(new Map([['c1', session]]));
+    const active = await handlers['GET /:id'](request);
+    sessionService.getAllSessions.mockReturnValueOnce(new Map());
+    sessionService.getSession.mockReturnValueOnce(null);
+    sessionService.findPersistedSession.mockResolvedValueOnce({ path: '/session' });
+    sessionService.readSessionSnapshot.mockResolvedValueOnce(session);
+    const persisted = await handlers['GET /:id'](request);
+    for (const result of [active, persisted]) {
+      expect(JSON.stringify(result.messages).includes('PRIVATE')).toBe(includeDetails);
+      expect(JSON.stringify(result.messages)).toContain('Answer');
+    }
+    expect(messages).toHaveLength(2);
+  });
+
+  it('does not return hidden payloads as a side effect of resuming a session', async () => {
+    const { app, handlers } = createMockApp();
+    const { sessionRoutes } = await import('./sessions.js');
+    await sessionRoutes(app as any);
+    sessionService.findPersistedSession.mockResolvedValueOnce({ path: '/session' });
+    sessionService.resumeSession.mockResolvedValueOnce({ sessionId: 's1', messages: [{ role: 'toolResult', content: 'PRIVATE' }] });
+    const result = await handlers['POST /:id/resume']({ params: { id: 's1' }, body: { clientId: 'c1' } });
+    expect(result.messages).toEqual([]);
   });
 
   it('keeps session services isolated between app instances', async () => {

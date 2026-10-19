@@ -77,7 +77,7 @@
             class="details-toggle-btn view-option-row"
             role="menuitemcheckbox"
             :aria-checked="showDetails"
-            @click="showDetails = !showDetails"
+            @click="setShowDetails(!showDetails)"
           >
             <span><PhListChecks v-if="showDetails" :size="14" /><PhListDashes v-else :size="14" /> {{ t('components.chatPanel.details') }}</span>
             <strong>{{ showDetails ? t('components.chatPanel.shown') : t('components.chatPanel.hidden') }}</strong>
@@ -810,7 +810,7 @@ import { useToasts } from '../composables/useToasts';
 
 const t = i18n.global.t;
 const gitOperations = createGitOperations();
-const { autoSpeakAssistant } = usePreferences();
+const { autoSpeakAssistant, showDetails, setShowDetails } = usePreferences();
 const { showToast } = useToasts();
 
 const {
@@ -1024,7 +1024,6 @@ const selectedMessageIndex = ref(0);
 const reviewTranscript = ref<ReviewSessionTranscript | null>(null);
 let reviewTranscriptRequestId = 0;
 const isReviewMode = computed(() => Boolean(props.reviewSourceId && props.reviewSessionId));
-const showDetails = ref(false);
 const showViewOptions = ref(false);
 const isExportingPdf = ref(false);
 const exportPdfError = ref('');

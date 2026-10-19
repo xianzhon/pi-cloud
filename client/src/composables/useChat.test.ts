@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick } from 'vue';
+import { usePreferences } from './usePreferences';
 import { useChat } from './useChat';
 import { i18n, setLocale } from '../i18n';
 
@@ -61,6 +62,82 @@ describe('useChat', () => {
     wrapper.unmount();
   });
 
+  it('defaults to lightweight delivery and fetches details only when requested', async () => {
+    const { chat, wrapper } = mountChat();
+    const fetchSpy = vi.fn(async (_url: string) => ({ json: async () => ({ messages: [] }) }));
+    vi.stubGlobal('fetch', fetchSpy);
+    await chat.loadSessionHistory('session-1');
+    expect(send).toHaveBeenCalledWith({ type: 'set_details', payload: { includeDetails: false } });
+    usePreferences().setShowDetails(true);
+    await nextTick();
+    expect(send).toHaveBeenCalledWith({ type: 'set_details', payload: { includeDetails: true } });
+    expect(fetchSpy.mock.calls.at(-1)?.[0]).toContain('includeDetails=true');
+    await nextTick();
+    handlers.get('connected')?.({});
+    expect(send).toHaveBeenCalledWith({ type: 'set_details', payload: { includeDetails: true } });
+    wrapper.unmount();
+  });
+
+  it('defers earlier detail hydration during streaming without losing live text', async () => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    const fetchSpy = vi.fn(async (_url: string) => ({ json: async () => ({ messages: [] }) }));
+    vi.stubGlobal('fetch', fetchSpy);
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_start' } });
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Still streaming' } } });
+    usePreferences().setShowDetails(true);
+    await nextTick();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(chat.messages.value[0].content).toBe('Still streaming');
+    handlers.get('status')?.({ sessionId: 'session-1', status: 'idle' });
+    await nextTick();
+    expect(fetchSpy.mock.calls.at(-1)?.[0]).toContain('includeDetails=true');
+    wrapper.unmount();
+  });
+
+  it('recognizes a response whose hidden thinking was omitted instead of showing a false failure', () => {
+    const { chat, wrapper } = mountChat();
+    handlers.get('event')?.({ event: { type: 'message_end', hasContent: true, message: { role: 'assistant', stopReason: 'stop' } } });
+    handlers.get('event')?.({ event: { type: 'agent_settled' } });
+    expect(chat.messages.value).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('discards a detail history response after Details is disabled', async () => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    let resolve!: (value: any) => void;
+    const fetchSpy = vi.fn((url: string) => url.includes('includeDetails=true')
+      ? new Promise((done) => { resolve = done; })
+      : Promise.resolve({ json: async () => ({ messages: [] }) }));
+    vi.stubGlobal('fetch', fetchSpy);
+    usePreferences().setShowDetails(true);
+    await nextTick();
+    usePreferences().setShowDetails(false);
+    expect(fetchSpy).toHaveBeenLastCalledWith('/api/sessions/session-1?clientId=client-1', { signal: expect.any(AbortSignal) });
+    resolve({ json: async () => ({ messages: [{ role: 'assistant', content: [{ type: 'thinking', thinking: 'Stale detail' }] }] }) });
+    await nextTick();
+    await nextTick();
+    expect(chat.messages.value).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('does not overwrite a new live response when an idle detail download finishes', async () => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    let resolve!: (value: any) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((done) => { resolve = done; })));
+    usePreferences().setShowDetails(true);
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_start' } });
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'New response' } } });
+    resolve({ json: async () => ({ messages: [], isStreaming: false }) });
+    await nextTick();
+    await nextTick();
+    expect(chat.isStreaming.value).toBe(true);
+    expect(chat.messages.value[0].content).toBe('New response');
+    wrapper.unmount();
+  });
+
   it('does not resubscribe to a stale session after switching', async () => {
     const { chat, wrapper } = mountChat();
     let resolveA!: (value: any) => void;
@@ -88,8 +165,8 @@ describe('useChat', () => {
   });
 
   it('does not add optimistic state when the socket cannot send', () => {
-    send.mockReturnValueOnce(false);
     const { chat } = mountChat();
+    send.mockReturnValueOnce(false);
 
     expect(chat.sendMessage('hello pi', 'session-1')).toBe(false);
     expect(chat.messages.value).toEqual([]);
@@ -622,7 +699,7 @@ describe('useChat', () => {
 
     await chat.loadSessionHistory('session-1');
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/sessions/session-1?clientId=client-1');
+    expect(fetchSpy).toHaveBeenCalledWith('/api/sessions/session-1?clientId=client-1', { signal: expect.any(AbortSignal) });
   });
 
   it('appends stored builtin command activity when loading history', async () => {
