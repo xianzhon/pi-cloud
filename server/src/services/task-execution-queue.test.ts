@@ -189,9 +189,12 @@ describe('TaskExecutionQueue', () => {
     const second = create('Second');
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    prompt.mockImplementation(async (text: string) => { await gate; success(text); });
+    // Signal readiness directly rather than polling real Git startup with a 1s deadline.
+    let notifyStarted!: () => void;
+    const started = new Promise<void>((resolve) => { notifyStarted = resolve; });
+    prompt.mockImplementation(async (text: string) => { notifyStarted(); await gate; success(text); });
     queue.configure([first.id, second.id], true);
-    await vi.waitFor(() => expect(prompt).toHaveBeenCalled());
+    await started;
     expect(() => queue.configure([second.id], false)).toThrow('Cannot rearrange');
     queue.configure([first.id, second.id], false);
     release();

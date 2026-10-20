@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { generateSync, verifySync } from 'otplib';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openPiCloudDatabase, type PiCloudDatabase } from '../db/database';
 import { TotpService } from './totp';
 
@@ -15,9 +15,13 @@ describe('TotpService', () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-cloud-totp-'));
     db = openPiCloudDatabase(path.join(tempDir, 'pi-cloud.sqlite'));
     totp = new TotpService(db, 'Pi Cloud', 'me');
+    // Keep code generation and verification in the same TOTP window under load.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     db.close();
     await fs.rm(tempDir, { recursive: true, force: true });
   });

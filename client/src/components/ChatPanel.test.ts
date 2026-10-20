@@ -509,6 +509,16 @@ describe('ChatPanel', () => {
   });
 
   it('uses the attachment validation path for paste and drop and enforces the twenty-image limit', async () => {
+    // Test validation without depending on twenty sequential DOM file-read timers.
+    // Real FileReader behavior is covered by useChatAttachments.test.ts.
+    vi.stubGlobal('FileReader', class {
+      result = 'data:image/png;base64,AQ==';
+      onload: (() => void) | null = null;
+
+      readAsDataURL(): void {
+        queueMicrotask(() => this.onload?.());
+      }
+    });
     const wrapper = mount(ChatPanel);
     const textarea = wrapper.find('textarea');
     const png = (name: string) => new File([new Uint8Array([1])], name, { type: 'image/png' });
@@ -516,7 +526,8 @@ describe('ChatPanel', () => {
     await textarea.trigger('paste', { clipboardData: { files: [png('pasted.png')] } });
     await vi.waitFor(() => expect(wrapper.findAll('.attachment-item')).toHaveLength(1));
     await wrapper.find('.composer-shell').trigger('drop', { dataTransfer: { files: Array.from({ length: 20 }, (_, index) => png(`${index}.png`)) } });
-    await vi.waitFor(() => expect(wrapper.findAll('.attachment-item')).toHaveLength(20));
+    await flushPromises();
+    expect(wrapper.findAll('.attachment-item')).toHaveLength(20);
 
     expect(wrapper.text()).toContain('You can attach up to 20 images.');
     await wrapper.findAll('.attachment-remove')[0].trigger('click');
