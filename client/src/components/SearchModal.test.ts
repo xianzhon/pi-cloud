@@ -182,6 +182,19 @@ describe('SearchModal', () => {
     vi.useRealTimers();
   });
 
+  it.each([
+    ['/home/alice', '~'],
+    ['/Users/alice/repo', '~/repo'],
+    ['/home/alice-other/repo', '~/repo'],
+    ['/workspace/home/alice', '/workspace/home/alice'],
+    ['C:\\Users\\alice\\repo', 'C:\\Users\\alice\\repo'],
+  ])('formats the result path %s as %s', (cwd, expected) => {
+    results.value = [{ ...results.value[0], cwd }];
+    const wrapper = mount(SearchModal, { props: { isOpen: true }, global: { stubs: { Teleport: true, Transition: false } } });
+    expect(wrapper.get('.result-path').text()).toBe(expected);
+    wrapper.unmount();
+  });
+
   it('loads more at the end, stops at boundaries, and closes with Escape', async () => {
     displayCount.value = 1;
     total.value = 2;

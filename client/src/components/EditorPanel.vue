@@ -1768,14 +1768,6 @@ function relativePathFromCwd(filePath: string): string {
   return normalizedFilePath;
 }
 
-function relativePathForGit(filePath: string): string {
-  return relativePathFromCwd(filePath);
-}
-
-function tabTooltipPath(filePath: string): string {
-  return normalizePathSeparators(filePath);
-}
-
 function rootDirectory(): string {
   return normalizePath(props.cwd || '~');
 }
@@ -1803,7 +1795,7 @@ function showTabTooltip(event: MouseEvent | FocusEvent, filePath: string) {
   const rect = target.getBoundingClientRect();
   tabTooltip.value = {
     visible: true,
-    text: tabTooltipPath(filePath),
+    text: normalizePathSeparators(filePath),
     left: rect.left + rect.width / 2,
     top: rect.bottom + 6,
   };
@@ -2073,7 +2065,7 @@ function applyGitChangeDecorations(filePath = activeTab.value) {
     return;
   }
 
-  const ranges = gitChanges.value.get(relativePathForGit(filePath)) || [];
+  const ranges = gitChanges.value.get(relativePathFromCwd(filePath)) || [];
   const lineCount = typeof model.getLineCount === 'function' ? model.getLineCount() : Number.MAX_SAFE_INTEGER;
   const decorations = ranges.map((change) => {
     const start = Math.min(lineCount, Math.max(1, change.start));
@@ -2583,28 +2575,6 @@ async function refreshDirectoryInTree(directoryPath: string) {
   const nextExpanded = new Set(expandedPaths.value);
   nextExpanded.add(node.path);
   expandedPaths.value = nextExpanded;
-}
-
-async function refreshActiveFile() {
-  if (!activeTab.value) return;
-
-  clearStatusTimer();
-  statusType.value = 'saving';
-  statusMessage.value = t('components.editorPanel.checkingFile');
-
-  const [changed] = await Promise.all([
-    refreshFile(activeTab.value),
-    refreshFileTree(),
-  ]);
-
-  if (changed) {
-    statusType.value = 'success';
-    statusMessage.value = t('components.editorPanel.refreshedFile');
-  } else {
-    statusType.value = 'success';
-    statusMessage.value = t('components.editorPanel.upToDate');
-  }
-  scheduleStatusClear();
 }
 
 async function refreshAllOpenFiles() {

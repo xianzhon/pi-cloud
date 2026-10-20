@@ -1,5 +1,5 @@
 // client/src/composables/useTerminal.ts
-import { ref, onUnmounted, type Ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -400,43 +400,5 @@ export function disposeTerminal(instance: TerminalInstance, terminate = true) {
   if (instance.isOpen) {
     instance.terminal.dispose()
     instance.isOpen = false
-  }
-}
-
-/** Legacy composable for a single terminal (backward compatible). */
-export function useTerminal(containerRef: Ref<HTMLElement | null>) {
-  const instance = createTerminalInstance()
-
-  function connect(clientId: string, cwd?: string) {
-    connectTerminal(instance, clientId, cwd)
-  }
-
-  function open() {
-    if (containerRef.value) openTerminal(instance, containerRef.value)
-  }
-
-  function fit() {
-    fitTerminal(instance)
-  }
-
-  function disconnect() {
-    disconnectTerminal(instance)
-  }
-
-  function dispose() {
-    disposeTerminal(instance)
-  }
-
-  onUnmounted(dispose)
-
-  return {
-    terminal: instance.terminal,
-    terminalId: instance.terminalId,
-    connectionState: instance.connectionState,
-    connect,
-    disconnect,
-    open,
-    fit,
-    dispose,
   }
 }

@@ -1,12 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('vue', async () => {
-  const actual = await vi.importActual<typeof import('vue')>('vue');
-  return {
-    ...actual,
-    onUnmounted: vi.fn(),
-  };
-});
+import { mount } from '@vue/test-utils';
 
 class MockWebSocket {
   static CONNECTING = 0;
@@ -98,6 +91,23 @@ describe('useWebSocket', () => {
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(MockWebSocket.instances[0].url).toBe('ws://localhost:5173/ws/chat?clientId=client-1');
     expect(first.clientId).toBe(second.clientId);
+  });
+
+  it('keeps the shared socket connected after a consumer unmounts', async () => {
+    const { useWebSocket } = await importComposable();
+    const wrapper = mount({
+      setup() { useWebSocket(); },
+      template: '<div />',
+    });
+    const consumer = useWebSocket();
+    const socket = MockWebSocket.instances[0];
+    socket.open();
+    wrapper.unmount();
+
+    expect(consumer.isConnected.value).toBe(true);
+    expect(consumer.send({ type: 'prompt' })).toBe(true);
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(socket.readyState).toBe(MockWebSocket.OPEN);
   });
 
   it('emits connected and typed message events', async () => {

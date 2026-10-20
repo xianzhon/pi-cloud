@@ -102,6 +102,17 @@ describe('fileSearchService', () => {
       expect(result).toHaveLength(3);
     });
 
+    it('ranks without mutating the input array or file records', () => {
+      const files = mockFiles.map(file => Object.freeze({ ...file }));
+      Object.freeze(files);
+      const result = filterAndRankFiles(files, parseFileQuery(''));
+
+      expect(result.map(file => file.path)).toEqual(['README.md', files[0].path, files[1].path]);
+      expect(result).not.toBe(files);
+      expect(files.map(file => file.score)).toEqual([0, 0, 0]);
+      expect(result.every(file => !files.includes(file))).toBe(true);
+    });
+
     it('filters by path', () => {
       const result = filterAndRankFiles(mockFiles, { pathPart: 'src/', filterPart: '', rawQuery: 'src/' });
       expect(result).toHaveLength(2);

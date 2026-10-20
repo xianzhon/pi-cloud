@@ -105,10 +105,6 @@ const nodeTitle = computed(() => {
   if (!props.node.isSymlink || !props.node.linkTarget) return props.node.path;
   return `${props.node.path} → ${props.node.linkTarget}`;
 });
-const toggleIcon = computed(() => {
-  if (props.node.type !== 'directory') return '';
-  return isExpanded.value ? '▾' : '▸';
-});
 
 function handleClick() {
   if (props.node.type === 'directory') {

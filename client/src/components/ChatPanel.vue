@@ -253,7 +253,6 @@
           @paste="handleImagePaste"
           :placeholder="t('components.chatPanel.typeAMessage')"
           rows="1"
-          :disabled="false"
           id="chat-input"
           name="chat-input"
         ></textarea>
@@ -863,7 +862,6 @@ const {
   thinkingSelectorOpen,
   modelSelectorLoading,
   modelSelectorError,
-  modelOptions,
   modelSearch,
   activeModelIndex,
   modelSearchRef,
@@ -1010,7 +1008,6 @@ interface CachedTtsAudio {
 
 const ttsAudioCache = new Map<string, CachedTtsAudio>();
 let ttsAudio: HTMLAudioElement | null = null;
-let ttsAudioUrl: string | null = null;
 let ttsAbortController: AbortController | null = null;
 const isStartingRecording = ref(false);
 const isRecording = ref(false);
@@ -1791,7 +1788,6 @@ function clearSpeechAudio(clearCache = true): void {
     ttsAudioCache.clear();
   }
   ttsAudio = null;
-  ttsAudioUrl = null;
   ttsLoadingMessageId.value = null;
   ttsMessageId.value = null;
   ttsIsPlaying.value = false;
@@ -1840,7 +1836,6 @@ async function speakMessage(message: SpeakableMessage): Promise<void> {
   const cached = ttsAudioCache.get(message.id);
   if (cached) {
     ttsAudio = cached.audio;
-    ttsAudioUrl = cached.url;
     await playSpeechAudio();
     return;
   }
@@ -1876,7 +1871,6 @@ async function speakMessage(message: SpeakableMessage): Promise<void> {
       }
       ttsAudioCache.delete(oldestMessageId);
     }
-    ttsAudioUrl = audioUrl;
     ttsAudio = audio;
     await playSpeechAudio();
   } catch (error) {

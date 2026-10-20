@@ -1,5 +1,5 @@
 // client/src/composables/useWebSocket.ts
-import { ref, onUnmounted } from 'vue';
+import { ref } from 'vue';
 import { getTabClientId } from '../utils/tabClientId';
 import { notifySessionExpired } from '../services/apiClient';
 
@@ -141,11 +141,7 @@ function close() {
 export function useWebSocket(options: { autoConnect?: boolean } = {}) {
   if (options.autoConnect !== false) connect();
 
-  onUnmounted(() => {
-    // Keep the singleton chat socket alive across route/component changes.
-    // Closing it from one component would disconnect other active consumers
-    // that share the same tab/clientId.
-  });
+  // The tab-wide socket outlives individual consumers; unmounting must not close it.
 
   return {
     socket,
