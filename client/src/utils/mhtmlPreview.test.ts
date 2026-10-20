@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { renderMhtmlDocument } from './mhtmlPreview';
 
 describe('renderMhtmlDocument', () => {
-  it('resolves archived resources with URL suffixes and mixed-case locations', () => {
+  it.each([
+    ['', ''],
+    ['?cache=1', ''],
+    ['#preview', '#preview'],
+    ['?cache=1#preview', '#preview'],
+    ['#preview?cache=1', '#preview?cache=1'],
+  ])('resolves mixed-case resource locations with suffix "%s"', (suffix, fragment) => {
     const boundary = '----mhtml-test----';
     const source = [
       'MIME-Version: 1.0',
@@ -12,7 +18,7 @@ describe('renderMhtmlDocument', () => {
       'Content-Type: text/html; charset=utf-8',
       'Content-Location: https://example.test/index.html',
       '',
-      '<!doctype html><img src="IMAGE.PNG?cache=1#preview">',
+      `<!doctype html><img src="IMAGE.PNG${suffix}">`,
       `--${boundary}`,
       'Content-Type: image/png',
       'Content-Location: https://example.test/IMAGE.PNG',
@@ -25,7 +31,7 @@ describe('renderMhtmlDocument', () => {
 
     const html = renderMhtmlDocument(source);
 
-    expect(html).toContain('src="data:image/png;base64,AQID#preview"');
+    expect(html).toContain(`src="data:image/png;base64,AQID${fragment}"`);
   });
 
   it('does not leave remote resources in the preview while preserving navigation links', () => {

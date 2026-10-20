@@ -245,17 +245,13 @@ function resolveUrl(reference: string, base?: string): string | undefined {
 
 function splitUrlSuffix(value: string): { path: string; suffix: string } {
   const fragmentIndex = value.indexOf('#');
-  const queryIndex = value.indexOf('?');
-  const suffixIndex = [queryIndex, fragmentIndex]
-    .filter(index => index >= 0)
-    .sort((left, right) => left - right)[0];
-  if (suffixIndex === undefined) return { path: value, suffix: '' };
+  if (fragmentIndex < 0) return { path: value, suffix: '' };
 
   // Query strings are useful for locating an MHTML part, but must not be
   // appended to the generated data URL. Preserve only a fragment.
   return {
-    path: fragmentIndex >= 0 ? value.slice(0, fragmentIndex) : value,
-    suffix: fragmentIndex >= 0 ? value.slice(fragmentIndex) : '',
+    path: value.slice(0, fragmentIndex),
+    suffix: value.slice(fragmentIndex),
   };
 }
 

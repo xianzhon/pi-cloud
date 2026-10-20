@@ -6,7 +6,7 @@ import { extract } from 'tar-stream';
 const MAX_ENTRIES = 10_000;
 const MAX_ZIP_DIRECTORY_SIZE = 32 * 1024 * 1024;
 const MAX_TAR_CONTENT_SIZE = 1024 * 1024 * 1024;
-const ZIP_END_SIGNATURE = 0x06054b50;
+const ZIP_END_SIGNATURE = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
 const ZIP_ENTRY_SIGNATURE = 0x02014b50;
 
 export function isArchivePath(filePath: string): boolean {
@@ -42,7 +42,7 @@ async function listZipEntries(filePath: string): Promise<ArchiveEntries> {
     const tail = Buffer.alloc(tailSize);
     await file.read(tail, 0, tailSize, stats.size - tailSize);
 
-    const endOffset = findSignatureBackwards(tail, ZIP_END_SIGNATURE);
+    const endOffset = tail.lastIndexOf(ZIP_END_SIGNATURE);
     if (endOffset < 0 || endOffset + 22 > tail.length) throw new Error('Invalid ZIP archive');
 
     const total = tail.readUInt16LE(endOffset + 10);
@@ -80,13 +80,6 @@ async function listZipEntries(filePath: string): Promise<ArchiveEntries> {
   } finally {
     await file.close();
   }
-}
-
-function findSignatureBackwards(buffer: Buffer, signature: number): number {
-  for (let offset = buffer.length - 4; offset >= 0; offset -= 1) {
-    if (buffer.readUInt32LE(offset) === signature) return offset;
-  }
-  return -1;
 }
 
 function listTarEntries(filePath: string, gzipped: boolean): Promise<ArchiveEntries> {

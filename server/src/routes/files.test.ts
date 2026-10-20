@@ -326,6 +326,25 @@ describe('fileRoutes', () => {
     expect(response.json().content).toContain('com/example/App.class');
   });
 
+  it('finds the ZIP directory before a trailing archive comment', async () => {
+    const filePath = path.join(tempDir, 'commented.zip');
+    const archive = await createZip({ 'README.md': 'readme' });
+    const comment = Buffer.from('archive comment');
+    archive.writeUInt16LE(comment.length, archive.length - 2);
+    await fs.writeFile(filePath, Buffer.concat([archive, comment]));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/files/read?path=${encodeURIComponent(filePath)}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      kind: 'archive',
+      content: expect.stringContaining('README.md'),
+    });
+  });
+
   it('previews entries in a tar.gz archive', async () => {
     const filePath = path.join(tempDir, 'source.tar.gz');
     await fs.writeFile(filePath, gzipSync(await createTar({
@@ -346,9 +365,9 @@ describe('fileRoutes', () => {
     expect(response.json().content).toContain('README.md');
   });
 
-  it('reports invalid archives without trying to show them as text', async () => {
+  it.each(['', 'P', 'PK', 'PK\x05', 'PK\x05\x06', 'not a zip'])('rejects invalid ZIP content %j without showing it as text', async (content) => {
     const filePath = path.join(tempDir, 'broken.zip');
-    await fs.writeFile(filePath, 'not a zip');
+    await fs.writeFile(filePath, content);
 
     const response = await app.inject({
       method: 'GET',
