@@ -1,5 +1,5 @@
 // client/src/composables/useChat.ts
-import { computed, onUnmounted, ref } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { i18n } from '../i18n';
 import { useWebSocket } from './useWebSocket';
 import { usePreferences } from './usePreferences';
@@ -377,7 +377,30 @@ export function useChat() {
   let isReconcilingStreamingSession = false;
 
   const { send, on, clientId } = useWebSocket();
-  const { streamingMessageBehavior, soundNotification } = usePreferences();
+  const { streamingMessageBehavior, soundNotification, showDetails } = usePreferences();
+  const historyRequests = new Map<string, AbortController>();
+  const pendingDetailHistory = new Set<string>();
+  function sendDetailPreference() {
+    send({ type: 'set_details', payload: { includeDetails: showDetails.value } });
+  }
+  sendDetailPreference();
+  watch(showDetails, (enabled) => {
+    const interruptedHistory = sessionId.value && historyRequests.has(sessionId.value);
+    for (const request of historyRequests.values()) request.abort();
+    historyRequests.clear();
+    pendingDetailHistory.clear();
+    sendDetailPreference();
+    if (!sessionId.value) return;
+    if (!enabled) {
+      if (interruptedHistory) void loadSessionHistory(sessionId.value);
+      return;
+    }
+    if (ensureSessionState(sessionId.value).isStreaming) {
+      pendingDetailHistory.add(sessionId.value);
+    } else {
+      void loadSessionHistory(sessionId.value, { force: true });
+    }
+  }, { flush: 'sync' });
   initSoundNotifications();
 
   function getMessageSessionId(data?: any): string | null {
@@ -456,6 +479,16 @@ export function useChat() {
     window.dispatchEvent(new CustomEvent('refresh-sessions'));
   }
 
+  function deferHistoryForStreaming(targetSessionId?: string | null) {
+    if (!targetSessionId) return;
+    const request = historyRequests.get(targetSessionId);
+    if (!request) return;
+    // Even a run that finishes before this snapshot arrives makes it stale.
+    request.abort();
+    historyRequests.delete(targetSessionId);
+    if (showDetails.value) pendingDetailHistory.add(targetSessionId);
+  }
+
   function stopStreaming(targetSessionId?: string | null, completed = false) {
     const streamingState = getStreamingSessionState(targetSessionId);
     const wasStreaming = streamingState.isStreaming;
@@ -463,6 +496,9 @@ export function useChat() {
     streamingState.streamingStartedAt = null;
     if (wasStreaming) playTaskNotification(soundNotification.value);
     emitSessionStreamingState(targetSessionId, false, completed);
+    if (targetSessionId && pendingDetailHistory.delete(targetSessionId) && showDetails.value) {
+      void loadSessionHistory(targetSessionId, { force: true });
+    }
   }
 
   function ensureSessionState(targetSessionId?: string | null): SessionChatState {
@@ -578,8 +614,10 @@ export function useChat() {
     const partialTool = event.partial?.content?.find?.((item: any) => normalizeType(item?.type) === 'tool_call');
     const toolCallId = event.toolCallId || event.tool_call_id || event.id || partialTool?.toolCallId || partialTool?.tool_call_id || partialTool?.id;
     const source = partialTool ? { ...partialTool, toolCallId } : event;
-    const toolInput = getToolInput(source) || stringifyValue(partialTool?.partialJson || '');
     const row = findToolRow(toolCallId, 'tool_call', targetSessionId || streamingSessionId.value || sessionId.value);
+    const toolInput = typeof event.inputDelta === 'string'
+      ? (row?.toolInput || '') + event.inputDelta
+      : getToolInput(source) || stringifyValue(partialTool?.partialJson || '');
 
     if (row) {
       row.content = toolInput;
@@ -665,6 +703,7 @@ export function useChat() {
   }
 
   const unsubscribeConnected = on('connected', () => {
+    sendDetailPreference();
     if (sessionId.value) send({ type: 'watch', payload: { sessionId: sessionId.value } });
   });
 
@@ -685,6 +724,7 @@ export function useChat() {
       ? data.streamingStartedAt
       : null;
     if (state.isStreaming) {
+      if (!wasStreaming) deferHistoryForStreaming(targetSessionId);
       streamingSessionId.value = targetSessionId;
       emitSessionStreamingState(targetSessionId, true);
     } else if (wasStreaming) {
@@ -751,6 +791,7 @@ export function useChat() {
       }
 
       case 'message_end':
+        if (event.hasContent) getStreamingSessionState(targetSessionId).receivedModelOutcome = true;
         applyCompletedAssistantMetadata(event.message, targetSessionId);
         if (event.message?.stopReason === 'error') {
           showModelFailure(event.message.errorMessage, targetSessionId);
@@ -782,6 +823,7 @@ export function useChat() {
 
       case 'agent_start':
       case 'compaction_start':
+        deferHistoryForStreaming(targetSessionId);
         if (targetSessionId) streamingSessionId.value = targetSessionId;
         const state = getStreamingSessionState(targetSessionId);
         state.isStreaming = true;
@@ -914,6 +956,8 @@ export function useChat() {
   });
 
   onUnmounted(() => {
+    for (const request of historyRequests.values()) request.abort();
+    historyRequests.clear();
     clearReconnectReconciliation();
     for (const requestId of Array.from(pendingPromptPreflights.keys())) {
       settlePromptPreflight(requestId, false);
@@ -976,6 +1020,7 @@ export function useChat() {
         },
       });
       if (!sent) return false;
+      deferHistoryForStreaming(resolvedSessionId);
       state.messages.push(userMessage);
       state.isStreaming = true;
       state.streamingStartedAt ??= Date.now();
@@ -1001,6 +1046,7 @@ export function useChat() {
       });
     });
 
+    deferHistoryForStreaming(resolvedSessionId);
     state.messages.push(userMessage);
     state.receivedModelOutcome = false;
     state.retryMessage = null;
@@ -1053,11 +1099,18 @@ export function useChat() {
   }
 
   async function loadSessionHistory(newSessionId: string, options: LoadSessionHistoryOptions = {}) {
+    historyRequests.get(newSessionId)?.abort();
+    const request = new AbortController();
+    historyRequests.set(newSessionId, request);
+    const includeDetails = showDetails.value;
+    const wasStreaming = ensureSessionState(newSessionId).isStreaming;
     try {
       if (!options.force || !sessionId.value) setViewedSession(newSessionId);
       if (sessionId.value === newSessionId) send({ type: 'watch', payload: { sessionId: newSessionId } });
-      const response = await fetch(`/api/sessions/${newSessionId}?clientId=${encodeURIComponent(clientId)}`);
+      sendDetailPreference();
+      const response = await fetch(`/api/sessions/${newSessionId}?clientId=${encodeURIComponent(clientId)}${includeDetails ? '&includeDetails=true' : ''}`, { signal: request.signal });
       const data = await response.json();
+      if (request.signal.aborted || includeDetails !== showDetails.value) return;
       
       if (data.messages && Array.isArray(data.messages)) {
         const normalizedMessages: Message[] = [];
@@ -1171,11 +1224,12 @@ export function useChat() {
         if (activity) normalizedMessages.push(activity);
 
         const state = ensureSessionState(newSessionId);
-        const shouldPreserveLiveState = !options.force && state.isStreaming && state.messages.length > 0;
+        const shouldPreserveLiveState = state.isStreaming && ((!options.force && state.messages.length > 0) || !wasStreaming);
+        if (shouldPreserveLiveState && includeDetails) pendingDetailHistory.add(newSessionId);
         if (!shouldPreserveLiveState) {
           state.messages = normalizedMessages;
         }
-        state.isStreaming = Boolean(data.isStreaming) || (!options.force && state.isStreaming);
+        state.isStreaming = Boolean(data.isStreaming) || ((!options.force || shouldPreserveLiveState) && state.isStreaming);
         if (!state.isStreaming) {
           state.streamingStartedAt = null;
         } else if (Number.isFinite(data.streamingStartedAt)) {
@@ -1185,7 +1239,9 @@ export function useChat() {
       // A stale/background snapshot must not replace the currently viewed subscription.
       if (sessionId.value === newSessionId) send({ type: 'watch', payload: { sessionId: newSessionId } });
     } catch (error) {
-      console.error('Failed to load session history:', error);
+      if (!request.signal.aborted) console.error('Failed to load session history:', error);
+    } finally {
+      if (historyRequests.get(newSessionId) === request) historyRequests.delete(newSessionId);
     }
   }
 

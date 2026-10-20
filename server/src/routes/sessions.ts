@@ -9,6 +9,7 @@ import { sessionFileRelocator } from '../services/session-file-relocator.js';
 import type { PiSessionService } from '../services/session-manager.js';
 import type { WorktreeMetadataStore } from '../services/worktree-metadata-store.js';
 import { expandHomePath } from '../utils/paths.js';
+import { projectChatMessages } from '../utils/chat-projection.js';
 import type { ProjectHistoryStore } from '../services/project-history-store.js';
 import type { ProjectTaskStore } from '../services/project-task-store.js';
 import type { RepositoryCloner } from '../services/repository-cloner.js';
@@ -1152,7 +1153,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
   });
 
   app.post('/:id/resume', async (req) => {
-    const { clientId } = req.body as ResumeSessionRequest;
+    const { clientId, includeDetails } = req.body as ResumeSessionRequest & { includeDetails?: boolean };
     const { id } = req.params as { id: string };
 
     if (!clientId) {
@@ -1169,7 +1170,7 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     return {
       success: true,
       sessionId: session.sessionId,
-      messages: session.messages,
+      messages: projectChatMessages(session.messages, includeDetails === true),
       model: session.model,
     };
   });
@@ -1379,7 +1380,8 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
   });
 
   app.get('/:id', async (req) => {
-    const { clientId } = req.query as { clientId?: string };
+    const { clientId, includeDetails: detailsQuery } = req.query as { clientId?: string; includeDetails?: string };
+    const includeDetails = detailsQuery === 'true';
     const { id } = req.params as { id: string };
 
     if (!clientId) {
@@ -1402,12 +1404,12 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     if (foundSession) {
       return withWorktree({
         sessionId: foundSession.sessionId,
-          messages: foundSession.messages,
+        messages: projectChatMessages(foundSession.messages, includeDetails),
         model: foundSession.model,
         thinkingLevel: foundSession.thinkingLevel,
         isStreaming: foundSession.isStreaming,
         streamingStartedAt: sessionService.getSessionStreamingStartedAt(foundSession.sessionId),
-        activity: options.activityStore?.listForSession(foundSession.sessionId) || [],
+        activity: includeDetails ? options.activityStore?.listForSession(foundSession.sessionId) || [] : [],
       }, worktreeMetadata);
     }
 
@@ -1416,9 +1418,11 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
       return { error: 'Session not found' };
     }
 
+    const snapshot = await sessionService.readSessionSnapshot(clientId, sessionInfo.path);
     return withWorktree({
-      ...(await sessionService.readSessionSnapshot(clientId, sessionInfo.path)),
-      activity: options.activityStore?.listForSession(id) || [],
+      ...snapshot,
+      messages: projectChatMessages(snapshot.messages, includeDetails),
+      activity: includeDetails ? options.activityStore?.listForSession(id) || [] : [],
     }, worktreeMetadata);
   });
 

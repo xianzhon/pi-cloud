@@ -121,6 +121,54 @@ describe('chat websocket', () => {
     messages.forEach(publish);
     expect(watcher.sent.map((item) => JSON.parse(item))).toEqual(messages);
     expect(other.sent).toEqual([]);
+    publish({ type: 'event', sessionId: 'background', event: {
+      type: 'message_update', message: { role: 'assistant', content: 'large snapshot' },
+      assistantMessageEvent: { type: 'text_delta', delta: 'new', partial: { content: 'large snapshot' } },
+    } });
+    expect(JSON.parse(watcher.sent.at(-1)!)).toMatchObject({ event: {
+      message: { role: 'assistant' }, assistantMessageEvent: { type: 'text_delta', delta: 'new' },
+    } });
+    expect(watcher.sent.at(-1)).not.toContain('large snapshot');
+  });
+
+  it('filters details independently for foreground recipients and switches modes without reconnecting', async () => {
+    const open = await createSocketServer();
+    const desktop = open('desktop');
+    const mobile = open('mobile');
+    desktop.emit('message', Buffer.from(JSON.stringify({ type: 'set_details', payload: { includeDetails: true } })));
+    mobile.emit('message', Buffer.from(JSON.stringify({ type: 'watch', payload: { sessionId: 'session-1' } })));
+    let publish!: (event: unknown) => void;
+    mocks.session.subscribe.mockImplementationOnce((callback) => { publish = callback!; return () => {}; });
+    let finish!: () => void;
+    mocks.prompt.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    desktop.emit('message', Buffer.from(JSON.stringify({ type: 'prompt', payload: { text: 'run', sessionId: 'session-1' } })));
+    await vi.waitFor(() => expect(publish).toBeDefined());
+    const event = { type: 'tool_execution_end', toolCallId: 't1', toolName: 'read', result: { content: 'PRIVATE RESULT' }, isError: false };
+    publish(event);
+    expect(desktop.sent.at(-1)).toContain('PRIVATE RESULT');
+    expect(mobile.sent.at(-1)).not.toContain('PRIVATE RESULT');
+    expect(JSON.parse(mobile.sent.at(-1)!).event.toolName).toBe('read');
+    mobile.emit('message', Buffer.from(JSON.stringify({ type: 'set_details', payload: { includeDetails: true } })));
+    publish(event);
+    expect(mobile.sent.at(-1)).toContain('PRIVATE RESULT');
+    mobile.emit('message', Buffer.from(JSON.stringify({ type: 'set_details', payload: { includeDetails: false } })));
+    const count = mobile.sent.length;
+    publish({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', delta: 'PRIVATE THINKING' } });
+    expect(mobile.sent).toHaveLength(count);
+    finish();
+  });
+
+  it('filters background execution details before delivery', async () => {
+    let publish!: (message: any) => void;
+    mocks.sessionService.onSessionExecutionMessage.mockImplementationOnce((listener) => { publish = listener; return () => {}; });
+    const socket = (await createSocketServer())();
+    socket.emit('message', Buffer.from(JSON.stringify({ type: 'watch', payload: { sessionId: 'background' } })));
+    const event = { type: 'agent_end', messages: [{ content: 'PRIVATE' }] };
+    publish({ type: 'event', sessionId: 'background', event });
+    expect(JSON.parse(socket.sent.at(-1)!).event).toEqual({ type: 'agent_end' });
+    socket.emit('message', Buffer.from(JSON.stringify({ type: 'set_details', payload: { includeDetails: true } })));
+    publish({ type: 'event', sessionId: 'background', event });
+    expect(JSON.parse(socket.sent.at(-1)!).event).toEqual(event);
   });
 
   it('pings idle sockets and terminates peers that stop answering', async () => {
@@ -179,6 +227,14 @@ describe('chat websocket', () => {
     })));
     await vi.waitFor(() => expect(publishEvent).toBeDefined());
     publishEvent!({ type: 'agent_start' });
+    publishEvent!({ type: 'message_update', message: { role: 'assistant', content: 'large snapshot' },
+      assistantMessageEvent: { type: 'text_delta', delta: 'new', partial: { content: 'large snapshot' } },
+    });
+    for (const client of [desktop, mobile]) {
+      const update = client.sent.map((message) => JSON.parse(message)).find((message) => message.event?.type === 'message_update');
+      expect(update.event.assistantMessageEvent).toEqual({ type: 'text_delta', delta: 'new' });
+      expect(JSON.stringify(update)).not.toContain('large snapshot');
+    }
     publishEvent!({ type: 'agent_end' });
     finishPrompt!();
 

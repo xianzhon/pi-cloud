@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 
 const SHOW_HINT_INFO_KEY = 'pi-cloud.showHintInfo';
+const SHOW_DETAILS_KEY = 'pi-cloud.showDetails';
 const SHOW_CODE_BLOCK_LANGUAGE_HEADERS_KEY = 'pi-cloud.showCodeBlockLanguageHeaders';
 const STREAMING_MESSAGE_BEHAVIOR_KEY = 'pi-cloud.streamingMessageBehavior';
 const EDITOR_AUTO_REFRESH_KEY = 'pi-cloud.editorAutoRefresh';
@@ -217,6 +218,13 @@ function cacheAnnotationToolShortcuts(value: AnnotationToolShortcuts): void {
 }
 
 const showHintInfo = ref(readCachedBoolean(SHOW_HINT_INFO_KEY));
+// Browser-local: a mobile device can save bandwidth independently of desktop.
+const showDetails = ref(readCachedBoolean(SHOW_DETAILS_KEY, false));
+
+function setShowDetails(value: boolean): void {
+  cacheBoolean(SHOW_DETAILS_KEY, value);
+  showDetails.value = value;
+}
 const showCodeBlockLanguageHeaders = ref(readCachedBoolean(SHOW_CODE_BLOCK_LANGUAGE_HEADERS_KEY));
 const streamingMessageBehavior = ref<StreamingMessageBehavior>(readCachedStreamingMessageBehavior());
 const editorAutoRefresh = ref(readCachedBoolean(EDITOR_AUTO_REFRESH_KEY, false));
@@ -494,6 +502,7 @@ async function setAnnotationToolShortcuts(value: AnnotationToolShortcuts): Promi
 
 function resetPreferenceRefsFromCache(): void {
   showHintInfo.value = readCachedBoolean(SHOW_HINT_INFO_KEY);
+  showDetails.value = readCachedBoolean(SHOW_DETAILS_KEY, false);
   showCodeBlockLanguageHeaders.value = readCachedBoolean(SHOW_CODE_BLOCK_LANGUAGE_HEADERS_KEY);
   streamingMessageBehavior.value = readCachedStreamingMessageBehavior();
   editorAutoRefresh.value = readCachedBoolean(EDITOR_AUTO_REFRESH_KEY, false);
@@ -520,6 +529,8 @@ export function usePreferences() {
   resetPreferenceRefsFromCache();
 
   return {
+    showDetails,
+    setShowDetails,
     showHintInfo,
     showCodeBlockLanguageHeaders,
     streamingMessageBehavior,

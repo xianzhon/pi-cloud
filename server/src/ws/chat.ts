@@ -6,6 +6,8 @@ import { validateImages, type ImageValidationResult } from '../services/image-in
 import type { PiSessionService } from '../services/session-manager.js';
 import { saveUploadedImages } from '../services/uploaded-image-store.js';
 import { sendJson } from './safe-send.js';
+import { compactChatEvent } from './chat-event.js';
+import { projectChatEvent } from '../utils/chat-projection.js';
 import { bindSocketSession } from './session-auth.js';
 
 const ABORT_GRACE_MS = 5_000;
@@ -21,11 +23,12 @@ export function loopDetectionThreshold(value = process.env.PI_CLOUD_LOOP_DETECTI
 }
 
 interface WSMessage {
-  type: 'watch' | 'prompt' | 'steer' | 'followUp' | 'abort';
+  type: 'watch' | 'set_details' | 'prompt' | 'steer' | 'followUp' | 'abort';
   payload?: {
     text?: string;
     sessionId?: string;
     requestId?: string;
+    includeDetails?: boolean;
     images?: unknown;
   };
 }
@@ -111,11 +114,21 @@ function formatCompactResult(result: any, status: ReturnType<PiSessionService['g
 
 export async function chatWebSocket(app: FastifyInstance) {
   const sessionService = app.services.sessions;
-  const clients = new Set<{ socket: Parameters<typeof sendJson>[0]; watchedSessionId?: string }>();
+  const clients = new Set<{ socket: Parameters<typeof sendJson>[0]; watchedSessionId?: string; includeDetails: boolean }>();
+
+  function sendToClient(client: { socket: Parameters<typeof sendJson>[0]; includeDetails: boolean }, message: { type: string; event?: unknown }): void {
+    if (message.type !== 'event') {
+      sendJson(client.socket, message);
+      return;
+    }
+    const event = projectChatEvent(message.event, client.includeDetails);
+    if (event !== null) sendJson(client.socket, { ...message, event });
+  }
 
   const unsubscribeExecution = sessionService.onSessionExecutionMessage((message) => {
+    const outgoing = message.type === 'event' ? { ...message, event: compactChatEvent(message.event) } : message;
     for (const client of clients) {
-      if (client.watchedSessionId === message.sessionId) sendJson(client.socket, message);
+      if (client.watchedSessionId === message.sessionId) sendToClient(client, outgoing);
     }
   });
   app.addHook('onClose', async () => { unsubscribeExecution(); });
@@ -170,15 +183,15 @@ export async function chatWebSocket(app: FastifyInstance) {
     }, HEARTBEAT_INTERVAL_MS);
     heartbeat.unref();
     const safeClientId = clientId;
-    const connectedClient = { socket, watchedSessionId: undefined as string | undefined };
+    const connectedClient = { socket, watchedSessionId: undefined as string | undefined, includeDetails: false };
     clients.add(connectedClient);
     req.log?.info({ clientId: safeClientId }, 'Chat WebSocket connected');
     sessionService.cancelCleanup(safeClientId);
 
-    function broadcastToSession(sessionId: string, message: unknown): void {
+    function broadcastToSession(sessionId: string, message: { type: string; event?: unknown; [key: string]: unknown }): void {
       for (const client of clients) {
         if (client === connectedClient || client.watchedSessionId === sessionId) {
-          sendJson(client.socket, message);
+          sendToClient(client, message);
         }
       }
     }
@@ -261,6 +274,10 @@ export async function chatWebSocket(app: FastifyInstance) {
         const message: WSMessage = JSON.parse(rawData.toString());
         
         switch (message.type) {
+          case 'set_details': {
+            connectedClient.includeDetails = message.payload?.includeDetails === true;
+            break;
+          }
           case 'watch': {
             connectedClient.watchedSessionId = message.payload?.sessionId;
             const targetSessionId = connectedClient.watchedSessionId;
@@ -348,7 +365,7 @@ export async function chatWebSocket(app: FastifyInstance) {
               broadcastToSession(sessionId, {
                 type: 'event',
                 sessionId,
-                event,
+                event: compactChatEvent(event),
                 streamingStartedAt,
               });
             });
@@ -362,7 +379,7 @@ export async function chatWebSocket(app: FastifyInstance) {
                     type: 'compact_result',
                     sessionId,
                     message: formatCompactResult(result, sessionService.getRuntimeStatus(session)),
-                    result,
+                    ...(connectedClient.includeDetails ? { result } : {}),
                   });
                 } else {
                   const requestId = message.payload?.requestId;

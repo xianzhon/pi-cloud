@@ -42,6 +42,12 @@ pi-cloud --port 8080
 pi-cloud --hostname 0.0.0.0 --no-open
 ```
 
+## Chat details and mobile bandwidth
+
+**Chat → View options → Details** is off by default and saved in this browser only. For Pi Cloud agent chats, leaving it off omits tool arguments, tool results, thinking content, and command activity from live delivery and loaded history. Answers, lightweight status signals, errors, and completion notifications still arrive. The agent continues using the full session on the server.
+
+Enable Details to load the full history and receive future details. If a run is in progress, new details arrive immediately; earlier details load after the run finishes to avoid interrupting the streamed answer. Disabling Details stops future detail delivery and cancels outstanding history downloads. Mobile and desktop browsers can use different settings.
+
 ## Shared skills
 
 In **Settings → Shared skills**, add a skill by entering a lowercase hyphenated name and a `SKILL.md` containing matching `name` and nonempty `description` frontmatter. You can edit its `SKILL.md` later without changing other files. Alternatively, clone an HTTPS GitHub repository containing a root `SKILL.md`, or a skill subdirectory using `https://github.com/owner/repo/tree/branch/path/to/skill` (single-segment branch names). The destination name must match the skill's frontmatter name. Clone never overwrites an existing skill and reports failures without retaining a partial copy.

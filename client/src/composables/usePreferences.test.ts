@@ -27,6 +27,19 @@ describe('usePreferences', () => {
     expect([preferences.mindMapLayout.value, preferences.mindMapTheme.value, preferences.mindMapStructure.value]).toEqual(['both', 'rainbow', 'cards']);
   });
 
+  it('keeps Details off by default and persists it locally without updating account preferences', () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const preferences = usePreferences();
+    expect(preferences.showDetails.value).toBe(false);
+    preferences.setShowDetails(true);
+    expect(localStorage.getItem('pi-cloud.showDetails')).toBe('true');
+    resetPreferencesForTests();
+    expect(usePreferences().showDetails.value).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it('initializes display preferences from localStorage cache', () => {
     localStorage.setItem('pi-cloud.showHintInfo', 'false');
     localStorage.setItem('pi-cloud.showCodeBlockLanguageHeaders', 'false');

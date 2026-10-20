@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick } from 'vue';
+import { usePreferences } from './usePreferences';
 import { useChat } from './useChat';
 import { i18n, setLocale } from '../i18n';
 
@@ -40,6 +41,136 @@ describe('useChat', () => {
     vi.restoreAllMocks();
   });
 
+  it('renders compact text, thinking, and interleaved tool argument deltas', () => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    const emit = (event: any) => handlers.get('event')?.({ sessionId: 'session-1', event });
+    emit({ type: 'message_start', message: { role: 'assistant', responseId: 'r1', timestamp: 123 } });
+    for (const [type, delta] of [['thinking_delta', 'Thinking'], ['text_delta', 'Hello'], ['text_delta', ' world']]) {
+      emit({ type: 'message_update', assistantMessageEvent: { type, delta } });
+    }
+    for (const [toolCallId, inputDelta] of [['a', '{"path":'], ['b', '{"other":1}'], ['a', '"file"}']]) {
+      emit({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_delta', toolCallId, toolName: 'read', inputDelta } });
+    }
+    expect(chat.messages.value.find((message) => message.id === 'r1')).toMatchObject({ content: 'Hello world', thinking: 'Thinking' });
+    expect(chat.messages.value.find((message) => message.toolCallId === 'a')).toMatchObject({ toolInput: '{"path":"file"}' });
+    expect(chat.messages.value.find((message) => message.toolCallId === 'b')).toMatchObject({ toolInput: '{"other":1}' });
+    emit({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_end', toolCallId: 'a', toolName: 'read', args: { path: 'file' } } });
+    expect(chat.messages.value.find((message) => message.toolCallId === 'a')?.toolInput).toBe(JSON.stringify({ path: 'file' }, null, 2));
+    emit({ type: 'message_end', message: { role: 'assistant', responseId: 'r1', provider: 'test', model: 'model', usage: { totalTokens: 10 } } });
+    expect(chat.messages.value.find((message) => message.id === 'r1')).toMatchObject({ provider: 'test', model: 'model', usage: { totalTokens: 10 } });
+    wrapper.unmount();
+  });
+
+  it('defaults to lightweight delivery and fetches details only when requested', async () => {
+    const { chat, wrapper } = mountChat();
+    const fetchSpy = vi.fn(async (_url: string) => ({ json: async () => ({ messages: [] }) }));
+    vi.stubGlobal('fetch', fetchSpy);
+    await chat.loadSessionHistory('session-1');
+    expect(send).toHaveBeenCalledWith({ type: 'set_details', payload: { includeDetails: false } });
+    usePreferences().setShowDetails(true);
+    await nextTick();
+    expect(send).toHaveBeenCalledWith({ type: 'set_details', payload: { includeDetails: true } });
+    expect(fetchSpy.mock.calls.at(-1)?.[0]).toContain('includeDetails=true');
+    await nextTick();
+    handlers.get('connected')?.({});
+    expect(send).toHaveBeenCalledWith({ type: 'set_details', payload: { includeDetails: true } });
+    wrapper.unmount();
+  });
+
+  it('defers earlier detail hydration during streaming without losing live text', async () => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    const fetchSpy = vi.fn(async (_url: string) => ({ json: async () => ({ messages: [] }) }));
+    vi.stubGlobal('fetch', fetchSpy);
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_start' } });
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Still streaming' } } });
+    usePreferences().setShowDetails(true);
+    await nextTick();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(chat.messages.value[0].content).toBe('Still streaming');
+    handlers.get('status')?.({ sessionId: 'session-1', status: 'idle' });
+    await nextTick();
+    expect(fetchSpy.mock.calls.at(-1)?.[0]).toContain('includeDetails=true');
+    wrapper.unmount();
+  });
+
+  it('recognizes a response whose hidden thinking was omitted instead of showing a false failure', () => {
+    const { chat, wrapper } = mountChat();
+    handlers.get('event')?.({ event: { type: 'message_end', hasContent: true, message: { role: 'assistant', stopReason: 'stop' } } });
+    handlers.get('event')?.({ event: { type: 'agent_settled' } });
+    expect(chat.messages.value).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('discards a detail history response after Details is disabled', async () => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    let resolve!: (value: any) => void;
+    const fetchSpy = vi.fn((url: string) => url.includes('includeDetails=true')
+      ? new Promise((done) => { resolve = done; })
+      : Promise.resolve({ json: async () => ({ messages: [] }) }));
+    vi.stubGlobal('fetch', fetchSpy);
+    usePreferences().setShowDetails(true);
+    await nextTick();
+    usePreferences().setShowDetails(false);
+    expect(fetchSpy).toHaveBeenLastCalledWith('/api/sessions/session-1?clientId=client-1', { signal: expect.any(AbortSignal) });
+    resolve({ json: async () => ({ messages: [{ role: 'assistant', content: [{ type: 'thinking', thinking: 'Stale detail' }] }] }) });
+    await nextTick();
+    await nextTick();
+    expect(chat.messages.value).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('does not overwrite a new live response when an idle detail download finishes', async () => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    let resolve!: (value: any) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((done) => { resolve = done; })));
+    usePreferences().setShowDetails(true);
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_start' } });
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'New response' } } });
+    resolve({ json: async () => ({ messages: [], isStreaming: false }) });
+    await nextTick();
+    await nextTick();
+    expect(chat.isStreaming.value).toBe(true);
+    expect(chat.messages.value[0].content).toBe('New response');
+    wrapper.unmount();
+  });
+
+  it.each(['prompt', 'awaited prompt', 'agent_start', 'streaming_state'])('preserves a completed answer when idle detail history arrives late (%s)', async (start) => {
+    const { chat, wrapper } = mountChat();
+    chat.setViewedSession('session-1');
+    send.mockReturnValue(true);
+    const responses: Array<(value: any) => void> = [];
+    const fetchSpy = vi.fn(() => new Promise((resolve) => { responses.push(resolve); }));
+    vi.stubGlobal('fetch', fetchSpy);
+    usePreferences().setShowDetails(true);
+    const resolveStale = responses[0];
+
+    if (start === 'prompt' || start === 'awaited prompt') {
+      void chat.sendMessage('New question', 'session-1', { awaitAcceptance: start === 'awaited prompt' });
+    } else if (start === 'agent_start') {
+      handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'agent_start' } });
+    } else {
+      handlers.get('streaming_state')?.({ sessionId: 'session-1', isStreaming: true });
+    }
+    handlers.get('event')?.({ sessionId: 'session-1', event: { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Completed answer' } } });
+    handlers.get('status')?.({ sessionId: 'session-1', status: 'idle' });
+    resolveStale({ json: async () => ({ messages: [], isStreaming: false }) });
+    await nextTick();
+    await nextTick();
+
+    expect(chat.isStreaming.value).toBe(false);
+    expect(chat.messages.value.some((message) => message.content === 'Completed answer')).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    responses[1]({ json: async () => ({ messages: [{ role: 'assistant', content: 'Completed answer' }], isStreaming: false }) });
+    await nextTick();
+    await nextTick();
+    expect(chat.messages.value.map((message) => message.content)).toEqual(['Completed answer']);
+    wrapper.unmount();
+  });
+
   it('does not resubscribe to a stale session after switching', async () => {
     const { chat, wrapper } = mountChat();
     let resolveA!: (value: any) => void;
@@ -67,8 +198,8 @@ describe('useChat', () => {
   });
 
   it('does not add optimistic state when the socket cannot send', () => {
-    send.mockReturnValueOnce(false);
     const { chat } = mountChat();
+    send.mockReturnValueOnce(false);
 
     expect(chat.sendMessage('hello pi', 'session-1')).toBe(false);
     expect(chat.messages.value).toEqual([]);
@@ -601,7 +732,7 @@ describe('useChat', () => {
 
     await chat.loadSessionHistory('session-1');
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/sessions/session-1?clientId=client-1');
+    expect(fetchSpy).toHaveBeenCalledWith('/api/sessions/session-1?clientId=client-1', { signal: expect.any(AbortSignal) });
   });
 
   it('appends stored builtin command activity when loading history', async () => {
