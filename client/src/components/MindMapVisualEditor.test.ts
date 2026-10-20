@@ -8,15 +8,11 @@ const source = 'mindmap\n  Root\n    One\n    Two\n';
 const mountEditor = () => mount(MindMapVisualEditor, { props: { source }, global: { plugins: [i18n] } });
 
 describe('mind map visual editing', () => {
-  it('locks mutations while preserving navigation and restores editing when unlocked', async () => {
+  it('starts locked, preserves navigation, and restores editing when unlocked', async () => {
     const wrapper = mountEditor();
     const lock = wrapper.get('.mindmap-lock-switch input');
     const nodes = () => wrapper.findAll('.mindmap-node');
-    expect((lock.element as HTMLInputElement).checked).toBe(false);
     expect(wrapper.find('.mindmap-lock-switch svg').exists()).toBe(true);
-    await nodes()[1].trigger('dblclick');
-    expect(wrapper.find('#mindmap-label').exists()).toBe(true);
-    await lock.setValue(true);
     expect((lock.element as HTMLInputElement).checked).toBe(true);
     expect(wrapper.find('#mindmap-label').exists()).toBe(false);
     expect(wrapper.find('.mindmap-shortcuts').exists()).toBe(false);
@@ -45,6 +41,7 @@ describe('mind map visual editing', () => {
 
   it('blocks undo and pending deletion while locked', async () => {
     const wrapper = mountEditor();
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     await wrapper.findAll('.mindmap-node')[1].trigger('dblclick');
     await wrapper.get('#mindmap-label').setValue('Edited');
     await wrapper.get('.mindmap-inline-edit').trigger('submit');
@@ -61,6 +58,7 @@ describe('mind map visual editing', () => {
   });
   it('edits source, preserves history on own update and invalidates it on raw changes', async () => {
     const wrapper = mountEditor();
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     const historyButtons = wrapper.findAll('.mindmap-history-button');
     expect(historyButtons.map(button => button.attributes('aria-label'))).toEqual(['Undo', 'Redo']);
     expect(historyButtons.every(button => button.find('svg').exists())).toBe(true);
@@ -105,6 +103,7 @@ describe('mind map visual editing', () => {
 
   it('fits the diagram at its center and preserves manual view after edits', async () => {
     const wrapper = mountEditor();
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     expect((wrapper.find('.mindmap-item').element as HTMLElement).style.width).toBe('');
     const viewport = wrapper.find('.mindmap-viewport').element;
     Object.defineProperties(viewport, { clientWidth: { value: 900 }, clientHeight: { value: 500 } });
@@ -153,6 +152,7 @@ describe('mind map visual editing', () => {
     expect(nodes()).toHaveLength(3);
     await nodes()[1].trigger('keydown', { key: ' ' });
     expect(nodes()).toHaveLength(5);
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     await nodes()[1].trigger('keydown', { key: 'Tab' });
     await wrapper.find('#mindmap-label').setValue('Added');
     await wrapper.find('.mindmap-inline-edit').trigger('submit');
@@ -220,6 +220,7 @@ describe('mind map visual editing', () => {
 
   it('places the add input at the child or following sibling position without changing source until submission', async () => {
     const wrapper = mountEditor();
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     const nodes = () => wrapper.findAll('.mindmap-node');
     const item = (index: number) => nodes()[index].element.parentElement as HTMLElement;
     await nodes()[1].trigger('click');
@@ -256,6 +257,7 @@ describe('mind map visual editing', () => {
     expect(wrapper.find('.mindmap-canvas').attributes('style')).toContain('translate(-12px, -8px)');
     expect(wrapper.emitted('change')).toBeUndefined();
     expect(wrapper.find('.mindmap-editor').classes()).not.toContain('dragging');
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     await wrapper.findAll('.mindmap-node')[2].trigger('dragstart');
     expect(wrapper.find('.mindmap-editor').classes()).toContain('dragging');
     await wrapper.findAll('.mindmap-drop-edge')[0].trigger('dragover');
@@ -273,6 +275,7 @@ describe('mind map visual editing', () => {
 describe('MindMapVisualEditor', () => {
   it('offers node actions on right click and commits edits on blur', async () => {
     const wrapper = mountEditor();
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     await wrapper.findAll('.mindmap-node')[1].trigger('contextmenu', { clientX: 30, clientY: 30 });
     expect(wrapper.findAll('[role="menuitem"]')).toHaveLength(4);
     expect(wrapper.findAll('[role="menuitem"] svg')).toHaveLength(4);
@@ -287,6 +290,7 @@ describe('MindMapVisualEditor', () => {
 
   it('renames and deletes from the node menu', async () => {
     const wrapper = mountEditor();
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     await wrapper.findAll('.mindmap-node')[1].trigger('contextmenu');
     await wrapper.findAll('[role="menuitem"]')[0].trigger('click');
     await wrapper.get('#mindmap-label').setValue('Updated');
@@ -300,6 +304,7 @@ describe('MindMapVisualEditor', () => {
 
   it('cancels on Escape and does not emit an edit', async () => {
     const wrapper = mountEditor();
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     await wrapper.findAll('.mindmap-node')[1].trigger('dblclick');
     const input = wrapper.get('#mindmap-label');
     await input.setValue('Changed');
@@ -311,6 +316,7 @@ describe('MindMapVisualEditor', () => {
 
   it('adds and removes a selected node icon with undo and source round trips', async () => {
     const wrapper = mountEditor();
+    await wrapper.get('.mindmap-lock-switch input').setValue(false);
     await wrapper.findAll('.mindmap-node')[1].trigger('click');
     await wrapper.get('button[aria-label="Icon"]').trigger('click');
     expect(wrapper.findAll('.mindmap-icon-grid button').slice(0, 10).map(button => button.text())).toEqual(['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩']);

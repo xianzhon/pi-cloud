@@ -100,7 +100,7 @@ const t = (key: string, params?: Record<string, number>) => i18n.global.t(`compo
 const root = ref<MindMapNode>(parseMindMap(props.source));
 const past = ref<MindMapNode[]>([]);
 const future = ref<MindMapNode[]>([]);
-const locked = ref(false);
+const locked = ref(true);
 function toggleLock() {
   locked.value = !locked.value;
   if (locked.value) {
