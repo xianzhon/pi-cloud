@@ -672,6 +672,34 @@ describe('MessageBubble', () => {
     window.removeEventListener('open-file-in-editor', openFile);
   });
 
+  it.each([
+    ['[示例中文笔记](notes/示例中文文档-第01章-笔记.md)', 'notes/示例中文文档-第01章-笔记.md'],
+    ['[笔记](/workspace/笔记.md)', '/workspace/笔记.md'],
+    ['[笔记](notes/%E7%AC%94%E8%AE%B0.md)', 'notes/笔记.md'],
+    ['[笔记](notes/学习%20笔记.md)', 'notes/学习 笔记.md'],
+    ['[Percent](notes/100%25.md)', 'notes/100%.md'],
+    ['[Literal escape](notes/%2541.md)', 'notes/%41.md'],
+    ['[Malformed escape](notes/100%.md)', 'notes/100%.md'],
+    ['`notes/%E7%AC%94%E8%AE%B0.md`', 'notes/%E7%AC%94%E8%AE%B0.md'],
+  ])('opens local file references with the correct filename: %s', async (content, path) => {
+    const openFile = vi.fn();
+    window.addEventListener('open-file-in-editor', openFile);
+    const wrapper = mount(MessageBubble, {
+      props: { message: { id: 'local-file-encoding', role: 'assistant', content } },
+    });
+
+    try {
+      const link = wrapper.find('.message-content .file-link');
+      expect(link.attributes('data-path')).toBe(path);
+      await link.trigger('click');
+      expect(openFile).toHaveBeenCalledTimes(1);
+      expect((openFile.mock.calls[0][0] as CustomEvent).detail.path).toBe(path);
+    } finally {
+      window.removeEventListener('open-file-in-editor', openFile);
+      wrapper.unmount();
+    }
+  });
+
   it('recognizes Windows file paths as path links', async () => {
     const openFile = vi.fn();
     window.addEventListener('open-file-in-editor', openFile);

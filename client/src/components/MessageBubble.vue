@@ -854,9 +854,14 @@ function fileLinkAttributes(path: string): string {
 
 function makeFilePathsClickable(html: string): string {
   const linkedFiles = html.replace(/<a href="([^"]+)"([^>]*)>/g, (match, href, attributes) => {
-    const decoded = decodeHtmlEntities(href);
-    if (!isFilePath(decoded)) return match;
-    return `<a href="${href}"${attributes} ${fileLinkAttributes(decoded)}>`;
+    let path = decodeHtmlEntities(href);
+    if (!isFilePath(path)) return match;
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      // Keep literal filenames containing malformed percent escapes usable.
+    }
+    return `<a href="${href}"${attributes} ${fileLinkAttributes(path)}>`;
   });
 
   // Match inline <code> without class attributes (excludes code blocks which have class="hljs").
