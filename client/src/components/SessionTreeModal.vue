@@ -141,15 +141,9 @@ function isVisibleEntry(entry: SessionTreeEntry) {
   return stringifyContent(entry.message.content).trim().length > 0;
 }
 
-function visibleChildrenFor(node: SessionTreeNode): SessionTreeNode[] {
-  return (node.children || []).flatMap((child) => (
-    isVisibleEntry(child.entry) ? [child] : visibleChildrenFor(child)
-  ));
-}
-
-function visibleRoots(nodes: SessionTreeNode[]): SessionTreeNode[] {
+function visibleNodes(nodes: SessionTreeNode[]): SessionTreeNode[] {
   return nodes.flatMap((node) => (
-    isVisibleEntry(node.entry) ? [node] : visibleChildrenFor(node)
+    isVisibleEntry(node.entry) ? [node] : visibleNodes(node.children || [])
   ));
 }
 
@@ -158,7 +152,7 @@ function flattenNode(
   guides: boolean[],
   connector: FlatTreeNode['connector'],
 ): FlatTreeNode[] {
-  const children = visibleChildrenFor(node);
+  const children = visibleNodes(node.children || []);
   const isBranch = children.length > 1;
   const isCollapsed = collapsedIds.value.has(node.entry.id);
   const row: FlatTreeNode = {
@@ -173,13 +167,6 @@ function flattenNode(
 
   const childGuides = connector ? [...guides, connector === '├'] : guides;
 
-  if (!isBranch) {
-    return [
-      row,
-      ...children.flatMap((child) => flattenNode(child, childGuides, '')),
-    ];
-  }
-
   return [
     row,
     ...children.flatMap((child, index) => flattenNode(
@@ -191,7 +178,7 @@ function flattenNode(
 }
 
 function flattenTree(nodes: SessionTreeNode[]): FlatTreeNode[] {
-  return visibleRoots(nodes).flatMap((node) => flattenNode(node, [], ''));
+  return visibleNodes(nodes).flatMap((node) => flattenNode(node, [], ''));
 }
 
 function toggleCollapsed(entryId: string) {

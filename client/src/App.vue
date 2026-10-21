@@ -626,6 +626,7 @@ import GitToolPanel from './components/GitToolPanel.vue';
 import NewSessionDialog from './components/NewSessionDialog.vue';
 import ChatPanel from './components/ChatPanel.vue';
 import type { ProjectTaskStartResult } from './types/projectTask';
+import type { WorktreePayload } from './types/sessionLaunch';
 import { useTerminalPanel } from './composables/useTerminalPanel';
 import ConfirmModal from './components/ConfirmModal.vue';
 import SearchModal from './components/SearchModal.vue';
@@ -639,7 +640,7 @@ import { useMemories } from './composables/useMemories';
 import { useGitHosting } from './composables/useGitHosting';
 import { useGatewaySettings } from './composables/useGatewaySettings';
 import { cachedLaunchResource, invalidateLaunchResourceCache, launchCacheKey } from './composables/useLaunchResourceCache';
-import { normalizePathSeparators } from './utils/paths';
+import { formatHomePath, normalizePathSeparators } from './utils/paths';
 import { createPreloadErrorHandler } from './utils/preloadErrorRecovery';
 import { loadWorkspaceState, saveWorkspaceState } from './services/workspaceState';
 
@@ -818,11 +819,6 @@ interface SessionWorktreeInfo {
 }
 
 type ModelOption = { provider: string; id: string; name?: string };
-
-type WorktreePayload =
-  | { mode: 'none' }
-  | { mode: 'managed'; branchMode: 'new'; branchName: string; baseBranch: string; copyFile?: string }
-  | { mode: 'managed'; branchMode: 'existing'; branchName: string; copyFile?: string };
 
 const optimisticSessions = ref(new Map<string, { id: string; name?: string; firstMessage?: string; cwd?: string; worktree?: SessionWorktreeInfo }>());
 const boundSessionId = ref<string>();
@@ -1222,13 +1218,6 @@ function handleVisibilityChange() {
     clearReadySession(activeSessionId.value);
     retryDisconnectedSocket();
   }
-}
-
-function formatHomePath(path?: string): string {
-  if (!path) return '';
-  return path
-    .replace(/^\/home\/[^/]+(?=\/|$)/, '~')
-    .replace(/^\/Users\/[^/]+(?=\/|$)/, '~');
 }
 
 function formatProjectName(path: string): string {

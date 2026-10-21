@@ -66,19 +66,8 @@ export function useProjectTasks(clientId: string) {
 
   async function start(id: string): Promise<ProjectTaskStartResult> {
     startingTaskId.value = id;
-    error.value = '';
     try {
-      const result = await apiRequest<ProjectTaskStartResult, { clientId: string }>(`/api/tasks/${encodeURIComponent(id)}/start`, {
-        method: 'POST',
-        body: { clientId },
-        fallbackMessage: 'Task request failed',
-      });
-      notifyChanged();
-      await load(lastProjectPath);
-      return result;
-    } catch (exception) {
-      error.value = errorMessage(exception);
-      throw exception;
+      return await mutate<ProjectTaskStartResult>(`/api/tasks/${encodeURIComponent(id)}/start`, 'POST', { clientId });
     } finally {
       startingTaskId.value = null;
     }

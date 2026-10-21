@@ -207,7 +207,7 @@
                 {{ t('components.memoryCenter.loadingMemory') }}
               </div>
               <div v-else-if="error" class="memory-state memory-error" role="alert">{{ error }}</div>
-              <div v-else-if="displayedMemories.length === 0" class="memory-state memory-empty">
+              <div v-else-if="filteredMemories.length === 0" class="memory-state memory-empty">
                 <PhBrain :size="28" weight="duotone" aria-hidden="true" />
                 <strong>{{ t('components.memoryCenter.noMemoriesInThisView') }}</strong>
                 <span>{{ t('components.memoryCenter.adjustTheFiltersOrAddOneDurable') }}</span>
@@ -215,7 +215,7 @@
 
               <div v-else ref="rowListRef" class="memory-list" role="list">
                 <article
-                  v-for="(memory, index) in displayedMemories"
+                  v-for="(memory, index) in filteredMemories"
                   :key="memory.id"
                   data-memory-row
                   class="memory-row"
@@ -459,14 +459,13 @@ const filteredMemories = computed(() => {
   });
 });
 
-const displayedMemories = computed(() => filteredMemories.value);
 const totalMemories = computed(() => props.controller.total.value);
 const canLoadMore = computed(() => filteredMemories.value.length < totalMemories.value);
 const selectedTidySuggestions = computed(() => (
   tidySuggestions.value.filter((suggestion) => selectedTidyIds.value.has(suggestion.archive.id))
 ));
 
-watch(displayedMemories, (items) => {
+watch(filteredMemories, (items) => {
   focusedIndex.value = items.length === 0
     ? -1
     : Math.min(Math.max(focusedIndex.value, 0), items.length - 1);
@@ -532,7 +531,7 @@ async function selectTab(tab: MemoryTab): Promise<void> {
   activeTab.value = tab;
   selectedCategory.value = 'all';
   selectedState.value = tab === 'review' ? 'pending' : 'active';
-  focusedIndex.value = displayedMemories.value.length ? 0 : -1;
+  focusedIndex.value = filteredMemories.value.length ? 0 : -1;
   await reload();
   if (tab === 'review' && props.reviewRunId) emit('reviewRunConsumed');
 }
@@ -746,11 +745,11 @@ async function loadMore(): Promise<void> {
 }
 
 function moveFocus(delta: number): void {
-  if (displayedMemories.value.length === 0) return;
+  if (filteredMemories.value.length === 0) return;
   const start = focusedIndex.value < 0
-    ? (delta > 0 ? 0 : displayedMemories.value.length - 1)
+    ? (delta > 0 ? 0 : filteredMemories.value.length - 1)
     : focusedIndex.value;
-  focusedIndex.value = Math.min(displayedMemories.value.length - 1, Math.max(0, start + delta));
+  focusedIndex.value = Math.min(filteredMemories.value.length - 1, Math.max(0, start + delta));
   nextTick(() => rowListRef.value
     ?.querySelectorAll<HTMLElement>('[data-memory-row]')[focusedIndex.value]
     ?.scrollIntoView({ block: 'nearest' }));

@@ -117,6 +117,37 @@ describe('useProjectTasks', () => {
     expect(state.startingTaskId.value).toBeNull();
   });
 
+  it('keeps start pending through the list refresh and notifies before reloading', async () => {
+    let resolveRefresh!: (value: Response) => void;
+    const state = useProjectTasks('client-1');
+    vi.mocked(fetch).mockResolvedValueOnce(response({ tasks: [task] }) as Response);
+    await state.load('/repo/app');
+    const startResult = { task: { ...task, status: 'started' }, sessionId: 'session-1', prompt: task.prompt };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response(startResult) as Response)
+      .mockReturnValueOnce(new Promise<Response>((resolve) => { resolveRefresh = resolve; }));
+    const notified = vi.fn(() => {
+      expect(state.startingTaskId.value).toBe(task.id);
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+    window.addEventListener('refresh-tasks', notified);
+    try {
+      const pending = state.start(task.id);
+      await vi.waitFor(() => expect(notified).toHaveBeenCalledOnce());
+      expect(state.startingTaskId.value).toBe(task.id);
+      expect(state.loading.value).toBe(true);
+      expect(fetch).toHaveBeenLastCalledWith('/api/tasks?scope=project&status=waiting&projectPath=%2Frepo%2Fapp');
+
+      resolveRefresh(response({ tasks: [] }) as Response);
+      expect(await pending).toEqual(startResult);
+      expect(state.tasks.value).toEqual([]);
+      expect(state.startingTaskId.value).toBeNull();
+      expect(state.loading.value).toBe(false);
+    } finally {
+      window.removeEventListener('refresh-tasks', notified);
+    }
+  });
+
   it('creates, updates, completes, and removes through their task endpoints', async () => {
     vi.mocked(fetch).mockResolvedValue(response({ task }) as Response);
     const state = useProjectTasks('client-1');
@@ -143,5 +174,7 @@ describe('useProjectTasks', () => {
 
     await expect(state.start('task-1')).rejects.toThrow('Model is unavailable');
     expect(state.error.value).toBe('Model is unavailable');
+    expect(state.startingTaskId.value).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
