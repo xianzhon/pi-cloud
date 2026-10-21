@@ -174,6 +174,20 @@ describe('resolveGatewayCommand', () => {
     finish({ stopReason: 'stop', content: [{ type: 'text', text: '{"action":"new_session"}' }] });
     expect(await pending).toHaveProperty('reply');
   });
+  it('does not start model work if the timeout expires during profile setup', async () => {
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    vi.spyOn(sessions, 'getClientAgentDirForRoutes').mockImplementation(async () => {
+      controller.abort();
+      return '/tmp/agent';
+    });
+
+    const result = await resolveGatewayCommand({ ...options, text: '小助理 新建对话' });
+
+    expect(result).toHaveProperty('reply');
+    expect(mocks.complete).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
   it('honors the custom prefix and asks for an instruction for a bare prefix', async () => {
     vi.stubEnv('PI_CLOUD_GATEWAY_COMMAND_PREFIX', 'Pi');
     expect(await resolveGatewayCommand({ ...options, text: '小助理 新建对话' })).toBeNull();

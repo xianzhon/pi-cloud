@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick, ref } from 'vue';
 import { findFileToken, replaceFileToken, useFileSearch } from './useFileSearch';
 
 function createDeferred<T>() {
@@ -106,6 +107,34 @@ describe('useFileSearch', () => {
   });
 
   describe('updateQuery', () => {
+    it.each(['value', 'ref', 'getter', 'undefined'] as const)('resolves a %s project path', async (kind) => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ files: ['README.md'] }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const path = ref<string | undefined>('/first project');
+      let source: Parameters<typeof useFileSearch>[0] = path.value;
+      if (kind === 'ref') source = path;
+      else if (kind === 'getter') source = () => path.value;
+      else if (kind === 'undefined') source = undefined;
+      const fileSearch = useFileSearch(source);
+      await fileSearch.updateQuery('@', 1);
+      const searchPath = kind === 'undefined' ? '.' : '/first project';
+      expect(fetchMock).toHaveBeenLastCalledWith(`/api/files/search?pattern=**/*&path=${encodeURIComponent(searchPath)}`);
+
+      if (kind === 'ref' || kind === 'getter') {
+        path.value = '/second project';
+        await nextTick();
+        await fileSearch.updateQuery('@', 1);
+        expect(fetchMock).toHaveBeenLastCalledWith('/api/files/search?pattern=**/*&path=%2Fsecond%20project');
+        path.value = undefined;
+        await nextTick();
+        await fileSearch.updateQuery('@', 1);
+        expect(fetchMock).toHaveBeenLastCalledWith('/api/files/search?pattern=**/*&path=.');
+      }
+    });
+
     it('shows all files when only @ is entered', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
         ok: true,

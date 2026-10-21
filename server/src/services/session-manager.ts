@@ -307,8 +307,7 @@ export class PiSessionService {
   }
 
   async getAgentProfileProxy(profileId: string) {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
-    if (!profile) throw new Error('Unknown agent profile');
+    await this.requireAgentProfile(profileId);
     return this.getProfileSettings(profileId).proxy;
   }
 
@@ -833,8 +832,7 @@ export class PiSessionService {
   }
 
   async saveAgentProfileDefaultModel(profileId: string, provider: string, modelId: string): Promise<AgentProfile> {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
-    if (!profile) throw new Error('Unknown agent profile');
+    const profile = await this.requireAgentProfile(profileId);
     const models = await this.listAgentProfileModels(profileId);
     if (!models.some((model) => model.provider === provider && model.id === modelId)) {
       throw new Error(`Unknown model: ${provider}/${modelId}`);
@@ -924,8 +922,7 @@ export class PiSessionService {
   }
 
   async saveAgentProfileProxy(profileId: string, proxyEnv: Record<string, unknown>): Promise<void> {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
-    if (!profile) throw new Error('Unknown agent profile');
+    await this.requireAgentProfile(profileId);
     const allowedKeys = ['ALL_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'];
     const proxy: Record<string, string> = {};
     for (const key of allowedKeys) {
@@ -936,8 +933,7 @@ export class PiSessionService {
   }
 
   async checkAgentProfileProxy(profileId: string, proxyEnv?: Record<string, unknown>): Promise<{ ok: boolean; country?: string }> {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
-    if (!profile) throw new Error('Unknown agent profile');
+    const profile = await this.requireAgentProfile(profileId);
 
     const env = await this.buildProxyCheckEnv(profile.path, proxyEnv);
     try {
@@ -969,15 +965,13 @@ export class PiSessionService {
   }
 
   async getAgentProfileAutomationModel(profileId: string): Promise<{ provider: string; modelId: string }> {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
-    if (!profile) throw new Error('Unknown agent profile');
+    await this.requireAgentProfile(profileId);
     const config = this.getProfileSettings(profileId);
     return { provider: config.automationProvider, modelId: config.automationModelId };
   }
 
   async saveAgentProfileAutomationModel(profileId: string, provider: string, modelId: string): Promise<{ provider: string; modelId: string }> {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
-    if (!profile) throw new Error('Unknown agent profile');
+    await this.requireAgentProfile(profileId);
     const models = await this.listAgentProfileModels(profileId);
     if (!models.some((model) => model.provider === provider && model.id === modelId)) {
       throw new Error(`Unknown model: ${provider}/${modelId}`);
@@ -988,8 +982,7 @@ export class PiSessionService {
   }
 
   async getAgentProfileAutoRenameConfig(profileId: string): Promise<{ language: 'english' | 'chinese' }> {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
-    if (!profile) throw new Error('Unknown agent profile');
+    await this.requireAgentProfile(profileId);
     const config = this.getProfileSettings(profileId);
     return { language: config.autoRenameLanguage };
   }
@@ -998,8 +991,7 @@ export class PiSessionService {
     profileId: string,
     input: { language?: string },
   ): Promise<{ language: 'english' | 'chinese' }> {
-    const profile = (await this.listAgentProfiles()).find((item) => item.id === profileId);
-    if (!profile) throw new Error('Unknown agent profile');
+    await this.requireAgentProfile(profileId);
     const language = this.normalizeAutoRenameLanguage(input.language || '');
     if (!language) throw new Error('language is required');
 
@@ -1579,10 +1571,6 @@ export class PiSessionService {
 
   getSkillPolicy(sessionId: string): SkillPolicyRecord | null {
     return this.skillPolicyStore?.get(sessionId) || null;
-  }
-
-  deleteSkillPolicy(sessionId: string): void {
-    this.skillPolicyStore?.delete(sessionId);
   }
 
   deleteSessionMetadata(sessionId: string): void {

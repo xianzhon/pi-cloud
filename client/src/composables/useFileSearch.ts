@@ -1,4 +1,4 @@
-import { computed, ref, watch, type Ref } from 'vue';
+import { computed, ref, toValue, watch, type MaybeRefOrGetter } from 'vue';
 import type { FileToken, FileSearchResult, FileSearchState } from '../types/fileSearch';
 import { parseFileQuery, filterAndRankFiles } from '../services/fileSearchService';
 import { getRecentFiles, addRecentFile } from '../services/recentFiles';
@@ -53,21 +53,7 @@ export function replaceFileToken(text: string, token: FileToken, filePath: strin
   return { text: nextText, cursor: token.start + filePath.length + 2 };
 }
 
-type FileSearchPathSource = string | undefined | Ref<string | undefined> | (() => string | undefined);
-
-function resolveProjectPath(projectPath?: FileSearchPathSource): string | undefined {
-  if (typeof projectPath === 'function') {
-    return projectPath();
-  }
-
-  if (projectPath && typeof projectPath === 'object' && 'value' in projectPath) {
-    return projectPath.value;
-  }
-
-  return projectPath;
-}
-
-export function useFileSearch(projectPath?: FileSearchPathSource) {
+export function useFileSearch(projectPath?: MaybeRefOrGetter<string | undefined>) {
   const state = ref<FileSearchState>({
     isOpen: false,
     activeIndex: 0,
@@ -85,7 +71,7 @@ export function useFileSearch(projectPath?: FileSearchPathSource) {
 
   const isOpen = computed(() => state.value.isOpen);
   const suggestions = computed(() => state.value.results);
-  const currentProjectPath = computed(() => resolveProjectPath(projectPath));
+  const currentProjectPath = computed(() => toValue(projectPath));
 
   function resetCache() {
     allFiles.value = [];

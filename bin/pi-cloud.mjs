@@ -2,8 +2,7 @@
 
 import { homedir } from 'node:os';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { loadRuntimeConfig } from './runtime-config.mjs';
 
@@ -61,7 +60,7 @@ function parseArgs(args) {
 const SERVICE_NAME = 'pi-cloud';
 const SERVICE_LABEL = 'com.pi-cloud';
 const NPM_PACKAGE_NAME = 'pi-cloud';
-const scriptPath = fileURLToPath(import.meta.url);
+const scriptPath = import.meta.filename;
 
 function runCommand(command, args) {
   const result = spawnSync(command, args, { stdio: 'inherit' });
@@ -120,7 +119,7 @@ function installWindowsService() {
 }
 
 function installedVersion() {
-  const packagePath = join(dirname(scriptPath), '..', 'package.json');
+  const packagePath = join(import.meta.dirname, '..', 'package.json');
   return JSON.parse(readFileSync(packagePath, 'utf8')).version;
 }
 

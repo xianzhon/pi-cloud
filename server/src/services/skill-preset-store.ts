@@ -42,11 +42,6 @@ export class SkillPresetStore {
     return rows.map(mapRow);
   }
 
-  listByUsername(_username: string): SkillPresetRecord[] {
-    // Presets are intentionally global; keep this compatibility method for callers that still pass a username.
-    return this.list();
-  }
-
   getById(id: string): SkillPresetRecord | null {
     const row = this.db.prepare('SELECT * FROM skill_presets WHERE id = ?').get(id) as SkillPresetRow | undefined;
     return row ? mapRow(row) : null;

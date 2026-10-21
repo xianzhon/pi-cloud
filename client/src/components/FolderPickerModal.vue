@@ -112,11 +112,11 @@
             <span>{{ directory.name }}</span>
           </button>
 
-          <div v-if="!isListLoading && visibleDirectories.length === 0" class="empty-state">
+          <div v-if="!loading && visibleDirectories.length === 0" class="empty-state">
             {{ emptyMessage }}
           </div>
 
-          <div v-if="isListLoading" class="empty-state">{{ t('components.folderPickerModal.loading') }}</div>
+          <div v-if="loading" class="empty-state">{{ t('components.folderPickerModal.loading') }}</div>
         </div>
 
         <div v-if="showRenameOption || showMoveOptions" class="history-option">
@@ -333,7 +333,6 @@ const visibleDirectories = computed(() => {
   if (!query) return directories.value;
   return directories.value.filter((directory) => directory.name.toLowerCase().includes(query));
 });
-const isListLoading = computed(() => loading.value);
 const emptyMessage = computed(() => (isSearching.value ? t('components.folderPickerModal.noMatchingFoldersFound') : t('components.folderPickerModal.noVisibleSubfolders')));
 
 watch(

@@ -322,15 +322,13 @@ describe('MemoryService', () => {
     });
     const usedSpy = vi.spyOn(store, 'markUsed');
 
-    const prompt = service.buildRecallPrompt(context, 'How should keyboard navigation work?');
+    const { prompt, tokenCount } = service.buildRecall(context, 'How should keyboard navigation work?');
 
     expect(prompt).toContain(pinned.content);
     expect(prompt).not.toContain('Pending keyboard fact');
     expect(prompt).not.toContain('Archived keyboard fact');
     expect(prompt).toContain('- [rule] Keep changes surgical');
-    expect(prompt).not.toContain('Pending keyboard fact');
-    expect(prompt).not.toContain('Archived keyboard fact');
-    expect(service.buildRecall(context, 'How should keyboard navigation work?').tokenCount).toBeLessThanOrEqual(1_500);
+    expect(tokenCount).toBeLessThanOrEqual(1_500);
     expect(usedSpy).toHaveBeenCalledWith(expect.arrayContaining([pinned.id]));
     expect(facts.some((fact) => (store.getMemory(fact.id)?.useCount || 0) > 0)).toBe(true);
   });

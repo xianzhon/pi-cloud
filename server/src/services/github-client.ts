@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { fetchWithProxy } from '../utils/fetch-proxy.js';
 import { githubProxyEnvFromUrl, type GithubSettings } from './github-settings-store';
 
@@ -14,6 +15,7 @@ export class GithubRequestError extends Error {
   }
 }
 
+const execFileAsync = promisify(execFile);
 const maxBuffer = 10 * 1024 * 1024;
 
 export class GithubClient {
@@ -76,7 +78,7 @@ export class GithubClient {
     ];
     if (init.body) args.push('-H', 'Content-Type: application/json', '--data-binary', String(init.body));
     args.push(url);
-    const { stdout } = await execFileCapture('curl', args, { env: { ...process.env, ...proxyEnv }, maxBuffer });
+    const { stdout } = await execFileAsync('curl', args, { env: { ...process.env, ...proxyEnv }, maxBuffer });
     const marker = stdout.lastIndexOf('\n');
     const text = marker >= 0 ? stdout.slice(0, marker) : stdout;
     const status = marker >= 0 ? Number(stdout.slice(marker + 1)) : 0;
@@ -96,15 +98,6 @@ export class GithubClient {
 
 function repoApiPath(owner: string, repo: string, suffix: string): string {
   return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${suffix}`;
-}
-
-function execFileCapture(file: string, args: string[], options: Parameters<typeof execFile>[2]): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    execFile(file, args, options, (error, stdout, stderr) => {
-      if (error) reject(error);
-      else resolve({ stdout: String(stdout), stderr: String(stderr) });
-    });
-  });
 }
 
 function parseResponse(text: string, ok: boolean, status: number): any {

@@ -121,7 +121,6 @@ const sessionService = {
     forceDisposeBySessionId: vi.fn(),
     forceDisposeByCwd: vi.fn(),
     deleteSessionFiles: vi.fn(),
-    deleteSkillPolicy: vi.fn(),
     deleteSessionMetadata: vi.fn(),
     getClientAgentDirForRoutes: vi.fn(),
     getProjectSessionDirForPath: vi.fn(),
@@ -749,9 +748,39 @@ describe('session routes', () => {
 
     expect(sessionService.forceDisposeByCwd).toHaveBeenCalledWith('/repo/cloned');
     expect(sessionService.deleteSessionFiles).toHaveBeenCalledWith('/profiles/default/sessions/project');
-    expect(sessionService.deleteSessionMetadata).toHaveBeenCalledTimes(2);
+    expect(sessionService.deleteSessionMetadata.mock.calls).toEqual([['session-1'], ['session-2']]);
     expect(projectHistoryStore.remove).toHaveBeenCalledWith('default', '/repo/cloned');
     expect(result).toEqual({ success: true, removedSessions: 2 });
+  });
+
+  it('retains project history and metadata if deleting session files fails', async () => {
+    sessionService.listSessions.mockResolvedValueOnce([{ id: 'session-1' }]);
+    sessionService.deleteSessionFiles.mockRejectedValueOnce(new Error('disk failure'));
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any, { projectHistoryStore });
+
+    await expect(handlers['DELETE /project-history']({
+      body: { clientId: 'client-1', projectPath: '/repo/project' },
+    }, { status: vi.fn().mockReturnThis(), send: vi.fn() })).rejects.toThrow('disk failure');
+    expect(sessionService.deleteSessionMetadata).not.toHaveBeenCalled();
+    expect(projectHistoryStore.remove).not.toHaveBeenCalled();
+  });
+
+  it('refuses to remove project history while any session is streaming', async () => {
+    sessionService.listSessions.mockResolvedValueOnce([{ id: 'session-1' }]);
+    sessionService.isSessionStreaming.mockReturnValueOnce(true);
+    const { sessionRoutes } = await import('./sessions.js');
+    const { app, handlers } = createMockApp();
+    await sessionRoutes(app as any, { projectHistoryStore });
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    await handlers['DELETE /project-history']({ body: { clientId: 'client-1', projectPath: '/repo/project' } }, reply);
+    expect(reply.status).toHaveBeenCalledWith(409);
+    expect(sessionService.forceDisposeByCwd).not.toHaveBeenCalled();
+    expect(sessionService.deleteSessionFiles).not.toHaveBeenCalled();
+    expect(sessionService.deleteSessionMetadata).not.toHaveBeenCalled();
+    expect(projectHistoryStore.remove).not.toHaveBeenCalled();
   });
 
   it('uses the base repo path for managed worktree sessions in project path options', async () => {

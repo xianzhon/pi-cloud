@@ -61,6 +61,30 @@ describe('SessionTreeModal', () => {
     wrapper.unmount();
   });
 
+  it('promotes messages through hidden chains without adding connectors to linear continuations', async () => {
+    const message = (id: string, children: unknown[] = []) => ({
+      entry: { id, type: 'message', message: { role: 'assistant', content: id } }, children,
+    });
+    const hidden = (children: unknown[]) => ({ entry: { type: 'model_change' }, children });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      tree: [hidden([hidden([message('root', [
+        hidden([message('left', [hidden([message('continuation')])])]),
+        hidden([hidden([message('right')])]),
+      ])])])],
+      leafId: 'continuation',
+    }))));
+    const wrapper = mount(SessionTreeModal, { props: { sessionId: 's1', clientId: 'c1' }, attachTo: document.body });
+    await settle();
+
+    const rows = [...document.body.querySelectorAll('.tree-row')];
+    expect(rows.map((row) => row.querySelector('.tree-row-text')?.textContent)).toEqual(['root', 'left', 'continuation', 'right']);
+    expect(rows.map((row) => row.querySelectorAll('.tree-connector').length)).toEqual([0, 1, 0, 1]);
+    expect(rows.map((row) => row.querySelectorAll('.tree-guide-line').length)).toEqual([0, 0, 1, 0]);
+    expect(rows[3].querySelector('.tree-connector.last')).not.toBeNull();
+    expect(rows[2].classList.contains('selected')).toBe(true);
+    wrapper.unmount();
+  });
+
   it('shows load errors, oversized responses, empty trees, and reloads for a new session', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'broken' }), { status: 500 }))

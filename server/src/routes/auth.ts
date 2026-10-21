@@ -146,36 +146,6 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
     return Object.prototype.hasOwnProperty.call(body, key);
   }
 
-  function getStreamingMessageBehavior(): 'steer' | 'followUp' {
-    const value = getPreferenceValue('ui.streamingMessageBehavior');
-    return value === 'followUp' ? 'followUp' : 'steer';
-  }
-
-  function getNewSessionShortcut(): 'ctrlAltN' | 'ctrlMetaN' | 'disabled' {
-    const value = getPreferenceValue('ui.newSessionShortcut');
-    return value === 'ctrlAltN' || value === 'disabled' ? value : 'ctrlMetaN';
-  }
-
-  function getFullscreenShortcut(): 'f11' | 'ctrlShiftF' {
-    const value = getPreferenceValue('ui.fullscreenShortcut');
-    return value === 'ctrlShiftF' ? 'ctrlShiftF' : 'f11';
-  }
-
-  function getTheme(): 'dark' | 'light' | 'system' {
-    const value = getPreferenceValue('ui.theme');
-    return value === 'dark' || value === 'light' ? value : 'system';
-  }
-
-  function getLanguage(): 'en' | 'zh-CN' {
-    const value = getPreferenceValue('ui.language');
-    return value === 'zh-CN' ? 'zh-CN' : 'en';
-  }
-
-  function getSoundNotification(): 'off' | 'beep' | 'chime' | 'ding' {
-    const value = getPreferenceValue('ui.soundNotification');
-    return value === 'off' || value === 'chime' || value === 'ding' ? value : 'beep';
-  }
-
   function getAnnotationToolShortcuts(): AnnotationToolShortcuts | null {
     const stored = getPreferenceValue('ui.annotationToolShortcuts');
     if (!stored) return null;
@@ -191,17 +161,17 @@ export async function authRoutes(app: FastifyInstance, options: AuthRouteOptions
       gitCloneParentPath: getPreferenceValue('ui.gitCloneParentPath') || '~/git/github',
       showHintInfo: getPreferenceValue('ui.showHintInfo') !== 'false',
       showCodeBlockLanguageHeaders: getPreferenceValue('ui.showCodeBlockLanguageHeaders') !== 'false',
-      streamingMessageBehavior: getStreamingMessageBehavior(),
+      streamingMessageBehavior: getAllowedPreference('ui.streamingMessageBehavior', ['steer', 'followUp'], 'steer'),
       editorAutoRefresh: getPreferenceValue('ui.editorAutoRefresh') === 'true',
       confirmSessionDelete: getPreferenceValue('ui.confirmSessionDelete') !== 'false',
-      newSessionShortcut: getNewSessionShortcut(),
-      fullscreenShortcut: getFullscreenShortcut(),
+      newSessionShortcut: getAllowedPreference('ui.newSessionShortcut', ['ctrlAltN', 'ctrlMetaN', 'disabled'], 'ctrlMetaN'),
+      fullscreenShortcut: getAllowedPreference('ui.fullscreenShortcut', ['f11', 'ctrlShiftF'], 'f11'),
       showGoToTopButton: getPreferenceValue('ui.showGoToTopButton') !== 'false',
       showChatViewOptionsButton: getPreferenceValue('ui.showChatViewOptionsButton') !== 'false',
       autoExtractMemory: getPreferenceValue('memory.autoExtract') === 'true',
-      theme: getTheme(),
-      language: getLanguage(),
-      soundNotification: getSoundNotification(),
+      theme: getAllowedPreference('ui.theme', ['dark', 'light', 'system'], 'system'),
+      language: getAllowedPreference('ui.language', ['en', 'zh-CN'], 'en'),
+      soundNotification: getAllowedPreference('ui.soundNotification', ['off', 'beep', 'chime', 'ding'], 'beep'),
       autoSpeakAssistant: getPreferenceValue('ui.autoSpeakAssistant') === 'true',
       annotationToolShortcuts: getAnnotationToolShortcuts(),
       mindMapLayout: getAllowedPreference('ui.mindMapLayout', MIND_MAP_LAYOUTS, 'both'),

@@ -58,7 +58,7 @@ export function filterAndRankFiles(
 ): FileSearchResult[] {
   const pathPart = query.pathPart.toLowerCase();
   const filterPart = query.filterPart.toLowerCase();
-  let filtered = [...files];
+  let filtered = files;
 
   if (pathPart) {
     filtered = filtered.filter((file) => file.path.toLowerCase().includes(pathPart));

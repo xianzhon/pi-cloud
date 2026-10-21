@@ -85,7 +85,7 @@
 
                   <div class="result-footer">
                     <span v-if="scope === 'all' && result.cwd" class="result-path">
-                      {{ formatPath(result.cwd) }}
+                      {{ formatHomePath(result.cwd) }}
                     </span>
                     <span class="result-date">{{ formatDate(result.created) }}</span>
                     <span class="match-count">{{ t(result.matchCount === 1 ? 'components.searchModal.matchCount' : 'components.searchModal.matchesCount', { count: result.matchCount }) }}</span>
@@ -113,6 +113,7 @@ import { i18n } from '../i18n';
 import { ref, computed, watch, nextTick } from 'vue';
 import { useSearch } from '../composables/useSearch';
 import type { SearchResult } from '../composables/useSearch';
+import { formatHomePath } from '../utils/paths';
 import { PhMagnifyingGlass, PhX } from '@phosphor-icons/vue';
 
 const t = i18n.global.t;
@@ -134,7 +135,6 @@ const {
   total,
   isLoading,
   displayCount,
-  search,
   debouncedSearch,
   loadMore,
   setScope,
@@ -286,12 +286,6 @@ function formatTitle(result: SearchResult): string {
     return result.firstMessage.slice(0, 50);
   }
   return result.id.slice(0, 8);
-}
-
-function formatPath(path: string): string {
-  return path
-    .replace(/^\/home\/[^/]+(?=\/|$)/, '~')
-    .replace(/^\/Users\/[^/]+(?=\/|$)/, '~');
 }
 
 function formatDate(dateStr: string): string {

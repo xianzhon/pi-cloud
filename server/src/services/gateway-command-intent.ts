@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { completeSimple } from '@earendil-works/pi-ai/compat';
 import { ModelRegistry, ModelRuntime } from '@earendil-works/pi-coding-agent';
+import { abortable } from '../utils/abortable.js';
 import { stripGatewayCommandPrefix } from './gateway-command-aliases.js';
 import type { PiSessionService } from './session-manager.js';
 import type { GatewayTaskCommands, GatewayTaskIntent } from './gateway-task-commands.js';
@@ -59,7 +60,7 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
     if (!profile) return INVALID_INTENT;
     await sessions.setClientAgentProfile(clientId, profile.id, signal);
     const agentDir = await sessions.getClientAgentDirForRoutes(clientId);
-    const response = await withAbort(signal, () => sessions.runForegroundWithClientProfileProxy(clientId, async () => {
+    const response = await abortable(() => sessions.runForegroundWithClientProfileProxy(clientId, async () => {
       signal.throwIfAborted();
       const registry = new ModelRegistry(await ModelRuntime.create({
         authPath: join(agentDir, 'auth.json'),
@@ -101,7 +102,7 @@ export async function resolveGatewayCommand(options: GatewayCommandOptions): Pro
         apiKey: auth.apiKey, headers: auth.headers, env: auth.env,
         maxTokens: 2000, signal, sessionId: `gateway-intent:${randomUUID()}`,
       });
-    }, signal));
+    }, signal), signal);
     signal.throwIfAborted();
     if (response.stopReason !== 'stop') return INVALID_INTENT;
     const output = response.content.flatMap((part) => part.type === 'text' ? [part.text] : []).join('');
@@ -162,20 +163,5 @@ async function executeTask(options: GatewayCommandOptions, intent: GatewayTaskIn
     return await options.tasks.execute(intent, options.config, options.clientId);
   } catch {
     return { reply: '任务操作未能完成。请查看任务列表或 WebUI 中的任务状态后重试。' };
-  }
-}
-
-async function withAbort<T>(signal: AbortSignal, work: () => Promise<T>): Promise<T> {
-  signal.throwIfAborted();
-  let onAbort!: () => void;
-  const aborted = new Promise<never>((_resolve, reject) => {
-    onAbort = () => reject(signal.reason);
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-  try {
-    // A provider that ignores cancellation must not block the gateway's message queue.
-    return await Promise.race([work(), aborted]);
-  } finally {
-    signal.removeEventListener('abort', onAbort);
   }
 }
