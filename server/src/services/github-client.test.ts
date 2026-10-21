@@ -3,9 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithProxy } from '../utils/fetch-proxy.js';
 import { GithubClient } from './github-client';
 
-vi.mock('node:child_process', () => ({
-  execFile: vi.fn((_file: string, _args: readonly string[] | null | undefined, _options: unknown, callback: Function) => callback(null, '', '')),
-}));
+vi.mock('node:child_process', async () => {
+  const { promisify } = await import('node:util');
+  const execFile = vi.fn((_file: string, _args: readonly string[] | null | undefined, _options: unknown, callback: Function) => callback(null, '', ''));
+  // Mirror Node's custom promisifier: execFile resolves both output streams.
+  return { execFile: Object.assign(execFile, {
+    [promisify.custom]: (file: string, args: string[], options: unknown) => new Promise((resolve, reject) => {
+      execFile(file, args, options, (error: Error | null, stdout: string, stderr: string) => {
+        if (error) reject(error);
+        else resolve({ stdout, stderr });
+      });
+    }),
+  }) };
+});
 vi.mock('../utils/fetch-proxy.js', () => ({ fetchWithProxy: vi.fn() }));
 
 const fetchMock = vi.mocked(fetchWithProxy);
@@ -39,6 +49,27 @@ describe('GithubClient', () => {
 
     await expect(new GithubClient({ serverUrl: 'https://github.com', token: 'abc' }).createIssue({ owner: 'o', repo: 'r', title: 'T', body: 'B' }))
       .rejects.toMatchObject({ message: 'Resource not accessible by personal access token', statusCode: 403 });
+  });
+
+  it('preserves provider error status through the curl fallback', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    execFileMock.mockImplementation(((_file: string, _args: readonly string[] | null | undefined, _options: unknown, callback: Function) => {
+      callback(null, '{"message":"Forbidden"}\n403', '');
+    }) as any);
+
+    await expect(new GithubClient({ serverUrl: 'https://github.com', token: 'abc' }).testConnection())
+      .rejects.toMatchObject({ message: 'Forbidden', statusCode: 403 });
+  });
+
+  it('propagates curl execution failures without retrying', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    const error = new Error('curl connection failed');
+    execFileMock.mockImplementation(((_file: string, _args: readonly string[] | null | undefined, _options: unknown, callback: Function) => {
+      callback(error, '', 'connection refused');
+    }) as any);
+
+    await expect(new GithubClient({ serverUrl: 'https://github.com', token: 'abc' }).testConnection()).rejects.toBe(error);
+    expect(execFileMock).toHaveBeenCalledOnce();
   });
 
   it('falls back to curl when fetch fails', async () => {
