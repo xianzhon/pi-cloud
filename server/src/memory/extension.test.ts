@@ -21,7 +21,6 @@ function setup(options: { autoExtractionEnabled?: boolean | (() => boolean) } = 
   };
   const service = {
     resolveContext: vi.fn(async () => memoryContext),
-    buildRecallPrompt: vi.fn(() => '# remembered'),
     buildRecall: vi.fn((): any => ({
       prompt: '# remembered',
       tokenCount: 12,

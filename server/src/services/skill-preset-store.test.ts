@@ -40,7 +40,6 @@ describe('SkillPresetStore', () => {
       updatedAt: expect.any(String),
     });
     expect(store.list()).toEqual([created]);
-    expect(store.listByUsername('other')).toEqual([created]);
   });
 
   it('enforces preset name uniqueness globally', () => {

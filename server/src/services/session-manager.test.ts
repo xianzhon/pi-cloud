@@ -174,6 +174,36 @@ vi.mock('./profile-proxy.js', async () => {
 const { PiSessionService } = await import('./session-manager.js');
 
 describe('PiSessionService', () => {
+  it.each([
+    ['proxy read', (service: InstanceType<typeof PiSessionService>) => service.getAgentProfileProxy('missing')],
+    ['default model', (service: InstanceType<typeof PiSessionService>) => service.saveAgentProfileDefaultModel('missing', 'openai', 'gpt-5')],
+    ['proxy write', (service: InstanceType<typeof PiSessionService>) => service.saveAgentProfileProxy('missing', {})],
+    ['proxy check', (service: InstanceType<typeof PiSessionService>) => service.checkAgentProfileProxy('missing')],
+    ['automation read', (service: InstanceType<typeof PiSessionService>) => service.getAgentProfileAutomationModel('missing')],
+    ['automation write', (service: InstanceType<typeof PiSessionService>) => service.saveAgentProfileAutomationModel('missing', 'openai', 'gpt-5')],
+    ['rename read', (service: InstanceType<typeof PiSessionService>) => service.getAgentProfileAutoRenameConfig('missing')],
+    ['rename write', (service: InstanceType<typeof PiSessionService>) => service.saveAgentProfileAutoRenameConfig('missing', { language: 'english' })],
+  ])('rejects an unknown profile before %s side effects', async (_name, invoke) => {
+    const service = new PiSessionService();
+    const profiles = vi.spyOn(service, 'listAgentProfiles').mockResolvedValue([]);
+    await expect(invoke(service)).rejects.toThrow(/^Unknown agent profile$/);
+    expect(profiles).toHaveBeenCalledTimes(1);
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('deletes session skill metadata idempotently without affecting other sessions', () => {
+    const policies = new SkillPolicyStore(db);
+    for (const sessionId of ['removed', 'retained']) {
+      policies.save({ sessionId, username: 'me', mode: 'enabled', skills: ['brainstorming'] });
+    }
+    const service = new PiSessionService({ skillPolicyStore: policies });
+    service.deleteSessionMetadata('removed');
+    service.deleteSessionMetadata('removed');
+    expect(policies.get('removed')).toBeNull();
+    expect(policies.get('retained')?.skills).toEqual(['brainstorming']);
+    expect(() => new PiSessionService().deleteSessionMetadata('missing')).not.toThrow();
+  });
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const originalLocalLlmAllowedOrigins = process.env.PI_CLOUD_LOCAL_LLM_ALLOWED_ORIGINS;
   let db: PiCloudDatabase;

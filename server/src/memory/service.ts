@@ -146,11 +146,6 @@ export class MemoryService {
     return { ...counts, pinnedOverflow: selectedPinned.length < pinned.length };
   }
 
-  /** @deprecated Use buildRecall() when callers also need trace metadata for UI/debugging. */
-  buildRecallPrompt(context: MemoryContext, prompt: string): string {
-    return this.buildRecall(context, prompt).prompt;
-  }
-
   buildRecall(context: MemoryContext, prompt: string): MemoryRecallResult {
     if (this.policy !== ADAPTIVE_MEMORY_POLICY) return this.buildLegacyRecall(context, prompt);
 

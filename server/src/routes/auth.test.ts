@@ -353,6 +353,35 @@ describe('authRoutes', () => {
     expect((db!.prepare('SELECT COUNT(*) AS count FROM audit_events').get() as { count: number }).count).toBe(0);
   });
 
+  it('preserves enum preference values and exact fallbacks for invalid stored values', async () => {
+    ({ app, tempDir, db } = await buildApp());
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });
+    const headers = { cookie: String(login.headers['set-cookie']).split(';')[0] };
+    const defaults = {
+      streamingMessageBehavior: 'steer', newSessionShortcut: 'ctrlMetaN', fullscreenShortcut: 'f11',
+      theme: 'system', language: 'en', soundNotification: 'beep',
+    };
+    const alternatives = [
+      { streamingMessageBehavior: 'followUp', newSessionShortcut: 'ctrlAltN', fullscreenShortcut: 'ctrlShiftF', theme: 'light', language: 'zh-CN', soundNotification: 'chime' },
+      { ...defaults, newSessionShortcut: 'disabled', theme: 'dark', soundNotification: 'off' },
+      { ...defaults, soundNotification: 'ding' },
+    ];
+    const cases: Array<{ stored: Record<string, string>; expected: Record<string, string> }> =
+      [defaults, ...alternatives].map(values => ({ stored: values, expected: values }));
+    for (const invalid of ['unknown', '']) {
+      cases.push({ stored: Object.fromEntries(Object.keys(defaults).map(key => [key, invalid])), expected: defaults });
+    }
+    for (const { stored, expected } of cases) {
+      for (const [key, value] of Object.entries(stored)) {
+        db!.prepare('INSERT OR REPLACE INTO application_settings (key, value, updated_at) VALUES (?, ?, ?)')
+          .run(`ui.${key}`, value, new Date().toISOString());
+      }
+      const result = await app.inject({ url: '/api/auth/preferences', headers });
+      expect(result.statusCode).toBe(200);
+      expect(result.json()).toMatchObject(expected);
+    }
+  });
+
   it('returns default preferences for authenticated users', async () => {
     ({ app, tempDir, db, totp } = await buildApp());
     const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'me', password: 'secret' } });

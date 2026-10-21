@@ -854,7 +854,6 @@ export async function sessionRoutes(app: FastifyInstance, options: SessionRouteO
     sessionService.forceDisposeByCwd(cwd);
     await sessionService.deleteSessionFiles(sessionService.getProjectSessionDirForPath(cwd, agentDir));
     for (const session of sessions) {
-      sessionService.deleteSkillPolicy(session.id);
       sessionService.deleteSessionMetadata(session.id);
     }
     options.projectHistoryStore?.remove(profileId, normalizedProjectPath);
