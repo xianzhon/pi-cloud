@@ -57,7 +57,7 @@ describe('TaskExecutionQueue', () => {
     }) };
     queue = makeQueue();
   });
-  afterEach(async () => { await queue.stop(); db.close(); await rm(cwd, { recursive: true, force: true }); });
+  afterEach(async () => { vi.useRealTimers(); await queue.stop(); db.close(); await rm(cwd, { recursive: true, force: true }); });
 
   it('runs in configured order, commits each task before the next, and completes statuses', async () => {
     const first = create('First');
@@ -326,6 +326,78 @@ describe('TaskExecutionQueue', () => {
       expect(tasks.get(task.id)?.status).toBe('started');
       expect(queue.get().error).toContain('shutdown');
     } finally { release(); await stopping; }
+  });
+
+  it('waits until the scheduled time and consumes the schedule only once', async () => {
+    const task = create('Scheduled');
+    vi.useFakeTimers();
+    const scheduledAt = new Date(Date.now() + 120_000).toISOString();
+    expect(queue.configure([task.id], true, scheduledAt).scheduledAt).toBe(scheduledAt);
+    await vi.advanceTimersByTimeAsync(119_999);
+    expect(starter.start).not.toHaveBeenCalled();
+    expect(tasks.get(task.id)?.status).toBe('waiting');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(queue.get().scheduledAt).toBeNull();
+    vi.useRealTimers();
+    await finished();
+    expect(tasks.get(task.id)?.status).toBe('completed');
+    expect(starter.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('reschedules and cancels a pending start', async () => {
+    const task = create('Scheduled');
+    vi.useFakeTimers();
+    queue.configure([task.id], true, new Date(Date.now() + 1000).toISOString());
+    queue.configure([task.id], true, new Date(Date.now() + 5000).toISOString());
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(starter.start).not.toHaveBeenCalled();
+    queue.configure([task.id], false);
+    expect(queue.get().scheduledAt).toBeNull();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(starter.start).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('restores a pending schedule after shutdown (overdue: %s)', async (overdue) => {
+    const task = create('Restored');
+    vi.useFakeTimers();
+    const scheduledAt = new Date(Date.now() + 5000).toISOString();
+    queue.configure([task.id], true, scheduledAt);
+    await queue.stop();
+    await vi.advanceTimersByTimeAsync(overdue ? 10_000 : 1000);
+    expect(starter.start).not.toHaveBeenCalled();
+    queue = makeQueue();
+    expect(queue.get().scheduledAt).toBe(scheduledAt);
+    expect(queue.get().error).toBe('');
+    await vi.advanceTimersByTimeAsync(overdue ? 0 : 4000);
+    vi.useRealTimers();
+    await finished();
+    expect(starter.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('pauses for review if a scheduled task was manually started before its deadline', async () => {
+    const task = create('Changed');
+    vi.useFakeTimers();
+    queue.configure([task.id], true, new Date(Date.now() + 1000).toISOString());
+    tasks.claimStart(task.id);
+    tasks.markStarted(task.id, 'manual-session');
+    await vi.advanceTimersByTimeAsync(1000);
+    vi.useRealTimers();
+    await finished();
+    expect(queue.get().error).toContain('no longer waiting');
+    expect(starter.start).not.toHaveBeenCalled();
+    expect(queue.get().scheduledAt).toBeNull();
+  });
+
+  it('validates schedule timestamps without changing the existing plan', () => {
+    const task = create('Scheduled');
+    const scheduledAt = new Date(Date.now() + 60_000).toISOString();
+    queue.configure([task.id], true, scheduledAt);
+    for (const invalid of ['', 'tomorrow', '2030-01-01T12:00', new Date(Date.now() - 1000).toISOString(), 123]) {
+      expect(() => queue.configure([task.id], true, invalid)).toThrow('future timestamp');
+      expect(queue.get().scheduledAt).toBe(scheduledAt);
+    }
+    expect(() => queue.configure([task.id], false, scheduledAt)).toThrow('Enable');
+    expect(() => queue.configure([], true, scheduledAt)).toThrow('Select at least');
   });
 
   it('validates duplicate, missing, and non-waiting task IDs', () => {

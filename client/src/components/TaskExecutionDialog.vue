@@ -19,6 +19,12 @@
           </label>
         </div>
 
+        <label class="schedule-field">
+          <span>{{ t('components.taskExecution.scheduledAt') }}</span>
+          <input v-model="scheduledTime" type="datetime-local" :disabled="loading || saving || activeTaskIds.length > 0" @input="scheduleDirty = true" />
+          <small>{{ t('components.taskExecution.scheduleHint') }}</small>
+        </label>
+        <p v-if="queue.enabled && queue.scheduledAt" class="execution-status" role="status">{{ t('components.taskExecution.scheduled', { time: new Date(queue.scheduledAt).toLocaleString() }) }}</p>
         <p v-for="id in activeTaskIds" :key="id" class="execution-status" role="status">{{ t('components.taskExecution.running', { title: taskTitle(id) }) }}</p>
         <p v-if="error || queue.error" class="execution-error" role="alert">{{ error || queue.error }}</p>
 
@@ -80,6 +86,7 @@ import CustomSelect, { type CustomSelectOption } from './CustomSelect.vue';
 
 interface QueueState {
   enabled: boolean;
+  scheduledAt?: string | null;
   taskIds: string[];
   activeTaskId: string | null;
   activeTaskIds?: string[];
@@ -94,12 +101,14 @@ const tasks = ref<ProjectTask[]>([]);
 const selected = ref<string[]>([]);
 const enabled = ref(false);
 const enabledDirty = ref(false);
+const scheduledTime = ref('');
+const scheduleDirty = ref(false);
 const scope = ref<'project' | 'all'>('project');
 const error = ref('');
 const loading = ref(false);
 const saving = ref(false);
 const activeTaskIds = computed(() => getActiveTaskIds(queue.value));
-const executionActive = computed(() => queue.value.enabled || activeTaskIds.value.length > 0);
+const executionActive = computed(() => (queue.value.enabled && !queue.value.scheduledAt) || activeTaskIds.value.length > 0);
 const scopeOptions = computed<CustomSelectOption[]>(() => [
   { value: 'project', label: t('components.taskInboxPanel.currentProject') },
   { value: 'all', label: t('components.taskInboxPanel.allProjects') },
@@ -157,11 +166,14 @@ async function load(initial: boolean, requestGeneration: number): Promise<void> 
       selected.value = [...state.taskIds];
       enabled.value = state.enabled;
       enabledDirty.value = false;
+      scheduledTime.value = localSchedule(state.scheduledAt);
+      scheduleDirty.value = false;
     } else if (changed) {
       const waitingIds = new Set(data.tasks.filter((task) => task.status === 'waiting').map((task) => task.id));
       const pending = selected.value.filter((id) => !queue.value.taskIds.includes(id) && waitingIds.has(id));
       selected.value = [...state.taskIds, ...pending.filter((id) => !state.taskIds.includes(id))];
       if (!enabledDirty.value) enabled.value = state.enabled;
+      if (!scheduleDirty.value) scheduledTime.value = localSchedule(state.scheduledAt);
     }
     queue.value = state;
     tasks.value = data.tasks;
@@ -176,14 +188,30 @@ async function load(initial: boolean, requestGeneration: number): Promise<void> 
   }
 }
 
+function localSchedule(value?: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 async function save(): Promise<void> {
   if (loading.value || saving.value) return;
   saving.value = true;
   error.value = '';
   try {
-    queue.value = await apiRequest<QueueState, { taskIds: string[]; enabled: boolean }>('/api/tasks/execution-queue', {
+    let scheduledAt: string | null = null;
+    if (enabled.value && scheduledTime.value) {
+      const date = new Date(scheduledTime.value);
+      if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) {
+        error.value = t('components.taskExecution.invalidSchedule');
+        return;
+      }
+      scheduledAt = date.toISOString();
+    }
+    queue.value = await apiRequest<QueueState, { taskIds: string[]; enabled: boolean; scheduledAt: string | null }>('/api/tasks/execution-queue', {
       method: 'PUT',
-      body: { taskIds: selected.value, enabled: enabled.value },
+      body: { taskIds: selected.value, enabled: enabled.value, scheduledAt },
     });
     emit('changed');
     emit('close');
@@ -196,6 +224,7 @@ async function save(): Promise<void> {
 
 function hasQueueChanged(current: QueueState, next: QueueState): boolean {
   return current.enabled !== next.enabled
+    || current.scheduledAt !== next.scheduledAt
     || current.activeTaskId !== next.activeTaskId
     || current.error !== next.error
     || !haveSameIds(current.taskIds, next.taskIds)
@@ -235,6 +264,23 @@ onUnmounted(() => {
 .execution-description {
   max-width: 72ch;
   line-height: 1.5;
+}
+
+.schedule-field {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.schedule-field input {
+  padding: 0.5rem;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.schedule-field small {
+  color: var(--text-secondary);
 }
 
 .execution-settings {

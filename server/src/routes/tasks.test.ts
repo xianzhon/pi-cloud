@@ -81,7 +81,10 @@ describe('task routes', () => {
     await taskRoutes(app as any, { store, starter, executionQueue: executionQueue as any });
     expect(await handlers['GET /execution-queue']({}, createReply())).toEqual(state);
     expect(await handlers['PUT /execution-queue']({ body: { taskIds: ['task-1'], enabled: true } }, createReply())).toEqual({ ...state, enabled: true });
-    expect(executionQueue.configure).toHaveBeenCalledWith(['task-1'], true);
+    expect(executionQueue.configure).toHaveBeenCalledWith(['task-1'], true, undefined);
+    const scheduledAt = '2030-01-01T12:00:00.000Z';
+    await handlers['PUT /execution-queue']({ body: { taskIds: ['task-1'], enabled: true, scheduledAt } }, createReply());
+    expect(executionQueue.configure).toHaveBeenCalledWith(['task-1'], true, scheduledAt);
     executionQueue.configure.mockImplementation(() => { throw new ProjectTaskValidationError('Invalid queue'); });
     const reply = createReply();
     await handlers['PUT /execution-queue']({ body: {} }, reply);

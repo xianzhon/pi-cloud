@@ -10,6 +10,7 @@ import type { PiSessionService } from './session-manager.js';
 
 export interface TaskExecutionQueueState {
   enabled: boolean;
+  scheduledAt: string | null;
   taskIds: string[];
   activeTaskId: string | null;
   activeTaskIds: string[];
@@ -36,6 +37,7 @@ export class TaskExecutionQueue {
   private readonly shutdown = new AbortController();
   private readonly activeSessions = new Map<string, { abort(): Promise<void> }>();
   private wakeRunner?: () => void;
+  private scheduleTimer?: ReturnType<typeof setTimeout>;
   private readonly git: NonNullable<Dependencies['git']>;
   private readonly resolvePath: NonNullable<Dependencies['resolvePath']>;
 
@@ -52,11 +54,13 @@ export class TaskExecutionQueue {
     const resolvePath = dependencies.resolvePath ?? resolveAllowedExistingPath;
     this.resolvePath = (path) => abortable(() => resolvePath(path), this.shutdown.signal);
     const row = dependencies.db.prepare('SELECT state_json FROM task_execution_queue WHERE id = 1').get() as { state_json: string } | undefined;
-    this.state = row ? JSON.parse(row.state_json) : { enabled: false, taskIds: [], activeTaskId: null, activeTaskIds: [], error: '' };
+    this.state = row ? JSON.parse(row.state_json) : { enabled: false, scheduledAt: null, taskIds: [], activeTaskId: null, activeTaskIds: [], error: '' };
+    this.state.scheduledAt ||= null;
     this.state.activeTaskIds ||= this.state.activeTaskId ? [this.state.activeTaskId] : [];
     let changed = false;
     // Never replay a partially executed task after a server restart.
-    if (this.state.enabled || this.state.activeTaskIds.length) {
+    if ((this.state.enabled && !this.state.scheduledAt) || this.state.activeTaskIds.length) {
+      this.state.scheduledAt = null;
       this.state.enabled = false;
       this.state.activeTaskId = null;
       this.state.activeTaskIds = [];
@@ -65,6 +69,7 @@ export class TaskExecutionQueue {
     }
     if (this.pruneUnavailableTaskIds().size) changed = true;
     if (changed) this.save();
+    this.armSchedule();
   }
 
   get(): TaskExecutionQueueState {
@@ -72,9 +77,18 @@ export class TaskExecutionQueue {
     return { ...this.state, taskIds: [...this.state.taskIds], activeTaskIds: [...this.state.activeTaskIds] };
   }
 
-  configure(taskIds: unknown, enabled: unknown): TaskExecutionQueueState {
+  configure(taskIds: unknown, enabled: unknown, scheduledAt: unknown = null): TaskExecutionQueueState {
     if (!Array.isArray(taskIds) || taskIds.some((id) => typeof id !== 'string') || new Set(taskIds).size !== taskIds.length || typeof enabled !== 'boolean') {
       throw new ProjectTaskValidationError('Provide unique task IDs and an enabled boolean');
+    }
+    let schedule: string | null = null;
+    if (scheduledAt !== null) {
+      if (typeof scheduledAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:\d{2})$/.test(scheduledAt) || !Number.isFinite(Date.parse(scheduledAt)) || Date.parse(scheduledAt) <= Date.now()) {
+        throw new ProjectTaskValidationError('Scheduled time must be a future timestamp with a timezone');
+      }
+      if (!enabled) throw new ProjectTaskValidationError('Enable auto-execution to schedule tasks');
+      if (this.running) throw new ProjectTaskConflictError('Cannot schedule while tasks are running');
+      schedule = new Date(scheduledAt).toISOString();
     }
     const unavailableTaskIds = this.pruneUnavailableTaskIds();
     if (unavailableTaskIds.size) this.save();
@@ -93,10 +107,12 @@ export class TaskExecutionQueue {
     if (enabled && !availableTaskIds.length) throw new ProjectTaskValidationError('Select at least one task');
     this.state.taskIds = [...availableTaskIds];
     this.state.enabled = enabled;
+    this.state.scheduledAt = schedule;
     this.state.error = '';
     this.save();
     const result = this.get();
-    if (enabled && !this.running && !this.closing) {
+    this.armSchedule();
+    if (enabled && !schedule && !this.running && !this.closing) {
       this.running = this.run().finally(() => { this.running = undefined; });
     } else if (this.running) {
       this.wakeRunner?.();
@@ -106,7 +122,8 @@ export class TaskExecutionQueue {
 
   async stop(): Promise<void> {
     this.closing = true;
-    this.state.enabled = false;
+    clearTimeout(this.scheduleTimer);
+    if (!this.state.scheduledAt) this.state.enabled = false;
     this.save();
     this.shutdown.abort(new Error(SHUTDOWN_ERROR_MESSAGE));
     const aborts = [...this.activeSessions.values()].map(async (session) => {
@@ -117,6 +134,23 @@ export class TaskExecutionQueue {
       await Promise.race([Promise.allSettled(aborts), new Promise<void>((resolve) => { timer = setTimeout(resolve, 1000); })]);
       await this.running;
     } finally { if (timer) clearTimeout(timer); }
+  }
+
+  private armSchedule(): void {
+    clearTimeout(this.scheduleTimer);
+    if (this.closing || !this.state.enabled || !this.state.scheduledAt) return;
+    // Recheck long delays and clock changes without overflowing Node's timer limit.
+    const delay = Math.max(0, Math.min(Date.parse(this.state.scheduledAt) - Date.now(), 60_000));
+    this.scheduleTimer = setTimeout(() => {
+      if (Date.parse(this.state.scheduledAt!) > Date.now()) {
+        this.armSchedule();
+        return;
+      }
+      this.state.scheduledAt = null;
+      this.save(); // Consume the one-shot schedule before starting any asynchronous work.
+      this.running = this.run().finally(() => { this.running = undefined; });
+    }, delay);
+    this.scheduleTimer.unref();
   }
 
   private save(): void {
