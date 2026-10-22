@@ -86,6 +86,35 @@ describe('TaskExecutionDialog', () => {
     }
   });
 
+  it('clears an unsaved schedule when the persisted schedule fires so tasks can still be appended', async () => {
+    vi.useFakeTimers();
+    try {
+      state = { enabled: true, scheduledAt: new Date(Date.now() + 1000).toISOString(), taskIds: ['one'], activeTaskId: null, error: '' };
+      await open();
+      const future = new Date(Date.now() + 86_400_000);
+      const draft = new Date(future.getTime() - future.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+      await wrapper.get('input[type="datetime-local"]').setValue(draft);
+      state = { ...state, scheduledAt: null, activeTaskId: 'one' };
+      await vi.advanceTimersByTimeAsync(2000);
+      await flushPromises();
+      const input = wrapper.get('input[type="datetime-local"]');
+      expect(input.attributes('disabled')).toBeDefined();
+      expect((input.element as HTMLInputElement).value).toBe('');
+      await wrapper.get('.custom-select-trigger').trigger('click');
+      await wrapper.findAll('.custom-select-option')[1]!.trigger('click');
+      await wrapper.findAll('.available input')[1]!.setValue(true);
+      await wrapper.get('.btn-confirm').trigger('click');
+      await flushPromises();
+      expect(request).toHaveBeenCalledWith('/api/tasks/execution-queue', {
+        method: 'PUT', body: { taskIds: ['one', 'two'], enabled: true, scheduledAt: null },
+      });
+      expect(wrapper.emitted('close')).toHaveLength(1);
+    } finally {
+      wrapper?.unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it('shows every concurrently running task', async () => {
     state = { enabled: true, taskIds: ['one', 'two'], activeTaskId: 'one', error: '', activeTaskIds: ['one', 'two'] } as typeof state;
     await open();

@@ -173,7 +173,12 @@ async function load(initial: boolean, requestGeneration: number): Promise<void> 
       const pending = selected.value.filter((id) => !queue.value.taskIds.includes(id) && waitingIds.has(id));
       selected.value = [...state.taskIds, ...pending.filter((id) => !state.taskIds.includes(id))];
       if (!enabledDirty.value) enabled.value = state.enabled;
-      if (!scheduleDirty.value) scheduledTime.value = localSchedule(state.scheduledAt);
+      if (queue.value.scheduledAt && !state.scheduledAt) {
+        scheduledTime.value = '';
+        scheduleDirty.value = false;
+      } else if (!scheduleDirty.value) {
+        scheduledTime.value = localSchedule(state.scheduledAt);
+      }
     }
     queue.value = state;
     tasks.value = data.tasks;
