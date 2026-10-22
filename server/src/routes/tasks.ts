@@ -11,6 +11,7 @@ import {
   isProjectTaskSkillMode,
   isProjectTaskStatus,
   normalizeWorktree,
+  normalizeScheduledAt,
   type ProjectTaskDraft,
   type ProjectTaskStatus,
   type ProjectTaskStore,
@@ -243,6 +244,7 @@ function parseTaskDraft(value: unknown): ProjectTaskDraft {
     skillMode: body.skillMode,
     skills,
     ...(body.presetId === undefined ? {} : { presetId: optionalString(body.presetId, 'presetId') }),
+    scheduledAt: normalizeScheduledAt(body.scheduledAt),
     worktree: normalizeWorktree(body.worktree),
   };
 }

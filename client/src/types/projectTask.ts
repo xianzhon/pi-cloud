@@ -17,6 +17,7 @@ export interface ProjectTaskDraft {
   skillMode: ProjectTaskSkillMode;
   skills: string[];
   presetId?: string | null;
+  scheduledAt?: string | null;
   worktree: WorktreePayload;
 }
 
@@ -31,6 +32,7 @@ export interface ProjectTaskGiteaIssue {
 export interface ProjectTask extends ProjectTaskDraft {
   id: string;
   status: ProjectTaskStatus;
+  scheduleError?: string | null;
   sessionId: string | null;
   giteaIssue: ProjectTaskGiteaIssue | null;
   /** Set on list results, which omit `images`; load the task by ID to get them. */

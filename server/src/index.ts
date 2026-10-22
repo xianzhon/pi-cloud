@@ -307,6 +307,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     presetStore: skillPresetStore,
   });
   const taskExecutionQueue = new TaskExecutionQueue({ db, tasks: projectTaskStore, starter: projectTaskStarter, sessions: piSessionService });
+  taskExecutionQueue.startTaskSchedules();
   const gatewayTaskCommands = new GatewayTaskCommands({ store: projectTaskStore, starter: projectTaskStarter, sessions: piSessionService });
   const feishuGateway = new FeishuGatewayService(db, gatewaySettings, piSessionService, gatewayTaskCommands);
   const weixinGateway = new WeixinGatewayService(db, gatewaySettings, piSessionService, gatewayTaskCommands);

@@ -113,7 +113,7 @@ const scopeOptions = computed<CustomSelectOption[]>(() => [
   { value: 'project', label: t('components.taskInboxPanel.currentProject') },
   { value: 'all', label: t('components.taskInboxPanel.allProjects') },
 ]);
-const available = computed(() => tasks.value.filter((task) => task.status === 'waiting' && (scope.value === 'all' || task.projectPath === props.currentProjectPath)));
+const available = computed(() => tasks.value.filter((task) => task.status === 'waiting' && !task.scheduledAt && (scope.value === 'all' || task.projectPath === props.currentProjectPath)));
 let timer: ReturnType<typeof setTimeout> | undefined;
 let generation = 0;
 

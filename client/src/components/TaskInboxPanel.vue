@@ -72,6 +72,8 @@
               <span v-if="task.worktree.mode === 'managed'" class="task-work-location">{{ workLocation(task) }}</span>
               <span class="task-created-at" :title="formatAbsoluteDate(task.createdAt)">{{ formatDate(task.createdAt) }}</span>
             </div>
+            <p v-if="task.status === 'waiting' && task.scheduledAt" class="task-notes">{{ t('components.taskExecution.scheduled', { time: formatAbsoluteDate(task.scheduledAt) }) }}</p>
+            <p v-if="task.scheduleError" class="task-error">{{ t('components.taskInboxPanel.scheduleFailed', { error: task.scheduleError }) }}</p>
             <p class="task-prompt" :class="{ expanded: isPromptExpanded(task.id) }">{{ task.prompt }}</p>
             <button
               v-if="isPromptExpandable(task.prompt)"

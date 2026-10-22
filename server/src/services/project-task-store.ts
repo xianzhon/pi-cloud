@@ -18,6 +18,7 @@ export interface ProjectTaskDraft {
   skillMode: ProjectTaskSkillMode;
   skills: string[];
   presetId?: string | null;
+  scheduledAt?: string | null;
   worktree: CreateSessionWorktreeOptions;
 }
 
@@ -39,6 +40,7 @@ export interface AttachGiteaIssueInput {
 export interface ProjectTaskRecord extends ProjectTaskDraft {
   id: string;
   presetId: string | null;
+  scheduleError: string | null;
   status: ProjectTaskStatus;
   sessionId: string | null;
   giteaIssue: ProjectTaskGiteaIssue | null;
@@ -67,6 +69,8 @@ interface ProjectTaskRow {
   skill_mode: ProjectTaskSkillMode;
   skills_json: string;
   preset_id: string | null;
+  scheduled_at: string | null;
+  schedule_error: string | null;
   worktree_json: string;
   session_id: string | null;
   gitea_issue_owner: string | null;
@@ -99,18 +103,18 @@ export class ProjectTaskStore {
   }
 
   create(input: ProjectTaskDraft): ProjectTaskRecord {
-    const draft = normalizeDraft(input);
+    const draft = normalizeDraft(input, this.now());
     const id = this.createId();
     const timestamp = this.now();
     this.db.prepare(`
       INSERT INTO project_tasks (
         id, project_path, title, prompt, images_json, notes, status, agent_profile_id,
         model_provider, model_id, skill_mode, skills_json, preset_id, worktree_json,
-        session_id, created_at, updated_at, started_at, completed_at
+        session_id, created_at, updated_at, started_at, completed_at, scheduled_at
       ) VALUES (
         @id, @projectPath, @title, @prompt, @imagesJson, @notes, 'waiting', @agentProfileId,
         @modelProvider, @modelId, @skillMode, @skillsJson, @presetId, @worktreeJson,
-        NULL, @createdAt, @updatedAt, NULL, NULL
+        NULL, @createdAt, @updatedAt, NULL, NULL, @scheduledAt
       )
     `).run({
       id,
@@ -146,13 +150,30 @@ export class ProjectTaskStore {
     return rows.map(mapRow);
   }
 
+  dueScheduledTaskIds(now = this.now()): string[] {
+    const rows = this.db.prepare(`SELECT id FROM project_tasks
+      WHERE status = 'waiting' AND scheduled_at <= ? ORDER BY scheduled_at, created_at, id`).all(now) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  }
+
+  consumeSchedule(task: ProjectTaskRecord): boolean {
+    return Boolean(this.db.prepare(`UPDATE project_tasks SET scheduled_at = NULL, schedule_error = NULL, updated_at = ?
+      WHERE id = ? AND status = 'waiting' AND scheduled_at = ? AND project_path = ?`)
+      .run(this.now(), task.id, task.scheduledAt, task.projectPath).changes);
+  }
+
+  recordScheduleError(id: string, error: string): void {
+    this.db.prepare('UPDATE project_tasks SET schedule_error = ?, updated_at = ? WHERE id = ?')
+      .run(error, this.now(), id);
+  }
+
   listProjectPaths(): string[] {
     const rows = this.db.prepare('SELECT DISTINCT project_path FROM project_tasks ORDER BY project_path').all() as Array<{ project_path: string }>;
     return rows.map((row) => row.project_path);
   }
 
   update(id: string, input: ProjectTaskDraft): ProjectTaskRecord {
-    const draft = normalizeDraft(input);
+    const draft = normalizeDraft(input, this.now());
     const result = this.db.prepare(`
       UPDATE project_tasks SET
         project_path = @projectPath,
@@ -167,6 +188,8 @@ export class ProjectTaskStore {
         skills_json = @skillsJson,
         preset_id = @presetId,
         worktree_json = @worktreeJson,
+        scheduled_at = @scheduledAt,
+        schedule_error = NULL,
         updated_at = @updatedAt
       WHERE id = @id AND status = 'waiting'
     `).run({
@@ -184,7 +207,7 @@ export class ProjectTaskStore {
 
   claimStart(id: string): ProjectTaskRecord {
     const result = this.db.prepare(`
-      UPDATE project_tasks SET status = 'starting', updated_at = ?
+      UPDATE project_tasks SET status = 'starting', scheduled_at = NULL, schedule_error = NULL, updated_at = ?
       WHERE id = ? AND status = 'waiting'
     `).run(this.now(), id);
     this.assertChanged(id, Number(result.changes), 'Only waiting tasks can be started');
@@ -298,7 +321,7 @@ export function normalizeWorktree(value: unknown): CreateSessionWorktreeOptions 
   throw new ProjectTaskValidationError('Invalid worktree settings');
 }
 
-function normalizeDraft(input: ProjectTaskDraft): ProjectTaskDraft {
+function normalizeDraft(input: ProjectTaskDraft, now: string): ProjectTaskDraft {
   if (!input || typeof input !== 'object') throw new ProjectTaskValidationError('Task payload is required');
   if (!isProjectTaskSkillMode(input.skillMode)) throw new ProjectTaskValidationError('Invalid skill mode');
   if (!Array.isArray(input.skills) || input.skills.some((skill) => typeof skill !== 'string')) {
@@ -316,8 +339,17 @@ function normalizeDraft(input: ProjectTaskDraft): ProjectTaskDraft {
     skillMode: input.skillMode,
     skills: Array.from(new Set(input.skills.map((skill) => skill.trim()).filter(Boolean))),
     presetId: typeof input.presetId === 'string' && input.presetId.trim() ? input.presetId.trim() : null,
+    scheduledAt: normalizeScheduledAt(input.scheduledAt, now),
     worktree: normalizeWorktree(input.worktree),
   };
+}
+
+export function normalizeScheduledAt(value: unknown, now = new Date().toISOString()): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value)) || Date.parse(value) <= Date.parse(now)) {
+    throw new ProjectTaskValidationError('Scheduled time must be a future timestamp with a timezone');
+  }
+  return new Date(value).toISOString();
 }
 
 function requiredString(value: unknown, field: string): string {
@@ -344,6 +376,8 @@ function mapRow(row: ProjectTaskRow): ProjectTaskRecord {
     skillMode: row.skill_mode,
     skills: JSON.parse(row.skills_json) as string[],
     presetId: row.preset_id,
+    scheduledAt: row.scheduled_at,
+    scheduleError: row.schedule_error,
     worktree: JSON.parse(row.worktree_json) as CreateSessionWorktreeOptions,
     sessionId: row.session_id,
     giteaIssue: row.gitea_issue_url ? {

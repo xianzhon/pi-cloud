@@ -47,6 +47,17 @@ describe('TaskExecutionDialog', () => {
     expect(request).toHaveBeenCalledWith('/api/tasks/execution-queue', { method: 'PUT', body: { taskIds: ['two', 'one'], enabled: true, scheduledAt: null } });
   });
 
+  it('excludes individually scheduled tasks from shared-queue selection', async () => {
+    request.mockImplementation(async (url: string) => url.includes('?')
+      ? { tasks: tasks.map((task) => task.id === 'one' ? { ...task, scheduledAt: '2099-01-01T00:00:00Z' } : task) }
+      : state);
+    await open();
+    expect(wrapper.find('.available').text()).not.toContain('Current task');
+    await wrapper.get('.custom-select-trigger').trigger('click');
+    await wrapper.findAll('.custom-select-option')[1]!.trigger('click');
+    expect(wrapper.find('.available').text()).toContain('Other task');
+  });
+
   it('locks ordering during execution but allows saving the switch off', async () => {
     state = { enabled: true, taskIds: ['one', 'two'], activeTaskId: 'one', error: '' };
     await open();

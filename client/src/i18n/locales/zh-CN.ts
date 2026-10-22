@@ -1647,6 +1647,8 @@ export default {
       slashCommands: '斜杠命令',
     },
     taskEditorDialog: {
+      scheduledAt: '定时开始（本地时间，可选）',
+      scheduleHint: '留空则手动启动。不受共享队列暂停影响，但会等待同一仓库中正在自动执行的任务。需要服务器运行，错过的计划会在重启后执行。清空此字段并保存可取消。',
       saveTheCompleteSessionSetupNowAnd: '现在保存完整的会话设置并稍后启动。',
       project: '项目',
       browse: '浏览…',
@@ -1696,6 +1698,7 @@ export default {
       remove: '从队列移除',
     },
     taskInboxPanel: {
+      scheduleFailed: '定时执行已停止：{error}',
       taskInbox: '任务收件箱',
       captureWorkNowAndStartInNew: '现在记录任务，稍后在新会话中启动。',
       newTask: '+ 新任务',

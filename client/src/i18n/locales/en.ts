@@ -1647,6 +1647,8 @@ export default {
       slashCommands: 'Slash commands',
     },
     taskEditorDialog: {
+      scheduledAt: 'Scheduled start (local time, optional)',
+      scheduleHint: 'Leave blank for manual start. Runs independently of shared-queue pauses, but waits for running automatic tasks in the same repository. The server must be running; overdue schedules run after restart. Clear this field and save to cancel.',
       saveTheCompleteSessionSetupNowAnd: 'Save the complete session setup now and start it later.',
       project: 'Project',
       browse: 'Browse…',
@@ -1696,6 +1698,7 @@ export default {
       remove: 'Remove from queue',
     },
     taskInboxPanel: {
+      scheduleFailed: 'Scheduled execution stopped: {error}',
       taskInbox: 'Task Inbox',
       captureWorkNowAndStartInNew: 'Capture work now and start in new session later.',
       newTask: '+ New task',

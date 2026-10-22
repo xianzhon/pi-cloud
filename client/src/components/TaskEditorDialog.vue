@@ -51,6 +51,10 @@
                 <label for="task-notes">{{ t('components.taskEditorDialog.privateNotesNotSent') }}</label>
                 <textarea id="task-notes" v-model="notes" rows="4" />
 
+                <label for="task-scheduled-at">{{ t('components.taskEditorDialog.scheduledAt') }}</label>
+                <input id="task-scheduled-at" v-model="scheduledTime" type="datetime-local" />
+                <p class="task-resource-state">{{ t('components.taskEditorDialog.scheduleHint') }}</p>
+
                 <footer class="task-editor-actions">
                   <button class="dialog-action" type="button" @click="emit('close')">{{ t('components.taskEditorDialog.cancel') }}</button>
                   <button class="dialog-action task-save" type="submit" :disabled="submitDisabled">{{ saving ? t('components.taskEditorDialog.saving') : t('components.taskEditorDialog.saveTask') }}</button>
@@ -151,6 +155,7 @@ const title = ref('');
 const prompt = ref('');
 const { attachments, attachmentError, handleImagePaste, removeAttachment } = useChatAttachments((key, params) => t(key, params || {}));
 const notes = ref('');
+const scheduledTime = ref('');
 const selectedProjectPath = ref('');
 const selectedProfileId = ref('');
 const projectPaths = ref<string[]>([]);
@@ -227,6 +232,8 @@ async function prepareForOpen() {
   }));
   attachmentError.value = '';
   notes.value = props.task?.notes || '';
+  const scheduled = props.task?.scheduledAt ? new Date(props.task.scheduledAt) : null;
+  scheduledTime.value = scheduled ? new Date(scheduled.getTime() - scheduled.getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : '';
   selectedProjectPath.value = props.task?.projectPath || props.currentProjectPath;
   launchValue.value = props.task ? launchFromTask(props.task) : defaultSessionLaunchValue();
 
@@ -473,12 +480,23 @@ async function polishTask() {
 
 function submit() {
   if (submitDisabled.value) return;
+  error.value = '';
+  let scheduledAt: string | null = null;
+  if (scheduledTime.value) {
+    const date = new Date(scheduledTime.value);
+    if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) {
+      error.value = t('components.taskExecution.invalidSchedule');
+      return;
+    }
+    scheduledAt = date.toISOString();
+  }
   emit('save', {
     projectPath: selectedProjectPath.value,
     title: title.value.trim(),
     prompt: prompt.value.trim(),
     images: attachments.value.map(({ type, data, mimeType, name }) => ({ type, data, mimeType, name })),
     notes: notes.value,
+    scheduledAt,
     agentProfileId: selectedProfileId.value,
     ...toTaskLaunchSnapshot(launchValue.value),
   });
