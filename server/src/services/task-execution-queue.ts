@@ -177,16 +177,21 @@ export class TaskExecutionQueue {
         // Re-read after path resolution: edits, cancellation and manual starts may have raced.
         const latest = tasks.get(id);
         if (!latest || latest.status !== 'waiting' || latest.projectPath !== task.projectPath || latest.scheduledAt !== task.scheduledAt) continue;
-        if (!tasks.consumeSchedule(latest)) continue;
+        let consumed = false;
         this.repositoriesInUse.set(repository, id);
-        const done = this.execute(latest, repository).then(() => {
+        const done = this.execute(latest, repository, () => consumed = tasks.consumeSchedule(latest)).then((executed) => {
+          if (!executed) return;
           this.checkOpen();
           tasks.complete(id);
         }).catch((error) => {
-          tasks.recordScheduleError(id, error instanceof Error ? error.message : String(error));
+          // A failed preflight must not consume or annotate a replacement schedule.
+          if (consumed || tasks.consumeSchedule(latest)) {
+            tasks.recordScheduleError(id, error instanceof Error ? error.message : String(error));
+          }
         }).finally(() => {
           this.repositoriesInUse.delete(repository);
           this.scheduledExecutions.delete(id);
+          this.wakeRunner?.();
         });
         this.scheduledExecutions.set(id, done);
       } catch (error) {
@@ -307,12 +312,14 @@ export class TaskExecutionQueue {
     publish();
   }
 
-  private async execute(task: ProjectTaskRecord, repository: string): Promise<void> {
+  private async execute(task: ProjectTaskRecord, repository: string, beforeStart?: () => boolean): Promise<boolean> {
     const projectPath = await this.resolvePath(task.projectPath);
     await this.resolvePath(await this.git(projectPath, ['rev-parse', '--show-toplevel']));
     if (await this.git(projectPath, ['status', '--porcelain', '--untracked-files=all'])) {
       throw new Error('Repository has uncommitted changes. Commit or stash them before running the queue.');
     }
+    // Consume the original schedule only after preflight, with no await before the starter claims it.
+    if (beforeStart && !beforeStart()) return false;
     const clientId = `task-execution:${task.id}`;
     try {
       const started = await this.dependencies.starter.start(task.id, clientId, this.shutdown.signal, task.projectPath);
@@ -371,5 +378,6 @@ export class TaskExecutionQueue {
       this.activeSessions.delete(task.id);
       if (!this.closing) this.dependencies.sessions.scheduleCleanup(clientId);
     }
+    return true;
   }
 }

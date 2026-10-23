@@ -405,14 +405,14 @@ describe('TaskExecutionQueue', () => {
       const task = create(title);
       return tasks.update(task.id, { ...task, projectPath, scheduledAt: new Date(Date.now() + delay).toISOString() });
     }
-    function startScheduler() {
+    function startScheduler(gitOverride?: (path: string, args: string[]) => Promise<string>) {
       vi.useFakeTimers();
-      queue = makeQueue(async (path, args) => {
+      queue = makeQueue(gitOverride ?? (async (path, args) => {
         if (args.includes('--git-common-dir') || args.includes('--show-toplevel')) return path;
         if (args[0] === 'rev-parse') return 'head';
         if (args[0] === 'symbolic-ref') return 'refs/heads/main';
         return '';
-      });
+      }));
       queue.startTaskSchedules();
     }
 
@@ -426,6 +426,87 @@ describe('TaskExecutionQueue', () => {
       expect(queue.get().enabled).toBe(false);
       await vi.advanceTimersByTimeAsync(5000);
       expect(starter.start).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['reschedule', 'cancel', 'delete', 'manual start'])('respects %s during independent preflight', async (action) => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      // Pause the last asynchronous check before the starter claims the task.
+      startScheduler(async (path, args) => {
+        if (args[0] === 'status') await gate;
+        if (args.includes('--git-common-dir') || args.includes('--show-toplevel')) return path;
+        return '';
+      });
+      const task = schedule('Independent');
+      await vi.advanceTimersByTimeAsync(1000);
+      const scheduledAt = new Date(Date.now() + 3_600_000).toISOString();
+      if (action === 'delete') tasks.delete(task.id);
+      else if (action === 'manual start') {
+        tasks.claimStart(task.id);
+        tasks.markStarted(task.id, 'manual-session');
+      } else tasks.update(task.id, { ...task, scheduledAt: action === 'reschedule' ? scheduledAt : null });
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(starter.start).not.toHaveBeenCalled();
+      if (action === 'delete') expect(tasks.get(task.id)).toBeNull();
+      else expect(tasks.get(task.id)).toMatchObject({
+        status: action === 'manual start' ? 'started' : 'waiting',
+        scheduledAt: action === 'reschedule' ? scheduledAt : null,
+        scheduleError: null,
+      });
+    });
+
+    it.each([false, true])('handles preflight failure without consuming a replacement schedule (rescheduled: %s)', async (rescheduled) => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      startScheduler(async (path, args) => {
+        if (args[0] === 'status') { await gate; return ' M existing.txt'; }
+        return path;
+      });
+      const task = schedule('Dirty');
+      await vi.advanceTimersByTimeAsync(1000);
+      const scheduledAt = new Date(Date.now() + 3_600_000).toISOString();
+      if (rescheduled) tasks.update(task.id, { ...task, scheduledAt });
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(starter.start).not.toHaveBeenCalled();
+      expect(tasks.get(task.id)).toMatchObject({
+        status: 'waiting',
+        scheduledAt: rescheduled ? scheduledAt : null,
+        scheduleError: rescheduled ? null : expect.stringContaining('uncommitted changes'),
+      });
+    });
+
+    it('wakes a shared runner when an independent task releases its repository', async () => {
+      startScheduler();
+      const independent = schedule('Independent');
+      const blocked = create('Blocked');
+      const unrelated = tasks.create({ ...blocked, title: 'Unrelated', prompt: 'Unrelated', projectPath: '/other' });
+      let releaseIndependent!: () => void;
+      let releaseUnrelated!: () => void;
+      const independentGate = new Promise<void>((resolve) => { releaseIndependent = resolve; });
+      const unrelatedGate = new Promise<void>((resolve) => { releaseUnrelated = resolve; });
+      prompt.mockImplementation(async (text: string) => {
+        if (text.startsWith('Independent')) await independentGate;
+        if (text.startsWith('Unrelated')) await unrelatedGate;
+        success(text);
+      });
+      try {
+        await vi.advanceTimersByTimeAsync(1000);
+        queue.configure([unrelated.id, blocked.id], true);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(tasks.get(unrelated.id)?.status).toBe('started');
+        expect(tasks.get(blocked.id)?.status).toBe('waiting');
+        releaseIndependent();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(tasks.get(independent.id)?.status).toBe('completed');
+        expect(tasks.get(blocked.id)?.status).toBe('completed');
+        expect(tasks.get(unrelated.id)?.status).toBe('started');
+      } finally {
+        releaseIndependent();
+        releaseUnrelated();
+        await vi.advanceTimersByTimeAsync(0);
+      }
     });
 
     it('runs despite an input-blocked shared queue and preserves its paused state and error', async () => {
