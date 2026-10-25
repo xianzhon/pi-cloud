@@ -74,10 +74,10 @@ importers:
     dependencies:
       '@earendil-works/pi-ai':
         specifier: 0.87.1
-        version: 0.87.1(supports-color@7.2.0)(ws@8.21.3)
+        version: 0.87.1(supports-color@7.2.0)(ws@8.22.0)
       '@earendil-works/pi-coding-agent':
         specifier: 0.87.1
-        version: 0.87.1(supports-color@7.2.0)(ws@8.21.3)
+        version: 0.87.1(supports-color@7.2.0)(ws@8.22.0)
       '@fastify/cookie':
         specifier: ^11.0.2
         version: 11.0.2
@@ -214,10 +214,10 @@ importers:
     dependencies:
       '@earendil-works/pi-ai':
         specifier: 'catalog:'
-        version: 0.87.1(supports-color@7.2.0)(ws@8.21.3)
+        version: 0.87.1(supports-color@7.2.0)(ws@8.22.0)
       '@earendil-works/pi-coding-agent':
         specifier: 'catalog:'
-        version: 0.87.1(supports-color@7.2.0)(ws@8.21.3)
+        version: 0.87.1(supports-color@7.2.0)(ws@8.22.0)
       '@fastify/cookie':
         specifier: 'catalog:'
         version: 11.0.2
@@ -281,7 +281,7 @@ importers:
         version: 1.5.6
       '@types/ws':
         specifier: ^8.18.1
-        version: 8.18.1
+        version: 8.18.2
       '@vitest/coverage-v8':
         specifier: ^5.0.0
         version: 5.0.0(vitest@5.0.0)
@@ -299,7 +299,7 @@ importers:
         version: 5.0.0(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@5.0.0)(happy-dom@20.9.0)(vite@7.3.7(@types/node@26.2.0)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       ws:
         specifier: ^8.21.3
-        version: 8.21.3
+        version: 8.22.0
 
 packages:
 
@@ -1419,8 +1419,8 @@ packages:
   '@types/whatwg-mimetype@3.0.2':
     resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
 
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@upsetjs/venn.js@2.0.0':
     resolution: {integrity: sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw==}
@@ -3190,8 +3190,8 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  ws@8.21.3:
-    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+  ws@8.22.0:
+    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -3463,10 +3463,10 @@ snapshots:
     dependencies:
       esbuild: 0.28.2
 
-  '@earendil-works/pi-agent-core@0.87.1(supports-color@7.2.0)(ws@8.21.3)':
+  '@earendil-works/pi-agent-core@0.87.1(supports-color@7.2.0)(ws@8.22.0)':
     dependencies:
       '@earendil-works/chord': 0.87.1
-      '@earendil-works/pi-ai': 0.87.1(supports-color@7.2.0)(ws@8.21.3)
+      '@earendil-works/pi-ai': 0.87.1(supports-color@7.2.0)(ws@8.22.0)
       '@earendil-works/pi-telemetry': 0.87.1
       diff: 8.0.4
       ignore: 7.0.8
@@ -3481,7 +3481,7 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.87.1(supports-color@7.2.0)(ws@8.21.3)':
+  '@earendil-works/pi-ai@0.87.1(supports-color@7.2.0)(ws@8.22.0)':
     dependencies:
       '@anthropic-ai/sdk': 0.124.0
       '@aws-sdk/client-bedrock-runtime': 3.1127.0
@@ -3490,7 +3490,7 @@ snapshots:
       '@smithy/node-http-handler': 4.12.1
       http-proxy-agent: 9.1.0(supports-color@7.2.0)
       https-proxy-agent: 9.1.0(supports-color@7.2.0)
-      openai: 6.40.0(ws@8.21.3)
+      openai: 6.40.0(ws@8.22.0)
       partial-json: 0.1.7
       typebox: 1.3.27
     transitivePeerDependencies:
@@ -3502,11 +3502,11 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-coding-agent@0.87.1(supports-color@7.2.0)(ws@8.21.3)':
+  '@earendil-works/pi-coding-agent@0.87.1(supports-color@7.2.0)(ws@8.22.0)':
     dependencies:
       '@earendil-works/chord': 0.87.1
-      '@earendil-works/pi-agent-core': 0.87.1(supports-color@7.2.0)(ws@8.21.3)
-      '@earendil-works/pi-ai': 0.87.1(supports-color@7.2.0)(ws@8.21.3)
+      '@earendil-works/pi-agent-core': 0.87.1(supports-color@7.2.0)(ws@8.22.0)
+      '@earendil-works/pi-ai': 0.87.1(supports-color@7.2.0)(ws@8.22.0)
       '@earendil-works/pi-tui': 0.87.1
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 6.0.0
@@ -3676,7 +3676,7 @@ snapshots:
     dependencies:
       duplexify: 4.1.3
       fastify-plugin: 5.1.0
-      ws: 8.21.3
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -3686,7 +3686,7 @@ snapshots:
       google-auth-library: 10.9.0(supports-color@7.2.0)
       p-retry: 4.6.2
       protobufjs: 7.6.5
-      ws: 8.21.3
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -4373,9 +4373,9 @@ snapshots:
 
   '@types/whatwg-mimetype@3.0.2': {}
 
-  '@types/ws@8.18.1':
+  '@types/ws@8.18.2':
     dependencies:
-      '@types/node': 26.3.0
+      '@types/node': 26.2.0
 
   '@upsetjs/venn.js@2.0.0':
     optionalDependencies:
@@ -5258,10 +5258,10 @@ snapshots:
     dependencies:
       '@types/node': 26.3.0
       '@types/whatwg-mimetype': 3.0.2
-      '@types/ws': 8.18.1
+      '@types/ws': 8.18.2
       entities: 7.0.1
       whatwg-mimetype: 3.0.0
-      ws: 8.21.3
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -5548,9 +5548,9 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openai@6.40.0(ws@8.21.3):
+  openai@6.40.0(ws@8.22.0):
     optionalDependencies:
-      ws: 8.21.3
+      ws: 8.22.0
 
   otplib@13.4.1:
     dependencies:
@@ -6187,7 +6187,7 @@ snapshots:
 
   wrappy@1.0.2: {}
 
-  ws@8.21.3: {}
+  ws@8.22.0: {}
 
   y18n@4.0.3: {}
 
