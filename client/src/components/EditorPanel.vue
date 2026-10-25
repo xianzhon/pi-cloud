@@ -565,6 +565,7 @@ import 'monaco-editor/basic-languages/monaco.contribution';
 import { PhX, PhArrowClockwise, PhFloppyDisk, PhCrosshair, PhEye, PhEyeSlash, PhFilePlus, PhFilePdf, PhFolderPlus, PhTrash, PhWarning, PhSidebarSimple, PhPushPinSimple, PhList, PhDownloadSimple, PhGraph, PhImage, PhCornersIn, PhCornersOut } from '@phosphor-icons/vue';
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
+import hljs from 'highlight.js';
 import { useTheme } from '../composables/useTheme';
 import { normalizePathSeparators } from '../utils/paths';
 import { createMarkdownPdfCopy, exportMarkdownPdf } from '../utils/markdownPdfExport';
@@ -2006,6 +2007,90 @@ function updateSplitDiffModels(path: string, content: string, language?: string)
   });
 }
 
+function diffSyntaxDecorations(model: monaco.editor.ITextModel, side: 'unified' | 'original' | 'modified'): monaco.editor.IModelDeltaDecoration[] {
+  const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+  const tokenKinds: Record<string, string> = {
+    keyword: 'keyword', 'selector-tag': 'keyword',
+    string: 'string', regexp: 'string', symbol: 'string',
+    comment: 'comment', quote: 'comment',
+    title: 'title', section: 'title', name: 'title',
+    attr: 'attr', attribute: 'attr', variable: 'attr', 'template-variable': 'attr',
+    number: 'number', literal: 'number',
+    built_in: 'built-in', type: 'built-in', class: 'built-in',
+  };
+  let language = '';
+  let inHunk = false;
+  let oldRows: Array<{ line: number; text: string }> = [];
+  let newRows: Array<{ line: number; text: string }> = [];
+
+  const highlight = (rows: typeof oldRows, oldVersion = false) => {
+    const content = rows.map(row => row.text).join('\n');
+    if (!content || content.length > 20000 || (language !== 'vue' && !hljs.getLanguage(language))) return;
+    const fragment = document.createElement('div');
+    // Vue hunks can contain script, template, or style without their surrounding tags.
+    fragment.innerHTML = language === 'vue'
+      ? hljs.highlightAuto(content, ['typescript', 'xml', 'css', 'scss']).value
+      : hljs.highlight(content, { language, ignoreIllegals: true }).value;
+    let rowIndex = 0;
+    let column = side === 'unified' ? 2 : 1;
+    const visit = (node: Node, kind?: string) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const parts = (node.textContent || '').split('\n');
+        parts.forEach((text, index) => {
+          if (index) {
+            rowIndex++;
+            column = side === 'unified' ? 2 : 1;
+          }
+          const row = rows[rowIndex];
+          if (kind && text.length && row && (!oldVersion || model.getLineContent(row.line).startsWith('-'))) {
+            decorations.push({
+              range: new monaco.Range(row.line, column, row.line, column + text.length),
+              options: { inlineClassName: `git-syntax-${kind}` },
+            });
+          }
+          column += text.length;
+        });
+        return;
+      }
+      if (node instanceof HTMLElement) {
+        for (const className of node.classList) {
+          kind = tokenKinds[className.replace(/^hljs-/, '').replace(/_+$/, '')] || kind;
+        }
+      }
+      node.childNodes.forEach(child => visit(child, kind));
+    };
+    visit(fragment);
+  };
+  const flush = () => {
+    // Context rows use the new version's tokens; old/new multiline state stays separate.
+    highlight(oldRows, true);
+    highlight(newRows);
+    oldRows = [];
+    newRows = [];
+  };
+
+  for (let line = 1; line <= model.getLineCount(); line++) {
+    const text = model.getLineContent(line);
+    const file = text.match(/^\/\/ File: (.+)$/);
+    if (file || text.startsWith('@@')) {
+      flush();
+      inHunk = !file;
+      if (file) {
+        const extension = file[1].split('.').pop()?.toLowerCase() || '';
+        language = ({ tsx: 'typescript', jsx: 'javascript', sh: 'bash' } as Record<string, string>)[extension] || extension;
+      }
+    } else if (inHunk && side !== 'unified') {
+      newRows.push({ line, text });
+    } else if (inHunk && /^[ +\-]/.test(text)) {
+      const row = { line, text: text.slice(1) };
+      if (text[0] !== '+') oldRows.push(row);
+      if (text[0] !== '-') newRows.push(row);
+    }
+  }
+  flush();
+  return decorations;
+}
+
 function applySplitDiffDecorations(splitModels?: SplitDiffModelSet): void {
   if (!splitDiffEditor || !splitModels) {
     originalSplitDiffDecorations?.clear();
@@ -2023,8 +2108,14 @@ function applySplitDiffDecorations(splitModels?: SplitDiffModelSet): void {
 
   originalSplitDiffDecorations ||= splitDiffEditor.getOriginalEditor().createDecorationsCollection();
   modifiedSplitDiffDecorations ||= splitDiffEditor.getModifiedEditor().createDecorationsCollection();
-  originalSplitDiffDecorations.set(decorationsFor(splitModels.originalLineKinds));
-  modifiedSplitDiffDecorations.set(decorationsFor(splitModels.modifiedLineKinds));
+  originalSplitDiffDecorations.set([
+    ...decorationsFor(splitModels.originalLineKinds),
+    ...diffSyntaxDecorations(splitModels.original, 'original'),
+  ]);
+  modifiedSplitDiffDecorations.set([
+    ...decorationsFor(splitModels.modifiedLineKinds),
+    ...diffSyntaxDecorations(splitModels.modified, 'modified'),
+  ]);
 }
 
 function applyDiffDecorations(filePath = activeTab.value): void {
@@ -2040,9 +2131,20 @@ function applyDiffDecorations(filePath = activeTab.value): void {
     return;
   }
 
-  const decorations = [];
+  const decorations = diffSyntaxDecorations(model, 'unified');
+  let inHunk = false;
   for (let lineNumber = 1; lineNumber <= model.getLineCount(); lineNumber++) {
-    const className = diffLineClass(model.getLineContent(lineNumber));
+    const line = model.getLineContent(lineNumber);
+    if (line.startsWith('// File: ') || line.startsWith('diff --git')) inHunk = false;
+    if (line.startsWith('@@')) inHunk = true;
+    if (inHunk && /^[ +\-]/.test(line)) {
+      // Visual padding only: preserve the original patch for copying.
+      decorations.push({
+        range: new monaco.Range(lineNumber, 1, lineNumber, 2),
+        options: { after: { content: '  ' } },
+      });
+    }
+    const className = diffLineClass(line);
     if (!className) continue;
     decorations.push({
       range: new monaco.Range(lineNumber, 1, lineNumber, 1),
@@ -4396,6 +4498,14 @@ defineExpose({ openFile, openVirtualDiff, locateActiveFileInTree });
 :deep(.git-change-deleted) {
   border-left: 3px solid var(--git-deleted);
 }
+
+:deep(.git-syntax-keyword) { color: var(--syntax-keyword) !important; }
+:deep(.git-syntax-string) { color: var(--syntax-string) !important; }
+:deep(.git-syntax-comment) { color: var(--syntax-comment) !important; }
+:deep(.git-syntax-title) { color: var(--syntax-title) !important; }
+:deep(.git-syntax-attr) { color: var(--syntax-attr) !important; }
+:deep(.git-syntax-number) { color: var(--syntax-number) !important; }
+:deep(.git-syntax-built-in) { color: var(--syntax-built-in) !important; }
 
 :deep(.git-diff-added) {
   background: var(--diff-added-bg);
