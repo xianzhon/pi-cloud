@@ -155,6 +155,23 @@ describe('useTerminal', () => {
     vi.useRealTimers();
   });
 
+  it('stops reconnecting when the server terminal is no longer available', () => {
+    vi.useFakeTimers();
+    const instance = createTerminalInstance();
+    connectTerminal(instance, 'client-1');
+    const socket = instance.socket as unknown as MockWebSocket;
+    socket.onmessage?.({ data: JSON.stringify({ type: 'created', terminalId: 'term-1', resumeToken: 'secret', shell: 'zsh' }) });
+    expect(getResumableTerminals('client-1')).toHaveLength(1);
+
+    socket.onclose?.({ code: 4404, reason: 'Terminal not found' });
+
+    expect(instance.connectionState.value).toBe('disconnected');
+    expect(instance.terminal.options.disableStdin).toBe(true);
+    expect(getResumableTerminals('client-1')).toEqual([]);
+    vi.runOnlyPendingTimers();
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
   it('persists acknowledged output for refresh restoration and reports truncation', () => {
     const instance = createTerminalInstance();
     connectTerminal(instance, 'client-1', '/workspace');

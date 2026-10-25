@@ -1756,6 +1756,7 @@ export default {
       terminal: 'Terminal',
       noTerminals: 'No terminals.',
       newTerminal: 'New terminal',
+      createNewTab: 'Create new tab',
       dockToBottom: 'Dock to bottom',
       popOut: 'Pop out',
       minimize: 'Minimize',

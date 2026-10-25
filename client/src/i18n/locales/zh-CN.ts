@@ -1756,6 +1756,7 @@ export default {
       terminal: '终端',
       noTerminals: '暂无终端。',
       newTerminal: '新建终端',
+      createNewTab: '新建标签页',
       dockToBottom: '停靠在底部',
       popOut: '在独立窗口中打开',
       minimize: '最小化',

@@ -74,6 +74,38 @@ describe('TerminalPanel', () => {
     expect(wrapper.emitted('createTerminal')).toBeTruthy();
   });
 
+  it.each(['disconnected', 'reconnecting', 'connecting', 'connected'] as const)('shows appropriate actions when %s', async (state) => {
+    const session = {
+      terminal_id: 't1', label: 'zsh', terminal: null, hostEl: null,
+      fitAddon: null, resizeObserver: null, history: [], pending_output: [],
+      connection_state: state,
+    };
+    const wrapper = mount(TerminalPanel, {
+      props: { ...defaultProps, sessions: [session], activeId: 't1' },
+    });
+    const status = wrapper.find('.terminal-connection-status');
+    if (state === 'connected') {
+      expect(status.exists()).toBe(false);
+    } else if (state === 'disconnected') {
+      expect(status.text()).toBe('Create new tab');
+      expect(status.findAll('button')).toHaveLength(1);
+      await status.find('button').trigger('click');
+      expect(wrapper.emitted('createTerminal')).toEqual([[]]);
+      expect(wrapper.emitted('retryTerminal')).toBeUndefined();
+      expect(wrapper.emitted('closeTerminal')).toBeUndefined();
+    } else {
+      expect(status.text()).toContain(state === 'connecting' ? 'Connecting' : 'Reconnecting');
+      expect(status.text()).not.toContain('Create new tab');
+      if (state === 'reconnecting') {
+        await status.find('button').trigger('click');
+        expect(wrapper.emitted('retryTerminal')).toEqual([['t1']]);
+      } else {
+        expect(status.text()).not.toContain('Retry');
+      }
+    }
+    wrapper.unmount();
+  });
+
   it('emits close when clicking minimize button', async () => {
     const wrapper = mount(TerminalPanel, { props: defaultProps });
     const btns = wrapper.findAll('.terminal-panel-actions .icon-btn');

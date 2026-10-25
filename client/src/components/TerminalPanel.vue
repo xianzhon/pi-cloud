@@ -83,13 +83,20 @@
           class="terminal-connection-status"
           role="status"
         >
-          <span>{{ connectionStatusLabel(session.connection_state) }}</span>
           <button
-            v-if="session.connection_state !== 'connecting'"
+            v-if="session.connection_state === 'disconnected'"
             type="button"
-            @click="$emit('retryTerminal', session.terminal_id)"
-          >{{ t('components.terminalPanel.retry') }}</button>
-          <button type="button" @click="$emit('closeTerminal', session.terminal_id)">{{ t('components.terminalPanel.close') }}</button>
+            @click="$emit('createTerminal')"
+          >{{ t('components.terminalPanel.createNewTab') }}</button>
+          <template v-else>
+            <span>{{ connectionStatusLabel(session.connection_state) }}</span>
+            <button
+              v-if="session.connection_state === 'reconnecting'"
+              type="button"
+              @click="$emit('retryTerminal', session.terminal_id)"
+            >{{ t('components.terminalPanel.retry') }}</button>
+            <button type="button" @click="$emit('closeTerminal', session.terminal_id)">{{ t('components.terminalPanel.close') }}</button>
+          </template>
         </div>
         <div :ref="(el: any) => $emit('setHostRef', session.terminal_id, el as HTMLElement | null)" class="terminal-host"></div>
       </div>
