@@ -81,7 +81,10 @@ describe('task routes', () => {
     await taskRoutes(app as any, { store, starter, executionQueue: executionQueue as any });
     expect(await handlers['GET /execution-queue']({}, createReply())).toEqual(state);
     expect(await handlers['PUT /execution-queue']({ body: { taskIds: ['task-1'], enabled: true } }, createReply())).toEqual({ ...state, enabled: true });
-    expect(executionQueue.configure).toHaveBeenCalledWith(['task-1'], true);
+    expect(executionQueue.configure).toHaveBeenCalledWith(['task-1'], true, undefined);
+    const scheduledAt = '2030-01-01T12:00:00.000Z';
+    await handlers['PUT /execution-queue']({ body: { taskIds: ['task-1'], enabled: true, scheduledAt } }, createReply());
+    expect(executionQueue.configure).toHaveBeenCalledWith(['task-1'], true, scheduledAt);
     executionQueue.configure.mockImplementation(() => { throw new ProjectTaskValidationError('Invalid queue'); });
     const reply = createReply();
     await handlers['PUT /execution-queue']({ body: {} }, reply);
@@ -113,10 +116,25 @@ describe('task routes', () => {
     const handlers = await setup();
 
     expect(await handlers['POST /']({ body: draft }, createReply())).toEqual({ task });
-    expect(store.create).toHaveBeenCalledWith({ ...draft, images: [] });
+    expect(store.create).toHaveBeenCalledWith({ ...draft, images: [], scheduledAt: null });
 
     expect(await handlers['PUT /:id']({ params: { id: 'task-1' }, body: draft }, createReply())).toEqual({ task });
-    expect(store.update).toHaveBeenCalledWith('task-1', { ...draft, images: [] });
+    expect(store.update).toHaveBeenCalledWith('task-1', { ...draft, images: [], scheduledAt: null });
+  });
+
+  it('accepts per-task schedules, supports clearing them and rejects invalid times', async () => {
+    const handlers = await setup();
+    await handlers['POST /']({ body: { ...draft, scheduledAt: '2099-01-01T08:00:00+08:00' } }, createReply());
+    expect(store.create).toHaveBeenCalledWith(expect.objectContaining({ scheduledAt: '2099-01-01T00:00:00.000Z' }));
+    await handlers['PUT /:id']({ params: { id: 'task-1' }, body: { ...draft, scheduledAt: null } }, createReply());
+    expect(store.update).toHaveBeenCalledWith('task-1', expect.objectContaining({ scheduledAt: null }));
+    store.create.mockClear();
+    for (const scheduledAt of ['invalid', '2000-01-01T00:00:00Z', '2099-01-01T12:00', 123]) {
+      const reply = createReply();
+      await handlers['POST /']({ body: { ...draft, scheduledAt } }, reply);
+      expect(reply.status).toHaveBeenCalledWith(400);
+    }
+    expect(store.create).not.toHaveBeenCalled();
   });
 
   it('validates image attachments before saving tasks', async () => {
@@ -130,7 +148,7 @@ describe('task routes', () => {
 
     const png = { ...image, data: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64') };
     await handlers['POST /']({ body: { ...draft, images: [png] } }, createReply());
-    expect(store.create).toHaveBeenCalledWith({ ...draft, images: [png] });
+    expect(store.create).toHaveBeenCalledWith({ ...draft, images: [png], scheduledAt: null });
   });
 
   it('starts, completes, and deletes tasks', async () => {

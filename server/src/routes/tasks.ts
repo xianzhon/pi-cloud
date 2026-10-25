@@ -11,6 +11,7 @@ import {
   isProjectTaskSkillMode,
   isProjectTaskStatus,
   normalizeWorktree,
+  normalizeScheduledAt,
   type ProjectTaskDraft,
   type ProjectTaskStatus,
   type ProjectTaskStore,
@@ -93,8 +94,8 @@ export async function taskRoutes(app: FastifyInstance, options: TaskRouteOptions
   app.put('/execution-queue', async (req, reply) => {
     if (!options.executionQueue) return reply.status(503).send({ error: 'Task execution queue unavailable' });
     try {
-      const body = req.body as { taskIds?: unknown; enabled?: unknown } | undefined;
-      return options.executionQueue.configure(body?.taskIds, body?.enabled);
+      const body = req.body as { taskIds?: unknown; enabled?: unknown; scheduledAt?: unknown } | undefined;
+      return options.executionQueue.configure(body?.taskIds, body?.enabled, body?.scheduledAt);
     } catch (error) {
       return sendTaskError(reply, error, 400);
     }
@@ -243,6 +244,7 @@ function parseTaskDraft(value: unknown): ProjectTaskDraft {
     skillMode: body.skillMode,
     skills,
     ...(body.presetId === undefined ? {} : { presetId: optionalString(body.presetId, 'presetId') }),
+    scheduledAt: normalizeScheduledAt(body.scheduledAt),
     worktree: normalizeWorktree(body.worktree),
   };
 }

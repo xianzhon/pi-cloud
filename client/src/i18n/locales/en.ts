@@ -1647,6 +1647,8 @@ export default {
       slashCommands: 'Slash commands',
     },
     taskEditorDialog: {
+      scheduledAt: 'Scheduled start (local time, optional)',
+      scheduleHint: 'Leave blank for manual start. Runs independently of shared-queue pauses, but waits for running automatic tasks in the same repository. The server must be running; overdue schedules run after restart. Clear this field and save to cancel.',
       saveTheCompleteSessionSetupNowAnd: 'Save the complete session setup now and start it later.',
       project: 'Project',
       browse: 'Browse…',
@@ -1683,6 +1685,10 @@ export default {
       description: 'Run up to three independent repositories concurrently. Tasks sharing a repository run in order, with verification and a commit before the next task. Successful tasks with no changes are also completed.',
       enabled: 'Auto-execution',
       pauseHint: 'Turning this off and saving lets running tasks finish. Errors or requests for input pause the queue. Start with clean Git repositories and avoid concurrent edits.',
+      scheduledAt: 'Start at (local time)',
+      scheduleHint: 'Optional: leave blank to run immediately. Enable auto-execution and save. Turn it off and save to cancel. The server must be running; overdue schedules run on restart. This does not automatically retry quota errors.',
+      scheduled: 'Scheduled: {time}',
+      invalidSchedule: 'Choose a future start time.',
       running: 'Running: {title}',
       order: 'Execution order',
       available: 'Select waiting tasks',
@@ -1692,6 +1698,7 @@ export default {
       remove: 'Remove from queue',
     },
     taskInboxPanel: {
+      scheduleFailed: 'Scheduled execution stopped: {error}',
       taskInbox: 'Task Inbox',
       captureWorkNowAndStartInNew: 'Capture work now and start in new session later.',
       newTask: '+ New task',

@@ -1647,6 +1647,8 @@ export default {
       slashCommands: '斜杠命令',
     },
     taskEditorDialog: {
+      scheduledAt: '定时开始（本地时间，可选）',
+      scheduleHint: '留空则手动启动。不受共享队列暂停影响，但会等待同一仓库中正在自动执行的任务。需要服务器运行，错过的计划会在重启后执行。清空此字段并保存可取消。',
       saveTheCompleteSessionSetupNowAnd: '现在保存完整的会话设置并稍后启动。',
       project: '项目',
       browse: '浏览…',
@@ -1683,6 +1685,10 @@ export default {
       description: '最多同时执行三个独立仓库的任务。同一仓库的任务按顺序执行，确认成功并提交改动后再开始下一个。成功但没有改动的任务也会标记为已完成。',
       enabled: '自动执行',
       pauseHint: '关闭并保存后，正在执行的任务仍会执行完毕。错误或需要用户输入时会暂停队列。请使用干净的 Git 仓库，并避免同时修改文件。',
+      scheduledAt: '开始时间（本地时间）',
+      scheduleHint: '可选，留空则立即执行。开启自动执行并保存；关闭并保存可取消计划。需要服务器运行，停机期间错过的计划会在重启后执行。不会自动重试配额错误。',
+      scheduled: '计划执行：{time}',
+      invalidSchedule: '请选择未来的开始时间。',
       running: '正在执行：{title}',
       order: '执行顺序',
       available: '选择等待中的任务',
@@ -1692,6 +1698,7 @@ export default {
       remove: '从队列移除',
     },
     taskInboxPanel: {
+      scheduleFailed: '定时执行已停止：{error}',
       taskInbox: '任务收件箱',
       captureWorkNowAndStartInNew: '现在记录任务，稍后在新会话中启动。',
       newTask: '+ 新任务',

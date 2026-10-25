@@ -57,6 +57,8 @@ describe('ProjectTaskStore', () => {
       images: [],
       status: 'waiting',
       presetId: null,
+      scheduledAt: null,
+      scheduleError: null,
       sessionId: null,
       giteaIssue: null,
       createdAt: now,
@@ -169,6 +171,41 @@ describe('ProjectTaskStore', () => {
     store.delete(started.id);
     expect(store.get(started.id)).toBeNull();
     expect(store.get(waiting.id)).not.toBeNull();
+  });
+
+  it('persists, reschedules, cancels and consumes individual schedules conditionally', () => {
+    const task = store.create({ ...baseDraft, scheduledAt: '2026-07-15T08:00:00+08:00' });
+    expect(store.get(task.id)?.scheduledAt).toBe('2026-07-15T00:00:00.000Z');
+    expect(store.dueScheduledTaskIds()).toEqual([]);
+    const edited = store.update(task.id, { ...baseDraft, scheduledAt: '2026-07-16T00:00:00Z' });
+    expect(store.consumeSchedule(task)).toBe(false);
+    now = '2026-07-17T00:00:00.000Z';
+    expect(store.dueScheduledTaskIds()).toEqual([task.id]);
+    expect(store.consumeSchedule(edited)).toBe(true);
+    expect(store.consumeSchedule(edited)).toBe(false);
+    expect(store.get(task.id)?.scheduledAt).toBeNull();
+    store.recordScheduleError(task.id, 'Needs review');
+    expect(store.get(task.id)?.scheduleError).toBe('Needs review');
+    const rescheduled = store.update(task.id, { ...baseDraft, scheduledAt: '2026-07-18T00:00:00Z' });
+    expect(rescheduled.scheduleError).toBeNull();
+    const cancelled = store.update(task.id, { ...baseDraft, scheduledAt: null });
+    expect(cancelled.scheduledAt).toBeNull();
+    expect(store.consumeSchedule(rescheduled)).toBe(false);
+    expect(store.dueScheduledTaskIds('2026-07-19T00:00:00Z')).toEqual([]);
+  });
+
+  it('clears schedules on manual starts and never restores them after interrupted starts', () => {
+    const task = store.create({ ...baseDraft, scheduledAt: '2026-07-15T00:00:00Z' });
+    expect(store.claimStart(task.id).scheduledAt).toBeNull();
+    store.restoreAllStarting();
+    expect(store.get(task.id)?.scheduledAt).toBeNull();
+    expect(store.dueScheduledTaskIds('2026-07-16T00:00:00Z')).toEqual([]);
+  });
+
+  it('rejects invalid and past schedule times', () => {
+    for (const scheduledAt of ['', 'tomorrow', '2026-07-15T12:00', '2026-07-13T00:00:00Z', 123]) {
+      expect(() => store.create({ ...baseDraft, scheduledAt: scheduledAt as any })).toThrow(ProjectTaskValidationError);
+    }
   });
 
   it('rejects blank content and malformed launch settings', () => {

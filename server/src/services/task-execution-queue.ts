@@ -5,11 +5,12 @@ import type { PiCloudDatabase } from '../db/database.js';
 import { abortable } from '../utils/abortable.js';
 import { resolveAllowedExistingPath } from '../utils/path-security.js';
 import type { ProjectTaskStarter } from './project-task-starter.js';
-import { ProjectTaskConflictError, ProjectTaskValidationError, type ProjectTaskRecord, type ProjectTaskStore } from './project-task-store.js';
+import { ProjectTaskConflictError, ProjectTaskValidationError, normalizeScheduledAt, type ProjectTaskRecord, type ProjectTaskStore } from './project-task-store.js';
 import type { PiSessionService } from './session-manager.js';
 
 export interface TaskExecutionQueueState {
   enabled: boolean;
+  scheduledAt: string | null;
   taskIds: string[];
   activeTaskId: string | null;
   activeTaskIds: string[];
@@ -36,6 +37,12 @@ export class TaskExecutionQueue {
   private readonly shutdown = new AbortController();
   private readonly activeSessions = new Map<string, { abort(): Promise<void> }>();
   private wakeRunner?: () => void;
+  private scheduleTimer?: ReturnType<typeof setTimeout>;
+  private taskScheduleTimer?: ReturnType<typeof setInterval>;
+  private scheduledLookup?: Promise<void>;
+  private readonly scheduledExecutions = new Map<string, Promise<void>>();
+  // Both automatic execution paths share repository reservations and the concurrency limit.
+  private readonly repositoriesInUse = new Map<string, string>();
   private readonly git: NonNullable<Dependencies['git']>;
   private readonly resolvePath: NonNullable<Dependencies['resolvePath']>;
 
@@ -52,11 +59,13 @@ export class TaskExecutionQueue {
     const resolvePath = dependencies.resolvePath ?? resolveAllowedExistingPath;
     this.resolvePath = (path) => abortable(() => resolvePath(path), this.shutdown.signal);
     const row = dependencies.db.prepare('SELECT state_json FROM task_execution_queue WHERE id = 1').get() as { state_json: string } | undefined;
-    this.state = row ? JSON.parse(row.state_json) : { enabled: false, taskIds: [], activeTaskId: null, activeTaskIds: [], error: '' };
+    this.state = row ? JSON.parse(row.state_json) : { enabled: false, scheduledAt: null, taskIds: [], activeTaskId: null, activeTaskIds: [], error: '' };
+    this.state.scheduledAt ||= null;
     this.state.activeTaskIds ||= this.state.activeTaskId ? [this.state.activeTaskId] : [];
     let changed = false;
     // Never replay a partially executed task after a server restart.
-    if (this.state.enabled || this.state.activeTaskIds.length) {
+    if ((this.state.enabled && !this.state.scheduledAt) || this.state.activeTaskIds.length) {
+      this.state.scheduledAt = null;
       this.state.enabled = false;
       this.state.activeTaskId = null;
       this.state.activeTaskIds = [];
@@ -65,6 +74,13 @@ export class TaskExecutionQueue {
     }
     if (this.pruneUnavailableTaskIds().size) changed = true;
     if (changed) this.save();
+    this.armSchedule();
+  }
+
+  startTaskSchedules(): void {
+    if (this.closing || this.taskScheduleTimer) return;
+    this.taskScheduleTimer = setInterval(() => this.checkTaskSchedules(), 30_000);
+    this.taskScheduleTimer.unref();
   }
 
   get(): TaskExecutionQueueState {
@@ -72,9 +88,14 @@ export class TaskExecutionQueue {
     return { ...this.state, taskIds: [...this.state.taskIds], activeTaskIds: [...this.state.activeTaskIds] };
   }
 
-  configure(taskIds: unknown, enabled: unknown): TaskExecutionQueueState {
+  configure(taskIds: unknown, enabled: unknown, scheduledAt: unknown = null): TaskExecutionQueueState {
     if (!Array.isArray(taskIds) || taskIds.some((id) => typeof id !== 'string') || new Set(taskIds).size !== taskIds.length || typeof enabled !== 'boolean') {
       throw new ProjectTaskValidationError('Provide unique task IDs and an enabled boolean');
+    }
+    const schedule = normalizeScheduledAt(scheduledAt);
+    if (schedule) {
+      if (!enabled) throw new ProjectTaskValidationError('Enable auto-execution to schedule tasks');
+      if (this.running) throw new ProjectTaskConflictError('Cannot schedule while tasks are running');
     }
     const unavailableTaskIds = this.pruneUnavailableTaskIds();
     if (unavailableTaskIds.size) this.save();
@@ -85,6 +106,7 @@ export class TaskExecutionQueue {
       throw new ProjectTaskConflictError('Cannot rearrange the queue while a task is running; only new tasks can be appended');
     }
     for (const id of availableTaskIds) {
+      if (this.dependencies.tasks.get(id)?.scheduledAt) throw new ProjectTaskValidationError('Individually scheduled tasks run independently and cannot be added to the shared queue');
       if (this.state.activeTaskIds.includes(id)) continue;
       if (enabled && this.dependencies.tasks.get(id)?.status !== 'waiting') {
         throw new ProjectTaskValidationError('Only waiting tasks can be queued. Remove any failed or manually started task first.');
@@ -93,10 +115,12 @@ export class TaskExecutionQueue {
     if (enabled && !availableTaskIds.length) throw new ProjectTaskValidationError('Select at least one task');
     this.state.taskIds = [...availableTaskIds];
     this.state.enabled = enabled;
+    this.state.scheduledAt = schedule;
     this.state.error = '';
     this.save();
     const result = this.get();
-    if (enabled && !this.running && !this.closing) {
+    this.armSchedule();
+    if (enabled && !schedule && !this.running && !this.closing) {
       this.running = this.run().finally(() => { this.running = undefined; });
     } else if (this.running) {
       this.wakeRunner?.();
@@ -106,7 +130,9 @@ export class TaskExecutionQueue {
 
   async stop(): Promise<void> {
     this.closing = true;
-    this.state.enabled = false;
+    clearTimeout(this.scheduleTimer);
+    clearInterval(this.taskScheduleTimer);
+    if (!this.state.scheduledAt) this.state.enabled = false;
     this.save();
     this.shutdown.abort(new Error(SHUTDOWN_ERROR_MESSAGE));
     const aborts = [...this.activeSessions.values()].map(async (session) => {
@@ -116,7 +142,81 @@ export class TaskExecutionQueue {
     try {
       await Promise.race([Promise.allSettled(aborts), new Promise<void>((resolve) => { timer = setTimeout(resolve, 1000); })]);
       await this.running;
+      await this.scheduledLookup;
+      await Promise.allSettled(this.scheduledExecutions.values());
     } finally { if (timer) clearTimeout(timer); }
+  }
+
+  private checkTaskSchedules(): void {
+    if (this.closing) return;
+    if (!this.scheduledLookup) {
+      this.scheduledLookup = this.launchScheduledTasks().finally(() => { this.scheduledLookup = undefined; });
+    }
+    // A shared queue may have yielded its repository slot to an independent task.
+    if (this.state.enabled && !this.state.scheduledAt && !this.running) {
+      this.running = this.run().finally(() => { this.running = undefined; });
+    }
+  }
+
+  private async launchScheduledTasks(): Promise<void> {
+    const tasks = this.dependencies.tasks;
+    for (const id of tasks.dueScheduledTaskIds()) {
+      if (this.closing || this.repositoriesInUse.size >= MAX_CONCURRENT_TASKS) break;
+      const task = tasks.get(id);
+      if (!task?.scheduledAt || task.status !== 'waiting') continue;
+      if (this.state.taskIds.includes(id)) {
+        this.state.taskIds = this.state.taskIds.filter((taskId) => taskId !== id);
+        this.save();
+      }
+      try {
+        const path = await this.resolvePath(task.projectPath);
+        const repository = await this.resolvePath(await this.git(path, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
+        this.checkOpen();
+        if (this.repositoriesInUse.has(repository)) continue;
+        if (this.repositoriesInUse.size >= MAX_CONCURRENT_TASKS) break;
+        // Re-read after path resolution: edits, cancellation and manual starts may have raced.
+        const latest = tasks.get(id);
+        if (!latest || latest.status !== 'waiting' || latest.projectPath !== task.projectPath || latest.scheduledAt !== task.scheduledAt) continue;
+        let consumed = false;
+        this.repositoriesInUse.set(repository, id);
+        const done = this.execute(latest, repository, () => consumed = tasks.consumeSchedule(latest)).then((executed) => {
+          if (!executed) return;
+          this.checkOpen();
+          tasks.complete(id);
+        }).catch((error) => {
+          // A failed preflight must not consume or annotate a replacement schedule.
+          if (consumed || tasks.consumeSchedule(latest)) {
+            tasks.recordScheduleError(id, error instanceof Error ? error.message : String(error));
+          }
+        }).finally(() => {
+          this.repositoriesInUse.delete(repository);
+          this.scheduledExecutions.delete(id);
+          this.wakeRunner?.();
+        });
+        this.scheduledExecutions.set(id, done);
+      } catch (error) {
+        if (!this.closing && tasks.consumeSchedule(task)) {
+          tasks.recordScheduleError(id, error instanceof Error ? error.message : String(error));
+        }
+      }
+    }
+  }
+
+  private armSchedule(): void {
+    clearTimeout(this.scheduleTimer);
+    if (this.closing || !this.state.enabled || !this.state.scheduledAt) return;
+    // Recheck long delays and clock changes without overflowing Node's timer limit.
+    const delay = Math.max(0, Math.min(Date.parse(this.state.scheduledAt) - Date.now(), 60_000));
+    this.scheduleTimer = setTimeout(() => {
+      if (Date.parse(this.state.scheduledAt!) > Date.now()) {
+        this.armSchedule();
+        return;
+      }
+      this.state.scheduledAt = null;
+      this.save(); // Consume the one-shot schedule before starting any asynchronous work.
+      this.running = this.run().finally(() => { this.running = undefined; });
+    }, delay);
+    this.scheduleTimer.unref();
   }
 
   private save(): void {
@@ -125,8 +225,11 @@ export class TaskExecutionQueue {
   }
 
   private pruneUnavailableTaskIds(): Set<string> {
-    if (this.state.enabled || this.state.activeTaskIds.length) return new Set();
-    const unavailable = new Set(this.state.taskIds.filter((id) => this.dependencies.tasks.get(id)?.status !== 'waiting'));
+    const executing = this.state.enabled || this.state.activeTaskIds.length > 0;
+    const unavailable = new Set(this.state.taskIds.filter((id) => {
+      const task = this.dependencies.tasks.get(id);
+      return task?.scheduledAt || (!executing && task?.status !== 'waiting');
+    }));
     if (unavailable.size) this.state.taskIds = this.state.taskIds.filter((id) => !unavailable.has(id));
     return unavailable;
   }
@@ -136,7 +239,7 @@ export class TaskExecutionQueue {
   }
 
   private async run(): Promise<void> {
-    const active = new Map<string, { repository: string; done: Promise<void> }>();
+    const active = new Map<string, Promise<void>>();
     const repositories = new Map<string, string>();
     const publish = () => {
       this.state.activeTaskIds = [...active.keys()];
@@ -151,10 +254,14 @@ export class TaskExecutionQueue {
     while ((this.state.enabled && !this.closing && this.state.taskIds.length) || active.size) {
       if (this.state.enabled && !this.closing) {
         for (const id of this.state.taskIds) {
-          if (active.size >= MAX_CONCURRENT_TASKS || !this.state.enabled || this.closing) break;
+          if (this.repositoriesInUse.size >= MAX_CONCURRENT_TASKS || !this.state.enabled || this.closing) break;
           if (active.has(id)) continue;
           try {
             const task = this.dependencies.tasks.get(id);
+            if (task?.scheduledAt) {
+              this.state.taskIds = this.state.taskIds.filter((taskId) => taskId !== id);
+              continue;
+            }
             if (!task || task.status !== 'waiting') throw new Error('Queued task is no longer waiting');
             let repository = repositories.get(task.projectPath);
             if (!repository) {
@@ -163,22 +270,30 @@ export class TaskExecutionQueue {
               repository = await this.resolvePath(commonDir);
               repositories.set(task.projectPath, repository);
             }
-            if ([...active.values()].some((run) => run.repository === repository)) continue;
+            if (this.repositoriesInUse.has(repository)) continue;
+            if (this.repositoriesInUse.size >= MAX_CONCURRENT_TASKS) break;
             this.checkOpen();
             if (!this.state.enabled) break;
             if (!this.state.taskIds.includes(id)) continue;
             const latest = this.dependencies.tasks.get(id);
+            if (latest?.scheduledAt) {
+              this.state.taskIds = this.state.taskIds.filter((taskId) => taskId !== id);
+              continue;
+            }
             if (!latest || latest.status !== 'waiting') throw new Error('Queued task is no longer waiting');
             if (latest.projectPath !== task.projectPath) throw new Error('Queued task project changed. Review the queue before continuing.');
+            const repositoryKey = repository;
+            this.repositoriesInUse.set(repositoryKey, id);
             const done = this.execute(latest, repository).then(() => {
               this.checkOpen();
               this.dependencies.tasks.complete(id);
               this.state.taskIds = this.state.taskIds.filter((taskId) => taskId !== id);
             }).catch(fail).finally(() => {
               active.delete(id);
+              this.repositoriesInUse.delete(repositoryKey);
               publish();
             });
-            active.set(id, { repository, done });
+            active.set(id, done);
             publish();
           } catch (error) { fail(error); break; }
         }
@@ -188,7 +303,7 @@ export class TaskExecutionQueue {
         const queueChanged = new Promise<void>((resolve) => { wake = resolve; });
         this.wakeRunner = wake;
         try {
-          await Promise.race([...active.values()].map((run) => run.done).concat(queueChanged));
+          await Promise.race([...active.values(), queueChanged]);
         } finally {
           if (this.wakeRunner === wake) this.wakeRunner = undefined;
         }
@@ -197,12 +312,14 @@ export class TaskExecutionQueue {
     publish();
   }
 
-  private async execute(task: ProjectTaskRecord, repository: string): Promise<void> {
+  private async execute(task: ProjectTaskRecord, repository: string, beforeStart?: () => boolean): Promise<boolean> {
     const projectPath = await this.resolvePath(task.projectPath);
     await this.resolvePath(await this.git(projectPath, ['rev-parse', '--show-toplevel']));
     if (await this.git(projectPath, ['status', '--porcelain', '--untracked-files=all'])) {
       throw new Error('Repository has uncommitted changes. Commit or stash them before running the queue.');
     }
+    // Consume the original schedule only after preflight, with no await before the starter claims it.
+    if (beforeStart && !beforeStart()) return false;
     const clientId = `task-execution:${task.id}`;
     try {
       const started = await this.dependencies.starter.start(task.id, clientId, this.shutdown.signal, task.projectPath);
@@ -261,5 +378,6 @@ export class TaskExecutionQueue {
       this.activeSessions.delete(task.id);
       if (!this.closing) this.dependencies.sessions.scheduleCleanup(clientId);
     }
+    return true;
   }
 }

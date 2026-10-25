@@ -84,6 +84,40 @@ describe('TaskEditorDialog', () => {
     });
   });
 
+  it('saves an optional local scheduled start as UTC', async () => {
+    const wrapper = mountEditor();
+    await vi.waitFor(() => expect(wrapper.text()).toContain('gpt-5.4'));
+    await wrapper.get('#task-title').setValue('Scheduled task');
+    await wrapper.get('#task-prompt').setValue('Execute later');
+    await wrapper.get('#task-scheduled-at').setValue('2099-01-02T08:30');
+    await wrapper.get('form').trigger('submit');
+    expect(wrapper.emitted('save')?.[0]?.[0]).toMatchObject({ scheduledAt: new Date('2099-01-02T08:30').toISOString() });
+  });
+
+  it('restores a schedule in local time and supports rescheduling and clearing it', async () => {
+    const scheduledAt = '2099-01-02T08:30:00.000Z';
+    const wrapper = mountEditor({ task: { ...existingTask, scheduledAt } });
+    await vi.waitFor(() => expect(wrapper.text()).toContain('sonnet'));
+    const date = new Date(scheduledAt);
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+    expect((wrapper.get('#task-scheduled-at').element as HTMLInputElement).value).toBe(local);
+    await wrapper.get('#task-scheduled-at').setValue('2099-01-03T09:00');
+    await wrapper.get('form').trigger('submit');
+    expect(wrapper.emitted('save')?.[0]?.[0]).toMatchObject({ scheduledAt: new Date('2099-01-03T09:00').toISOString() });
+    await wrapper.get('#task-scheduled-at').setValue('');
+    await wrapper.get('form').trigger('submit');
+    expect(wrapper.emitted('save')?.[1]?.[0]).toMatchObject({ scheduledAt: null });
+  });
+
+  it('rejects past scheduled times without emitting a save', async () => {
+    const wrapper = mountEditor({ task: existingTask });
+    await vi.waitFor(() => expect(wrapper.text()).toContain('sonnet'));
+    await wrapper.get('#task-scheduled-at').setValue('2000-01-01T08:30');
+    await wrapper.get('form').trigger('submit');
+    expect(wrapper.emitted('save')).toBeUndefined();
+    expect(wrapper.text()).toContain('Choose a future start time.');
+  });
+
   it('shows saved images inside the prompt composer without a file picker', async () => {
     const wrapper = mountEditor({ task: {
       ...existingTask,

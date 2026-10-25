@@ -98,6 +98,18 @@ describe('TaskInboxPanel', () => {
     expect(wrapper.find('.task-project').text()).toContain('/repo/app');
   });
 
+  it('shows a task schedule and any independent execution error', async () => {
+    const scheduledAt = '2099-01-01T12:00:00.000Z';
+    tasks.value = [{ ...waitingTask, scheduledAt, scheduleError: 'Repository needs review' }];
+    const wrapper = mountPanel();
+    try {
+      expect(wrapper.text()).toContain(i18n.global.t('components.taskExecution.scheduled', { time: new Date(scheduledAt).toLocaleString() }));
+      expect(wrapper.text()).toContain('Scheduled execution stopped: Repository needs review');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it('starts a waiting task once and emits the result', async () => {
     const wrapper = mountPanel();
     await wrapper.get('[data-task-id="task-1"] .task-start').trigger('click');
