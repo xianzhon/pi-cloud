@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Window } from 'happy-dom';
 
 const mocks = vi.hoisted(() => ({
   html2canvas: vi.fn(), save: vi.fn(async () => new Uint8Array([1, 2, 3])), embedPng: vi.fn(async () => ({ image: true })),
@@ -30,7 +31,17 @@ function mockCanvases() {
 }
 
 describe('Markdown PDF rendering', () => {
-  afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); document.querySelectorAll('iframe').forEach((item) => item.remove()); });
+  const happyDOM = (window as unknown as Window).happyDOM;
+  beforeEach(() => {
+    // Happy DOM 21 disables iframe documents by default; PDF tests need about:blank frames.
+    happyDOM.settings.enableIframePageLoading = true;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    document.querySelectorAll('iframe').forEach((item) => item.remove());
+    happyDOM.settings.enableIframePageLoading = false;
+  });
 
   it('waits for image load and error events and marks broken images', async () => {
     const doc = document.implementation.createHTMLDocument();
