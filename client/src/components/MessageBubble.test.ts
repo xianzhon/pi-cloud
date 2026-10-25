@@ -944,6 +944,42 @@ describe('MessageBubble', () => {
     expect(wrapper.text()).toContain('+  const wasActive = activeTerminalId.value === terminalId;');
   });
 
+  it('highlights each Vue edit hunk and each side using its snippet language', () => {
+    const toolInput = JSON.stringify({
+      path: 'client/src/components/EditorPanel.vue',
+      edits: [
+        { oldText: 'const highlight = (rows: Row[]) => {\n  return rows;\n};', newText: 'const highlight = (rows: Row[], oldVersion = false) => {\n  return rows;\n};' },
+        { oldText: '.editor-panel { color: red; }', newText: '.editor-panel { color: blue; }' },
+        { oldText: '<div>old</div>', newText: '<span>new</span>' },
+        { oldText: 'const answer: number = 42;', newText: '<div>{{ answer }}</div>' },
+      ],
+    });
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'vue-edit-call',
+          role: 'assistant',
+          content: toolInput,
+          kind: 'tool_call',
+          status: 'pending',
+          toolName: 'edit',
+          toolInput,
+        },
+      },
+    });
+
+    const hunks = wrapper.findAll('.edit-diff-hunk');
+    expect(hunks).toHaveLength(4);
+    for (const side of ['removed', 'added']) {
+      expect(hunks[0].find(`.${side} .hljs-keyword`).text()).toBe('const');
+      expect(hunks[1].find(`.${side} .hljs-attribute`).text()).toBe('color');
+      expect(hunks[2].find(`.${side} .hljs-tag`).exists()).toBe(true);
+    }
+    expect(hunks[3].find('.removed .hljs-keyword').text()).toBe('const');
+    expect(hunks[3].find('.added .hljs-tag').exists()).toBe(true);
+    expect(hunks[0].find('.added code').text()).toContain('oldVersion = false');
+  });
+
   it('renders apply_patch input with line-level diff colors', () => {
     const patch = [
       '*** Begin Patch',
@@ -1061,7 +1097,34 @@ describe('MessageBubble', () => {
     expect(sections[0].find('code').html()).toContain('hljs-');
   });
 
-  it('renders large tool output without expensive syntax tokenization', () => {
+  it.each([
+    ['typescript', 'function applyDiffDecorations(filePath = activeTab.value): void {\n  const model = models.get(filePath);\n  if (!model) return;\n}'],
+    ['css', '.editor-panel {\n  display: flex;\n  color: var(--text);\n}'],
+    ['xml', '<div class="editor-panel">{{ title }}</div>'],
+    ['xml', '<script setup lang="ts">\nconst answer: number = 42;\n</script>\n<template><div>{{ answer }}</div></template>'],
+  ])('detects %s in Vue read output', (language, content) => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 'vue-read-result',
+          role: 'assistant',
+          content,
+          kind: 'tool_result',
+          status: 'success',
+          toolName: 'read',
+          toolInput: JSON.stringify({ path: 'client/src/components/EditorPanel.vue', offset: 2120, limit: 42 }),
+          toolOutput: content,
+        },
+      },
+    });
+
+    const code = wrapper.find(`.event-block code.hljs.language-${language}`);
+    expect(code.exists()).toBe(true);
+    expect(code.html()).toContain('hljs-');
+    expect(code.text()).toBe(content);
+  });
+
+  it.each([['ts', 'typescript'], ['vue', 'xml']])('renders large %s tool output without expensive syntax tokenization', (extension, language) => {
     const largeTypescript = Array.from({ length: 2500 }, (_, index) => `const value${index}: number = ${index};`).join('\n');
 
     const wrapper = mount(MessageBubble, {
@@ -1074,13 +1137,13 @@ describe('MessageBubble', () => {
           status: 'success',
           title: 'Tool read completed',
           toolName: 'read',
-          toolInput: JSON.stringify({ file_path: 'client/src/large.ts' }, null, 2),
+          toolInput: JSON.stringify({ file_path: `client/src/large.${extension}` }, null, 2),
           toolOutput: largeTypescript,
         },
       },
     });
 
-    const outputCode = wrapper.findAll('.event-block')[0].find('code.hljs.language-typescript');
+    const outputCode = wrapper.findAll('.event-block')[0].find(`code.hljs.language-${language}`);
     expect(outputCode.exists()).toBe(true);
     expect(outputCode.html()).not.toContain('hljs-keyword');
     expect(outputCode.text()).toContain('const value2499: number = 2499;');

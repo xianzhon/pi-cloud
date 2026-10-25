@@ -606,9 +606,13 @@ function parseThinkingBlock(text: string, fallbackTitle?: string): ThinkingBlock
   return { title: defaultTitle, body: text };
 }
 
-function languageFromPath(path: string): string {
+function languageFromPath(path: string, content?: string): string {
   const cleanPath = path.split(/[?#]/)[0].replace(/:\d+(?::\d+)?$/, '');
   const extension = cleanPath.match(/\.([A-Za-z0-9_-]+)$/)?.[1]?.toLowerCase();
+  // Partial Vue reads can start inside a script or style block, without its opening tag.
+  if (extension === 'vue' && content && content.length <= MAX_HIGHLIGHT_CHARS) {
+    return hljs.highlightAuto(content, ['xml', 'typescript', 'css']).language || 'xml';
+  }
   return extension ? extensionLanguageMap[extension] || extension : '';
 }
 
@@ -661,7 +665,9 @@ function inferToolBlockLanguage(kind: 'input' | 'output'): string {
     return '';
   }
 
-  if (toolName === 'read' || toolName === 'codegraph_node') return languageFromPath(getToolInputPath());
+  if (toolName === 'read' || toolName === 'codegraph_node') {
+    return languageFromPath(getToolInputPath(), props.message.toolOutput);
+  }
   if (isCommandTool()) return 'bash';
   return '';
 }
@@ -719,7 +725,7 @@ function renderEditDiff() {
   const edits = getEditDiffs();
   if (edits.length === 0) return '';
 
-  const language = languageFromPath(getToolInputPath());
+  const path = getToolInputPath();
   const hunks = edits.map((edit, index) => {
     const oldLines = diffLines(edit.oldText);
     const newLines = diffLines(edit.newText);
@@ -737,8 +743,8 @@ function renderEditDiff() {
       suffixLength++;
     }
 
-    const highlightedOldLines = highlightEditDiffLines(oldLines, language);
-    const highlightedNewLines = highlightEditDiffLines(newLines, language);
+    const highlightedOldLines = highlightEditDiffLines(oldLines, languageFromPath(path, edit.oldText));
+    const highlightedNewLines = highlightEditDiffLines(newLines, languageFromPath(path, edit.newText));
     const lines = [
       ...highlightedOldLines.slice(0, prefixLength).map((line) => renderEditDiffLine(line, 'context')),
       ...highlightedOldLines.slice(prefixLength, oldLines.length - suffixLength).map((line) => renderEditDiffLine(line, 'removed')),
