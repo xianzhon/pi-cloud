@@ -296,6 +296,18 @@
           :style="pageStyle(page)"
         >
           <canvas v-if="!isHtml" :ref="element => setCanvasElement(page, element, false)" />
+          <div
+            v-if="!isHtml && !isImage"
+            :ref="element => setTextLayerElement(page, element)"
+            class="pdf-text-layer"
+            :class="{ enabled: tool === 'select' }"
+            :style="{
+              width: `${(pageSizes[page] || defaultPageSize).width}px`,
+              height: `${(pageSizes[page] || defaultPageSize).height}px`,
+              transform: `scale(${scale})`,
+            }"
+            @contextmenu="showSelectionMenu"
+          />
           <iframe
             v-if="isHtml"
             :key="filePath"
@@ -412,7 +424,7 @@ import {
   PhTrash,
   PhX,
 } from '@phosphor-icons/vue';
-import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask, TextLayer } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { i18n } from '../i18n';
 import {
@@ -504,17 +516,25 @@ function sendSelection(target: 'current' | 'new'): void {
 }
 
 function showSelectionMenu(event: MouseEvent): void {
-  const text = htmlFrameEl.value?.contentWindow?.getSelection()?.toString().trim();
-  if (!text) {
+  const selection = isHtml.value
+    ? htmlFrameEl.value?.contentWindow?.getSelection()
+    : window.getSelection();
+  const text = selection?.toString().trim();
+  const isPdfSelection = !isHtml.value && !isImage.value && tool.value === 'select'
+    && selection?.anchorNode && selection.focusNode
+    && viewportEl.value?.contains(selection.anchorNode) && viewportEl.value.contains(selection.focusNode)
+    && selection.anchorNode.parentElement?.closest('.pdf-text-layer')
+    && selection.focusNode.parentElement?.closest('.pdf-text-layer');
+  if (!text || (!isHtml.value && !isPdfSelection)) {
     closeSelectionMenu();
     return;
   }
   event.preventDefault();
   closeSelectionMenu();
-  const rect = htmlFrameEl.value!.getBoundingClientRect();
+  const rect = isHtml.value ? htmlFrameEl.value!.getBoundingClientRect() : undefined;
   selectionMenu.value = {
-    x: Math.min(rect.left + event.clientX * scale.value, window.innerWidth - 220),
-    y: Math.min(rect.top + event.clientY * scale.value, window.innerHeight - 90),
+    x: Math.max(0, Math.min(rect ? rect.left + event.clientX * scale.value : event.clientX, window.innerWidth - 220)),
+    y: Math.max(0, Math.min(rect ? rect.top + event.clientY * scale.value : event.clientY, window.innerHeight - 90)),
     text,
   };
   nextTick(() => {
@@ -579,7 +599,7 @@ const pageToneOptions = computed<CustomSelectOption[]>(() => [
   { value: 'dark', label: t('components.editorPanel.pdfPageToneDark') },
 ]);
 const annotationToolOptions = computed<Array<{ name: ShortcutTool; label: string; icon: object; weight?: 'fill' }>>(() => [
-  ...(isHtml.value ? [{ name: 'select' as const, label: 'components.editorPanel.mhtmlSelectText', icon: PhCursorText }] : []),
+  ...(!isImage.value ? [{ name: 'select' as const, label: isHtml.value ? 'components.editorPanel.mhtmlSelectText' : 'components.editorPanel.pdfSelectText', icon: PhCursorText }] : []),
   { name: 'pen', label: isHtml.value ? 'components.editorPanel.mhtmlPen' : isImage.value ? 'components.editorPanel.imagePen' : 'components.editorPanel.pdfPen', icon: PhPencilSimple },
   { name: 'highlighter', label: isHtml.value ? 'components.editorPanel.mhtmlHighlighter' : isImage.value ? 'components.editorPanel.imageHighlighter' : 'components.editorPanel.pdfHighlighter', icon: PhHighlighter },
   { name: 'line', label: 'components.editorPanel.pdfLine', icon: PhMinus },
@@ -621,6 +641,8 @@ const htmlCanvasHeight = ref(1);
 const htmlPageWidth = ref<number>();
 const pageElements = new Map<number, HTMLElement>();
 const canvasElements = new Map<number, HTMLCanvasElement>();
+const textLayerElements = new Map<number, HTMLElement>();
+const textLayerTasks = new Map<number, TextLayer>();
 const annotationCanvasElements = new Map<number, HTMLCanvasElement>();
 const textEditorEl = ref<HTMLTextAreaElement>();
 const pageNumber = ref(1);
@@ -694,6 +716,7 @@ const pagesToDisplay = computed(() => Array.from({ length: pageCount.value }, (_
 const defaultPageSize = ref({ width: 612, height: 792 });
 const pageSizes = ref<Record<number, { width: number; height: number }>>({});
 let document: PDFDocumentProxy | undefined;
+let pdfTextLayer: typeof TextLayer | undefined;
 let imageDocument: HTMLImageElement | undefined;
 let loadingTask: PDFDocumentLoadingTask | undefined;
 let pageObserver: IntersectionObserver | undefined;
@@ -956,6 +979,45 @@ function setCanvasElement(page: number, element: unknown, annotation: boolean): 
   else elements.delete(page);
 }
 
+function setTextLayerElement(page: number, element: unknown): void {
+  if (element instanceof HTMLElement) textLayerElements.set(page, element);
+  else textLayerElements.delete(page);
+}
+
+function clearTextLayers(): void {
+  textLayerTasks.forEach(task => task.cancel());
+  textLayerTasks.clear();
+  textLayerElements.forEach(element => element.replaceChildren());
+}
+
+async function renderTextLayer(pageNumber: number, page: PDFPageProxy, generation: number, request: number): Promise<void> {
+  const host = textLayerElements.get(pageNumber);
+  const TextLayer = pdfTextLayer;
+  if (!host || host.childElementCount || !TextLayer) return;
+  const isCurrent = () => generation === renderGeneration && renderRequests.get(pageNumber) === request;
+  let task: TextLayer | undefined;
+  try {
+    const textContent = await page.getTextContent();
+    if (!isCurrent()) return;
+    // Keep text at its native size; CSS zoom matches the canvas immediately without re-extraction.
+    const viewport = page.getViewport({ scale: 1 });
+    const container = window.document.createElement('div');
+    container.className = 'pdf-text-content';
+    container.style.setProperty('--total-scale-factor', String(viewport.scale * viewport.userUnit));
+    task = new TextLayer({ textContentSource: textContent, container, viewport });
+    textLayerTasks.get(pageNumber)?.cancel();
+    textLayerTasks.set(pageNumber, task);
+    await task.render();
+    if (isCurrent()) host.replaceChildren(container);
+  } catch (textError) {
+    if (isCurrent() && (textError as Error).name !== 'AbortException') {
+      console.warn('Failed to render PDF text layer:', textError);
+    }
+  } finally {
+    if (task && textLayerTasks.get(pageNumber) === task) textLayerTasks.delete(pageNumber);
+  }
+}
+
 function setHtmlFrameElement(element: unknown): void {
   htmlFrameEl.value = element instanceof HTMLIFrameElement ? element : undefined;
 }
@@ -1049,7 +1111,7 @@ function restoreViewState(view?: PdfViewState): void {
   htmlPageWidth.value = typeof view?.htmlPageWidth === 'number' && Number.isFinite(view.htmlPageWidth) && view.htmlPageWidth > 0
     ? view.htmlPageWidth
     : undefined;
-  tool.value = view?.tool && ANNOTATION_TOOLS.has(view.tool) && (isHtml.value || view.tool !== 'select')
+  tool.value = view?.tool && ANNOTATION_TOOLS.has(view.tool) && (!isImage.value || view.tool !== 'select')
     ? view.tool : 'pan';
   coverColor.value = typeof view?.coverColor === 'string' ? view.coverColor : '#ffffff';
   const globalTone = isHtml.value ? localStorage.getItem(MHTML_PAGE_TONE_KEY) : null;
@@ -1143,7 +1205,7 @@ function handleToolShortcut(event: KeyboardEvent): void {
   const key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
   const nextTool = (Object.keys(toolShortcutKeys.value) as ShortcutTool[])
     .find(annotationTool => toolShortcutKeys.value[annotationTool] === key);
-  if (!nextTool || (nextTool === 'select' && !isHtml.value) || isEditable || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing) return;
+  if (!nextTool || (nextTool === 'select' && isImage.value) || isEditable || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.isComposing) return;
   event.preventDefault();
   toggleTool(nextTool);
 }
@@ -1575,6 +1637,7 @@ async function renderPage(pageNumberToRender: number): Promise<void> {
     await renderTask.promise;
     if (generation === renderGeneration && renderRequests.get(pageNumberToRender) === request) {
       drawAnnotations(pageNumberToRender);
+      await renderTextLayer(pageNumberToRender, page, generation, request);
     }
   } catch (renderError) {
     if ((renderError as Error).name !== 'RenderingCancelledException') throw renderError;
@@ -1771,7 +1834,9 @@ async function loadPdf(): Promise<void> {
   loadedFilePath = undefined;
   loading.value = true;
   error.value = '';
+  closeSelectionMenu();
   renderGeneration++;
+  clearTextLayers();
   renderTasks.forEach(task => task.cancel());
   renderTasks.clear();
   visiblePages.clear();
@@ -1835,6 +1900,7 @@ async function loadPdf(): Promise<void> {
     }
 
     document = loadedDocument;
+    pdfTextLayer = pdfjs.TextLayer;
     pageCount.value = loadedDocument.numPages;
     const [firstPage, loadedOutline] = await Promise.all([
       loadedDocument.getPage(1),
@@ -2302,6 +2368,7 @@ function rerenderVisiblePages(): void {
 
 watch(scale, rerenderVisiblePages);
 watch(tool, () => {
+  closeSelectionMenu();
   selectedAnnotation.value = undefined;
   drawVisibleAnnotations();
 });
@@ -2326,6 +2393,8 @@ onUnmounted(() => {
   selectionDocument?.removeEventListener('pointerdown', closeSelectionMenu);
   selectionDocument?.removeEventListener('pointerup', highlightHtmlSelection);
   loadVersion++;
+  renderGeneration++;
+  clearTextLayers();
   finishToolbarDrag();
   window.removeEventListener('resize', keepToolbarInBounds);
   window.removeEventListener('pointerdown', closeColorPresetsOutside);
@@ -2868,6 +2937,63 @@ onUnmounted(() => {
   height: 100%;
   transition: filter 120ms ease;
 }
+
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: top left;
+  pointer-events: none;
+  user-select: none;
+}
+
+.pdf-text-layer.enabled {
+  pointer-events: auto;
+  user-select: text;
+}
+
+/* PDF.js TextLayer's font sizing and transforms, scoped to this preview. */
+.pdf-text-layer :deep(.pdf-text-content) {
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+}
+
+.pdf-text-layer :deep(:is(span, br)) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: inherit;
+}
+
+.pdf-text-layer :deep(.pdf-text-content > :not(.markedContent)),
+.pdf-text-layer :deep(.markedContent span:not(.markedContent)) {
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.pdf-text-layer :deep(.markedContent) { display: contents; }
+.pdf-text-layer :deep([data-main-rotation="90"]) { transform: rotate(90deg) translateY(-100%); }
+.pdf-text-layer :deep([data-main-rotation="180"]) { transform: rotate(180deg) translate(-100%, -100%); }
+.pdf-text-layer :deep([data-main-rotation="270"]) { transform: rotate(270deg) translateX(-100%); }
+.pdf-text-layer :deep(::selection) { background: rgb(59 130 246 / 35%); color: transparent; }
+.pdf-text-layer :deep(br::selection) { background: transparent; }
 
 .mhtml-document-frame {
   position: absolute;

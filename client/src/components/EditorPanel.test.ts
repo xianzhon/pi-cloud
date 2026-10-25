@@ -24,7 +24,7 @@ vi.mock('./MediaAnnotationPreview.vue', () => ({
   default: {
     name: 'MediaAnnotationPreviewStub',
     props: ['src', 'filePath', 'htmlDocument', 'initialScale', 'kind', 'font'],
-    emits: ['scale-change', 'font-loaded'],
+    emits: ['scale-change', 'font-loaded', 'explain-selection'],
     template: '<div class="pdf-preview-test" :data-src="src" :data-file-path="filePath" :data-html-document="htmlDocument" :data-initial-scale="initialScale" :data-kind="kind" />',
   },
 }));
@@ -964,6 +964,9 @@ describe('EditorPanel', () => {
     expect(wrapper.find('.pdf-preview-test').attributes('data-file-path'))
       .toBe('/project/document.pdf');
     expect(wrapper.find('.editor-container').classes()).toContain('hidden');
+
+    wrapper.findComponent({ name: 'MediaAnnotationPreviewStub' }).vm.$emit('explain-selection', 'Selected PDF text', '/project/document.pdf', 'new');
+    expect(wrapper.emitted('explain-selection')?.[0]).toEqual(['Selected PDF text', '/project/document.pdf', 'new']);
 
     wrapper.findComponent({ name: 'MediaAnnotationPreviewStub' }).vm.$emit('scale-change', 1.5);
     await wrapper.vm.openFile('/project/other.pdf');

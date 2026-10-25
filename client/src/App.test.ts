@@ -402,6 +402,21 @@ describe('App routing', () => {
     wrapper.unmount();
   });
 
+  it.each([
+    ['document.pdf', 'PDF'],
+    ['page.mhtml', 'MHTML'],
+  ])('explains text from %s with the correct document type', async (filename, type) => {
+    const wrapper = mount(App);
+    await flushPromises();
+    await wrapper.get('[data-header-action="editor"]').trigger('click');
+    await flushPromises();
+    wrapper.findComponent({ name: 'EditorPanel' }).vm.$emit('explain-selection', 'Selected text', `/workspace/${filename}`, 'current');
+    await flushPromises();
+    expect(submitExternalPrompt).toHaveBeenCalledWith(
+      `Explain the following selected text from the ${type} file "/workspace/${filename}". Read the file for context.\n\n"Selected text"`,
+    );
+  });
+
   it('persists the active editor item reported by the editor', async () => {
     const wrapper = mount(App);
     await flushPromises();

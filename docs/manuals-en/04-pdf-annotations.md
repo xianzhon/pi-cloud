@@ -25,6 +25,14 @@ Annotations use document-relative coordinates, so they stay aligned when the PDF
 
 For images, use Ctrl or Command with the mouse wheel, or use a pinch gesture, to zoom. Drag to pan, and double-click to reset zoom. Zoom can also be changed from the navigation toolbar.
 
+## Select and Explain PDF Text
+
+For PDFs with embedded text, choose **Select PDF text to copy** (default shortcut `S`), drag across the text, then press Ctrl+C or Command+C to copy it. Right-click the selection to ask for an explanation in the current session or a new session.
+
+Text selection follows page zoom and is active only in the selection tool. Choose another tool, or select the active tool again, to draw or pan. The highlighter remains freehand; it does not snap to selected PDF text.
+
+Scanned pages without embedded text cannot be selected; OCR is not included. Some PDFs may copy text in an imperfect reading order. Selection does not change the original PDF or add an annotation.
+
 ## PDF Page Color
 
 For PDFs, use the page-color selector in the navigation toolbar to choose **Original**, **Warm**, **Gray**, or **Dark**. The setting is saved with the PDF view state. It only changes the on-screen preview; the original PDF and exported copies keep their original colors.

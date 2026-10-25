@@ -389,7 +389,7 @@
       :initial-maximized="editorMaximized"
       @close="showEditor = false"
       @add-reference="addEditorReference"
-      @explain-selection="explainMhtmlSelection"
+      @explain-selection="explainDocumentSelection"
       @workspace-state-changed="handleEditorWorkspaceStateChanged"
     />
 
@@ -1729,9 +1729,10 @@ async function waitForSessionContextReady(): Promise<void> {
   });
 }
 
-async function explainMhtmlSelection(text: string, filePath: string, target: 'current' | 'new'): Promise<void> {
+async function explainDocumentSelection(text: string, filePath: string, target: 'current' | 'new'): Promise<void> {
   if (isReviewMode.value) return;
-  const prompt = `Explain the following selected text from the MHTML file ${JSON.stringify(filePath)}. Read the file for context.\n\n${JSON.stringify(text)}`;
+  const fileType = /\.pdf$/i.test(filePath) ? 'PDF' : 'MHTML';
+  const prompt = `Explain the following selected text from the ${fileType} file ${JSON.stringify(filePath)}. Read the file for context.\n\n${JSON.stringify(text)}`;
   if (target === 'new') {
     const sessionId = await createNewSession({ cwd: sessionCwd.value || selectedProjectPath.value, firstMessage: prompt });
     if (!sessionId) return;

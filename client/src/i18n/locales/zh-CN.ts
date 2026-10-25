@@ -737,6 +737,7 @@ export default {
       imageAnnotationControls: '图片标注控件',
       mhtmlAnnotationControls: 'MHTML 标注控件',
       mhtmlSelectText: '选择 MHTML 文字以复制',
+      pdfSelectText: '选择 PDF 文字以复制',
       movePdfToolbar: '移动标注工具栏',
       showPdfToolbarVertically: '垂直显示标注工具栏',
       showPdfToolbarHorizontally: '水平显示标注工具栏',

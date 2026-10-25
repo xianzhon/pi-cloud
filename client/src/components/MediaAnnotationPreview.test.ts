@@ -5,8 +5,23 @@ import MediaAnnotationPreview from './MediaAnnotationPreview.vue';
 
 const pdfjsMock = vi.hoisted(() => {
   const render = vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() }));
+  const getTextContent = vi.fn(async () => ({ items: [{ str: 'It was a bright cold day in April.' }], styles: {} }));
+  const textLayerRender = vi.fn(async (container: HTMLElement, content: { items: Array<{ str: string }> }) => {
+    for (const item of content.items) {
+      const span = window.document.createElement('span');
+      span.textContent = item.str;
+      container.append(span);
+    }
+  });
+  const textLayerCancel = vi.fn();
+  class TextLayer {
+    constructor(private options: { container: HTMLElement; textContentSource: { items: Array<{ str: string }> } }) {}
+    render() { return textLayerRender(this.options.container, this.options.textContentSource); }
+    cancel() { textLayerCancel(); }
+  }
   const getPage = vi.fn(async () => ({
-    getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }),
+    getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale, scale, userUnit: 1 }),
+    getTextContent,
     render,
   }));
   const getOutline = vi.fn<() => Promise<unknown[] | null>>(async () => []);
@@ -17,6 +32,10 @@ const pdfjsMock = vi.hoisted(() => {
   const getDocument = vi.fn(() => ({ promise: Promise.resolve(document), destroy }));
   return {
     GlobalWorkerOptions: { workerSrc: '' },
+    TextLayer,
+    getTextContent,
+    textLayerRender,
+    textLayerCancel,
     getDocument,
     getPage,
     getOutline,
@@ -76,6 +95,10 @@ describe('MediaAnnotationPreview', () => {
     localStorage.removeItem('pi-cloud.mhtmlPageTone');
     resetPreferencesForTests();
     pdfjsMock.document.numPages = 2;
+    pdfjsMock.getTextContent.mockClear();
+    pdfjsMock.textLayerRender.mockClear();
+    pdfjsMock.textLayerCancel.mockClear();
+    window.getSelection()?.removeAllRanges();
     pdfjsMock.getOutline.mockResolvedValue([]);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
     vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
@@ -128,6 +151,161 @@ describe('MediaAnnotationPreview', () => {
     htmlDocument.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     await flushPromises();
     expect(window.document.querySelector('.mhtml-selection-menu')).toBeNull();
+  });
+
+  it('renders PDF text and enables selection without enabling drawing or panning', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    const layer = wrapper.get('.pdf-text-layer');
+    expect(layer.text()).toBe('It was a bright cold day in April.');
+    expect(layer.classes()).not.toContain('enabled');
+
+    const select = wrapper.get('[aria-label="Select PDF text to copy"]');
+    await select.trigger('click');
+    expect(select.attributes('aria-pressed')).toBe('true');
+    expect(layer.classes()).toContain('enabled');
+    expect(wrapper.get('.pdf-annotation-canvas').classes()).not.toContain('enabled');
+    expect(wrapper.get('.pdf-viewport').classes()).not.toContain('pannable');
+
+    await wrapper.get('[aria-label="Draw on PDF"]').trigger('click');
+    expect(layer.classes()).not.toContain('enabled');
+    expect(wrapper.get('.pdf-annotation-canvas').classes()).toContain('enabled');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: select.attributes('aria-keyshortcuts') }));
+    await wrapper.vm.$nextTick();
+    expect(layer.classes()).toContain('enabled');
+  });
+
+  it('offers both explanation targets for selected PDF text at viewport coordinates', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      attachTo: window.document.body,
+      props: { src: '/pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    await wrapper.get('[aria-label="Select PDF text to copy"]').trigger('click');
+    const span = wrapper.get('.pdf-text-layer span');
+    const range = window.document.createRange();
+    range.selectNodeContents(span.element);
+    window.getSelection()!.addRange(range);
+
+    for (const [index, target] of ['current', 'new'].entries()) {
+      await span.trigger('contextmenu', { clientX: 10, clientY: 20 });
+      const menu = window.document.querySelector<HTMLElement>('.mhtml-selection-menu')!;
+      expect(menu.style.left).toBe('10px');
+      expect(menu.style.top).toBe('20px');
+      (menu.querySelectorAll('button')[index] as HTMLButtonElement).click();
+      expect(wrapper.emitted('explain-selection')?.[index]).toEqual([
+        'It was a bright cold day in April.', '/project/document.pdf', target,
+      ]);
+    }
+  });
+
+  it('does not explain empty, outside, or inactive PDF text selections', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      attachTo: window.document.body,
+      props: { src: '/pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    const layer = wrapper.get('.pdf-text-layer');
+    await wrapper.get('[aria-label="Select PDF text to copy"]').trigger('click');
+    await layer.trigger('contextmenu');
+    expect(window.document.querySelector('.mhtml-selection-menu')).toBeNull();
+
+    const outside = window.document.createElement('p');
+    outside.textContent = 'Unrelated chat text';
+    window.document.body.append(outside);
+    const range = window.document.createRange();
+    range.selectNodeContents(outside);
+    window.getSelection()!.addRange(range);
+    await layer.trigger('contextmenu');
+    expect(window.document.querySelector('.mhtml-selection-menu')).toBeNull();
+    outside.remove();
+
+    window.getSelection()!.removeAllRanges();
+    range.selectNodeContents(layer.get('span').element);
+    window.getSelection()!.addRange(range);
+    await layer.trigger('contextmenu');
+    expect(window.document.querySelector('.mhtml-selection-menu')).not.toBeNull();
+    await wrapper.get('[aria-label="Draw on PDF"]').trigger('click');
+    expect(window.document.querySelector('.mhtml-selection-menu')).toBeNull();
+    await layer.trigger('contextmenu');
+    expect(window.document.querySelector('.mhtml-selection-menu')).toBeNull();
+  });
+
+  it('scales existing PDF text immediately on zoom without re-extracting it', async () => {
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    await vi.waitFor(() => expect(wrapper.findAll('.pdf-text-layer span')).toHaveLength(2));
+    const text = wrapper.get('.pdf-text-layer span').element;
+    const extractionCount = pdfjsMock.getTextContent.mock.calls.length;
+    await wrapper.get('[aria-label="Zoom in"]').trigger('click');
+    expect(wrapper.get<HTMLElement>('.pdf-text-layer').element.style.transform).toBe('scale(1.1)');
+    expect(wrapper.get('.pdf-text-layer span').element).toBe(text);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    await flushPromises();
+    expect(pdfjsMock.getTextContent).toHaveBeenCalledTimes(extractionCount);
+  });
+
+  it('discards text extraction from a replaced PDF', async () => {
+    pdfjsMock.document.numPages = 1;
+    let resolveText!: (content: { items: Array<{ str: string }>; styles: object }) => void;
+    const pending = new Promise<{ items: Array<{ str: string }>; styles: object }>(resolve => { resolveText = resolve; });
+    pdfjsMock.getTextContent.mockReturnValueOnce(pending);
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/old.pdf', filePath: '/project/old.pdf' },
+    });
+    await vi.waitFor(() => expect(pdfjsMock.getTextContent).toHaveBeenCalledTimes(1));
+    await wrapper.setProps({ src: '/new.pdf', filePath: '/project/new.pdf' });
+    await vi.waitFor(() => expect(wrapper.get('.pdf-text-layer').text()).toBe('It was a bright cold day in April.'));
+    resolveText({ items: [{ str: 'Stale text from old PDF' }], styles: {} });
+    await flushPromises();
+    expect(wrapper.get('.pdf-text-layer').text()).toBe('It was a bright cold day in April.');
+  });
+
+  it('cancels pending PDF text rendering on unmount and does not attach late text', async () => {
+    pdfjsMock.document.numPages = 1;
+    let finishRendering!: () => void;
+    const pending = new Promise<void>(resolve => { finishRendering = resolve; });
+    pdfjsMock.textLayerRender.mockReturnValueOnce(pending);
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/pdf', filePath: '/project/document.pdf' },
+    });
+    await vi.waitFor(() => expect(pdfjsMock.textLayerRender).toHaveBeenCalledTimes(1));
+    const layer = wrapper.get('.pdf-text-layer').element;
+    wrapper.unmount();
+    expect(pdfjsMock.textLayerCancel).toHaveBeenCalledTimes(1);
+    finishRendering();
+    await flushPromises();
+    expect(layer.childElementCount).toBe(0);
+  });
+
+  it('keeps the PDF canvas usable if text extraction fails', async () => {
+    pdfjsMock.document.numPages = 1;
+    pdfjsMock.getTextContent.mockRejectedValueOnce(new Error('Bad text stream'));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/pdf', filePath: '/project/document.pdf' },
+    });
+    await vi.waitFor(() => expect(warning).toHaveBeenCalled());
+    expect(wrapper.find('.pdf-error').exists()).toBe(false);
+    expect(wrapper.get<HTMLCanvasElement>('.pdf-page > canvas').element.width).toBe(600);
+  });
+
+  it('restores the PDF selection tool from a saved view', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ content: JSON.stringify({ version: 1, pages: {}, view: { tool: 'select' } }) }),
+    } as Response);
+    const wrapper = mount(MediaAnnotationPreview, {
+      props: { src: '/pdf', filePath: '/project/document.pdf' },
+    });
+    await flushPromises();
+    expect(wrapper.get('[aria-label="Select PDF text to copy"]').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('.pdf-text-layer').classes()).toContain('enabled');
   });
 
   it('loads a PDF and supports page navigation and zoom', async () => {
@@ -657,6 +835,9 @@ describe('MediaAnnotationPreview', () => {
     expect(wrapper.find('.pdf-page-status').exists()).toBe(false);
     expect(wrapper.find('[aria-label="Draw on image"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="Export annotated image"]').exists()).toBe(true);
+    expect(wrapper.find('.pdf-text-layer').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Select PDF text to copy"]').exists()).toBe(false);
+    expect(pdfjsMock.getTextContent).not.toHaveBeenCalled();
 
     const toneControl = wrapper.get('[aria-label="Image color"]');
     expect(toneControl.element.tagName).toBe('BUTTON');
@@ -931,6 +1112,8 @@ describe('MediaAnnotationPreview', () => {
 
     expect(wrapper.findAll('.pdf-page')).toHaveLength(20);
     expect(pdfjsMock.render).toHaveBeenCalledTimes(2);
+    expect(wrapper.findAll('.pdf-text-layer span')).toHaveLength(2);
+    expect(pdfjsMock.getTextContent).toHaveBeenCalledTimes(2);
   });
 
   it('pans the PDF viewport by dragging when annotation tools are inactive', async () => {
@@ -1125,7 +1308,7 @@ describe('MediaAnnotationPreview', () => {
     expect(editor.attributes('style')).toContain('left: 418px');
     expect(editor.attributes('style')).toContain('top: 56px');
     const shortcutTools = editor.findAll('.pdf-shortcut-tool');
-    expect(shortcutTools).toHaveLength(10);
+    expect(shortcutTools).toHaveLength(11);
     expect(shortcutTools.every(tool => tool.find('svg').exists())).toBe(true);
   });
 

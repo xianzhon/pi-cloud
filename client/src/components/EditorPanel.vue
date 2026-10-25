@@ -395,6 +395,7 @@
         :file-path="activeTab"
         :initial-scale="activeTabInfo?.previewScale"
         @scale-change="setActivePreviewScale"
+        @explain-selection="(text, filePath, target) => emit('explain-selection', text, filePath, target)"
       />
       <MediaAnnotationPreview
         v-else-if="activeImageSrc && activeTab"
