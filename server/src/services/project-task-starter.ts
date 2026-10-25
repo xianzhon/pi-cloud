@@ -113,6 +113,9 @@ export class ProjectTaskStarter {
       throw new ProjectTaskValidationError(`Model is unavailable: ${task.modelProvider}/${task.modelId}`);
     }
 
+    // Presets are shared across profiles; session creation ignores unavailable preset skills.
+    if (task.presetId) return;
+
     const skills = await abortable(() => this.options.sessionService.listAgentProfileSkills(task.agentProfileId, task.projectPath, ...signalArgs), signal);
     const availableNames = new Set(skills.map((skill) => skill.name));
     const unavailable = task.skills.filter((skill) => !availableNames.has(skill));

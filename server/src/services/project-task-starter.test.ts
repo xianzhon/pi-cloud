@@ -126,6 +126,22 @@ describe('ProjectTaskStarter', () => {
     }));
   });
 
+  it.each(['enabled', 'disabled'] as const)('starts a %s preset with skills unavailable to the task profile', async (mode) => {
+    store.create(draft({ title: '优化 diff', presetId: 'frontend-dev', skills: ['old-skill'] }));
+    presetStore.getById.mockReturnValue({
+      id: 'frontend-dev', mode, skills: ['brainstorming', 'feature-dev'],
+    });
+
+    const result = await starter.start('task-1', 'client-1');
+
+    expect(result.task.status).toBe('started');
+    expect(sessionService.createSession).toHaveBeenCalledWith('client-1', expect.objectContaining({
+      skillMode: mode,
+      presetId: 'frontend-dev',
+      [mode === 'enabled' ? 'enabledSkills' : 'disabledSkills']: ['brainstorming', 'feature-dev'],
+    }));
+  });
+
   it('uses no skills if a referenced preset no longer exists', async () => {
     store.create(draft({ presetId: 'deleted-preset' }));
 
