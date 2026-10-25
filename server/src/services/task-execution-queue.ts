@@ -79,7 +79,7 @@ export class TaskExecutionQueue {
 
   startTaskSchedules(): void {
     if (this.closing || this.taskScheduleTimer) return;
-    this.taskScheduleTimer = setInterval(() => this.checkTaskSchedules(), 1000);
+    this.taskScheduleTimer = setInterval(() => this.checkTaskSchedules(), 30_000);
     this.taskScheduleTimer.unref();
   }
 

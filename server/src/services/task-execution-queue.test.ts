@@ -416,10 +416,10 @@ describe('TaskExecutionQueue', () => {
       queue.startTaskSchedules();
     }
 
-    it('executes a due task without enabling the shared queue', async () => {
+    it('scans every 30 seconds and executes a due task without enabling the shared queue', async () => {
       startScheduler();
       const task = schedule('Independent');
-      await vi.advanceTimersByTimeAsync(999);
+      await vi.advanceTimersByTimeAsync(29_999);
       expect(starter.start).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(1);
       expect(tasks.get(task.id)).toMatchObject({ status: 'completed', scheduledAt: null, scheduleError: null });
@@ -438,7 +438,7 @@ describe('TaskExecutionQueue', () => {
         return '';
       });
       const task = schedule('Independent');
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(30_000);
       const scheduledAt = new Date(Date.now() + 3_600_000).toISOString();
       if (action === 'delete') tasks.delete(task.id);
       else if (action === 'manual start') {
@@ -464,7 +464,7 @@ describe('TaskExecutionQueue', () => {
         return path;
       });
       const task = schedule('Dirty');
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(30_000);
       const scheduledAt = new Date(Date.now() + 3_600_000).toISOString();
       if (rescheduled) tasks.update(task.id, { ...task, scheduledAt });
       release();
@@ -492,7 +492,7 @@ describe('TaskExecutionQueue', () => {
         success(text);
       });
       try {
-        await vi.advanceTimersByTimeAsync(1000);
+        await vi.advanceTimersByTimeAsync(30_000);
         queue.configure([unrelated.id, blocked.id], true);
         await vi.advanceTimersByTimeAsync(0);
         expect(tasks.get(unrelated.id)?.status).toBe('started');
@@ -523,7 +523,7 @@ describe('TaskExecutionQueue', () => {
       const paused = queue.get();
       expect(paused.enabled).toBe(false);
       expect(paused.error).toContain('did not confirm');
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(tasks.get(independent.id)?.status).toBe('completed');
       expect(tasks.get(waiting.id)?.status).toBe('waiting');
       expect(queue.get().error).toBe(paused.error);
@@ -541,11 +541,11 @@ describe('TaskExecutionQueue', () => {
         success(text);
       });
       queue.configure([shared.id], true);
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(tasks.get(independent.id)?.scheduledAt).not.toBeNull();
       expect(starter.start).toHaveBeenCalledTimes(1);
       release();
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(tasks.get(shared.id)?.status).toBe('completed');
       expect(tasks.get(independent.id)?.status).toBe('completed');
     });
@@ -560,13 +560,13 @@ describe('TaskExecutionQueue', () => {
         if (text.startsWith('Independent')) await gate;
         success(text);
       });
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(30_000);
       queue.configure([shared.id], true);
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(0);
       expect(tasks.get(shared.id)?.status).toBe('waiting');
       expect(starter.start).toHaveBeenCalledTimes(1);
       release();
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(tasks.get(independent.id)?.status).toBe('completed');
       expect(tasks.get(shared.id)?.status).toBe('completed');
     });
@@ -579,10 +579,10 @@ describe('TaskExecutionQueue', () => {
         if (text.startsWith('Needs input')) messages.push({ role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Need input' }] });
         else success(text);
       });
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(60_000);
       expect(tasks.get(first.id)).toMatchObject({ status: 'started', scheduledAt: null, scheduleError: expect.stringContaining('did not confirm') });
       expect(tasks.get(second.id)?.status).toBe('completed');
-      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(90_000);
       expect(starter.start).toHaveBeenCalledTimes(2);
     });
 
@@ -593,13 +593,13 @@ describe('TaskExecutionQueue', () => {
       const deleted = schedule('Deleted');
       const manual = schedule('Manual');
       tasks.update(cancelled.id, { ...cancelled, scheduledAt: null });
-      tasks.update(later.id, { ...later, scheduledAt: new Date(Date.now() + 5000).toISOString() });
+      tasks.update(later.id, { ...later, scheduledAt: new Date(Date.now() + 60_000).toISOString() });
       tasks.delete(deleted.id);
       tasks.claimStart(manual.id);
       tasks.markStarted(manual.id, 'manual-session');
-      await vi.advanceTimersByTimeAsync(4000);
+      await vi.advanceTimersByTimeAsync(59_999);
       expect(starter.start).not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(1);
       expect(starter.start.mock.calls.map(([id]) => id)).toEqual([later.id]);
     });
 
@@ -613,7 +613,7 @@ describe('TaskExecutionQueue', () => {
       await vi.advanceTimersByTimeAsync(5000);
       expect(starter.start).not.toHaveBeenCalled();
       startScheduler();
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(tasks.get(pending.id)?.status).toBe('completed');
       expect(starter.start.mock.calls.map(([id]) => id)).toEqual([pending.id]);
     });
@@ -624,7 +624,7 @@ describe('TaskExecutionQueue', () => {
       await queue.stop();
       queue = new TaskExecutionQueue({ db, tasks, starter, sessions, resolvePath: async () => { throw new Error('Path outside allowed roots'); } });
       queue.startTaskSchedules();
-      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(90_000);
       expect(tasks.get(independent.id)).toMatchObject({ status: 'waiting', scheduledAt: null, scheduleError: 'Path outside allowed roots' });
       expect(starter.start).not.toHaveBeenCalled();
       expect(queue.get().error).toBe('');
