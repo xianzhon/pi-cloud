@@ -2,6 +2,43 @@
 
 All notable changes to Pi Cloud are documented here.
 
+## [2.0.6] - 2026-10-26
+
+### Added
+
+- Added passkey registration, login, and management, enabled by configuring `PI_CLOUD_PASSKEY_ORIGIN`.
+- Added expiring, revocable API tokens and a server-to-server integration API for profile/model discovery and persistent AI conversations, with JSON responses or SSE streaming.
+- Added MCP server configuration and tool discovery in Settings, profile-level server permissions, and a `/mcp` panel for persistent session-level restrictions.
+- Added per-profile controls to enable or disable package extensions without uninstalling packages.
+- Added one-time scheduled starts for the shared automatic task queue and individual tasks. Individual schedules run independently of queue pauses while sharing repository and concurrency limits; pending schedules survive server restarts.
+- Added AI-interpreted management instructions across WeChat, WeCom, and Feishu, including creating, listing, and starting project tasks in independent sessions. Added immediate slash controls for stopping chats and querying task status, results, or cancellation of gateway-started tasks.
+- Added editable, reorderable, and disableable built-in prompts, including **Save to Task Inbox**.
+- Added text selection, copying, and AI explanations in PDF previews for documents with embedded text; OCR is not included.
+- Added syntax highlighting to edited-code diffs in chat and unified/split editor diff views, including partial Vue snippets.
+
+### Changed
+
+- Chat now defaults to lightweight history and live events, with a per-browser **Details** option for tool arguments/results, thinking, and command activity.
+- Gateway access now requires explicit sender authorization: WeCom and Feishu deny unlisted users by default, and WeChat pairing mode accepts only the paired user and allowlisted users.
+- Allowed-root checks are now enabled by default on Windows as well as macOS/Linux; additional Windows drives must be explicitly allowed.
+- Mind maps now open locked against editing while retaining navigation.
+- Session launch selectors now show the selected profile's default model, and repeated-tool loop detection is configurable with `PI_CLOUD_LOOP_DETECTION_THRESHOLD` (`0` disables it).
+- Reduced background traffic by skipping editor auto-refresh in hidden browser tabs, loading task images on demand instead of with polling, and backing off failed pull-request status refreshes.
+- Updated Fastify and security-related dependencies, plus the PDF renderer and Monaco editor.
+
+### Fixed
+
+- Prevented stale editor saves from silently overwriting disk changes by requiring overwrite confirmation, and fixed saving large or heavily JSON-escaped text files.
+- Fixed composer `@` searches omitting hidden files, encoded file links failing to open, image attachments being blocked before model selection, and asynchronous sends losing drafts.
+- Preserved profile extension tools during session creation and resume; inline MCP bearer-token updates now reload affected idle sessions without losing conversation history.
+- Fixed task launches rejecting shared presets containing skills unavailable in the selected profile; unavailable preset skills are ignored.
+- Fixed pinned rule memories defaulting to conditional matching instead of always applying, while preserving explicit applicability settings.
+- Improved chat connection recovery with heartbeats and stopped reconnecting expired authenticated sessions; unavailable terminals now stop retrying and offer a new tab.
+- Hardened authentication for percent-encoded API routes, same-origin browser requests including port checks, WebSocket upgrades and session expiry, TOTP reuse, and proxy-aware rate limiting; bounded audit retention and rate-limiter memory.
+- Prevented Pi Cloud secrets from being inherited by terminals and agent subprocesses, tightened file-write and repository-clone path checks, required new credentials when changing Git hosting origins, and rejected plaintext Feishu callbacks when encryption is configured.
+- Preserved unmerged Git branches and refused dirty or uncheckable worktree removal unless forced.
+- Fixed initial theme loading under the application's strict Content Security Policy.
+
 ## [2.0.5] - 2026-10-09
 
 ### Added
