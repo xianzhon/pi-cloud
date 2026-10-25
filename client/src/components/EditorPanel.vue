@@ -2081,7 +2081,7 @@ function diffSyntaxDecorations(model: monaco.editor.ITextModel, side: 'unified' 
       }
     } else if (inHunk && side !== 'unified') {
       newRows.push({ line, text });
-    } else if (inHunk && /^[ +\-]/.test(text)) {
+    } else if (inHunk && /^[ +-]/.test(text)) {
       const row = { line, text: text.slice(1) };
       if (text[0] !== '+') oldRows.push(row);
       if (text[0] !== '-') newRows.push(row);
@@ -2137,7 +2137,7 @@ function applyDiffDecorations(filePath = activeTab.value): void {
     const line = model.getLineContent(lineNumber);
     if (line.startsWith('// File: ') || line.startsWith('diff --git')) inHunk = false;
     if (line.startsWith('@@')) inHunk = true;
-    if (inHunk && /^[ +\-]/.test(line)) {
+    if (inHunk && /^[ +-]/.test(line)) {
       // Visual padding only: preserve the original patch for copying.
       decorations.push({
         range: new monaco.Range(lineNumber, 1, lineNumber, 2),
