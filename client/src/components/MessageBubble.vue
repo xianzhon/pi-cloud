@@ -691,15 +691,35 @@ function sanitizeHtmlFragment(html: string): string {
   return DOMPurify.sanitize(`<section>${html}</section>`);
 }
 
-function renderEditDiffLine(line: string, type: 'context' | 'removed' | 'added') {
+function highlightEditDiffLines(lines: string[], language: string): string[] {
+  const content = lines.join('\n');
+  if (!hljs.getLanguage(language) || content.length > MAX_HIGHLIGHT_CHARS) {
+    return lines.map(escapeHtml);
+  }
+
+  const highlighted = hljs.highlight(content, { language, ignoreIllegals: true }).value;
+  const openSpans: string[] = [];
+  // Reopen token spans on each row so multiline strings/comments remain valid HTML.
+  return highlighted.split('\n').map((line) => {
+    const prefix = openSpans.join('');
+    for (const match of line.matchAll(/<span\b[^>]*>|<\/span>/g)) {
+      if (match[0] === '</span>') openSpans.pop();
+      else openSpans.push(match[0]);
+    }
+    return prefix + line + '</span>'.repeat(openSpans.length);
+  });
+}
+
+function renderEditDiffLine(highlightedLine: string, type: 'context' | 'removed' | 'added') {
   const mark = type === 'removed' ? '-' : type === 'added' ? '+' : ' ';
-  return `<div class="edit-diff-line ${type}"><span class="edit-diff-mark">${mark}</span><code>${escapeHtml(line)}</code></div>`;
+  return `<div class="edit-diff-line ${type}"><span class="edit-diff-mark">${mark}</span><code>${highlightedLine}</code></div>`;
 }
 
 function renderEditDiff() {
   const edits = getEditDiffs();
   if (edits.length === 0) return '';
 
+  const language = languageFromPath(getToolInputPath());
   const hunks = edits.map((edit, index) => {
     const oldLines = diffLines(edit.oldText);
     const newLines = diffLines(edit.newText);
@@ -717,11 +737,13 @@ function renderEditDiff() {
       suffixLength++;
     }
 
+    const highlightedOldLines = highlightEditDiffLines(oldLines, language);
+    const highlightedNewLines = highlightEditDiffLines(newLines, language);
     const lines = [
-      ...oldLines.slice(0, prefixLength).map((line) => renderEditDiffLine(line, 'context')),
-      ...oldLines.slice(prefixLength, oldLines.length - suffixLength).map((line) => renderEditDiffLine(line, 'removed')),
-      ...newLines.slice(prefixLength, newLines.length - suffixLength).map((line) => renderEditDiffLine(line, 'added')),
-      ...oldLines.slice(oldLines.length - suffixLength).map((line) => renderEditDiffLine(line, 'context')),
+      ...highlightedOldLines.slice(0, prefixLength).map((line) => renderEditDiffLine(line, 'context')),
+      ...highlightedOldLines.slice(prefixLength, oldLines.length - suffixLength).map((line) => renderEditDiffLine(line, 'removed')),
+      ...highlightedNewLines.slice(prefixLength, newLines.length - suffixLength).map((line) => renderEditDiffLine(line, 'added')),
+      ...highlightedOldLines.slice(oldLines.length - suffixLength).map((line) => renderEditDiffLine(line, 'context')),
     ].join('');
     const hunkHeader = edits.length > 1
       ? `<div class="edit-diff-hunk-header">${t('components.messageBubble.editNumber', { number: index + 1 })}</div>`
@@ -2092,45 +2114,45 @@ async function copyContent() {
   color: var(--diff-meta-text);
 }
 
-.markdown-body :deep(.hljs-keyword),
-.markdown-body :deep(.hljs-selector-tag),
-.markdown-body :deep(.hljs-subst) {
+:is(.markdown-body, .event-block) :deep(.hljs-keyword),
+:is(.markdown-body, .event-block) :deep(.hljs-selector-tag),
+:is(.markdown-body, .event-block) :deep(.hljs-subst) {
   color: var(--syntax-keyword);
 }
 
-.markdown-body :deep(.hljs-string),
-.markdown-body :deep(.hljs-regexp),
-.markdown-body :deep(.hljs-symbol),
-.markdown-body :deep(.hljs-bullet) {
+:is(.markdown-body, .event-block) :deep(.hljs-string),
+:is(.markdown-body, .event-block) :deep(.hljs-regexp),
+:is(.markdown-body, .event-block) :deep(.hljs-symbol),
+:is(.markdown-body, .event-block) :deep(.hljs-bullet) {
   color: var(--syntax-string);
 }
 
-.markdown-body :deep(.hljs-comment),
-.markdown-body :deep(.hljs-quote) {
+:is(.markdown-body, .event-block) :deep(.hljs-comment),
+:is(.markdown-body, .event-block) :deep(.hljs-quote) {
   color: var(--syntax-comment);
 }
 
-.markdown-body :deep(.hljs-title),
-.markdown-body :deep(.hljs-section),
-.markdown-body :deep(.hljs-name) {
+:is(.markdown-body, .event-block) :deep(.hljs-title),
+:is(.markdown-body, .event-block) :deep(.hljs-section),
+:is(.markdown-body, .event-block) :deep(.hljs-name) {
   color: var(--syntax-title);
 }
 
-.markdown-body :deep(.hljs-attr),
-.markdown-body :deep(.hljs-attribute),
-.markdown-body :deep(.hljs-variable),
-.markdown-body :deep(.hljs-template-variable) {
+:is(.markdown-body, .event-block) :deep(.hljs-attr),
+:is(.markdown-body, .event-block) :deep(.hljs-attribute),
+:is(.markdown-body, .event-block) :deep(.hljs-variable),
+:is(.markdown-body, .event-block) :deep(.hljs-template-variable) {
   color: var(--syntax-attr);
 }
 
-.markdown-body :deep(.hljs-number),
-.markdown-body :deep(.hljs-literal) {
+:is(.markdown-body, .event-block) :deep(.hljs-number),
+:is(.markdown-body, .event-block) :deep(.hljs-literal) {
   color: var(--syntax-number);
 }
 
-.markdown-body :deep(.hljs-built_in),
-.markdown-body :deep(.hljs-type),
-.markdown-body :deep(.hljs-class) {
+:is(.markdown-body, .event-block) :deep(.hljs-built_in),
+:is(.markdown-body, .event-block) :deep(.hljs-type),
+:is(.markdown-body, .event-block) :deep(.hljs-class) {
   color: var(--syntax-built-in);
 }
 
